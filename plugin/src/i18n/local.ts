@@ -15,6 +15,7 @@ export interface Local {
 	auto_submit_description: string;
 	auto_submit: string;
 	basic_setting: string;
+	tars_setting: string;
 	bottom_below_title: string;
 	brief_description: string;
 	cancel: string;

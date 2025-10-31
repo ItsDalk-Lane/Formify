@@ -13,6 +13,11 @@
     "isolatedModules": true,
     "strictNullChecks": true,
     "jsx": "react-jsx",
+    "paths": {
+      "tars/*": [
+        "src/features/tars/*"
+      ]
+    },
     "lib": [
       "DOM",
       "ES5",

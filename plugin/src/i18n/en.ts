@@ -17,6 +17,7 @@ export class En implements Local {
 	auto_submit = "Auto submit";
 	auto_submit_description = "Automatically submit the form without showing the UI when opened via command";
 	basic_setting = "Basic settings";
+	tars_setting = "AI Assistants";
 	bottom_below_title = "Bottom below title";
 	brief_description = "Brief description";
 	cancel = "Cancel";

@@ -17,6 +17,7 @@ export class Zh implements Local {
 	auto_submit = "自动提交";
 	auto_submit_description = "通过命令打开表单时自动提交，不显示表单界面";
 	basic_setting = "基本设置";
+	tars_setting = "AI 助手";
 	bottom_below_title = "指定标题下最后一行";
 	brief_description = "简要描述";
 	cancel = "取消";

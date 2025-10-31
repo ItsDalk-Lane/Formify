@@ -17,6 +17,7 @@ export class ZhTw implements Local {
 	auto_submit = "自動提交";
 	auto_submit_description = "通過命令打開表單時自動提交，不顯示表單界面";
 	basic_setting = "基本設定";
+	tars_setting = "AI 助手";
 	bottom_below_title = "指定標題下最後一行";
 	brief_description = "簡要描述";
 	cancel = "取消";
