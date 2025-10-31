@@ -1,6 +1,10 @@
 import { Local } from "./local";
 
 export class ZhTw implements Local {
+	command = "命令";
+	no_command_selected = "未選擇命令";
+	create = "創建";
+	run_command = "執行命令";
 	action_type = "執行動作";
 	add = "添加";
 	add_action = "添加動作";
@@ -62,11 +66,17 @@ export class ZhTw implements Local {
 	field_type = "欄位類型";
 	file_already_exists = "檔案已存在, {0}";
 	file_basename = "檔名";
+	file_conflict_resolution = "當檔案已存在時";
+	file_conflict_resolution_skip = "跳過創建";
+	file_conflict_resolution_auto_rename = "自動重新命名";
+	file_conflict_resolution_overwrite = "覆蓋檔案";
 	file_name_cannot_be_empty = "檔名不能為空";
 	file_name_conflict = "檔名衝突";
 	file_not_found = "檔案未找到";
 	file_path = "檔案路徑";
 	file_path_required = "檔案路徑不能為空";
+	folder_path = "資料夾路徑";
+	folder_path_required = "資料夾路徑不能為空";
 	fold = "摺疊";
 	folder = "資料夾";
 	form = "表單";
@@ -146,6 +156,7 @@ export class ZhTw implements Local {
 	register_as_command = "註冊為命令";
 	register_as_command_description = "註冊為命令後可以設置快捷鍵打開表單";
 	remove_value = "刪除值";
+	remark = "備註";
 	required = "必填";
 	reset_and_restart = "重置並重啟";
 	reset_code = "重置代碼";
@@ -198,4 +209,7 @@ export class ZhTw implements Local {
 	update_property = "更新屬性";
 	value = "值";
 	visibility_condition = "顯示條件";
+	wait = "等待";
+	wait_time = "等待時間";
+	milliseconds = "毫秒";
 }

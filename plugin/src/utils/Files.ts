@@ -22,16 +22,6 @@ export class Files {
         if (!folderExists) {
             await app.vault.createFolder(normlizedFolder);
         }
-
-        await app.vault.adapter.write(
-            normalizePath(filePath),
-            data
-        );
-        const res = app.vault.getAbstractFileByPath(filePath)
-        if (res instanceof TFile) {
-            return res;
-        } else {
-            throw new Error(`Failed to create file: ${filePath}`);
-        }
+        return await app.vault.create(filePath, data);
     }
 }

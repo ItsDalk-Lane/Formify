@@ -1,4 +1,12 @@
-import { Code, File, FileJson, MessageSquare, Text } from "lucide-react";
+import {
+	Code,
+	File,
+	FileJson,
+	Hourglass,
+	MessageSquare,
+	Text,
+	ZapIcon,
+} from "lucide-react";
 import { localInstance } from "src/i18n/locals";
 import { FormActionType } from "src/model/enums/FormActionType";
 import { FormTypeSelect } from "src/view/shared/select/FormTypeSelect";
@@ -50,8 +58,18 @@ export const formActionTypeOptions = [
 		icon: <MessageSquare />,
 	},
 	{
+		value: FormActionType.RUN_COMMAND,
+		label: localInstance.run_command,
+		icon: <ZapIcon />,
+	},
+	{
 		value: FormActionType.RUN_SCRIPT,
 		label: localInstance.run_script,
 		icon: <Code />,
+	},
+	{
+		value: FormActionType.WAIT,
+		label: localInstance.wait,
+		icon: <Hourglass />,
 	},
 ];

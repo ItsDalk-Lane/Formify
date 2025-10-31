@@ -8,8 +8,10 @@ import InsertTextActionService from "./insert-text/InsertTextActionService";
 import RunScriptActionService from "./run-script/RunScriptActionService";
 import SuggestModalActionService from "./suggest-modal/SuggestModalActionService";
 import UpdateFrontmatterActionService from "./update-frontmatter/UpdateFrontmatterActionService";
+import WaitActionService from "./wait/WaitActionService";
 import { hasConditions } from "./util/hasConditions";
 import { FilterService } from "../filter/FilterService";
+import { RunCommandActionService } from "./run-command/RunCommandActionService";
 
 export interface IActionService {
 
@@ -34,7 +36,9 @@ export class ActionChain {
         new RunScriptActionService(),
         new SuggestModalActionService(),
         new UpdateFrontmatterActionService(),
+        new RunCommandActionService(),
         new GenerateFormActionService(),
+        new WaitActionService(),
     ]
 
     constructor(actions: IFormAction[]) {

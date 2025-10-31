@@ -1,0 +1,36 @@
+{
+	"name": "obsidian-tars",
+	"version": "3.5.1",
+	"description": "Text generation based on tag suggestions, using DeepSeek, Claude, OpenAI, OpenRouter, SiliconFlow, Gemini, Qwen & more.",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"version": "node version-bump.mjs && git add manifest.json versions.json",
+		"lint": "eslint .",
+		"format": "prettier --write src/"
+	},
+	"keywords": [],
+	"author": "C Jack<https://github.com/ae86jack>",
+	"license": "MIT",
+	"devDependencies": {
+		"@anthropic-ai/sdk": "^0.56.0",
+		"@eslint/js": "^9.19.0",
+		"@google/generative-ai": "^0.21.0",
+		"@types/node": "^16.18.101",
+		"axios": "^1.8.3",
+		"builtin-modules": "3.3.0",
+		"esbuild": "^0.25.8",
+		"eslint": "^9.19.0",
+		"eslint-config-prettier": "^10.0.1",
+		"handlebars": "^4.7.8",
+		"jose": "^5.2.4",
+		"obsidian": "latest",
+		"ollama": "^0.5.16",
+		"openai": "^5.0.1",
+		"prettier": "^3.3.3",
+		"tslib": "^2.4.0",
+		"typescript": "^5.5.2",
+		"typescript-eslint": "^8.23.0"
+	}
+}

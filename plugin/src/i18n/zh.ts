@@ -1,6 +1,10 @@
 import { Local } from "./local";
 
 export class Zh implements Local {
+	command = "命令";
+	no_command_selected = "未选择命令";
+	create = "创建";
+	run_command = "执行命令";
 	action_type = "执行动作";
 	add = "添加";
 	add_action = "添加动作";
@@ -62,11 +66,17 @@ export class Zh implements Local {
 	field_type = "字段类型";
 	file_already_exists = "文件已存在, {0}";
 	file_basename = "文件名";
+	file_conflict_resolution = "当文件已存在时";
+	file_conflict_resolution_skip = "跳过创建";
+	file_conflict_resolution_auto_rename = "自动重命名";
+	file_conflict_resolution_overwrite = "覆盖文件";
 	file_name_cannot_be_empty = "文件名不能为空";
 	file_name_conflict = "文件名冲突";
 	file_not_found = "文件未找到";
 	file_path = "文件路径";
 	file_path_required = "文件路径不能为空";
+	folder_path = "文件夹路径";
+	folder_path_required = "文件夹路径不能为空";
 	fold = "折叠";
 	folder = "文件目录";
 	form = "表单";
@@ -146,6 +156,7 @@ export class Zh implements Local {
 	register_as_command = "注册为命令";
 	register_as_command_description = "注册为命令后可以设置快捷键打开表单";
 	remove_value = "删除值";
+	remark = "备注";
 	required = "必填";
 	reset_and_restart = "重置并重启";
 	reset_code = "重置代码";
@@ -198,5 +209,8 @@ export class Zh implements Local {
 	update_property = "更新属性";
 	value = "值";
 	visibility_condition = "显示条件";
+	wait = "等待";
+	wait_time = "等待时间";
+	milliseconds = "毫秒";
 }
 

@@ -1,4 +1,8 @@
 export interface Local {
+	command: string;
+	no_command_selected: string;
+	create: string;
+	run_command: string;
 	action_type: string;
 	add_action: string;
 	add_condition_group: string;
@@ -57,11 +61,17 @@ export interface Local {
 	field_type: string;
 	file_already_exists: string;
 	file_basename: string;
+	file_conflict_resolution: string;
+	file_conflict_resolution_skip: string;
+	file_conflict_resolution_auto_rename: string;
+	file_conflict_resolution_overwrite: string;
 	file_name_cannot_be_empty: string;
 	file_name_conflict: string;
 	file_not_found: string;
 	file_path_required: string;
 	file_path: string;
+	folder_path: string;
+	folder_path_required: string;
 	fold: string;
 	folder: string;
 	form_action_setting: string;
@@ -139,6 +149,7 @@ export interface Local {
 	register_as_command_description: string;
 	register_as_command: string;
 	remove_value: string;
+	remark: string;
 	required: string;
 	reset_and_restart: string;
 	reset_code: string;
@@ -186,4 +197,7 @@ export interface Local {
 	update_property: string;
 	value: string;
 	visibility_condition: string;
+	wait: string;
+	wait_time: string;
+	milliseconds: string;
 }

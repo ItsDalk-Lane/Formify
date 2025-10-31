@@ -76,7 +76,7 @@ export default function (props: {
 					{result.validationMessages[0] || ""}
 				</span>
 			)}
-			<CpsFormAcionHeader
+			<CpsFormActionHeader
 				title={title}
 				value={value}
 				open={open}
@@ -86,18 +86,27 @@ export default function (props: {
 				onDuplicate={onDuplicate}
 				setDragHandleRef={setDragHandleRef}
 			/>
-			<div className="form--CpsFormActionCondition">
-				<button
-					className="form--VisibilityConditionButton"
-					data-has-condition={fieldConditionLength > 0}
-					onClick={() => {
-						setOpenCondition(true);
-					}}
-				>
-					<Network size={14} />
-					{localInstance.execute_condition}
-					{fieldConditionLength > 0 && ` + ${fieldConditionLength}`}
-				</button>
+			<div className="form--CpsFormActionBottomSection">
+				<div className="form--CpsFormActionRemark">
+					{value.remark && (
+						<span className="form--CpsFormActionRemarkText">
+							{value.remark}
+						</span>
+					)}
+				</div>
+				<div className="form--CpsFormActionCondition">
+					<button
+						className="form--VisibilityConditionButton"
+						data-has-condition={fieldConditionLength > 0}
+						onClick={() => {
+							setOpenCondition(true);
+						}}
+					>
+						<Network size={14} />
+						{localInstance.execute_condition}
+						{fieldConditionLength > 0 && ` + ${fieldConditionLength}`}
+					</button>
+				</div>
 			</div>
 
 			{open && (
@@ -135,7 +144,7 @@ export default function (props: {
 	);
 }
 
-function CpsFormAcionHeader(props: {
+function CpsFormActionHeader(props: {
 	title: React.ReactNode;
 	value: IFormAction;
 	open: boolean;

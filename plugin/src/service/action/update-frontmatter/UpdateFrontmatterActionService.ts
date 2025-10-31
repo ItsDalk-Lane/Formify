@@ -52,5 +52,6 @@ export default class UpdateFrontmatterActionService implements IActionService {
                 frontmatter[property.name] = convertFrontmatterValue(app, property.name, property.value);
             }
         });
+        return await chain.next(context);
     }
 }
