@@ -12,6 +12,9 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = process.argv[2] === "production";
 
+// Obsidian 插件目标目录
+const OBSIDIAN_PLUGIN_DIR = "C:\\Desktop\\沙箱仓库2\\.obsidian\\plugins\\obsidian-flow-form";
+
 const cssOutputPlugin = () => ({
 	name: "css-output-plugin",
 	setup(build) {
@@ -24,6 +27,41 @@ const cssOutputPlugin = () => ({
 			try {
 				if (fs.existsSync(cssFileName)) {
 					fs.renameSync(cssFileName, newCssFileName);
+				}
+				
+				// 复制文件到 Obsidian 插件目录
+				if (prod) {
+					// 确保目标目录存在
+					if (!fs.existsSync(OBSIDIAN_PLUGIN_DIR)) {
+						fs.mkdirSync(OBSIDIAN_PLUGIN_DIR, { recursive: true });
+						console.log(`创建目标目录: ${OBSIDIAN_PLUGIN_DIR}`);
+					}
+					
+					// 复制 main.js
+					const mainJsSource = path.join(parent, "main.js");
+					const mainJsTarget = path.join(OBSIDIAN_PLUGIN_DIR, "main.js");
+					if (fs.existsSync(mainJsSource)) {
+						fs.copyFileSync(mainJsSource, mainJsTarget);
+						console.log(`已复制 main.js 到: ${mainJsTarget}`);
+					}
+					
+					// 复制 styles.css
+					const stylesSource = path.join(parent, "styles.css");
+					const stylesTarget = path.join(OBSIDIAN_PLUGIN_DIR, "styles.css");
+					if (fs.existsSync(stylesSource)) {
+						fs.copyFileSync(stylesSource, stylesTarget);
+						console.log(`已复制 styles.css 到: ${stylesTarget}`);
+					}
+					
+					// 复制 manifest.json
+					const manifestSource = path.join(parent, "manifest.json");
+					const manifestTarget = path.join(OBSIDIAN_PLUGIN_DIR, "manifest.json");
+					if (fs.existsSync(manifestSource)) {
+						fs.copyFileSync(manifestSource, manifestTarget);
+						console.log(`已复制 manifest.json 到: ${manifestTarget}`);
+					}
+					
+					console.log(`✅ 插件文件已成功部署到 Obsidian 目录！`);
 				}
 			} catch (e) {
 				console.error("Failed to rename file:", e);
