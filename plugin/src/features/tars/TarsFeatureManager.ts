@@ -14,6 +14,7 @@ import {
 } from './commands'
 import { RequestController } from './editor'
 import { t } from './lang/helper'
+import { ProviderSettings } from './providers'
 import { getTitleFromCmdId, loadTemplateFileCommand, promptTemplateCmd, templateToCmdId } from './prompt'
 import { TarsSettings } from './settings'
 import { StatusBarManager } from './statusBarManager'
@@ -96,10 +97,87 @@ export class TarsFeatureManager {
 	}
 
 	updateSettings(settings: TarsSettings) {
+		console.debug('[Tars] 更新设置，检查 provider 变化')
+		
+		// 检测 provider 是否有实质性变化（API key、baseURL、model 等）
+		const hasProviderChanges = this.hasProviderConfigChanges(this.settings.providers, settings.providers)
+		
 		this.settings = settings
-		this.buildTagCommands()
-		this.buildPromptCommands()
+		
+		// 如果 provider 配置有变化，需要完全重建命令以确保使用新的 API 密钥
+		if (hasProviderChanges) {
+			console.debug('[Tars] 检测到 provider 配置变化，重建所有命令')
+			this.rebuildAllCommands()
+		} else {
+			// 否则只进行增量更新
+			console.debug('[Tars] 未检测到 provider 配置变化，执行增量更新')
+			this.buildTagCommands()
+			this.buildPromptCommands()
+		}
+		
 		this.syncOptionalCommands()
+		this.syncEditorSuggest()
+	}
+
+	/**
+	 * 检测 provider 配置是否有实质性变化
+	 */
+	private hasProviderConfigChanges(oldProviders: ProviderSettings[], newProviders: ProviderSettings[]): boolean {
+		if (oldProviders.length !== newProviders.length) {
+			return true
+		}
+
+		for (let i = 0; i < oldProviders.length; i++) {
+			const oldProvider = oldProviders[i]
+			const newProvider = newProviders[i]
+
+			// 检查关键配置是否变化
+			if (
+				oldProvider.tag !== newProvider.tag ||
+				oldProvider.vendor !== newProvider.vendor ||
+				oldProvider.options.apiKey !== newProvider.options.apiKey ||
+				oldProvider.options.baseURL !== newProvider.options.baseURL ||
+				oldProvider.options.model !== newProvider.options.model ||
+				JSON.stringify(oldProvider.options.parameters) !== JSON.stringify(newProvider.options.parameters)
+			) {
+				console.debug(
+					`[Tars] Provider ${oldProvider.tag} 配置变化:`,
+					{
+						apiKey: oldProvider.options.apiKey !== newProvider.options.apiKey,
+						baseURL: oldProvider.options.baseURL !== newProvider.options.baseURL,
+						model: oldProvider.options.model !== newProvider.options.model,
+						parameters: JSON.stringify(oldProvider.options.parameters) !== JSON.stringify(newProvider.options.parameters)
+					}
+				)
+				return true
+			}
+		}
+
+		return false
+	}
+
+	/**
+	 * 完全重建所有命令，确保使用最新的配置
+	 */
+	private rebuildAllCommands() {
+		// 移除所有现有的 tag 命令
+		this.tagCmdIds.forEach((cmdId) => {
+			this.plugin.removeCommand(cmdId)
+		})
+		this.tagCmdIds = []
+		this.tagLowerCaseMap.clear()
+
+		// 移除所有 prompt 命令
+		this.promptCmdIds.forEach((cmdId) => {
+			this.plugin.removeCommand(cmdId)
+		})
+		this.promptCmdIds = []
+
+		// 重新构建命令（suppressNotifications = true 避免重复通知）
+		this.buildTagCommands(true)
+		this.buildPromptCommands(true)
+
+		console.debug('[Tars] 所有命令已重建完成')
 	}
 
 	private registerCommand(
