@@ -3,6 +3,7 @@ import { t } from './lang/helper'
 import { SelectModelModal, SelectVendorModal } from './modal'
 import { BaseOptions, Message, Optional, ProviderSettings, ResolveEmbedAsBinary, Vendor } from './providers'
 import { ClaudeOptions, claudeVendor } from './providers/claude'
+import { DoubaoImageOptions, doubaoImageVendor } from './providers/doubaoImage'
 import { GptImageOptions, gptImageVendor } from './providers/gptImage'
 import { grokVendor } from './providers/grok'
 import { kimiVendor } from './providers/kimi'
@@ -408,6 +409,10 @@ export class TarsSettingTab {
 
 		if (vendor.name === gptImageVendor.name) {
 			this.addGptImageSections(details, settings.options as GptImageOptions)
+		}
+
+		if (vendor.name === doubaoImageVendor.name) {
+			this.addDoubaoImageSections(details, settings.options as DoubaoImageOptions)
 		}
 
 		this.addBaseURLSection(details, settings.options, vendor.defaultOptions.baseURL)
@@ -849,6 +854,48 @@ export class TarsSettingTab {
 						await this.saveSettings()
 					})
 			)
+	}
+
+	addDoubaoImageSections = (details: HTMLDetailsElement, options: DoubaoImageOptions) => {
+		new Setting(details)
+			.setName(t('Image Display Width'))
+			.setDesc(t('Example: 400px width would output as ![[image.jpg|400]]'))
+			.addSlider((slider) =>
+				slider
+					.setLimits(200, 800, 100)
+					.setValue(options.displayWidth)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						options.displayWidth = value
+						await this.saveSettings()
+					})
+			)
+		new Setting(details)
+			.setName(t('Number of images'))
+			.setDesc(t('Number of images to generate (1-5)'))
+			.addSlider((slider) =>
+				slider
+					.setLimits(1, 4, 1)
+					.setValue(options.n)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						options.n = value
+						await this.saveSettings()
+					})
+			)
+		new Setting(details).setName(t('Image size')).addDropdown((dropdown) =>
+			dropdown
+				.addOptions({
+					'1024x1024': '1024x1024',
+					'1536x1024': '1536x1024 ' + t('landscape'),
+					'1024x1536': '1024x1536 ' + t('portrait')
+				})
+				.setValue(options.size)
+				.onChange(async (value) => {
+					options.size = value as DoubaoImageOptions['size']
+					await this.saveSettings()
+				})
+		)
 	}
 
 	private async testProviderConfiguration(provider: ProviderSettings): Promise<boolean> {

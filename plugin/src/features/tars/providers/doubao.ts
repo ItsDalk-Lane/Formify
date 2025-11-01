@@ -1,9 +1,9 @@
-import { Notice, requestUrl } from 'obsidian'
+import { requestUrl } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 
 const sendRequestFunc = (settings: BaseOptions): SendRequest =>
-	async function* (messages: Message[], _controller: AbortController, _resolveEmbedAsBinary: ResolveEmbedAsBinary) {
+	async function* (messages: Message[], controller: AbortController, _resolveEmbedAsBinary: ResolveEmbedAsBinary) {
 		const { parameters, ...optionsExcludingParams } = settings
 		const options = { ...optionsExcludingParams, ...parameters }
 		const { apiKey, baseURL, model, ...remains } = options
@@ -13,23 +13,56 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		const data = {
 			model,
 			messages,
-			stream: false,
+			stream: true,
 			...remains
 		}
 
-		new Notice(t('This is a non-streaming request, please wait...'), 5 * 1000)
-
-		const response = await requestUrl({
-			url: baseURL,
+		const response = await fetch(baseURL, {
 			method: 'POST',
 			body: JSON.stringify(data),
 			headers: {
 				Authorization: `Bearer ${apiKey}`,
 				'Content-Type': 'application/json'
-			}
+			},
+			signal: controller.signal
 		})
 
-		yield response.json.choices[0].message.content
+		if (!response.ok) {
+			throw new Error(`HTTP error! status: ${response.status}`)
+		}
+
+		const reader = response.body?.getReader()
+		if (!reader) throw new Error('Failed to get response reader')
+
+		const decoder = new TextDecoder()
+		let buffer = ''
+
+		try {
+			while (true) {
+				const { done, value } = await reader.read()
+				if (done) break
+
+				buffer += decoder.decode(value, { stream: true })
+				const lines = buffer.split('\n')
+				buffer = lines.pop() || ''
+
+				for (const line of lines) {
+					const trimmed = line.trim()
+					if (!trimmed || trimmed === 'data: [DONE]') continue
+					if (!trimmed.startsWith('data: ')) continue
+
+					try {
+						const json = JSON.parse(trimmed.slice(6))
+						const content = json.choices?.[0]?.delta?.content
+						if (content) yield content
+					} catch (e) {
+						console.warn('Failed to parse SSE data:', trimmed)
+					}
+				}
+			}
+		} finally {
+			reader.releaseLock()
+		}
 	}
 
 export const doubaoVendor: Vendor = {
