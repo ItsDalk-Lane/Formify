@@ -506,11 +506,17 @@ export class TarsSettingTab {
 			})
 	}
 
-	addAPIkeySection = (details: HTMLDetailsElement, options: BaseOptions, desc: string = '') =>
-		new Setting(details)
+	addAPIkeySection = (details: HTMLDetailsElement, options: BaseOptions, desc: string = '') => {
+		let isPasswordVisible = false
+		let textInput: HTMLInputElement | null = null
+		let toggleButton: HTMLButtonElement | null = null
+		
+		const setting = new Setting(details)
 			.setName('API key')
 			.setDesc(desc)
-			.addText((text) =>
+			.addText((text) => {
+				textInput = text.inputEl
+				textInput.type = 'password' // 默认隐藏
 				text
 					.setPlaceholder(t('API key (required)'))
 					.setValue(options.apiKey)
@@ -518,17 +524,44 @@ export class TarsSettingTab {
 						options.apiKey = value.trim()
 						await this.saveSettings()
 					})
-			)
+			})
+			.addButton((btn) => {
+				toggleButton = btn.buttonEl
+				btn
+					.setIcon('eye-off')
+					.setTooltip('显示/隐藏密钥')
+					.onClick(() => {
+						isPasswordVisible = !isPasswordVisible
+						if (textInput) {
+							textInput.type = isPasswordVisible ? 'text' : 'password'
+						}
+						if (toggleButton) {
+							btn.setIcon(isPasswordVisible ? 'eye' : 'eye-off')
+						}
+					})
+				
+				// 设置按钮样式
+				toggleButton.addClass('clickable-icon')
+			})
+		
+		return setting
+	}
 
 	addAPISecretOptional = (
 		details: HTMLDetailsElement,
 		options: BaseOptions & Pick<Optional, 'apiSecret'>,
 		desc: string = ''
-	) =>
-		new Setting(details)
+	) => {
+		let isPasswordVisible = false
+		let textInput: HTMLInputElement | null = null
+		let toggleButton: HTMLButtonElement | null = null
+		
+		const setting = new Setting(details)
 			.setName('API Secret')
 			.setDesc(desc)
-			.addText((text) =>
+			.addText((text) => {
+				textInput = text.inputEl
+				textInput.type = 'password' // 默认隐藏
 				text
 					.setPlaceholder('')
 					.setValue(options.apiSecret)
@@ -536,7 +569,28 @@ export class TarsSettingTab {
 						options.apiSecret = value.trim()
 						await this.saveSettings()
 					})
-			)
+			})
+			.addButton((btn) => {
+				toggleButton = btn.buttonEl
+				btn
+					.setIcon('eye-off')
+					.setTooltip('显示/隐藏密钥')
+					.onClick(() => {
+						isPasswordVisible = !isPasswordVisible
+						if (textInput) {
+							textInput.type = isPasswordVisible ? 'text' : 'password'
+						}
+						if (toggleButton) {
+							btn.setIcon(isPasswordVisible ? 'eye' : 'eye-off')
+						}
+					})
+				
+				// 设置按钮样式
+				toggleButton.addClass('clickable-icon')
+			})
+		
+		return setting
+	}
 
 	addModelDropDownSection = (details: HTMLDetailsElement, options: BaseOptions, models: string[], desc: string) =>
 		new Setting(details)

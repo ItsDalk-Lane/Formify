@@ -118,6 +118,8 @@ export default {
 	'Web search': 'Web search',
 	'Enable web search for AI': 'Enable web search for AI',
 	'API key (required)': 'API key (required)',
+	'API key (已设置)': 'API key (configured)',
+	'API Secret (已设置)': 'API Secret (configured)',
 	'Default:': 'Default:',
 	'Refer to the technical documentation': 'Refer to the technical documentation',
 	'Keyword for tag must not contain #': 'Keyword for tag must not contain #',

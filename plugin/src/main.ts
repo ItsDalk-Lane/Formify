@@ -8,6 +8,7 @@ import { PluginSettingTab } from './settings/PluginSettingTab';
 import './style/base.css'
 import { FormFlowApi } from './api/FormFlowApi';
 import { TarsFeatureManager, cloneTarsSettings } from './features/tars';
+import { encryptApiKey, decryptApiKey } from './features/tars/utils/cryptoUtils';
 
 export default class FormPlugin extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
@@ -40,13 +41,35 @@ export default class FormPlugin extends Plugin {
 	async loadSettings() {
 		const persisted = (await this.loadData()) ?? {};
 		const defaultSettings = { ...DEFAULT_SETTINGS };
+		
+		// 解密存储的 Tars 设置中的 API 密钥
+		let decryptedTarsSettings = persisted?.tars?.settings
+		if (decryptedTarsSettings?.providers) {
+			console.debug('[Main] 开始解密 API 密钥')
+			decryptedTarsSettings = {
+				...decryptedTarsSettings,
+				providers: decryptedTarsSettings.providers.map((provider: any) => ({
+					...provider,
+					options: {
+						...provider.options,
+						apiKey: decryptApiKey(provider.options.apiKey || ''),
+						// 如果有 apiSecret 字段也需要解密
+						...(provider.options.apiSecret && {
+							apiSecret: decryptApiKey(provider.options.apiSecret)
+						})
+					}
+				}))
+			}
+			console.debug('[Main] API 密钥解密完成')
+		}
+		
 		this.settings = {
 			...defaultSettings,
 			...persisted,
 			formIntegrations: persisted.formIntegrations ?? defaultSettings.formIntegrations,
 			tars: {
 				enabled: persisted?.tars?.enabled ?? defaultSettings.tars.enabled,
-				settings: cloneTarsSettings(persisted?.tars?.settings),
+				settings: cloneTarsSettings(decryptedTarsSettings),
 			}
 		};
 	}
@@ -64,7 +87,36 @@ export default class FormPlugin extends Plugin {
 	}
 
 	async saveSettings() {
-		await this.saveData(this.settings);
+		// 在保存前加密 Tars 设置中的 API 密钥
+		const settingsToSave = { ...this.settings }
+		if (settingsToSave.tars?.settings?.providers) {
+			console.debug('[Main] 开始加密 API 密钥')
+			settingsToSave.tars = {
+				...settingsToSave.tars,
+				settings: {
+					...settingsToSave.tars.settings,
+					providers: settingsToSave.tars.settings.providers.map((provider) => {
+						const encryptedOptions: any = {
+							...provider.options,
+							apiKey: encryptApiKey(provider.options.apiKey || '')
+						}
+						
+						// 如果有 apiSecret 字段也需要加密
+						if ('apiSecret' in provider.options && (provider.options as any).apiSecret) {
+							encryptedOptions.apiSecret = encryptApiKey((provider.options as any).apiSecret)
+						}
+						
+						return {
+							...provider,
+							options: encryptedOptions
+						}
+					})
+				}
+			}
+			console.debug('[Main] API 密钥加密完成')
+		}
+		
+		await this.saveData(settingsToSave);
 		formScriptService.refresh(this.settings.scriptFolder)
 		formIntegrationService.initialize(this);
 		this.refreshTarsFeature();

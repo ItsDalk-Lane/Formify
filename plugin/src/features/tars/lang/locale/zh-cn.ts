@@ -114,6 +114,8 @@ export default {
 	'Web search': '网络搜索',
 	'Enable web search for AI': '为当前 AI 启用网络搜索',
 	'API key (required)': 'API Key (必填)',
+	'API key (已设置)': 'API Key (已设置)',
+	'API Secret (已设置)': 'API Secret (已设置)',
 	'Default:': '默认:',
 	'Refer to the technical documentation': '参考技术文档',
 	'Keyword for tag must not contain #': '标签关键字不能包含 #',
