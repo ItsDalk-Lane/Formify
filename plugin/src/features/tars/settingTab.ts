@@ -1,7 +1,7 @@
 import { App, Notice, requestUrl, Setting } from 'obsidian'
 import { t } from './lang/helper'
 import { SelectModelModal, SelectVendorModal } from './modal'
-import { BaseOptions, Optional, ProviderSettings, Vendor } from './providers'
+import { BaseOptions, Message, Optional, ProviderSettings, ResolveEmbedAsBinary, Vendor } from './providers'
 import { ClaudeOptions, claudeVendor } from './providers/claude'
 import { GptImageOptions, gptImageVendor } from './providers/gptImage'
 import { grokVendor } from './providers/grok'
@@ -420,6 +420,26 @@ export class TarsSettingTab {
 
 		this.addParametersSection(details, settings.options)
 
+		const testButtonLabel = t('Test now')
+		new Setting(details)
+			.setName(t('Test model'))
+			.setDesc(t('Test model description'))
+			.addButton((btn) => {
+				btn
+					.setButtonText(testButtonLabel)
+					.setCta()
+					.onClick(async () => {
+						btn.setDisabled(true)
+						btn.setButtonText(t('Testing model...'))
+						try {
+							await this.testProviderConfiguration(settings)
+						} finally {
+							btn.setDisabled(false)
+							btn.setButtonText(testButtonLabel)
+						}
+					})
+			})
+
 		new Setting(details).setName(t('Remove') + ' ' + vendor.name).addButton((btn) => {
 			btn
 				.setWarning()
@@ -775,6 +795,47 @@ export class TarsSettingTab {
 						await this.saveSettings()
 					})
 			)
+	}
+
+	private async testProviderConfiguration(provider: ProviderSettings): Promise<boolean> {
+		const vendor = availableVendors.find((v) => v.name === provider.vendor)
+		if (!vendor) {
+			new Notice(`${t('Model test failed')}: ${t('Vendor not found')}`)
+			return false
+		}
+
+		new Notice(t('Testing model...'))
+		try {
+			const sendRequest = vendor.sendRequestFunc(provider.options)
+			const controller = new AbortController()
+			const resolveEmbed: ResolveEmbedAsBinary = async () => {
+				throw new Error(t('Model test embed unsupported'))
+			}
+			const messages: Message[] = [
+				{ role: 'system', content: t('Model test system prompt') },
+				{ role: 'user', content: t('Model test user prompt') }
+			]
+			let received = ''
+			for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
+				received += chunk
+				if (received.length > 2000) {
+					received = received.slice(0, 2000)
+				}
+			}
+			if (received.trim().length === 0) {
+				throw new Error(t('Model test empty response'))
+			}
+			new Notice(t('Model test succeeded'))
+			return true
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			if (error instanceof Error && error.name === 'AbortError') {
+				new Notice(t('Model test succeeded'))
+				return true
+			}
+			new Notice(`${t('Model test failed')}: ${message}`)
+			return false
+		}
 	}
 }
 

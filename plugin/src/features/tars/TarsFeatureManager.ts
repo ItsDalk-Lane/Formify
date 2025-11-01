@@ -97,8 +97,8 @@ export class TarsFeatureManager {
 
 	updateSettings(settings: TarsSettings) {
 		this.settings = settings
-		this.buildTagCommands(true)
-		this.buildPromptCommands(true)
+		this.buildTagCommands()
+		this.buildPromptCommands()
 		this.syncOptionalCommands()
 	}
 
