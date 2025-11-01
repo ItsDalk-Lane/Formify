@@ -912,12 +912,17 @@ export class TarsSettingTab {
 			const resolveEmbed: ResolveEmbedAsBinary = async () => {
 				throw new Error(t('Model test embed unsupported'))
 			}
+			// 为图片生成模型提供模拟的 saveAttachment 函数
+			const saveAttachment = async (filename: string, data: ArrayBuffer) => {
+				console.debug(`[Test Mode] Would save file: ${filename}, size: ${data.byteLength} bytes`)
+				// 测试模式下不实际保存文件，只记录日志
+			}
 			const messages: Message[] = [
 				{ role: 'system', content: t('Model test system prompt') },
 				{ role: 'user', content: t('Model test user prompt') }
 			]
 			let received = ''
-			for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
+			for await (const chunk of sendRequest(messages, controller, resolveEmbed, saveAttachment)) {
 				received += chunk
 				if (received.length > 2000) {
 					received = received.slice(0, 2000)
