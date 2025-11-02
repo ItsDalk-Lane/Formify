@@ -376,48 +376,13 @@ export class TarsSettingTab {
 		// model setting
 		const modelConfig = MODEL_FETCH_CONFIGS[vendor.name as keyof typeof MODEL_FETCH_CONFIGS]
 		if (modelConfig) {
-			new Setting(details)
-				.setName(t('Model'))
-				.setDesc(capabilities)
-				.addButton((btn) => {
-					btn
-						.setButtonText(settings.options.model ? settings.options.model : t('Select the model to use'))
-						.onClick(async () => {
-							// Check if API key is required but not provided
-							if (modelConfig.requiresApiKey && !settings.options.apiKey) {
-								new Notice(t('Please input API key first'))
-								return
-							}
-							try {
-								const models = await fetchModels(
-									modelConfig.url,
-									modelConfig.requiresApiKey ? settings.options.apiKey : undefined
-								)
-								const onChoose = async (selectedModel: string) => {
-									settings.options.model = selectedModel
-									await this.saveSettings()
-									btn.setButtonText(selectedModel)
-								}
-								new SelectModelModal(this.app, models, onChoose).open()
-							} catch (error) {
-								if (error instanceof Error) {
-									const errorMessage = error.message.toLowerCase()
-									if (errorMessage.includes('401') || errorMessage.includes('unauthorized')) {
-										new Notice('🔑 ' + t('API key may be incorrect. Please check your API key.'))
-									} else if (errorMessage.includes('403') || errorMessage.includes('forbidden')) {
-										new Notice('🚫 ' + t('Access denied. Please check your API permissions.'))
-									} else {
-										new Notice('🔴 ' + error.message)
-									}
-								} else {
-									new Notice('🔴 ' + String(error))
-								}
-							}
-						})
-				})
+			// 按钮选择模式（支持API获取模型列表 + 自定义输入）
+			this.addModelButtonSection(details, settings.options, modelConfig, capabilities)
 		} else if (vendor.models.length > 0) {
+			// 下拉选择模式（预设模型列表 + 自定义输入）
 			this.addModelDropDownSection(details, settings.options, vendor.models, capabilities)
 		} else {
+			// 纯文本输入模式（完全自定义）
 			this.addModelTextSection(details, settings.options, capabilities)
 		}
 
@@ -642,25 +607,237 @@ export class TarsSettingTab {
 		return setting
 	}
 
-	addModelDropDownSection = (details: HTMLDetailsElement, options: BaseOptions, models: string[], desc: string) =>
-		new Setting(details)
+	addModelButtonSection = (
+		details: HTMLDetailsElement,
+		options: BaseOptions,
+		modelConfig: { url: string; requiresApiKey: boolean },
+		desc: string
+	) => {
+		const setting = new Setting(details).setName(t('Model')).setDesc(desc)
+
+		let buttonComponent: HTMLButtonElement | null = null
+		let textInputComponent: HTMLInputElement | null = null
+		let switchToCustomButtonEl: HTMLElement | null = null
+		let switchToSelectButtonEl: HTMLElement | null = null
+		let isShowingCustomInput = false
+
+		// 创建选择按钮（用于从API获取模型列表）
+		setting.addButton((btn) => {
+			buttonComponent = btn.buttonEl
+			btn
+				.setButtonText(options.model ? options.model : t('Select the model to use'))
+				.onClick(async () => {
+					// Check if API key is required but not provided
+					if (modelConfig.requiresApiKey && !options.apiKey) {
+						new Notice(t('Please input API key first'))
+						return
+					}
+					try {
+						const models = await fetchModels(
+							modelConfig.url,
+							modelConfig.requiresApiKey ? options.apiKey : undefined
+						)
+						const onChoose = async (selectedModel: string) => {
+							options.model = selectedModel
+							await this.saveSettings()
+							btn.setButtonText(selectedModel)
+						}
+						new SelectModelModal(this.app, models, onChoose).open()
+					} catch (error) {
+						if (error instanceof Error) {
+							const errorMessage = error.message.toLowerCase()
+							if (errorMessage.includes('401') || errorMessage.includes('unauthorized')) {
+								new Notice('🔑 ' + t('API key may be incorrect. Please check your API key.'))
+							} else if (errorMessage.includes('403') || errorMessage.includes('forbidden')) {
+								new Notice('🚫 ' + t('Access denied. Please check your API permissions.'))
+							} else {
+								new Notice('🔴 ' + error.message)
+							}
+						} else {
+							new Notice('🔴 ' + String(error))
+						}
+					}
+				})
+		})
+
+		// 创建文本输入框（用于自定义模型）
+		setting.addText((text) => {
+			textInputComponent = text.inputEl
+			text
+				.setPlaceholder(t('Enter custom model name'))
+				.setValue(options.model || '')
+				.onChange(async (value) => {
+					options.model = value.trim()
+					await this.saveSettings()
+					if (buttonComponent) {
+						buttonComponent.textContent = value.trim() || t('Select the model to use')
+					}
+				})
+
+			// 初始状态：隐藏文本输入框
+			textInputComponent.style.display = 'none'
+			textInputComponent.style.width = '200px'
+		})
+
+		// 添加"切换到自定义"按钮
+		setting.addButton((btn) => {
+			switchToCustomButtonEl = btn.buttonEl
+			btn
+				.setButtonText('✏️')
+				.setTooltip(t('Switch to custom input'))
+				.onClick(() => {
+					isShowingCustomInput = true
+					if (buttonComponent) {
+						buttonComponent.style.display = 'none'
+					}
+					if (textInputComponent) {
+						textInputComponent.style.display = 'inline-block'
+						textInputComponent.value = options.model || ''
+						textInputComponent.focus()
+					}
+					if (switchToCustomButtonEl) {
+						switchToCustomButtonEl.style.display = 'none'
+					}
+					if (switchToSelectButtonEl) {
+						switchToSelectButtonEl.style.display = 'inline-block'
+					}
+				})
+		})
+
+		// 添加"切换到选择"按钮
+		setting.addButton((btn) => {
+			switchToSelectButtonEl = btn.buttonEl
+			btn
+				.setButtonText('↩')
+				.setTooltip(t('Switch to model selection'))
+				.onClick(() => {
+					isShowingCustomInput = false
+					if (buttonComponent) {
+						buttonComponent.style.display = 'inline-block'
+					}
+					if (textInputComponent) {
+						textInputComponent.style.display = 'none'
+					}
+					if (switchToCustomButtonEl) {
+						switchToCustomButtonEl.style.display = 'inline-block'
+					}
+					if (switchToSelectButtonEl) {
+						switchToSelectButtonEl.style.display = 'none'
+					}
+				})
+
+			// 初始状态：隐藏此按钮
+			switchToSelectButtonEl.style.display = 'none'
+		})
+
+		return setting
+	}
+
+	addModelDropDownSection = (details: HTMLDetailsElement, options: BaseOptions, models: string[], desc: string) => {
+		const CUSTOM_MODEL_KEY = '__custom__'
+		const isCustomModel = !models.includes(options.model) && options.model !== ''
+		
+		const setting = new Setting(details)
 			.setName(t('Model'))
 			.setDesc(desc)
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOptions(
-						models.reduce((acc: Record<string, string>, cur: string) => {
-							acc[cur] = cur
-							return acc
-						}, {})
-					)
-					.setValue(options.model)
-					.onChange(async (value) => {
-						options.model = value
-						await this.saveSettings()
-						this.doubaoRenderers.get(options)?.()
-					})
-			)
+		
+		let dropdownComponent: DropdownComponent | null = null
+		let textInputComponent: HTMLInputElement | null = null
+		let backButtonEl: HTMLElement | null = null
+		let isShowingCustomInput = isCustomModel
+		
+		// 创建下拉框
+		setting.addDropdown((dropdown) => {
+			dropdownComponent = dropdown
+			// 添加所有预设模型
+			const optionsMap = models.reduce((acc: Record<string, string>, cur: string) => {
+				acc[cur] = cur
+				return acc
+			}, {})
+			// 添加"自定义"选项
+			optionsMap[CUSTOM_MODEL_KEY] = t('Custom')
+			
+			dropdown.addOptions(optionsMap)
+			
+			// 设置初始值
+			if (isCustomModel) {
+				dropdown.setValue(CUSTOM_MODEL_KEY)
+			} else {
+				dropdown.setValue(options.model || models[0])
+			}
+			
+			dropdown.onChange(async (value) => {
+				if (value === CUSTOM_MODEL_KEY) {
+					// 切换到自定义输入模式
+					isShowingCustomInput = true
+					if (dropdownComponent) {
+						dropdownComponent.selectEl.style.display = 'none'
+					}
+					if (textInputComponent) {
+						textInputComponent.style.display = 'inline-block'
+						textInputComponent.focus()
+					}
+					if (backButtonEl) {
+						backButtonEl.style.display = 'inline-block'
+					}
+				} else {
+					// 选择了预设模型
+					options.model = value
+					await this.saveSettings()
+					this.doubaoRenderers.get(options)?.()
+				}
+			})
+		})
+		
+		// 创建文本输入框（用于自定义模型）
+		setting.addText((text) => {
+			textInputComponent = text.inputEl
+			text
+				.setPlaceholder(t('Enter custom model name'))
+				.setValue(isCustomModel ? options.model : '')
+				.onChange(async (value) => {
+					options.model = value.trim()
+					await this.saveSettings()
+					this.doubaoRenderers.get(options)?.()
+				})
+			
+			// 初始状态：根据是否是自定义模型决定显示
+			textInputComponent.style.display = isShowingCustomInput ? 'inline-block' : 'none'
+			textInputComponent.style.width = '200px'
+		})
+		
+		// 添加切换按钮（从自定义模式切换回下拉选择）
+		setting.addButton((btn) => {
+			backButtonEl = btn.buttonEl
+			btn
+				.setButtonText('↩')
+				.setTooltip(t('Back to preset models'))
+				.onClick(() => {
+					isShowingCustomInput = false
+					if (textInputComponent) {
+						textInputComponent.style.display = 'none'
+					}
+					if (dropdownComponent) {
+						dropdownComponent.selectEl.style.display = 'inline-block'
+						// 选择第一个预设模型
+						if (models.length > 0) {
+							dropdownComponent.setValue(models[0])
+							options.model = models[0]
+							this.saveSettings()
+							this.doubaoRenderers.get(options)?.()
+						}
+					}
+					if (backButtonEl) {
+						backButtonEl.style.display = 'none'
+					}
+				})
+			
+			// 初始状态：只在显示自定义输入时显示按钮
+			backButtonEl.style.display = isShowingCustomInput ? 'inline-block' : 'none'
+		})
+		
+		return setting
+	}
 
 	addModelTextSection = (details: HTMLDetailsElement, options: BaseOptions, desc: string) =>
 		new Setting(details)
@@ -770,17 +947,13 @@ export class TarsSettingTab {
 					})
 			)
 
-	addParametersSection = (details: HTMLDetailsElement, options: BaseOptions) =>
-		new Setting(details)
-			.setName(t('Override input parameters'))
-			.setDesc(
-				t(
-					'Developer feature, in JSON format. For example, if the model list doesn\'t have the model you want, enter {"model": "your desired model"}'
-				)
-			)
+	addParametersSection = (details: HTMLDetailsElement, options: BaseOptions) => {
+		const setting = new Setting(details)
+			.setName(t('Additional parameters'))
+			.setDesc(t('Additional parameters description'))
 			.addTextArea((text) =>
 				text
-					.setPlaceholder('{}')
+					.setPlaceholder('{"temperature": 0.7, "top_p": 0.9}')
 					.setValue(JSON.stringify(options.parameters))
 					.onChange(async (value) => {
 						try {
@@ -791,7 +964,13 @@ export class TarsSettingTab {
 								await this.saveSettings()
 								return
 							}
-							options.parameters = JSON.parse(trimmed)
+							const parsed = JSON.parse(trimmed)
+							// 检查是否包含model字段，如果有则警告
+							if (parsed.model) {
+								new Notice(t('Please set model in the Model field above, not here'))
+								return
+							}
+							options.parameters = parsed
 							await this.saveSettings()
 						} catch {
 							// This is difficult to handle properly - onChange triggers quickly, and users might receive frequent error messages before they finish typing, which is annoying
@@ -799,6 +978,15 @@ export class TarsSettingTab {
 						}
 					})
 			)
+		
+		// 添加说明文本
+		setting.descEl.createEl('div', {
+			text: t('Common parameters example'),
+			cls: 'setting-item-description'
+		})
+		
+		return setting
+	}
 
 	addGptImageSections = (details: HTMLDetailsElement, options: GptImageOptions) => {
 		new Setting(details)

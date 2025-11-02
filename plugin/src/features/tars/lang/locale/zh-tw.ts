@@ -13,5 +13,17 @@ export default {
 	'Model test embed unsupported': '測試過程不支援解析附件。',
 	'Model test system prompt': '你正在協助 Obsidian FormFlow 外掛驗證連線。',
 	'Model test user prompt': '請回覆一段簡短的確認訊息。',
-	'Model test empty response': '測試回傳內容為空。'
+	'Model test empty response': '測試回傳內容為空。',
+	'Custom': '自訂',
+	'Enter custom model name': '輸入自訂模型名稱',
+	'Back to preset models': '返回預設模型',
+	'Switch to custom input': '切換到自訂輸入',
+	'Switch to model selection': '切換到模型選擇',
+	'Advanced parameters in JSON format. For other parameters besides model (e.g., temperature, top_p, etc.). Model name should be set in the Model field above.':
+		'進階參數，以 JSON 格式。用於設定 model 以外的其他參數（如 temperature、top_p 等）。模型名稱應該在上方的「模型」欄位中設定。',
+	'Additional parameters': '額外參數',
+	'Additional parameters description': '以 JSON 格式設定額外的 API 參數（如 temperature、top_p、max_tokens 等）。注意：請勿在此設定 model 參數。',
+	'Please set model in the Model field above, not here': '請在上方的「模型」欄位設定模型，而不是在這裡',
+	'Common parameters example': '常用參數範例：{"temperature": 0.7, "top_p": 0.9, "max_tokens": 2000}',
 }
+

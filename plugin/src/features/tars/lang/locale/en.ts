@@ -128,6 +128,12 @@ export default {
 	Model: 'Model',
 	'Supported features': 'Supported features',
 	'Select the model to use': 'Select the model to use',
+	'Custom': 'Custom',
+	'Custom model name': 'Custom model name',
+	'Enter custom model name': 'Enter custom model name',
+	'Back to preset models': 'Back to preset models',
+	'Switch to custom input': 'Switch to custom input',
+	'Switch to model selection': 'Switch to model selection',
 	'Please input API key first': 'Please input API key first',
 	'Please enter a number': 'Please enter a number',
 	'Minimum value is 256': 'Minimum value is 256',
@@ -135,6 +141,13 @@ export default {
 	'Override input parameters': 'Override input parameters',
 	'Developer feature, in JSON format. For example, if the model list doesn\'t have the model you want, enter {"model": "your desired model"}':
 		'Developer feature, in JSON format. For example, if the model list doesn\'t have the model you want, enter {"model": "your desired model"}',
+	'Advanced parameters in JSON format. For other parameters besides model (e.g., temperature, top_p, etc.). Model name should be set in the Model field above.':
+		'Advanced parameters in JSON format. For other parameters besides model (e.g., temperature, top_p, etc.). Model name should be set in the Model field above.',
+	'Additional parameters': 'Additional parameters',
+	'Additional parameters description':
+		'Set additional API parameters in JSON format (e.g., temperature, top_p, max_tokens). Note: Do not set the model parameter here.',
+	'Please set model in the Model field above, not here': 'Please set model in the Model field above, not here',
+	'Common parameters example': 'Common parameters example: {"temperature": 0.7, "top_p": 0.9, "max_tokens": 2000}',
 	'Remove AI assistant': 'Remove AI assistant',
 	Remove: 'Remove',
 	Endpoint: 'Endpoint',
