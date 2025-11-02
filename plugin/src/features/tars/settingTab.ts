@@ -3,7 +3,7 @@ import { t } from './lang/helper'
 import { SelectModelModal, SelectVendorModal } from './modal'
 import { BaseOptions, Message, Optional, ProviderSettings, ResolveEmbedAsBinary, Vendor } from './providers'
 import { ClaudeOptions, claudeVendor } from './providers/claude'
-import { DoubaoImageOptions, doubaoImageVendor } from './providers/doubaoImage'
+import { DoubaoImageOptions, doubaoImageVendor, DOUBAO_IMAGE_SIZE_PRESETS } from './providers/doubaoImage'
 import { GptImageOptions, gptImageVendor } from './providers/gptImage'
 import { grokVendor } from './providers/grok'
 import { kimiVendor } from './providers/kimi'
@@ -857,6 +857,7 @@ export class TarsSettingTab {
 	}
 
 	addDoubaoImageSections = (details: HTMLDetailsElement, options: DoubaoImageOptions) => {
+		// 图片显示宽度
 		new Setting(details)
 			.setName(t('Image Display Width'))
 			.setDesc(t('Example: 400px width would output as ![[image.jpg|400]]'))
@@ -870,32 +871,134 @@ export class TarsSettingTab {
 						await this.saveSettings()
 					})
 			)
+		
+		// 图片尺寸
 		new Setting(details)
-			.setName(t('Number of images'))
-			.setDesc(t('Number of images to generate (1-5)'))
-			.addSlider((slider) =>
-				slider
-					.setLimits(1, 4, 1)
-					.setValue(options.n)
-					.setDynamicTooltip()
+			.setName(t('Image size'))
+			.setDesc('支持分辨率（1K/2K/4K）或精确像素值')
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOptions(DOUBAO_IMAGE_SIZE_PRESETS)
+					.setValue(options.size)
 					.onChange(async (value) => {
-						options.n = value
+						options.size = value
+						await this.saveSettings()
+					})
+				return dropdown
+			})
+		
+		// 响应格式
+		new Setting(details)
+			.setName('响应格式')
+			.setDesc('选择接收生成图像的方式')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						'b64_json': 'Base64 JSON (推荐)',
+						'url': 'URL'
+					})
+					.setValue(options.response_format)
+					.onChange(async (value) => {
+						options.response_format = value as DoubaoImageOptions['response_format']
 						await this.saveSettings()
 					})
 			)
-		new Setting(details).setName(t('Image size')).addDropdown((dropdown) =>
-			dropdown
-				.addOptions({
-					'1024x1024': '1024x1024',
-					'1536x1024': '1536x1024 ' + t('landscape'),
-					'1024x1536': '1024x1536 ' + t('portrait')
-				})
-				.setValue(options.size)
-				.onChange(async (value) => {
-					options.size = value as DoubaoImageOptions['size']
-					await this.saveSettings()
-				})
-		)
+		
+		// 组图功能
+		new Setting(details)
+			.setName('组图功能')
+			.setDesc('开启后模型可根据提示词生成多张关联图片')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						'disabled': '关闭（单图输出）',
+						'auto': '自动判断（组图输出）'
+					})
+					.setValue(options.sequential_image_generation || 'disabled')
+					.onChange(async (value) => {
+						options.sequential_image_generation = value as 'auto' | 'disabled'
+						await this.saveSettings()
+					})
+			)
+		
+		// 最大图片数量（仅在组图模式下生效）
+		new Setting(details)
+			.setName('最大图片数量')
+			.setDesc('组图模式下最多生成的图片数量（1-15）。注意：输入参考图+生成图总数≤15')
+			.addSlider((slider) =>
+				slider
+					.setLimits(1, 15, 1)
+					.setValue(options.max_images || 5)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						options.max_images = value
+						await this.saveSettings()
+					})
+			)
+		
+		// 流式输出
+		new Setting(details)
+			.setName('流式输出')
+			.setDesc('开启后每生成一张图片即返回，无需等待全部生成完成。注意：流式输出可能增加请求处理时间')
+			.addToggle((toggle) =>
+				toggle
+					.setValue(options.stream ?? false)
+					.onChange(async (value) => {
+						options.stream = value
+						await this.saveSettings()
+					})
+			)
+		
+		// 提示词优化
+		new Setting(details)
+			.setName('提示词优化模式')
+			.setDesc('标准模式质量更高但耗时较长，快速模式速度快但质量一般')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						'standard': '标准模式（推荐）',
+						'fast': '快速模式'
+					})
+					.setValue(options.optimize_prompt_mode || 'standard')
+					.onChange(async (value) => {
+						options.optimize_prompt_mode = value as 'standard' | 'fast'
+						await this.saveSettings()
+					})
+			)
+		
+		// 水印
+		new Setting(details)
+			.setName('水印')
+			.setDesc('为生成的图像添加水印')
+			.addToggle((toggle) =>
+				toggle
+					.setValue(options.watermark ?? false)
+					.onChange(async (value) => {
+						options.watermark = value
+						await this.saveSettings()
+					})
+			)
+		
+		// 输入图片URL（支持图文生图和多图融合）
+		new Setting(details)
+			.setName('输入图片 URL')
+			.setDesc('可选：输入一个或多个图片 URL（每行一个），支持图文生图、多图融合等功能')
+			.addTextArea((text) => {
+				text
+					.setPlaceholder('https://example.com/image1.jpg\nhttps://example.com/image2.jpg')
+					.setValue((options.inputImages || []).join('\n'))
+					.onChange(async (value) => {
+						// 将文本按行分割并过滤空行
+						options.inputImages = value
+							.split('\n')
+							.map(url => url.trim())
+							.filter(url => url.length > 0)
+						await this.saveSettings()
+					})
+				text.inputEl.rows = 4
+				text.inputEl.style.width = '100%'
+				return text
+			})
 	}
 
 	private async testProviderConfiguration(provider: ProviderSettings): Promise<boolean> {
