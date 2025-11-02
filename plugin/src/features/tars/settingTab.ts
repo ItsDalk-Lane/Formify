@@ -18,7 +18,7 @@ import { GptImageOptions, gptImageVendor } from './providers/gptImage'
 import { grokVendor } from './providers/grok'
 import { kimiVendor } from './providers/kimi'
 import { ollamaVendor } from './providers/ollama'
-import { openRouterVendor } from './providers/openRouter'
+import { OpenRouterOptions, openRouterVendor } from './providers/openRouter'
 import { siliconFlowVendor } from './providers/siliconflow'
 import { getCapabilityEmoji } from './providers/utils'
 import { availableVendors, DEFAULT_TARS_SETTINGS } from './settings'
@@ -407,6 +407,11 @@ export class TarsSettingTab {
 						await this.saveSettings()
 					})
 				)
+			
+			// OpenRouter 特定的网络搜索配置
+			if (vendor.name === openRouterVendor.name) {
+				this.addOpenRouterWebSearchSections(details, settings.options as OpenRouterOptions)
+			}
 		}
 
 		if (vendor.name === claudeVendor.name) {
@@ -1419,6 +1424,78 @@ export class TarsSettingTab {
 				text.inputEl.style.width = '100%'
 				return text
 			})
+	}
+
+	/**
+	 * OpenRouter 网络搜索配置部分
+	 * 支持自定义搜索引擎、结果数量和搜索提示
+	 */
+	addOpenRouterWebSearchSections = (details: HTMLDetailsElement, options: OpenRouterOptions) => {
+		// 搜索引擎选择
+		new Setting(details)
+			.setName('搜索引擎')
+			.setDesc('选择搜索引擎。自动：OpenAI/Anthropic 使用 native，其他使用 exa')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						'auto': '自动选择（推荐）',
+						'native': 'Native（原生搜索）',
+						'exa': 'Exa（通用搜索）'
+					})
+					.setValue(options.webSearchEngine || 'auto')
+					.onChange(async (value) => {
+						if (value === 'auto') {
+							options.webSearchEngine = undefined
+						} else {
+							options.webSearchEngine = value as 'native' | 'exa'
+						}
+						await this.saveSettings()
+					})
+			)
+
+		// 搜索结果数量
+		new Setting(details)
+			.setName('搜索结果数量')
+			.setDesc('控制返回的搜索结果数量（1-10）。更多结果可能提供更全面的信息，但会增加 token 消耗')
+			.addSlider((slider) =>
+				slider
+					.setLimits(1, 10, 1)
+					.setValue(options.webSearchMaxResults ?? 5)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						options.webSearchMaxResults = value
+						await this.saveSettings()
+					})
+			)
+
+		// 自定义搜索提示
+		new Setting(details)
+			.setName('自定义搜索提示')
+			.setDesc('自定义在搜索结果前添加的提示文本。留空使用默认提示')
+			.addTextArea((text) => {
+				text
+					.setPlaceholder('A web search was conducted on {date}. Incorporate the following web search results into your response.\n\nIMPORTANT: Cite them using markdown links.')
+					.setValue(options.webSearchPrompt || '')
+					.onChange(async (value) => {
+						const trimmed = value.trim()
+						options.webSearchPrompt = trimmed || undefined
+						await this.saveSettings()
+					})
+				text.inputEl.rows = 4
+				text.inputEl.style.width = '100%'
+				return text
+			})
+		
+		// 添加价格说明
+		const pricingInfo = details.createEl('div', {
+			cls: 'setting-item-description',
+			attr: { style: 'margin-top: 10px; padding: 10px; background-color: var(--background-secondary); border-radius: 5px;' }
+		})
+		pricingInfo.createEl('strong', { text: '💰 价格说明：' })
+		pricingInfo.createEl('br')
+		pricingInfo.createEl('span', { text: '• Exa 搜索：$4 / 1000 结果（默认 5 结果 = $0.02/请求）' })
+		pricingInfo.createEl('br')
+		pricingInfo.createEl('span', { text: '• Native 搜索：由提供商定价（具体见 OpenRouter 文档）' })
 	}
 
 	private async testProviderConfiguration(provider: ProviderSettings): Promise<boolean> {

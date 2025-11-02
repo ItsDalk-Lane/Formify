@@ -71,15 +71,81 @@ export interface DoubaoOptions extends BaseOptions {
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp']
 
+/**
+ * 从文本中提取图片 URL
+ * 支持 http:// 和 https:// 开头的链接
+ * 
+ * 改进的 URL 提取逻辑：
+ * 1. 提取所有 http/https URL
+ * 2. 清理 URL 末尾的特殊字符（括号、中文等）
+ * 3. 保留合法的查询参数和锚点
+ * 4. 不强制要求 URL 包含图片扩展名（支持动态图片服务）
+ * 
+ * 支持的 URL 格式：
+ * - 带扩展名：https://example.com/image.jpg
+ * - 带查询参数：https://example.com/image.jpg?size=large
+ * - 动态服务：https://tse1.mm.bing.net/th/id/OIP.xxx?rs=1&pid=ImgDetMain
+ */
 const extractImageUrls = (text: string | undefined): string[] => {
 	if (!text) return []
+	
+	// 匹配所有以 http:// 或 https:// 开头的 URL
 	const urlRegex = /(https?:\/\/[^\s]+)/gi
 	const matches = text.match(urlRegex) || []
-	const uniqueUrls = Array.from(new Set(matches.map((match) => match.trim())));
-	return uniqueUrls.filter((url) => {
+	
+	const imageUrls: string[] = []
+	
+	for (const match of matches) {
+		let url = match.trim()
+		
+		// 清理 URL 末尾的特殊字符
+		// 移除常见的中文标点、括号等非 URL 字符
+		// 但保留合法的 URL 字符（包括查询参数和锚点）
+		url = url.replace(/[)）\]】>'"]+$/, '')
+		
+		// 如果 URL 包含图片扩展名，截断到扩展名之后
 		const lowerUrl = url.toLowerCase()
-		return IMAGE_EXTENSIONS.some((ext) => lowerUrl.includes(ext))
-	})
+		let foundExt = false
+		
+		for (const ext of IMAGE_EXTENSIONS) {
+			const extIndex = lowerUrl.lastIndexOf(ext)
+			if (extIndex !== -1) {
+				foundExt = true
+				// 截取到扩展名结束的位置
+				const afterExt = url.substring(extIndex + ext.length)
+				
+				// 如果扩展名后面是查询参数或锚点，保留它们
+				if (afterExt.startsWith('?') || afterExt.startsWith('#')) {
+					// 查找查询参数或锚点的结束位置（遇到非 URL 字符为止）
+					const endMatch = afterExt.match(/^[?#][^\s)）\]】>'"]*/)
+					if (endMatch) {
+						url = url.substring(0, extIndex + ext.length + endMatch[0].length)
+					} else {
+						url = url.substring(0, extIndex + ext.length)
+					}
+				} else if (afterExt.length > 0) {
+					// 扩展名后有其他字符但不是查询参数，截断
+					url = url.substring(0, extIndex + ext.length)
+				}
+				break
+			}
+		}
+		
+		// 即使没有找到扩展名，也保留 URL（支持动态图片服务）
+		if (!foundExt) {
+			// 对于没有扩展名的 URL，确保末尾没有多余的特殊字符
+			// 但保留查询参数和锚点
+			url = url.replace(/[)）\]】>'"]+$/, '')
+		}
+		
+		// 最终验证：确保 URL 不为空且格式合法
+		if (url.length > 10 && url.match(/^https?:\/\/.+/)) {
+			imageUrls.push(url)
+		}
+	}
+	
+	// 去重
+	return Array.from(new Set(imageUrls))
 }
 
 const extractString = (value: unknown): string | undefined => {
