@@ -4,6 +4,7 @@ import { TarsSettings } from 'tars/settings'
 import { toSpeakMark } from 'tars/suggest'
 import { TagCmdMeta } from './tagCmd'
 import { fetchTagMeta, insertMarkToBegin, insertMarkToEmptyLines, isEmptyLines, replaceTag } from './tagUtils'
+import { DebugLogger } from '../../../utils/DebugLogger'
 
 export const systemTagCmd = ({ id, name, tag }: TagCmdMeta, app: App, settings: TarsSettings): Command => ({
 	id,
@@ -12,7 +13,7 @@ export const systemTagCmd = ({ id, name, tag }: TagCmdMeta, app: App, settings: 
 		try {
 			const mark = toSpeakMark(tag)
 			const { range, role, tagContent, tagRange } = fetchTagMeta(app, editor, settings)
-			console.debug('systemTagCmd', { range, role, tagContent, tagRange })
+			DebugLogger.debug('systemTagCmd', { range, role, tagContent, tagRange })
 
 			// If it's an empty line, directly insert the tag
 			if (isEmptyLines(editor, range)) {

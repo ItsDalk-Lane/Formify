@@ -1,5 +1,6 @@
 import { App, Command, Modal, Notice, Setting } from 'obsidian'
 import { t } from 'tars/lang/helper'
+import { DebugLogger } from '../../../utils/DebugLogger'
 
 export const replaceCmdId = 'replace-tag'
 
@@ -17,7 +18,7 @@ export const replaceCmd = (app: App): Command => ({
 			new Notice(t('No speaker found'))
 			return
 		}
-		console.debug('twoMostFrequentSpeakers', twoMostFrequentSpeakers)
+		DebugLogger.debug('twoMostFrequentSpeakers', twoMostFrequentSpeakers)
 		const recommendedTags = twoMostFrequentSpeakers.map((speaker) => ({
 			original: speaker.name,
 			count: speaker.count,
@@ -96,12 +97,12 @@ const findTwoMostFrequentSpeakers = (fileText: string) => {
 	const matchResults = lines
 		.map((line) => line.match(/^([\u4e00-\u9fa5a-zA-Z0-9# ]+)([:|：]) /g))
 		.flatMap((match) => match || [])
-	console.debug('allMatches', matchResults)
+	DebugLogger.debug('allMatches', matchResults)
 	const matchCounts = countOccurrences(matchResults)
 
 	// sort occurrences
 	const sortedMatchFrequencies = Object.entries(matchCounts).sort((arr1, arr2) => arr2[1] - arr1[1])
-	console.debug('sortedMatchFrequencies', sortedMatchFrequencies)
+	DebugLogger.debug('sortedMatchFrequencies', sortedMatchFrequencies)
 	// Select the two most frequent speakers
 	const [mostFrequent, secondMostFrequent] = sortedMatchFrequencies.slice(0, 2)
 	if (!mostFrequent || !secondMostFrequent) {

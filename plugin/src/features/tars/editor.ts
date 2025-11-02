@@ -21,6 +21,7 @@ import { withStreamLogging } from './providers/decorator'
 import { APP_FOLDER, EditorStatus, TarsSettings, availableVendors } from './settings'
 import { GenerationStats, StatusBarManager } from './statusBarManager'
 import { TagRole } from './suggest'
+import { DebugLogger } from '../../utils/DebugLogger'
 
 export interface RunEnv {
 	readonly appMeta: MetadataCache
@@ -122,7 +123,7 @@ export const buildRunEnv = async (app: App, settings: TarsSettings): Promise<Run
 	}
 	const resolveEmbed = async (embed: EmbedCache) => {
 		const { path, subpath } = parseLinktext(embed.link)
-		console.debug('resolveEmbed path', path, 'subpath', subpath)
+		DebugLogger.debug('resolveEmbed path', path, 'subpath', subpath)
 		const targetFile = appMeta.getFirstLinkpathDest(path, filePath)
 		if (targetFile === null) {
 			throw new Error('LinkText broken: ' + embed.link.substring(0, 20))
@@ -152,7 +153,7 @@ export const buildRunEnv = async (app: App, settings: TarsSettings): Promise<Run
 const resolveLinkedContent = async (env: RunEnv, linkText: string) => {
 	const { appMeta, vault, filePath } = env
 	const { path, subpath } = parseLinktext(linkText)
-	console.debug('path', path, 'subpath', subpath)
+	DebugLogger.debug('path', path, 'subpath', subpath)
 
 	const targetFile = appMeta.getFirstLinkpathDest(path, filePath)
 
@@ -202,7 +203,7 @@ const extractTaggedBlocks = (env: RunEnv, startOffset: number, endOffset: number
 				: null
 		})
 		.filter((t) => t !== null) as Tag[]
-	console.debug('roleMappedTags', roleMappedTags)
+	DebugLogger.debug('roleMappedTags', roleMappedTags)
 
 	const ranges: [number, number][] = roleMappedTags.map((tag, i) => [
 		tag.tagRange[0],
@@ -222,7 +223,7 @@ const extractTaggedBlocks = (env: RunEnv, startOffset: number, endOffset: number
 		),
 		line: [roleMappedTags[i].tagLine, roleMappedTags[i + 1] ? roleMappedTags[i + 1].tagLine - 1 : Infinity]
 	}))
-	console.debug('taggedBlocks', taggedBlocks)
+	DebugLogger.debug('taggedBlocks', taggedBlocks)
 	return taggedBlocks
 }
 
@@ -285,7 +286,7 @@ const resolveTextRangeWithLinks = async (
 		}),
 		{ endOffset: startOffset, text: '' }
 	)
-	console.debug('accumulatedText', accumulatedText)
+	DebugLogger.debug('accumulatedText', accumulatedText)
 	return {
 		text: accumulatedText.text + fileText.slice(accumulatedText.endOffset, endOffset),
 		range: [startOffset, endOffset] as [number, number]
@@ -298,7 +299,7 @@ const extractTaggedBlockContent = async (env: RunEnv, taggedBlock: TaggedBlock) 
 			resolveTextRangeWithLinks(env, section, taggedBlock.contentRange, taggedBlock.role)
 		)
 	)
-	console.debug('textRanges', textRanges)
+	DebugLogger.debug('textRanges', textRanges)
 	const accumulated = textRanges
 		.map((range) => range.text)
 		.join('\n\n')
@@ -364,7 +365,7 @@ const insertText = (editor: Editor, text: string, editorStatus: EditorStatus, la
 	const lineAtCursor = editor.getLine(cursor.line)
 	if (lineAtCursor.length > cursor.ch) {
 		cursor = { line: cursor.line, ch: lineAtCursor.length }
-		// console.debug('Update cursor to end of line', cursor)
+		// DebugLogger.debug('Update cursor to end of line', cursor)
 	}
 
 	const lines = text.split('\n')
@@ -396,7 +397,7 @@ export const extractConversationsTextOnly = async (env: RunEnv) => {
 		.filter((_, index) => index % 2 === 0)
 		.map((startOffset, index) => ({ startOffset, endOffset: positions[index * 2 + 1] }))
 
-	console.debug('ranges', ranges)
+	DebugLogger.debug('ranges', ranges)
 
 	const conversations = await Promise.all(
 		ranges.map(async (r) => {
@@ -422,16 +423,16 @@ export const getMsgPositionByLine = (env: RunEnv, line: number) => {
 	} = env
 	const msgTags = [...systemTags, ...userTags, ...assistantTags]
 	const msgTagsInMeta = tagsInMeta.filter((t) => msgTags.some((n) => t.tag.slice(1).toLowerCase() === n.toLowerCase()))
-	console.debug('msgTagsInMeta', msgTagsInMeta)
+	DebugLogger.debug('msgTagsInMeta', msgTagsInMeta)
 	const msgIndex = findLastIndex(msgTagsInMeta, (t) => t.position.start.line <= line)
 	if (msgIndex < 0) return [-1, -1]
 
-	console.debug('msgTag', msgTagsInMeta[msgIndex])
+	DebugLogger.debug('msgTag', msgTagsInMeta[msgIndex])
 	const startOffset = msgTagsInMeta[msgIndex].position.end.offset + 2
 	const nextMsgIndex = msgIndex + 1
 	const nextMsgStartOffset =
 		nextMsgIndex < msgTagsInMeta.length ? msgTagsInMeta[nextMsgIndex].position.start.offset : Infinity
-	console.debug('nextTag', msgTagsInMeta[nextMsgIndex])
+	DebugLogger.debug('nextTag', msgTagsInMeta[nextMsgIndex])
 	const lastSection = findLast(
 		sections,
 		(section) =>
@@ -441,7 +442,7 @@ export const getMsgPositionByLine = (env: RunEnv, line: number) => {
 	if (!lastSection) return [-1, -1]
 
 	const endOffset = lastSection.position.end.offset
-	console.debug('startOff', startOffset, 'endOffset', endOffset)
+	DebugLogger.debug('startOff', startOffset, 'endOffset', endOffset)
 	return [startOffset, endOffset]
 }
 
@@ -457,7 +458,7 @@ const createDecoratedSendRequest = async (env: RunEnv, vendor: Vendor, provider:
 		if (!(await env.vault.adapter.exists(normalizePath(APP_FOLDER)))) {
 			await env.vault.createFolder(APP_FOLDER)
 		}
-		console.debug('Using stream logging')
+		DebugLogger.debug('Using stream logging')
 		return withStreamLogging(vendor.sendRequestFunc(provider.options), env.createPlainText)
 	} else {
 		return vendor.sendRequestFunc(provider.options)
@@ -483,7 +484,7 @@ export const generate = async (
 		const messages = conversation.map((c) =>
 			c.embeds ? { role: c.role, content: c.content, embeds: c.embeds } : { role: c.role, content: c.content }
 		)
-		console.debug('messages', messages)
+		DebugLogger.debug('messages', messages)
 
 		const lastMsg = messages.last()
 		if (!lastMsg || lastMsg.role !== 'user' || lastMsg.content.trim().length === 0) {
@@ -496,7 +497,7 @@ export const generate = async (
 				role: 'system',
 				content: env.options.defaultSystemMsg
 			})
-			console.debug('Default system message added:', env.options.defaultSystemMsg)
+			DebugLogger.debug('Default system message added:', env.options.defaultSystemMsg)
 		}
 
 		const round = messages.filter((m) => m.role === 'assistant').length + 1
@@ -538,13 +539,13 @@ export const generate = async (
 			throw new Error(t('No text generated'))
 		}
 
-		console.debug('✨ ' + t('AI generate') + ' ✨ ', llmResponse)
+		DebugLogger.debug('✨ ' + t('AI generate') + ' ✨ ', llmResponse)
 		if (startPos) {
 			const endPos = editor.getCursor('to')
 			const insertedText = editor.getRange(startPos, endPos)
 			const formattedText = formatTextWithLeadingBreaks(llmResponse)
 			if (insertedText !== formattedText) {
-				console.debug('format text with leading breaks')
+				DebugLogger.debug('format text with leading breaks')
 				editor.replaceRange(formattedText, startPos, endPos)
 			}
 		}

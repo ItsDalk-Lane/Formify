@@ -136,7 +136,7 @@ const sendRequestFunc = (settings: ClaudeOptions): SendRequest =>
 
 		let startReasoning = false
 		for await (const messageStreamEvent of stream) {
-			// console.debug('ClaudeNew messageStreamEvent', messageStreamEvent)
+			// DebugLogger.debug('ClaudeNew messageStreamEvent', messageStreamEvent)
 
 			// Handle different types of stream events
 			if (messageStreamEvent.type === 'content_block_delta') {
@@ -154,7 +154,7 @@ const sendRequestFunc = (settings: ClaudeOptions): SendRequest =>
 				}
 			} else if (messageStreamEvent.type === 'content_block_start') {
 				// Handle content block start events, including tool usage
-				// console.debug('Content block started', messageStreamEvent.content_block)
+				// DebugLogger.debug('Content block started', messageStreamEvent.content_block)
 				if (
 					messageStreamEvent.content_block.type === 'server_tool_use' &&
 					messageStreamEvent.content_block.name === 'web_search'
@@ -163,7 +163,7 @@ const sendRequestFunc = (settings: ClaudeOptions): SendRequest =>
 				}
 			} else if (messageStreamEvent.type === 'message_delta') {
 				// Handle message-level incremental updates
-				// console.debug('Message delta received', messageStreamEvent.delta)
+				// DebugLogger.debug('Message delta received', messageStreamEvent.delta)
 				// Check stop reason and notify user
 				if (messageStreamEvent.delta.stop_reason) {
 					const stopReason = messageStreamEvent.delta.stop_reason

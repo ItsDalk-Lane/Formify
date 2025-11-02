@@ -47,6 +47,8 @@ export interface TarsSettings {
 	enableDefaultSystemMsg: boolean
 	defaultSystemMsg: string
 	enableStreamLog: boolean
+	debugMode: boolean // 调试模式开关
+	debugLevel: 'debug' | 'info' | 'warn' | 'error' // 调试日志级别
 }
 
 export const DEFAULT_TARS_SETTINGS: TarsSettings = {
@@ -72,7 +74,9 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 	enableReplaceTag: false,
 	enableDefaultSystemMsg: false,
 	defaultSystemMsg: '',
-	enableStreamLog: false
+	enableStreamLog: false,
+	debugMode: false, // 默认关闭调试模式
+	debugLevel: 'error' // 默认只输出错误日志
 }
 
 export const availableVendors: Vendor[] = [

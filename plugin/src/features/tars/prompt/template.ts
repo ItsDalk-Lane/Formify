@@ -1,5 +1,6 @@
 import { App, HeadingCache, SectionCache } from 'obsidian'
 import { t } from 'tars/lang/helper'
+import { DebugLogger } from '../../../utils/DebugLogger'
 
 export interface PromptTemplate {
 	readonly title: string
@@ -19,7 +20,7 @@ export const getPromptTemplatesFromFile = async (app: App, promptFilePath: strin
 		throw new Error(t('Waiting for metadata to be ready. Please try again.'))
 	}
 
-	console.debug('sections', fileMeta.sections)
+	DebugLogger.debug('sections', fileMeta.sections)
 
 	const sections = fileMeta.sections
 	if (!sections) {
@@ -49,10 +50,10 @@ export const getPromptTemplatesFromFile = async (app: App, promptFilePath: strin
 		)
 		.filter((group) => group.length > 0) // Remove empty groups
 
-	console.debug('sectionGroups', sectionGroups)
+	DebugLogger.debug('sectionGroups', sectionGroups)
 
 	const slides = sectionGroups.slice(1) // Remove the intro slide
-	console.debug('slides', slides)
+	DebugLogger.debug('slides', slides)
 
 	const promptTemplates: PromptTemplate[] = []
 	const reporter: string[] = []
@@ -67,8 +68,8 @@ export const getPromptTemplatesFromFile = async (app: App, promptFilePath: strin
 			reporter.push(error.message)
 		}
 	}
-	console.debug('promptTemplates', promptTemplates)
-	console.debug('reporter', reporter)
+	DebugLogger.debug('promptTemplates', promptTemplates)
+	DebugLogger.debug('reporter', reporter)
 	return { promptTemplates, reporter }
 }
 

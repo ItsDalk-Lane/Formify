@@ -5,6 +5,7 @@ import { t } from 'tars/lang/helper'
 import { APP_FOLDER, TarsSettings } from 'tars/settings'
 import { ReporterModal } from './modal'
 import { findChangedTemplates, getPromptTemplatesFromFile, PromptTemplate } from './template'
+import { DebugLogger } from '../../../utils/DebugLogger'
 
 export const templateToCmdId = (template: PromptTemplate): string => `Prompt#${template.title}`
 export const getTitleFromCmdId = (id: string): string => id.slice(id.indexOf('#') + 1)
@@ -32,7 +33,7 @@ export const loadTemplateFileCommand = (
 			// Find elements in these two arrays that have the same title but different content
 			const changed = findChangedTemplates(settings.promptTemplates, promptTemplates)
 			if (changed.length > 0) {
-				console.debug('changed', changed)
+				DebugLogger.debug('changed', changed)
 				new Notice(t('Templates have been updated: ') + changed.map((t) => t.title).join(', '))
 			}
 
@@ -45,7 +46,7 @@ export const loadTemplateFileCommand = (
 				new ReporterModal(app, reporter).open()
 			}
 		} catch (error) {
-			console.error(error)
+			DebugLogger.error('loadTemplateFileCommand error:', error)
 			new Notice(
 				`🔴 ${Platform.isDesktopApp ? t('Check the developer console for error details. ') : ''}${error}`,
 				10 * 1000
@@ -92,7 +93,7 @@ export const promptTemplateCmd = (id: string, name: string, app: App, settings: 
 			await new Promise((resolve) => setTimeout(resolve, 500))
 			applyTemplate(editor, template.template)
 		} catch (error) {
-			console.error(error)
+			DebugLogger.error('promptTemplateCmd error:', error)
 			new Notice(
 				`🔴 ${Platform.isDesktopApp ? t('Check the developer console for error details. ') : ''}${error}`,
 				10 * 1000
@@ -118,7 +119,7 @@ const applyTemplate = (editor: Editor, template: string) => {
 	const substitution = templateFn({ s: selectedText })
 	// If the selected text is within newPrompt, replace it; otherwise append
 	const newPrompt = substitution.includes(selectedText) ? substitution : selectedText + substitution
-	// console.debug('newPrompt', newPrompt)
+	// DebugLogger.debug('newPrompt', newPrompt)
 	const { anchor, head } = getEditorSelection(editor)
 	editor.replaceRange(newPrompt, anchor, head)
 }

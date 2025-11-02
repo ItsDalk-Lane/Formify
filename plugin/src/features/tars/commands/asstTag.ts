@@ -14,6 +14,7 @@ import {
 	insertText,
 	isEmptyLines
 } from './tagUtils'
+import { DebugLogger } from '../../../utils/DebugLogger'
 
 export const asstTagCmd = (
 	{ id, name, tag }: TagCmdMeta,
@@ -34,7 +35,7 @@ export const asstTagCmd = (
 			const defaultUserMark = toSpeakMark(settings.userTags[0])
 			const mark = toSpeakMark(tag)
 			const { range, role, tagContent, tagRange } = fetchTagMeta(app, editor, settings)
-			console.debug('asstTagCmd', { range, role, tagContent, tagRange })
+			DebugLogger.debug('asstTagCmd', { range, role, tagContent, tagRange })
 
 			// If it's an empty line, directly insert the tag
 			if (isEmptyLines(editor, range)) {
@@ -109,7 +110,7 @@ export const asstTagCmd = (
 				)
 			}
 		} catch (error) {
-			console.error(error)
+			DebugLogger.error('asstTagCmd error:', error)
 			if (error.name === 'AbortError') {
 				statusBarManager.setCancelledStatus()
 				new Notice(t('Generation cancelled'))

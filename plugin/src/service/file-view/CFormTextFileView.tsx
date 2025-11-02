@@ -1,4 +1,5 @@
 import { TFile, TextFileView, WorkspaceLeaf } from "obsidian";
+import { DebugLogger } from '../../utils/DebugLogger';
 import { StrictMode } from "react";
 import { Root, createRoot } from "react-dom/client";
 import CalloutBlock from "src/component/callout-block/CalloutBlock";
@@ -46,7 +47,7 @@ export class CFormTextFileView extends TextFileView {
 				this.root.unmount();
 			}
 			if (!this.file) {
-				// console.info("file not loaded...");
+				// DebugLogger.info("file not loaded...");
 				return;
 			}
 			if (data === "{}" || data === "") {

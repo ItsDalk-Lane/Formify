@@ -1,7 +1,7 @@
 import { requestUrl } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
-import { convertEmbedToImageUrl, getMimeTypeFromFilename } from './utils'
+import { CALLOUT_BLOCK_END, CALLOUT_BLOCK_START, convertEmbedToImageUrl, getMimeTypeFromFilename } from './utils'
 
 // Web Search 工具配置
 export interface WebSearchTool {
@@ -17,8 +17,37 @@ export interface WebSearchTool {
 	}
 }
 
+export type DoubaoThinkingType = 'enabled' | 'disabled' | 'auto'
+export type DoubaoReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
+
+interface DoubaoModelCapability {
+	thinkingTypes: DoubaoThinkingType[]
+	supportsReasoningEffort: boolean
+}
+
+const DOUBAO_MODEL_CAPABILITY_MAP: Record<string, DoubaoModelCapability> = {
+	'doubao-seed-1-6-vision-250815': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: false },
+	'doubao-seed-1-6-lite-251015': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: true },
+	'doubao-seed-1-6-250615': { thinkingTypes: ['enabled', 'disabled', 'auto'], supportsReasoningEffort: false },
+	'doubao-seed-1-6-251015': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: true },
+	'doubao-seed-1-6-flash-250828': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: false },
+	'doubao-seed-1-6-flash-250715': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: false },
+	'doubao-seed-1-6-flash-250615': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: false },
+	'doubao-1-5-thinking-vision-pro-250428': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: false },
+	'doubao-1-5-ui-tars-250428': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: false },
+	'doubao-1-5-thinking-pro-m-250428': { thinkingTypes: ['enabled', 'disabled', 'auto'], supportsReasoningEffort: false }
+}
+
+export const DOUBAO_REASONING_EFFORT_OPTIONS: DoubaoReasoningEffort[] = ['minimal', 'low', 'medium', 'high']
+export const DEFAULT_DOUBAO_THINKING_TYPE: DoubaoThinkingType = 'enabled'
+
+export const getDoubaoModelCapability = (model: string): DoubaoModelCapability | undefined =>
+	DOUBAO_MODEL_CAPABILITY_MAP[model]
+
 // Doubao图片理解配置选项
 export interface DoubaoOptions extends BaseOptions {
+	thinkingType?: DoubaoThinkingType
+	reasoningEffort?: DoubaoReasoningEffort
 	// 图片理解精细度控制
 	imageDetail?: 'low' | 'high'
 	imagePixelLimit?: {
@@ -52,6 +81,35 @@ const extractImageUrls = (text: string | undefined): string[] => {
 		return IMAGE_EXTENSIONS.some((ext) => lowerUrl.includes(ext))
 	})
 }
+
+const extractString = (value: unknown): string | undefined => {
+	if (!value) return undefined
+	if (typeof value === 'string') return value
+	if (Array.isArray(value)) {
+		return value
+			.map((item) => extractString(item))
+			.filter((item): item is string => typeof item === 'string')
+			.join('') || undefined
+	}
+	if (typeof value === 'object') {
+		const obj = value as Record<string, unknown>
+		const preferredKeys: Array<string> = ['text', 'content', 'delta', 'thinking', 'value', 'output']
+		for (const key of preferredKeys) {
+			if (key in obj) {
+				const nested = extractString(obj[key])
+				if (nested) return nested
+			}
+		}
+		for (const key of Object.keys(obj)) {
+			if (preferredKeys.includes(key)) continue
+			const nested = extractString(obj[key])
+			if (nested) return nested
+		}
+	}
+	return undefined
+}
+
+const formatThinking = (text: string) => text.replace(/\n/g, '\n> ')
 
 // 处理消息，支持文本和图片的多模态输入
 // 当启用 Web Search 时，需要转换为 Responses API 的消息格式
@@ -186,7 +244,18 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary) {
 		const { parameters, ...optionsExcludingParams } = settings
 		const options = { ...optionsExcludingParams, ...parameters } as DoubaoOptions
-		const { apiKey, baseURL, model, imageDetail, imagePixelLimit, enableWebSearch, webSearchConfig, ...remains } = options
+		const {
+			apiKey,
+			baseURL,
+			model,
+			imageDetail,
+			imagePixelLimit,
+			enableWebSearch,
+			webSearchConfig,
+			thinkingType,
+			reasoningEffort,
+			...remains
+		} = options
 		if (!apiKey) throw new Error(t('API key is required'))
 		if (!model) throw new Error(t('Model is required'))
 
@@ -217,7 +286,59 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			...remains
 		}
 
-		// 根据 API 类型设置消息字段
+	const capability = getDoubaoModelCapability(model)
+	let effectiveThinkingType: DoubaoThinkingType | undefined
+
+	console.log('[Doubao] 模型能力检查', {
+		model,
+		capability,
+		requestedThinkingType: thinkingType,
+		requestedReasoningEffort: reasoningEffort
+	})
+
+	if (capability) {
+		const fallbackThinking = capability.thinkingTypes.includes(DEFAULT_DOUBAO_THINKING_TYPE)
+			? DEFAULT_DOUBAO_THINKING_TYPE
+			: capability.thinkingTypes[0]
+		const requestedThinking = thinkingType ?? fallbackThinking
+		effectiveThinkingType = capability.thinkingTypes.includes(requestedThinking)
+			? requestedThinking
+			: fallbackThinking
+
+		console.log('[Doubao] 深度思考配置', {
+			fallbackThinking,
+			requestedThinking,
+			effectiveThinkingType
+		})
+
+		if (effectiveThinkingType) {
+			data.thinking = { type: effectiveThinkingType }
+		}
+
+		if (capability.supportsReasoningEffort) {
+			if (effectiveThinkingType === 'enabled') {
+				const candidate =
+					reasoningEffort && DOUBAO_REASONING_EFFORT_OPTIONS.includes(reasoningEffort)
+						? reasoningEffort
+						: 'low'
+				data.reasoning_effort = candidate
+				console.log('[Doubao] 设置 reasoning_effort', candidate)
+			} else if (effectiveThinkingType === 'disabled') {
+				data.reasoning_effort = 'minimal'
+				console.log('[Doubao] thinking disabled, 强制 reasoning_effort = minimal')
+			}
+		}
+	} else {
+		console.warn('[Doubao] 当前模型不在能力映射表中:', model)
+	}
+
+	console.log('[Doubao] 最终请求配置', {
+		model,
+		thinking: data.thinking,
+		reasoning_effort: data.reasoning_effort,
+		useResponsesAPI,
+		完整data: JSON.stringify(data, null, 2)
+	})		// 根据 API 类型设置消息字段
 		if (useResponsesAPI) {
 			// Responses API 使用 input 字段
 			data.input = processedMessages
@@ -274,27 +395,31 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			data.messages = processedMessages
 		}
 
-		// 发送请求
-		const response = await fetch(endpoint, {
-			method: 'POST',
-			body: JSON.stringify(data),
-			headers: {
-				Authorization: `Bearer ${apiKey}`,
-				'Content-Type': 'application/json'
-			},
-			signal: controller.signal
-		})
+	// 发送请求
+	console.log('[Doubao] 准备发送请求到:', endpoint)
+	console.log('[Doubao] 请求体:', JSON.stringify(data, null, 2))
+	
+	const response = await fetch(endpoint, {
+		method: 'POST',
+		body: JSON.stringify(data),
+		headers: {
+			Authorization: `Bearer ${apiKey}`,
+			'Content-Type': 'application/json'
+		},
+		signal: controller.signal
+	})
 
-		if (!response.ok) {
-			const errorText = await response.text()
-			throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
-		}
-
-		const reader = response.body?.getReader()
+	console.log('[Doubao] 收到响应:', response.status, response.statusText)
+	
+	if (!response.ok) {
+		const errorText = await response.text()
+		throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
+	}		const reader = response.body?.getReader()
 		if (!reader) throw new Error('Failed to get response reader')
 
 		const decoder = new TextDecoder()
 		let buffer = ''
+		let thinkingActive = false
 
 		try {
 			while (true) {
@@ -311,21 +436,62 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 					if (!trimmed.startsWith('data: ')) continue
 
 					try {
-						const json = JSON.parse(trimmed.slice(6))
-						
+						const payload = JSON.parse(trimmed.slice(6))
+						console.log('[Doubao] payload.type:', payload.type)
+					
 						if (useResponsesAPI) {
-							// 处理 Responses API 的流式响应
-							const chunkType = json.type
-							
-							// 只输出最终回答文本，忽略思考过程和搜索状态
+							const chunkType = payload.type as string | undefined
+							if (chunkType && chunkType.startsWith('response.thinking')) {
+								console.log('[Doubao] ✓ 检测到思考块!', payload)
+								const thinkingText = extractString(payload.delta ?? payload.thinking ?? payload.content)
+								if (thinkingText) {
+									const prefix = !thinkingActive ? ((thinkingActive = true), CALLOUT_BLOCK_START) : ''
+									yield prefix + formatThinking(thinkingText)
+								}
+								continue
+							}
 							if (chunkType === 'response.output_text.delta') {
-								const content = json.delta
-								if (content) yield content
+								const content = extractString(payload.delta)
+								if (content) {
+									if (thinkingActive) {
+										thinkingActive = false
+										yield CALLOUT_BLOCK_END + content
+									} else {
+										yield content
+									}
+								}
+								continue
+							}
+							if (chunkType === 'response.completed' && thinkingActive) {
+								thinkingActive = false
+								yield CALLOUT_BLOCK_END
 							}
 						} else {
-							// 处理 Chat Completions API 的流式响应
-							const content = json.choices?.[0]?.delta?.content
-							if (content) yield content
+							const delta = payload.choices?.[0]?.delta ?? {}
+							console.log('[Doubao] delta keys:', Object.keys(delta))
+							
+							// 豆包使用 reasoning_content 字段返回推理过程
+							const reasoningContent = (delta as any).reasoning_content
+							if (reasoningContent) {
+								console.log('[Doubao] ✓ reasoning_content!', reasoningContent.substring(0, 50))
+								const prefix = !thinkingActive ? ((thinkingActive = true), CALLOUT_BLOCK_START) : ''
+								yield prefix + formatThinking(reasoningContent)
+							}
+							
+							const content = (delta as any).content
+							if (content) {
+								if (thinkingActive) {
+									thinkingActive = false
+									yield CALLOUT_BLOCK_END + content
+								} else {
+									yield content
+								}
+							}
+							const finishReason = payload.choices?.[0]?.finish_reason
+							if (finishReason && thinkingActive) {
+								thinkingActive = false
+								yield CALLOUT_BLOCK_END
+							}
 						}
 					} catch (e) {
 						console.warn('Failed to parse SSE data:', trimmed, e)
@@ -333,9 +499,15 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 				}
 			}
 		} finally {
+			if (thinkingActive) {
+				thinkingActive = false
+				yield CALLOUT_BLOCK_END
+			}
 			reader.releaseLock()
 		}
 	}
+
+const models = Object.keys(DOUBAO_MODEL_CAPABILITY_MAP)
 
 export const doubaoVendor: Vendor = {
 	name: 'Doubao',
@@ -347,8 +519,8 @@ export const doubaoVendor: Vendor = {
 		enableWebSearch: false // 默认不启用 Web Search
 	},
 	sendRequestFunc,
-	models: [],
+	models,
 	websiteToObtainKey: 'https://www.volcengine.com',
-	capabilities: ['Text Generation', 'Image Vision', 'Web Search']
+	capabilities: ['Text Generation', 'Image Vision', 'Web Search', 'Reasoning']
 }
 

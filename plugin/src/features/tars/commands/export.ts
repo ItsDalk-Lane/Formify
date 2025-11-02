@@ -3,6 +3,7 @@ import { buildRunEnv, extractConversationsTextOnly } from 'tars/editor'
 import { t } from 'tars/lang/helper'
 import { Message } from 'tars/providers'
 import { TarsSettings } from 'tars/settings'
+import { DebugLogger } from '../../../utils/DebugLogger'
 
 export const exportCmdId = 'export-to-jsonl'
 
@@ -17,17 +18,17 @@ export const exportCmd = (app: App, settings: TarsSettings) => ({
 const exportConversation = async (app: App, settings: TarsSettings) => {
 	const env = await buildRunEnv(app, settings)
 	const conversations = await extractConversationsTextOnly(env)
-	console.debug('conversations', conversations)
+	DebugLogger.debug('conversations', conversations)
 
 	let query_responses = []
 	try {
 		query_responses = conversations.map(to_query_response_history)
 	} catch (error) {
-		console.error('error', error)
+		DebugLogger.error('error', error)
 		new Notice(`🔴${t('Error')}: ${error}`, 10 * 1000)
 		return
 	}
-	// console.debug('query_responses', query_responses)
+	// DebugLogger.debug('query_responses', query_responses)
 	if (query_responses.length === 0) {
 		new Notice(t('No conversation found'))
 		return

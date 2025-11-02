@@ -236,6 +236,26 @@ Translate the following content into English：{{s}}
 	'Must be ≥1024 and less than max_tokens': 'Must be ≥1024 and less than max_tokens',
 	'Minimum value is 1024': 'Minimum value is 1024',
 
+	// Doubao thinking settings
+	'Doubao thinking mode': 'Doubao thinking mode',
+	'Select a model first to configure deep thinking.': 'Select a model first to configure deep thinking.',
+	'Select a model first': 'Select a model first',
+	'Current model does not support configuring deep thinking.':
+		'Current model does not support configuring deep thinking.',
+	'Not supported': 'Not supported',
+	'Force enable deep thinking': 'Force enable deep thinking',
+	'Force disable deep thinking': 'Force disable deep thinking',
+	'Let the model decide deep thinking automatically': 'Let the model decide deep thinking automatically',
+	'Control whether the Doubao model performs deep thinking before answering.':
+		'Control whether the Doubao model performs deep thinking before answering.',
+	'Reasoning effort': 'Reasoning effort',
+	'Adjust how long the model thinks before answering. Only available when deep thinking is enabled.':
+		'Adjust how long the model thinks before answering. Only available when deep thinking is enabled.',
+	'Minimal reasoning (direct answer)': 'Minimal reasoning (direct answer)',
+	'Low reasoning (quick response)': 'Low reasoning (quick response)',
+	'Medium reasoning (balanced)': 'Medium reasoning (balanced)',
+	'High reasoning (deep analysis)': 'High reasoning (deep analysis)',
+
 	// statusBarManager.ts
 	'AI Generation Details': 'AI Generation Details',
 	Round: 'Round',

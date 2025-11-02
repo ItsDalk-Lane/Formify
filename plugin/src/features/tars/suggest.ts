@@ -13,6 +13,7 @@ import { RequestController, buildRunEnv, generate } from './editor'
 import { t } from './lang/helper'
 import { TarsSettings } from './settings'
 import { StatusBarManager } from './statusBarManager'
+import { DebugLogger } from '../../utils/DebugLogger'
 
 export type TagRole = 'user' | 'assistant' | 'system' | 'newChat'
 
@@ -102,7 +103,7 @@ export class TagEditorSuggest extends EditorSuggest<TagEntry> {
 		if (!this.active || !this.settings.enableTagSuggest) return null
 		if (this.settings.editorStatus.isTextInserting) return null
 		if (cursor.ch < 1 || cursor.ch > this.settings.tagSuggestMaxLineLength) return null
-		// console.debug('---- onTrigger ---------')
+		// DebugLogger.debug('---- onTrigger ---------')
 		const text = editor.getLine(cursor.line)
 		if (text.length > cursor.ch) return null // Cursor is not at the end of the line
 
@@ -189,7 +190,7 @@ export class TagEditorSuggest extends EditorSuggest<TagEntry> {
 			this.close()
 			return
 		}
-		console.debug('element', element)
+		DebugLogger.debug('element', element)
 
 		try {
 			const provider = this.settings.providers.find((p) => p.tag === element.tag)
@@ -200,7 +201,7 @@ export class TagEditorSuggest extends EditorSuggest<TagEntry> {
 
 			const env = await buildRunEnv(this.app, this.settings)
 			const messagesEndOffset = editor.posToOffset(this.context.start)
-			console.debug('endOffset', messagesEndOffset)
+			DebugLogger.debug('endOffset', messagesEndOffset)
 			await generate(
 				env,
 				editor,
@@ -211,7 +212,7 @@ export class TagEditorSuggest extends EditorSuggest<TagEntry> {
 				this.requestController
 			)
 		} catch (error) {
-			console.error('error', error)
+			DebugLogger.error('error', error)
 			if (error.name === 'AbortError') {
 				this.statusBarManager.setCancelledStatus()
 				new Notice(t('Generation cancelled'))

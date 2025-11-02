@@ -3,6 +3,7 @@ import OpenAI from 'openai'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SaveAttachment, SendRequest, Vendor } from '.'
 import { getMimeTypeFromFilename } from './utils'
+import { DebugLogger } from '../../../utils/DebugLogger'
 
 const models = ['gpt-image-1']
 
@@ -40,8 +41,8 @@ const sendRequestFunc = (settings: GptImageOptions): SendRequest =>
 		if (!apiKey) throw new Error(t('API key is required'))
 		if (!saveAttachment) throw new Error('saveAttachment is required')
 
-		console.debug('messages:', messages)
-		console.debug('options:', options)
+		DebugLogger.debug('messages:', messages)
+		DebugLogger.debug('options:', options)
 		if (messages.length > 1) {
 			new Notice(t('Only the last user message is used for image generation. Other messages are ignored.'))
 		}
@@ -117,14 +118,14 @@ const sendRequestFunc = (settings: GptImageOptions): SendRequest =>
 			const imageData = response.data[i]
 			const imageBase64 = imageData.b64_json
 			if (!imageBase64) {
-				console.error(`No base64 image data returned for image ${i + 1}`)
+				DebugLogger.error(`No base64 image data returned for image ${i + 1}`)
 				continue
 			}
 			const imageBuffer = Buffer.from(imageBase64, 'base64')
 			const indexFlag = n > 1 ? `-${i + 1}` : ''
 			const filename = `gptImage-${formatTime}${indexFlag}.${output_format}`
-			console.debug(`Saving image as ${filename}`)
-			await saveAttachment(filename, imageBuffer)
+			DebugLogger.debug(`Saving image as ${filename}`)
+			await saveAttachment(filename, imageBuffer.buffer as ArrayBuffer)
 
 			yield `![[${filename}|${displayWidth}]]\n\n`
 		}

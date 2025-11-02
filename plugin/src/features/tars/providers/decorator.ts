@@ -1,6 +1,7 @@
 import { normalizePath } from 'obsidian'
 import { APP_FOLDER } from 'tars/settings'
 import { CreatePlainText, SendRequest } from '.'
+import { DebugLogger } from '../../../utils/DebugLogger'
 
 interface TextWithTime {
 	readonly text: string
@@ -36,7 +37,7 @@ export const withStreamLogging = (originalFunc: SendRequest, createPlainText: Cr
 				texts
 			}
 			await createPlainText(filePath, JSON.stringify(response, null, 2))
-			console.debug('Response logged to:', filePath)
+			DebugLogger.debug('Response logged to:', filePath)
 		}
 	}
 }

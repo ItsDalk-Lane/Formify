@@ -233,6 +233,25 @@ export default {
 	'Must be ≥1024 and less than max_tokens': '必须 ≥1024 且小于 max_tokens',
 	'Minimum value is 1024': '最小值为 1024',
 
+	// Doubao thinking settings
+	'Doubao thinking mode': '深度思考模式',
+	'Select a model first to configure deep thinking.': '请先选择模型以配置深度思考。',
+	'Select a model first': '请先选择模型',
+	'Current model does not support configuring deep thinking.': '当前模型不支持配置深度思考功能。',
+	'Not supported': '暂不支持',
+	'Force enable deep thinking': '强制开启深度思考',
+	'Force disable deep thinking': '强制关闭深度思考',
+	'Let the model decide deep thinking automatically': '由模型自动判断是否执行深度思考',
+	'Control whether the Doubao model performs deep thinking before answering.':
+		'控制豆包模型在回答前是否执行深度思考。',
+	'Reasoning effort': '思考长度',
+	'Adjust how long the model thinks before answering. Only available when deep thinking is enabled.':
+		'调整模型在回答前的思考时长，仅当深度思考开启时可用。',
+	'Minimal reasoning (direct answer)': '最短思考（直接回答）',
+	'Low reasoning (quick response)': '低强度思考（快速响应）',
+	'Medium reasoning (balanced)': '中等思考（速度与深度平衡）',
+	'High reasoning (deep analysis)': '高强度思考（深度分析）',
+
 	// statusBarManager.ts
 	'AI Generation Details': 'AI 生成详情',
 	Round: '回合',

@@ -2,6 +2,7 @@ import OpenAI from 'openai'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { CALLOUT_BLOCK_END, CALLOUT_BLOCK_START } from './utils'
+import { DebugLogger } from '../../../utils/DebugLogger'
 
 type DeepSeekDelta = OpenAI.ChatCompletionChunk.Choice.Delta & {
 	reasoning_content?: string
@@ -33,7 +34,7 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		let startReasoning = false
 		for await (const part of stream) {
 			if (part.usage && part.usage.prompt_tokens && part.usage.completion_tokens)
-				console.debug(`Prompt tokens: ${part.usage.prompt_tokens}, completion tokens: ${part.usage.completion_tokens}`)
+				DebugLogger.debug(`Prompt tokens: ${part.usage.prompt_tokens}, completion tokens: ${part.usage.completion_tokens}`)
 
 			const delta = part.choices[0]?.delta as DeepSeekDelta
 			const reasonContent = delta?.reasoning_content

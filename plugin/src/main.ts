@@ -9,6 +9,7 @@ import './style/base.css'
 import { FormFlowApi } from './api/FormFlowApi';
 import { TarsFeatureManager, cloneTarsSettings } from './features/tars';
 import { encryptApiKey, decryptApiKey } from './features/tars/utils/cryptoUtils';
+import { DebugLogger } from './utils/DebugLogger';
 
 export default class FormPlugin extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
@@ -19,6 +20,11 @@ export default class FormPlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+		
+		// 初始化调试日志系统
+		DebugLogger.setDebugMode(this.settings.tars?.settings?.debugMode ?? false);
+		DebugLogger.setDebugLevel(this.settings.tars?.settings?.debugLevel ?? 'error');
+		
 		this.addSettingTab(new PluginSettingTab(this));
 		await applicationCommandService.initialize(this);
 		await applicationFileViewService.initialize(this);
@@ -45,7 +51,7 @@ export default class FormPlugin extends Plugin {
 		// 解密存储的 Tars 设置中的 API 密钥
 		let decryptedTarsSettings = persisted?.tars?.settings
 		if (decryptedTarsSettings?.providers) {
-			console.debug('[Main] 开始解密 API 密钥')
+			DebugLogger.debug('[Main] 开始解密 API 密钥')
 			decryptedTarsSettings = {
 				...decryptedTarsSettings,
 				providers: decryptedTarsSettings.providers.map((provider: any) => ({
@@ -60,7 +66,7 @@ export default class FormPlugin extends Plugin {
 					}
 				}))
 			}
-			console.debug('[Main] API 密钥解密完成')
+			DebugLogger.debug('[Main] API 密钥解密完成')
 		}
 		
 		this.settings = {
@@ -90,7 +96,7 @@ export default class FormPlugin extends Plugin {
 		// 在保存前加密 Tars 设置中的 API 密钥
 		const settingsToSave = { ...this.settings }
 		if (settingsToSave.tars?.settings?.providers) {
-			console.debug('[Main] 开始加密 API 密钥')
+			DebugLogger.debug('[Main] 开始加密 API 密钥')
 			settingsToSave.tars = {
 				...settingsToSave.tars,
 				settings: {
@@ -113,10 +119,15 @@ export default class FormPlugin extends Plugin {
 					})
 				}
 			}
-			console.debug('[Main] API 密钥加密完成')
+			DebugLogger.debug('[Main] API 密钥加密完成')
 		}
 		
 		await this.saveData(settingsToSave);
+		
+		// 更新调试日志设置
+		DebugLogger.setDebugMode(this.settings.tars?.settings?.debugMode ?? false);
+		DebugLogger.setDebugLevel(this.settings.tars?.settings?.debugLevel ?? 'error');
+		
 		formScriptService.refresh(this.settings.scriptFolder)
 		formIntegrationService.initialize(this);
 		this.refreshTarsFeature();

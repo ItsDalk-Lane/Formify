@@ -2,6 +2,7 @@ import axios from 'axios'
 import { Notice, Platform, requestUrl } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, Optional, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
+import { DebugLogger } from '../../../utils/DebugLogger'
 
 interface TokenResponse {
 	access_token: string
@@ -51,7 +52,7 @@ const validOrCreate = async (currentToken: Token | undefined, apiKey: string, ap
 		}
 	}
 	const newToken = await createToken(apiKey, apiSecret)
-	console.debug('create new token', newToken)
+	DebugLogger.debug('create new token', newToken)
 	return {
 		isValid: false,
 		token: newToken
@@ -138,7 +139,7 @@ const sendRequestFunc = (settings: QianFanOptions): SendRequest =>
 				}
 			})
 
-			console.debug('response', response.json)
+			DebugLogger.debug('response', response.json)
 			yield response.json.result
 		}
 	}

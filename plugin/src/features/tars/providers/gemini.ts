@@ -26,7 +26,7 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		const result = await chat.sendMessageStream(lastMsg.content, { signal: controller.signal })
 		for await (const chunk of result.stream) {
 			const chunkText = chunk.text()
-			// console.debug('chunkText', chunkText)
+			// DebugLogger.debug('chunkText', chunkText)
 			yield chunkText
 		}
 	}

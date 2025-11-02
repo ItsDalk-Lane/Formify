@@ -1,9 +1,18 @@
-import { App, Notice, requestUrl, Setting } from 'obsidian'
+import { App, DropdownComponent, Notice, requestUrl, Setting } from 'obsidian'
 import { t } from './lang/helper'
 import { SelectModelModal, SelectVendorModal } from './modal'
 import { BaseOptions, Message, Optional, ProviderSettings, ResolveEmbedAsBinary, Vendor } from './providers'
 import { ClaudeOptions, claudeVendor } from './providers/claude'
-import { DoubaoOptions, doubaoVendor } from './providers/doubao'
+import { DebugLogger } from '../../utils/DebugLogger'
+import {
+	DoubaoOptions,
+	doubaoVendor,
+	DoubaoThinkingType,
+	DoubaoReasoningEffort,
+	DOUBAO_REASONING_EFFORT_OPTIONS,
+	DEFAULT_DOUBAO_THINKING_TYPE,
+	getDoubaoModelCapability
+} from './providers/doubao'
 import { DoubaoImageOptions, doubaoImageVendor, DOUBAO_IMAGE_SIZE_PRESETS } from './providers/doubaoImage'
 import { GptImageOptions, gptImageVendor } from './providers/gptImage'
 import { grokVendor } from './providers/grok'
@@ -24,6 +33,7 @@ export interface TarsSettingsContext {
 
 export class TarsSettingTab {
 	private containerEl!: HTMLElement
+	private readonly doubaoRenderers = new WeakMap<BaseOptions, () => void>()
 
 	constructor(private readonly app: App, private readonly context: TarsSettingsContext) {}
 
@@ -316,6 +326,36 @@ export class TarsSettingTab {
 					await this.saveSettings()
 				})
 			)
+
+		// 调试模式设置
+		new Setting(advancedSection)
+			.setName('调试模式')
+			.setDesc('启用后将在控制台输出调试日志。修改后需要重新加载插件才能生效。')
+			.addToggle((toggle) =>
+				toggle.setValue(this.settings.debugMode ?? false).onChange(async (value) => {
+					this.settings.debugMode = value
+					await this.saveSettings()
+					DebugLogger.setDebugMode(value)
+				})
+			)
+
+		// 调试级别设置
+		new Setting(advancedSection)
+			.setName('调试日志级别')
+			.setDesc('选择要输出的最低日志级别。debug=全部, info=信息及以上, warn=警告及以上, error=仅错误')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption('debug', 'Debug (全部)')
+					.addOption('info', 'Info (信息)')
+					.addOption('warn', 'Warn (警告)')
+					.addOption('error', 'Error (错误)')
+					.setValue(this.settings.debugLevel ?? 'error')
+					.onChange(async (value: 'debug' | 'info' | 'warn' | 'error') => {
+						this.settings.debugLevel = value
+						await this.saveSettings()
+						DebugLogger.setDebugLevel(value)
+					})
+			)
 	}
 
 	createProviderSetting = (index: number, settings: ProviderSettings, isOpen: boolean = false) => {
@@ -472,7 +512,7 @@ export class TarsSettingTab {
 					.setValue(settings.tag)
 					.onChange(async (value) => {
 						const trimmed = value.trim()
-						// console.debug('trimmed', trimmed)
+						// DebugLogger.debug('trimmed', trimmed)
 						if (trimmed.length === 0) return
 						if (!validateTag(trimmed)) return
 						const otherTags = this.settings.providers
@@ -618,6 +658,7 @@ export class TarsSettingTab {
 					.onChange(async (value) => {
 						options.model = value
 						await this.saveSettings()
+						this.doubaoRenderers.get(options)?.()
 					})
 			)
 
@@ -862,6 +903,14 @@ export class TarsSettingTab {
 	}
 
 	addDoubaoSections = (details: HTMLDetailsElement, options: DoubaoOptions) => {
+		const thinkingContainer = details.createDiv({ cls: 'tars-doubao-thinking-section' })
+		const renderThinkingControls = () => {
+			thinkingContainer.empty()
+			this.renderDoubaoThinkingControls(thinkingContainer, options)
+		}
+		renderThinkingControls()
+		this.doubaoRenderers.set(options, renderThinkingControls)
+
 		// 图片理解精细度控制 - 使用detail字段
 		new Setting(details)
 			.setName('图片理解精细度（detail）')
@@ -929,23 +978,114 @@ export class TarsSettingTab {
 						await this.saveSettings()
 					})
 			)
+	}
 
-		// 说明文字
-		const infoDiv = details.createDiv({ cls: 'setting-item-description' })
-		infoDiv.style.marginTop = '10px'
-		infoDiv.style.padding = '10px'
-		infoDiv.style.backgroundColor = 'var(--background-secondary)'
-		infoDiv.style.borderRadius = '5px'
-		infoDiv.innerHTML = `
-			<strong>💡 使用说明：</strong><br>
-			<ul style="margin: 5px 0; padding-left: 20px;">
-				<li><strong>优先级</strong>：image_pixel_limit（像素限制）> detail（精细度）</li>
-				<li><strong>detail=low</strong>：min_pixels=3136, max_pixels=1048576（约1MP）</li>
-				<li><strong>detail=high</strong>：min_pixels=3136, max_pixels=4014080（约4MP）</li>
-				<li><strong>像素范围</strong>：必须在 [196, 36000000] 之间，否则API会报错</li>
-				<li><strong>缺省逻辑</strong>：不设置时使用API的默认值（low）</li>
-			</ul>
-		`
+	private renderDoubaoThinkingControls = (container: HTMLElement, options: DoubaoOptions) => {
+		const model = options.model
+		const capability = getDoubaoModelCapability(model)
+		const thinkingSetting = new Setting(container).setName(t('Doubao thinking mode'))
+
+		if (!model) {
+			thinkingSetting
+				.setDesc(t('Select a model first to configure deep thinking.'))
+				.addDropdown((dropdown) => {
+					dropdown.addOption('', t('Select a model first'))
+					dropdown.setValue('')
+					dropdown.setDisabled(true)
+				})
+			return
+		}
+
+		if (!capability) {
+			thinkingSetting
+				.setDesc(t('Current model does not support configuring deep thinking.'))
+				.addDropdown((dropdown) => {
+					dropdown.addOption('', t('Not supported'))
+					dropdown.setValue('')
+					dropdown.setDisabled(true)
+				})
+			return
+		}
+
+		const supportedTypes = capability.thinkingTypes
+		const fallbackType = supportedTypes.includes(DEFAULT_DOUBAO_THINKING_TYPE)
+			? DEFAULT_DOUBAO_THINKING_TYPE
+			: supportedTypes[0]
+		const initialThinking: DoubaoThinkingType =
+			options.thinkingType && supportedTypes.includes(options.thinkingType)
+				? options.thinkingType
+				: fallbackType
+
+		let reasoningDropdown: DropdownComponent | null = null
+		const thinkingLabels: Record<DoubaoThinkingType, string> = {
+			enabled: t('Force enable deep thinking'),
+			disabled: t('Force disable deep thinking'),
+			auto: t('Let the model decide deep thinking automatically')
+		}
+
+		thinkingSetting
+			.setDesc(t('Control whether the Doubao model performs deep thinking before answering.'))
+			.addDropdown((dropdown) => {
+				for (const type of supportedTypes) {
+					dropdown.addOption(type, thinkingLabels[type])
+				}
+				dropdown.setValue(initialThinking)
+				dropdown.onChange(async (value) => {
+					const newValue = value as DoubaoThinkingType
+					options.thinkingType = newValue
+					if (capability.supportsReasoningEffort && reasoningDropdown) {
+						if (newValue === 'enabled') {
+							const validEffort =
+								options.reasoningEffort && DOUBAO_REASONING_EFFORT_OPTIONS.includes(options.reasoningEffort)
+									? options.reasoningEffort
+									: 'low'
+							reasoningDropdown.setDisabled(false)
+							reasoningDropdown.setValue(validEffort)
+							options.reasoningEffort = validEffort
+						} else {
+							reasoningDropdown.setDisabled(true)
+							reasoningDropdown.setValue('minimal')
+						}
+					}
+					await this.saveSettings()
+				})
+			})
+
+		if (!capability.supportsReasoningEffort) {
+			return
+		}
+
+		const reasoningLabels: Record<DoubaoReasoningEffort, string> = {
+			minimal: t('Minimal reasoning (direct answer)'),
+			low: t('Low reasoning (quick response)'),
+			medium: t('Medium reasoning (balanced)'),
+			high: t('High reasoning (deep analysis)')
+		}
+
+		const storedEffort =
+			options.reasoningEffort && DOUBAO_REASONING_EFFORT_OPTIONS.includes(options.reasoningEffort)
+				? options.reasoningEffort
+				: 'low'
+		const initialReasoning: DoubaoReasoningEffort = initialThinking === 'enabled' ? storedEffort : 'minimal'
+		if (initialThinking === 'enabled') {
+			options.reasoningEffort = storedEffort
+		}
+
+		new Setting(container)
+			.setName(t('Reasoning effort'))
+			.setDesc(t('Adjust how long the model thinks before answering. Only available when deep thinking is enabled.'))
+			.addDropdown((dropdown) => {
+				for (const effort of DOUBAO_REASONING_EFFORT_OPTIONS) {
+					dropdown.addOption(effort, reasoningLabels[effort])
+				}
+				dropdown.setValue(initialReasoning)
+				dropdown.setDisabled(initialThinking !== 'enabled')
+				dropdown.onChange(async (value) => {
+					options.reasoningEffort = value as DoubaoReasoningEffort
+					await this.saveSettings()
+				})
+				reasoningDropdown = dropdown
+			})
 	}
 
 	addDoubaoImageSections = (details: HTMLDetailsElement, options: DoubaoImageOptions) => {
@@ -1109,7 +1249,7 @@ export class TarsSettingTab {
 			}
 			// 为图片生成模型提供模拟的 saveAttachment 函数
 			const saveAttachment = async (filename: string, data: ArrayBuffer) => {
-				console.debug(`[Test Mode] Would save file: ${filename}, size: ${data.byteLength} bytes`)
+				DebugLogger.debug(`[Test Mode] Would save file: ${filename}, size: ${data.byteLength} bytes`)
 				// 测试模式下不实际保存文件，只记录日志
 			}
 			const messages: Message[] = [

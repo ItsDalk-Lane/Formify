@@ -2,6 +2,7 @@ import { App, Editor, EditorPosition, EditorRange, EditorSelection, TagCache } f
 import { t } from 'tars/lang/helper'
 import { TarsSettings } from 'tars/settings'
 import { TagRole } from 'tars/suggest'
+import { DebugLogger } from '../../../utils/DebugLogger'
 
 export const HARD_LINE_BREAK = '  \n' // Two spaces plus newline, hard line break in markdown
 
@@ -23,13 +24,13 @@ export const fetchTagMeta = (app: App, editor: Editor, settings: TarsSettings): 
 
 export const refineRange = (app: App, editor: Editor): EditorRange => {
 	const selection = getEditorSelection(editor)
-	console.debug('anchor', selection.anchor)
-	console.debug('head', selection.head)
+	DebugLogger.debug('anchor', selection.anchor)
+	DebugLogger.debug('head', selection.head)
 	const cursor = editor.getCursor()
 
 	const { sections } = getEnv(app)
 	if (!sections) {
-		console.debug('No sections')
+		DebugLogger.debug('No sections')
 		return {
 			from: {
 				line: cursor.line,
@@ -52,7 +53,7 @@ export const refineRange = (app: App, editor: Editor): EditorRange => {
 	)
 
 	if (overlappingSections.length === 0) {
-		console.debug('No overlapping sections')
+		DebugLogger.debug('No overlapping sections')
 
 		// select the whole line
 		return {

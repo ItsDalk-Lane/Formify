@@ -1,6 +1,7 @@
 import { Notice, requestUrl } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SaveAttachment, SendRequest, Vendor } from '.'
+import { DebugLogger } from '../../../utils/DebugLogger'
 
 // 豆包图像生成支持的模型列表
 const models = [
@@ -126,8 +127,8 @@ const sendRequestFunc = (settings: DoubaoImageOptions): SendRequest =>
 		if (!apiKey) throw new Error(t('API key is required'))
 		if (!saveAttachment) throw new Error('saveAttachment is required')
 
-		console.debug('messages:', messages)
-		console.debug('options:', options)
+		DebugLogger.debug('messages:', messages)
+		DebugLogger.debug('options:', options)
 		
 		if (messages.length > 1) {
 			new Notice(t('Only the last user message is used for image generation. Other messages are ignored.'))
@@ -169,7 +170,8 @@ const sendRequestFunc = (settings: DoubaoImageOptions): SendRequest =>
 							mimeType = 'image/jpeg'
 						}
 						const base64 = Buffer.from(binary).toString('base64')
-						imageUrls.push(`data:${mimeType};base64,${base64}`)
+						imageUrls.push(`data:${mimeType};
+import { DebugLogger } from '../../../utils/DebugLogger';base64,${base64}`)
 					}
 				} catch (error) {
 					console.error('Failed to process embed image:', error)
@@ -212,7 +214,7 @@ const sendRequestFunc = (settings: DoubaoImageOptions): SendRequest =>
 			data.watermark = watermark
 		}
 
-		console.debug('Request data:', JSON.stringify(data, null, 2))
+		DebugLogger.debug('Request data:', JSON.stringify(data, null, 2))
 
 		// 发送请求
 		const response = await requestUrl({
@@ -225,8 +227,8 @@ const sendRequestFunc = (settings: DoubaoImageOptions): SendRequest =>
 			}
 		})
 
-		console.debug('Response status:', response.status)
-		console.debug('Response headers:', response.headers)
+		DebugLogger.debug('Response status:', response.status)
+		DebugLogger.debug('Response headers:', response.headers)
 
 		// 处理响应数据
 		let responseData: any
@@ -237,12 +239,12 @@ const sendRequestFunc = (settings: DoubaoImageOptions): SendRequest =>
 		
 		if (isStreamResponse && typeof response.text === 'string') {
 			// 解析 SSE (Server-Sent Events) 格式的流式响应
-			console.debug('Parsing SSE stream response')
+			DebugLogger.debug('Parsing SSE stream response')
 			try {
 				responseData = parseSSEResponse(response.text)
 			} catch (error) {
 				console.error('Failed to parse SSE response:', error)
-				console.debug('Raw response text:', response.text)
+				DebugLogger.debug('Raw response text:', response.text)
 				throw new Error('解析流式响应失败，请尝试关闭流式输出选项')
 			}
 		} else {
@@ -250,7 +252,7 @@ const sendRequestFunc = (settings: DoubaoImageOptions): SendRequest =>
 			responseData = response.json
 		}
 
-		console.debug('Parsed response data:', responseData)
+		DebugLogger.debug('Parsed response data:', responseData)
 
 		if (!responseData.data || responseData.data.length === 0) {
 			throw new Error(t('Failed to generate image. no data received from API'))
@@ -297,7 +299,7 @@ const sendRequestFunc = (settings: DoubaoImageOptions): SendRequest =>
 			// 多张图片时添加序号
 			const indexFlag = imageCount > 1 ? `-${i + 1}` : ''
 			const filename = `doubaoImage-${formatTime}${indexFlag}.png`
-			console.debug(`Saving image as ${filename}`)
+			DebugLogger.debug(`Saving image as ${filename}`)
 			
 			try {
 				await saveAttachment(filename, imageBuffer)

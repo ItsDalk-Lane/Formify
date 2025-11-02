@@ -2,6 +2,7 @@ import * as jose from 'jose'
 import OpenAI from 'openai'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
+import { DebugLogger } from '../../../utils/DebugLogger'
 
 interface Token {
 	id: string
@@ -21,7 +22,7 @@ const sendRequestFunc = (settings: ZhipuOptions): SendRequest =>
 		const options = { ...optionsExcludingParams, ...parameters }
 		const { apiKey, baseURL, model, token: currentToken, tokenExpireInMinutes, enableWebSearch, ...remains } = options
 		if (!apiKey) throw new Error(t('API key is required'))
-		console.debug('zhipu options', { baseURL, apiKey, model, currentToken, tokenExpireInMinutes, enableWebSearch })
+		DebugLogger.debug('zhipu options', { baseURL, apiKey, model, currentToken, tokenExpireInMinutes, enableWebSearch })
 
 		const { token } = await validOrCreate(currentToken, apiKey, tokenExpireInMinutes)
 		settings.token = token
@@ -98,7 +99,7 @@ const validOrCreate = async (currentToken: Token | undefined, apiKeySecret: stri
 		}
 	}
 	const newToken = await createToken(apiKeySecret, expireInMinutes)
-	console.debug('create new token', newToken)
+	DebugLogger.debug('create new token', newToken)
 	return {
 		isValid: false,
 		token: newToken
