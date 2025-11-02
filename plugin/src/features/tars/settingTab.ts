@@ -18,7 +18,7 @@ import { GptImageOptions, gptImageVendor } from './providers/gptImage'
 import { grokVendor } from './providers/grok'
 import { kimiVendor } from './providers/kimi'
 import { ollamaVendor } from './providers/ollama'
-import { OpenRouterOptions, openRouterVendor } from './providers/openRouter'
+import { OpenRouterOptions, openRouterVendor, isImageGenerationModel } from './providers/openRouter'
 import { siliconFlowVendor } from './providers/siliconflow'
 import { getCapabilityEmoji } from './providers/utils'
 import { availableVendors, DEFAULT_TARS_SETTINGS } from './settings'
@@ -34,6 +34,8 @@ export interface TarsSettingsContext {
 export class TarsSettingTab {
 	private containerEl!: HTMLElement
 	private readonly doubaoRenderers = new WeakMap<BaseOptions, () => void>()
+	private currentOpenProviderIndex: number = -1 // 记录当前展开的 provider 索引
+	private autoSaveEnabled: boolean = true // 控制是否自动保存
 
 	constructor(private readonly app: App, private readonly context: TarsSettingsContext) {}
 
@@ -42,10 +44,12 @@ export class TarsSettingTab {
 	}
 
 	private async saveSettings() {
-		await this.context.saveSettings()
+		if (this.autoSaveEnabled) {
+			await this.context.saveSettings()
+		}
 	}
 
-	render(containerEl: HTMLElement, expandLastProvider = false): void {
+	render(containerEl: HTMLElement, expandLastProvider = false, keepOpenIndex: number = -1): void {
 		this.containerEl = containerEl
 		containerEl.empty()
 
@@ -55,7 +59,7 @@ export class TarsSettingTab {
 			.addToggle((toggle) =>
 				toggle.setValue(enabled).onChange(async (value) => {
 					await this.context.setEnabled(value)
-					this.render(containerEl, expandLastProvider)
+					this.render(containerEl, expandLastProvider, keepOpenIndex)
 				})
 			)
 
@@ -95,7 +99,8 @@ export class TarsSettingTab {
 
 		for (const [index, provider] of this.settings.providers.entries()) {
 			const isLast = index === this.settings.providers.length - 1
-			this.createProviderSetting(index, provider, isLast && expandLastProvider)
+			const shouldOpen = (isLast && expandLastProvider) || index === keepOpenIndex
+			this.createProviderSetting(index, provider, shouldOpen)
 		}
 
 		containerEl.createEl('br')
@@ -359,12 +364,23 @@ export class TarsSettingTab {
 	}
 
 	createProviderSetting = (index: number, settings: ProviderSettings, isOpen: boolean = false) => {
+		// 禁用自动保存，改为手动点击保存按钮
+		const previousAutoSaveState = this.autoSaveEnabled
+		this.autoSaveEnabled = false
+		
 		const vendor = availableVendors.find((v) => v.name === settings.vendor)
 		if (!vendor) throw new Error('No vendor found ' + settings.vendor)
 		const { containerEl } = this
 		const details = containerEl.createEl('details')
 		details.createEl('summary', { text: getSummary(settings.tag, vendor.name), cls: 'tars-setting-h4' })
 		details.open = isOpen
+		
+		// 监听展开/折叠事件，记录当前展开的索引
+		details.addEventListener('toggle', () => {
+			if (details.open) {
+				this.currentOpenProviderIndex = index
+			}
+		})
 
 		const capabilities =
 			t('Supported features') +
@@ -377,7 +393,7 @@ export class TarsSettingTab {
 		const modelConfig = MODEL_FETCH_CONFIGS[vendor.name as keyof typeof MODEL_FETCH_CONFIGS]
 		if (modelConfig) {
 			// 按钮选择模式（支持API获取模型列表 + 自定义输入）
-			this.addModelButtonSection(details, settings.options, modelConfig, capabilities)
+			this.addModelButtonSection(details, settings.options, modelConfig, capabilities, vendor.name)
 		} else if (vendor.models.length > 0) {
 			// 下拉选择模式（预设模型列表 + 自定义输入）
 			this.addModelDropDownSection(details, settings.options, vendor.models, capabilities)
@@ -397,20 +413,44 @@ export class TarsSettingTab {
 		if ('apiSecret' in settings.options)
 			this.addAPISecretOptional(details, settings.options as BaseOptions & Pick<Optional, 'apiSecret'>)
 
-		if (vendor.capabilities.includes('Web Search')) {
-			new Setting(details)
-				.setName(t('Web search'))
-				.setDesc(t('Enable web search for AI'))
-				.addToggle((toggle) =>
-					toggle.setValue(settings.options.enableWebSearch ?? false).onChange(async (value) => {
-						settings.options.enableWebSearch = value
-						await this.saveSettings()
-					})
-				)
+		// OpenRouter 特殊处理：根据模型自动判断显示网络搜索或图像生成
+		if (vendor.name === openRouterVendor.name) {
+			const options = settings.options as OpenRouterOptions
+			const supportsImageGeneration = options.model ? isImageGenerationModel(options.model) : false
 			
-			// OpenRouter 特定的网络搜索配置
-			if (vendor.name === openRouterVendor.name) {
-				this.addOpenRouterWebSearchSections(details, settings.options as OpenRouterOptions)
+			if (supportsImageGeneration) {
+				// 模型支持图像生成，显示图像生成配置
+				this.addOpenRouterImageGenerationSections(details, options)
+			} else {
+				// 模型不支持图像生成，显示网络搜索配置
+				if (vendor.capabilities.includes('Web Search')) {
+					new Setting(details)
+						.setName(t('Web search'))
+						.setDesc(t('Enable web search for AI'))
+						.addToggle((toggle) =>
+							toggle.setValue(settings.options.enableWebSearch ?? false).onChange(async (value) => {
+								settings.options.enableWebSearch = value
+								await this.saveSettings()
+							})
+						)
+					
+					this.addOpenRouterWebSearchSections(details, options)
+				}
+			}
+		} else {
+			// 其他提供商的网络搜索配置
+			if (vendor.capabilities.includes('Web Search')) {
+				new Setting(details)
+					.setName(t('Web search'))
+					.setDesc(t('Enable web search for AI'))
+					.addToggle((toggle) =>
+						toggle.setValue(settings.options.enableWebSearch ?? false).onChange(async (value) => {
+							settings.options.enableWebSearch = value
+							await this.saveSettings()
+						})
+					)
+				
+				// OpenRouter 特定的网络搜索配置（已在上面处理）
 			}
 		}
 
@@ -460,16 +500,61 @@ export class TarsSettingTab {
 					})
 			})
 
-		new Setting(details).setName(t('Remove') + ' ' + vendor.name).addButton((btn) => {
+		// 保存和移除按钮
+		const actionSetting = new Setting(details)
+		
+		// 添加保存按钮
+		actionSetting.addButton((btn) => {
+			btn
+				.setButtonText('保存')
+				.setCta()
+				.onClick(async () => {
+					// 保存前验证所有标签
+					const tags = this.settings.providers.map(p => p.tag.toLowerCase())
+					const uniqueTags = new Set(tags)
+					if (tags.length !== uniqueTags.size) {
+						new Notice('❌ ' + t('Keyword for tag must be unique'))
+						return
+					}
+					
+					// 验证标签格式
+					for (const provider of this.settings.providers) {
+						if (!validateTag(provider.tag)) {
+							new Notice('❌ 标签格式无效: ' + provider.tag)
+							return
+						}
+					}
+					
+					// 临时启用自动保存来真正保存设置
+					this.autoSaveEnabled = true
+					await this.context.saveSettings()
+					this.autoSaveEnabled = previousAutoSaveState
+					new Notice('✅ 设置已保存')
+					
+					// OpenRouter: 保存后检查是否需要重新渲染（模型变化导致功能切换）
+					if (vendor.name === openRouterVendor.name) {
+						this.render(this.containerEl, false, this.currentOpenProviderIndex)
+					}
+				})
+		})
+		
+		// 添加移除按钮
+		actionSetting.addButton((btn) => {
 			btn
 				.setWarning()
 				.setButtonText(t('Remove'))
 				.onClick(async () => {
 					this.settings.providers.splice(index, 1)
-					await this.saveSettings()
+					// 移除操作需要真正保存
+					this.autoSaveEnabled = true
+					await this.context.saveSettings()
+					this.autoSaveEnabled = previousAutoSaveState
 					this.render(this.containerEl)
 				})
 		})
+		
+		// 恢复自动保存状态
+		this.autoSaveEnabled = previousAutoSaveState
 	}
 
 	addTagSection = (details: HTMLDetailsElement, settings: ProviderSettings, index: number, defaultTag: string) =>
@@ -482,17 +567,10 @@ export class TarsSettingTab {
 					.setValue(settings.tag)
 					.onChange(async (value) => {
 						const trimmed = value.trim()
-						// DebugLogger.debug('trimmed', trimmed)
+						// 只更新内存中的值,不进行验证和弹出通知
+						// 验证将在点击保存按钮时进行
 						if (trimmed.length === 0) return
-						if (!validateTag(trimmed)) return
-						const otherTags = this.settings.providers
-							.filter((e, i) => i !== index)
-							.map((e) => e.tag.toLowerCase())
-						if (otherTags.includes(trimmed.toLowerCase())) {
-							new Notice(t('Keyword for tag must be unique'))
-							return
-						}
-
+						
 						settings.tag = trimmed
 						const summaryElement = details.querySelector('summary')
 						if (summaryElement != null) summaryElement.textContent = getSummary(settings.tag, defaultTag) // 更新summary
@@ -616,7 +694,8 @@ export class TarsSettingTab {
 		details: HTMLDetailsElement,
 		options: BaseOptions,
 		modelConfig: { url: string; requiresApiKey: boolean },
-		desc: string
+		desc: string,
+		vendorName?: string
 	) => {
 		const setting = new Setting(details).setName(t('Model')).setDesc(desc)
 
@@ -646,6 +725,10 @@ export class TarsSettingTab {
 							options.model = selectedModel
 							await this.saveSettings()
 							btn.setButtonText(selectedModel)
+							// OpenRouter: 模型改变时重新渲染以切换网络搜索/图像生成配置
+							if (vendorName === openRouterVendor.name) {
+								this.render(this.containerEl, false, this.currentOpenProviderIndex)
+							}
 						}
 						new SelectModelModal(this.app, models, onChoose).open()
 					} catch (error) {
@@ -676,6 +759,10 @@ export class TarsSettingTab {
 					await this.saveSettings()
 					if (buttonComponent) {
 						buttonComponent.textContent = value.trim() || t('Select the model to use')
+					}
+					// OpenRouter: 模型改变时重新渲染以显示/隐藏相关设置
+					if (vendorName === openRouterVendor.name) {
+						this.render(this.containerEl, false, this.currentOpenProviderIndex)
 					}
 				})
 
@@ -1485,17 +1572,97 @@ export class TarsSettingTab {
 				text.inputEl.style.width = '100%'
 				return text
 			})
-		
-		// 添加价格说明
-		const pricingInfo = details.createEl('div', {
-			cls: 'setting-item-description',
-			attr: { style: 'margin-top: 10px; padding: 10px; background-color: var(--background-secondary); border-radius: 5px;' }
-		})
-		pricingInfo.createEl('strong', { text: '💰 价格说明：' })
-		pricingInfo.createEl('br')
-		pricingInfo.createEl('span', { text: '• Exa 搜索：$4 / 1000 结果（默认 5 结果 = $0.02/请求）' })
-		pricingInfo.createEl('br')
-		pricingInfo.createEl('span', { text: '• Native 搜索：由提供商定价（具体见 OpenRouter 文档）' })
+	}
+
+	/**
+	 * OpenRouter 图像生成配置部分
+	 * 支持配置图片宽高比、流式生成、格式和保存方式
+	 */
+	addOpenRouterImageGenerationSections = (details: HTMLDetailsElement, options: OpenRouterOptions) => {
+		// 图片宽高比配置
+		new Setting(details)
+			.setName('图片宽高比')
+			.setDesc('选择生成图片的宽高比。不同宽高比对应不同的像素尺寸')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						'1:1': '1:1 (1024×1024)',
+						'2:3': '2:3 (832×1248)',
+						'3:2': '3:2 (1248×832)',
+						'3:4': '3:4 (864×1184)',
+						'4:3': '4:3 (1184×864)',
+						'4:5': '4:5 (896×1152)',
+						'5:4': '5:4 (1152×896)',
+						'9:16': '9:16 (768×1344)',
+						'16:9': '16:9 (1344×768)',
+						'21:9': '21:9 (1536×672)'
+					})
+					.setValue(options.imageAspectRatio || '1:1')
+					.onChange(async (value) => {
+						options.imageAspectRatio = value as OpenRouterOptions['imageAspectRatio']
+						await this.saveSettings()
+					})
+			)
+
+		// 流式生成开关
+		new Setting(details)
+			.setName('流式图像生成')
+			.setDesc('开启后图像生成过程将以流式方式返回。某些模型支持在生成过程中逐步显示结果')
+			.addToggle((toggle) =>
+				toggle
+					.setValue(options.imageStream ?? false)
+					.onChange(async (value) => {
+						options.imageStream = value
+						await this.saveSettings()
+					})
+			)
+
+		// 图片格式选择
+		new Setting(details)
+			.setName('图片返回格式')
+			.setDesc('选择图片的返回格式：Base64（嵌入在响应中）或 URL（提供下载链接）')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						'b64_json': 'Base64 JSON（推荐）',
+						'url': 'URL 链接'
+					})
+					.setValue(options.imageResponseFormat || 'b64_json')
+					.onChange(async (value) => {
+						options.imageResponseFormat = value as 'url' | 'b64_json'
+						await this.saveSettings()
+					})
+			)
+
+		// 保存方式选择
+		new Setting(details)
+			.setName('图片保存方式')
+			.setDesc('选择是否将图片保存为附件。关闭后将直接输出 URL 或 Base64 数据')
+			.addToggle((toggle) =>
+				toggle
+					.setValue(options.imageSaveAsAttachment ?? true)
+					.onChange(async (value) => {
+						options.imageSaveAsAttachment = value
+						await this.saveSettings()
+					})
+			)
+
+		// 图片显示宽度（仅在保存为附件时生效）
+		if (options.imageSaveAsAttachment) {
+			new Setting(details)
+				.setName('图片显示宽度')
+				.setDesc('设置图片在笔记中的显示宽度（像素）')
+				.addSlider((slider) =>
+					slider
+						.setLimits(200, 800, 50)
+						.setValue(options.imageDisplayWidth || 400)
+						.setDynamicTooltip()
+						.onChange(async (value) => {
+							options.imageDisplayWidth = value
+							await this.saveSettings()
+						})
+				)
+		}
 	}
 
 	private async testProviderConfiguration(provider: ProviderSettings): Promise<boolean> {

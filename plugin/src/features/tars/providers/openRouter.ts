@@ -1,17 +1,34 @@
 import { EmbedCache, Notice } from 'obsidian'
 import { t } from 'tars/lang/helper'
-import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
+import { BaseOptions, Message, ResolveEmbedAsBinary, SaveAttachment, SendRequest, Vendor } from '.'
 import { arrayBufferToBase64, getCapabilityEmoji, getMimeTypeFromFilename } from './utils'
 
 /**
  * OpenRouter 选项接口
- * 扩展基础选项以支持网络搜索功能
+ * 扩展基础选项以支持网络搜索和图像生成功能
  */
 export interface OpenRouterOptions extends BaseOptions {
+	// 网络搜索配置
 	enableWebSearch: boolean
 	webSearchEngine?: 'native' | 'exa' // 搜索引擎选择：native（原生）、exa 或 undefined（自动选择）
 	webSearchMaxResults?: number // 搜索结果数量，默认为 5
 	webSearchPrompt?: string // 自定义搜索提示文本
+	
+	// 图像生成配置（根据模型自动启用，无需手动开关）
+	imageAspectRatio?: '1:1' | '2:3' | '3:2' | '3:4' | '4:3' | '4:5' | '5:4' | '9:16' | '16:9' | '21:9' // 图片宽高比
+	imageStream?: boolean // 是否启用流式图像生成
+	imageResponseFormat?: 'url' | 'b64_json' // 图片返回格式
+	imageSaveAsAttachment?: boolean // 是否保存为附件（false则返回URL）
+	imageDisplayWidth?: number // 图片显示宽度
+}
+
+/**
+ * 判断模型是否支持图像生成
+ * 根据模型名称中是否包含 "image" 来判断
+ */
+export const isImageGenerationModel = (model: string): boolean => {
+	if (!model) return false
+	return model.toLowerCase().includes('image')
 }
 
 /**
@@ -25,7 +42,7 @@ interface WebSearchPlugin {
 }
 
 const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
-	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary) {
+	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary, saveAttachment?: SaveAttachment) {
 		const { parameters, ...optionsExcludingParams } = settings
 		const options = { ...optionsExcludingParams, ...parameters }
 		const { 
@@ -36,10 +53,35 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 			webSearchEngine,
 			webSearchMaxResults = 5,
 			webSearchPrompt,
+			imageAspectRatio,
+			imageStream = false,
+			imageResponseFormat = 'b64_json',
+			imageSaveAsAttachment = true,
+			imageDisplayWidth = 400,
 			...remains 
 		} = options
 		if (!apiKey) throw new Error(t('API key is required'))
 		if (!model) throw new Error(t('Model is required'))
+
+		// 根据模型自动判断是否支持图像生成
+		const supportsImageGeneration = isImageGenerationModel(model)
+
+		// 检查是否是图像生成请求
+		const isImageGenerationRequest = supportsImageGeneration || messages.some(msg => 
+			msg.content?.toLowerCase().includes('生成图片') || 
+			msg.content?.toLowerCase().includes('生成图像') ||
+			msg.content?.toLowerCase().includes('generate image')
+		)
+
+		// 如果是图像生成但未提供 saveAttachment 且配置要保存为附件，则抛出错误
+		if (isImageGenerationRequest && imageSaveAsAttachment && !saveAttachment) {
+			throw new Error('图像生成需要 saveAttachment 函数支持')
+		}
+
+		// 如果模型支持图像生成但检测到非图像模型特征，给出警告
+		if (supportsImageGeneration && !isImageGenerationModel(model)) {
+			new Notice('⚠️ 警告：当前模型可能不支持图像生成功能。请在 OpenRouter 模型页面确认该模型的输出模态是否包含 "image"', 6000)
+		}
 
 		const formattedMessages = await Promise.all(messages.map((msg) => formatMsg(msg, resolveEmbedAsBinary)))
 		
@@ -47,12 +89,28 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 		const data: Record<string, unknown> = {
 			model,
 			messages: formattedMessages,
-			stream: true,
+			stream: imageStream || !isImageGenerationRequest, // 图像生成时根据配置决定是否流式
 			...remains
 		}
 
-		// 如果启用了网络搜索,配置 plugins 参数
-		if (enableWebSearch) {
+		// 如果模型支持图像生成，添加 modalities 和 image_config
+		if (supportsImageGeneration) {
+			data.modalities = ['image', 'text']
+			
+			// 配置图片宽高比
+			if (imageAspectRatio) {
+				data.image_config = {
+					aspect_ratio: imageAspectRatio
+				}
+			}
+			
+			// 显示图像生成通知
+			new Notice(getCapabilityEmoji('Image Generation') + '图像生成模式')
+		}
+
+		// 如果启用了网络搜索且模型不支持图像生成,配置 plugins 参数
+		// 图像生成模式下不使用网络搜索
+		if (enableWebSearch && !supportsImageGeneration) {
 			const webPlugin: WebSearchPlugin = {
 				id: 'web'
 			}
@@ -88,12 +146,43 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 			signal: controller.signal
 		})
 
+		// 检查响应是否成功
+		if (!response.ok) {
+			let errorText = await response.text()
+			let errorMessage = `OpenRouter API 错误 (${response.status}): ${errorText}`
+			
+			// 尝试解析错误信息
+			try {
+				const errorJson = JSON.parse(errorText)
+				if (errorJson.error) {
+					const error = errorJson.error
+					errorMessage = error.message || errorText
+					
+					// 针对图像生成的特殊错误提示
+					if (supportsImageGeneration && (
+						errorMessage.includes('modalities') || 
+						errorMessage.includes('output_modalities') ||
+						errorMessage.includes('not support')
+					)) {
+						errorMessage = `❌ 模型不支持图像生成：${errorMessage}\n\n请确保：\n1. 模型的 output_modalities 包含 "image"\n2. 在 OpenRouter 模型页面筛选支持图像生成的模型\n3. 推荐使用 google/gemini-2.5-flash-image-preview`
+					}
+				}
+			} catch {
+				// 如果不是 JSON 格式，使用原始错误文本
+			}
+			
+			throw new Error(errorMessage)
+		}
+
 		const reader = response.body?.getReader()
 		if (!reader) {
 			throw new Error('Response body is not readable')
 		}
 		const decoder = new TextDecoder()
 		let buffer = ''
+		
+		// 用于累积图像数据
+		let hasGeneratedImages = false
 
 		try {
 			while (true) {
@@ -112,14 +201,78 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 						if (data === '[DONE]') break
 						try {
 							const parsed = JSON.parse(data)
-							const content = parsed.choices[0].delta.content
+							
+							// 处理文本内容
+							const content = parsed.choices?.[0]?.delta?.content
 							if (content) {
 								yield content
 							}
 							
+							// 处理图像内容（流式或非流式）
+							const delta = parsed.choices?.[0]?.delta
+							const message = parsed.choices?.[0]?.message
+							
+							if ((delta?.images || message?.images) && !hasGeneratedImages) {
+								hasGeneratedImages = true
+								const images = delta?.images || message?.images
+								
+								yield '\n\n'
+								
+								// 处理生成的图像
+								for (let i = 0; i < images.length; i++) {
+									const image = images[i]
+									const imageUrl = image.image_url?.url
+									
+									if (!imageUrl) {
+										console.warn('图像数据缺失 URL')
+										continue
+									}
+									
+									// 如果配置为保存为附件
+									if (imageSaveAsAttachment && saveAttachment) {
+										try {
+											// 从 base64 data URL 中提取数据
+											if (imageUrl.startsWith('data:')) {
+												const base64Data = imageUrl.split(',')[1]
+												const buffer = Buffer.from(base64Data, 'base64')
+												const arrayBuffer = buffer.buffer.slice(
+													buffer.byteOffset,
+													buffer.byteOffset + buffer.byteLength
+												)
+												
+												// 生成文件名
+												const now = new Date()
+												const formatTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
+												const indexFlag = images.length > 1 ? `-${i + 1}` : ''
+												const filename = `openrouter-${formatTime}${indexFlag}.png`
+												
+												// 保存附件
+												await saveAttachment(filename, arrayBuffer)
+												
+												// 输出图片引用
+												yield `![[${filename}|${imageDisplayWidth}]]\n\n`
+											} else {
+												// 如果是 URL 形式但配置要保存为附件，需要下载
+												yield `⚠️ 检测到 URL 格式图片，但配置为保存附件。请手动下载：\n${imageUrl}\n\n`
+											}
+										} catch (error) {
+											console.error('保存图片失败:', error)
+											yield `❌ 图片保存失败，URL: ${imageUrl}\n\n`
+										}
+									} else {
+										// 直接输出 URL 或 base64
+										if (imageUrl.startsWith('data:')) {
+											yield `📷 生成的图片（Base64格式）：\n${imageUrl.substring(0, 100)}...\n\n`
+										} else {
+											yield `📷 生成的图片：\n${imageUrl}\n\n`
+										}
+									}
+								}
+							}
+							
 							// 处理网络搜索的 annotations（URL citations）
 							// OpenRouter 会在消息中返回 url_citation 注释
-							if (parsed.choices[0].message?.annotations) {
+							if (parsed.choices?.[0]?.message?.annotations) {
 								const annotations = parsed.choices[0].message.annotations
 								for (const annotation of annotations) {
 									if (annotation.type === 'url_citation') {
@@ -355,11 +508,16 @@ export const openRouterVendor: Vendor = {
 		webSearchEngine: undefined, // undefined 表示自动选择：OpenAI 和 Anthropic 使用 native，其他使用 exa
 		webSearchMaxResults: 5,
 		webSearchPrompt: undefined,
+		imageAspectRatio: '1:1',
+		imageStream: false,
+		imageResponseFormat: 'b64_json',
+		imageSaveAsAttachment: true,
+		imageDisplayWidth: 400,
 		parameters: {}
 	} as OpenRouterOptions,
 	sendRequestFunc,
 	models: [],
 	websiteToObtainKey: 'https://openrouter.ai',
-	capabilities: ['Text Generation', 'Image Vision', 'PDF Vision', 'Web Search']
+	capabilities: ['Text Generation', 'Image Vision', 'PDF Vision', 'Web Search', 'Image Generation']
 }
 

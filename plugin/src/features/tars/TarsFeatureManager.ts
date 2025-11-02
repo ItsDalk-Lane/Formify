@@ -246,12 +246,10 @@ export class TarsFeatureManager {
 		const removedTags = toRemove.map((cmdId) => getMeta(cmdId).tag)
 		if (removedTags.length > 0) {
 			console.debug('Removed commands', removedTags)
-			new Notice(`${t('Removed commands')}: ${removedTags.join(', ')}`)
 		}
 		const addedTags = toAdd.map((cmdId) => getMeta(cmdId).tag)
 		if (addedTags.length > 0) {
 			console.debug('Added commands', addedTags)
-			new Notice(`${t('Added commands')}: ${addedTags.join(', ')}`)
 		}
 	}
 
@@ -273,12 +271,10 @@ export class TarsFeatureManager {
 		const removedTitles = toRemove.map((cmdId) => getTitleFromCmdId(cmdId))
 		if (removedTitles.length > 0) {
 			console.debug('Removed commands', removedTitles)
-			new Notice(`${t('Removed commands')}: ${removedTitles.join(', ')}`)
 		}
 		const addedTitles = toAdd.map((t) => t.title)
 		if (addedTitles.length > 0) {
 			console.debug('Added commands', addedTitles)
-			new Notice(`${t('Added commands')}: ${addedTitles.join(', ')}`)
 		}
 	}
 
