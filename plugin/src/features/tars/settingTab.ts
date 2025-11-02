@@ -3,6 +3,7 @@ import { t } from './lang/helper'
 import { SelectModelModal, SelectVendorModal } from './modal'
 import { BaseOptions, Message, Optional, ProviderSettings, ResolveEmbedAsBinary, Vendor } from './providers'
 import { ClaudeOptions, claudeVendor } from './providers/claude'
+import { DoubaoOptions, doubaoVendor } from './providers/doubao'
 import { DoubaoImageOptions, doubaoImageVendor, DOUBAO_IMAGE_SIZE_PRESETS } from './providers/doubaoImage'
 import { GptImageOptions, gptImageVendor } from './providers/gptImage'
 import { grokVendor } from './providers/grok'
@@ -405,6 +406,10 @@ export class TarsSettingTab {
 
 		if (vendor.name === claudeVendor.name) {
 			this.addClaudeSections(details, settings.options as ClaudeOptions)
+		}
+
+		if (vendor.name === doubaoVendor.name) {
+			this.addDoubaoSections(details, settings.options as DoubaoOptions)
 		}
 
 		if (vendor.name === gptImageVendor.name) {
@@ -854,6 +859,93 @@ export class TarsSettingTab {
 						await this.saveSettings()
 					})
 			)
+	}
+
+	addDoubaoSections = (details: HTMLDetailsElement, options: DoubaoOptions) => {
+		// 图片理解精细度控制 - 使用detail字段
+		new Setting(details)
+			.setName('图片理解精细度（detail）')
+			.setDesc('控制模型理解图片的精细程度。低分辨率速度快，高分辨率细节多。留空使用API默认值')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						'': '不设置（使用默认）',
+						'low': '低分辨率（速度快）',
+						'high': '高分辨率（细节多）'
+					})
+					.setValue(options.imageDetail || '')
+					.onChange(async (value) => {
+						options.imageDetail = value ? (value as 'low' | 'high') : undefined
+						await this.saveSettings()
+					})
+			)
+
+		// 图片像素限制 - 最小像素
+		new Setting(details)
+			.setName('图片最小像素（min_pixels）')
+			.setDesc('图片理解的最小像素值（196-36000000）。留空或0不设置。优先级高于detail字段')
+			.addText((text) =>
+				text
+					.setPlaceholder('例如: 3136')
+					.setValue(options.imagePixelLimit?.minPixels?.toString() || '')
+					.onChange(async (value) => {
+						const numValue = parseInt(value)
+						if (!options.imagePixelLimit) {
+							options.imagePixelLimit = {}
+						}
+						if (value === '' || isNaN(numValue) || numValue === 0) {
+							delete options.imagePixelLimit.minPixels
+						} else if (numValue >= 196 && numValue <= 36000000) {
+							options.imagePixelLimit.minPixels = numValue
+						} else {
+							new Notice('像素值必须在 196 到 36000000 之间')
+							return
+						}
+						await this.saveSettings()
+					})
+			)
+
+		// 图片像素限制 - 最大像素
+		new Setting(details)
+			.setName('图片最大像素（max_pixels）')
+			.setDesc('图片理解的最大像素值（196-36000000）。留空或0不设置。优先级高于detail字段')
+			.addText((text) =>
+				text
+					.setPlaceholder('例如: 1048576')
+					.setValue(options.imagePixelLimit?.maxPixels?.toString() || '')
+					.onChange(async (value) => {
+						const numValue = parseInt(value)
+						if (!options.imagePixelLimit) {
+							options.imagePixelLimit = {}
+						}
+						if (value === '' || isNaN(numValue) || numValue === 0) {
+							delete options.imagePixelLimit.maxPixels
+						} else if (numValue >= 196 && numValue <= 36000000) {
+							options.imagePixelLimit.maxPixels = numValue
+						} else {
+							new Notice('像素值必须在 196 到 36000000 之间')
+							return
+						}
+						await this.saveSettings()
+					})
+			)
+
+		// 说明文字
+		const infoDiv = details.createDiv({ cls: 'setting-item-description' })
+		infoDiv.style.marginTop = '10px'
+		infoDiv.style.padding = '10px'
+		infoDiv.style.backgroundColor = 'var(--background-secondary)'
+		infoDiv.style.borderRadius = '5px'
+		infoDiv.innerHTML = `
+			<strong>💡 使用说明：</strong><br>
+			<ul style="margin: 5px 0; padding-left: 20px;">
+				<li><strong>优先级</strong>：image_pixel_limit（像素限制）> detail（精细度）</li>
+				<li><strong>detail=low</strong>：min_pixels=3136, max_pixels=1048576（约1MP）</li>
+				<li><strong>detail=high</strong>：min_pixels=3136, max_pixels=4014080（约4MP）</li>
+				<li><strong>像素范围</strong>：必须在 [196, 36000000] 之间，否则API会报错</li>
+				<li><strong>缺省逻辑</strong>：不设置时使用API的默认值（low）</li>
+			</ul>
+		`
 	}
 
 	addDoubaoImageSections = (details: HTMLDetailsElement, options: DoubaoImageOptions) => {
