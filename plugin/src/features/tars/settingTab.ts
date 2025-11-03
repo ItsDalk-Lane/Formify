@@ -1622,27 +1622,6 @@ export class TarsSettingTab {
 						await this.saveSettings()
 					})
 			)
-		
-		// 输入图片URL（支持图文生图和多图融合）
-		new Setting(details)
-			.setName('输入图片 URL')
-			.setDesc('可选：输入一个或多个图片 URL（每行一个），支持图文生图、多图融合等功能')
-			.addTextArea((text) => {
-				text
-					.setPlaceholder('https://example.com/image1.jpg\nhttps://example.com/image2.jpg')
-					.setValue((options.inputImages || []).join('\n'))
-					.onChange(async (value) => {
-						// 将文本按行分割并过滤空行
-						options.inputImages = value
-							.split('\n')
-							.map(url => url.trim())
-							.filter(url => url.length > 0)
-						await this.saveSettings()
-					})
-				text.inputEl.rows = 4
-				text.inputEl.style.width = '100%'
-				return text
-			})
 	}
 
 	/**

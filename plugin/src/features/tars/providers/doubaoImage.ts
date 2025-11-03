@@ -3,6 +3,73 @@ import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SaveAttachment, SendRequest, Vendor } from '.'
 import { DebugLogger } from '../../../utils/DebugLogger'
 
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp']
+
+/**
+ * 从文本中提取图片 URL
+ * 支持 http:// 和 https:// 开头的链接
+ * 
+ * 改进的 URL 提取逻辑：
+ * 1. 提取所有 http/https URL
+ * 2. 清理 URL 末尾的特殊字符（括号、中文等）
+ * 3. 保留合法的查询参数和锚点
+ * 4. 不强制要求 URL 包含图片扩展名（支持动态图片服务）
+ */
+const extractImageUrls = (text: string | undefined): string[] => {
+	if (!text) return []
+	
+	// 匹配所有以 http:// 或 https:// 开头的 URL
+	const urlRegex = /(https?:\/\/[^\s]+)/gi
+	const matches = text.match(urlRegex) || []
+	
+	const imageUrls: string[] = []
+	
+	for (const match of matches) {
+		let url = match.trim()
+		
+		// 清理 URL 末尾的特殊字符
+		// 移除常见的中文标点、括号等非 URL 字符
+		// 但保留合法的 URL 字符（包括查询参数和锚点）
+		url = url.replace(/[)）\]】>'"]+$/, '')
+		
+		// 如果 URL 包含图片扩展名，截断到扩展名之后
+		const lowerUrl = url.toLowerCase()
+		let foundExt = false
+		
+		for (const ext of IMAGE_EXTENSIONS) {
+			const extIndex = lowerUrl.lastIndexOf(ext)
+			if (extIndex !== -1) {
+				foundExt = true
+				// 截取到扩展名结束的位置
+				const afterExt = url.substring(extIndex + ext.length)
+				
+				// 如果扩展名后面是查询参数或锚点，保留它们
+				if (afterExt.startsWith('?') || afterExt.startsWith('#')) {
+					// 查找查询参数或锚点的结束位置（遇到非 URL 字符为止）
+					const endMatch = afterExt.match(/^[?#][^\s)）\]】>'"]*/)
+					if (endMatch) {
+						url = url.substring(0, extIndex + ext.length + endMatch[0].length)
+					} else {
+						url = url.substring(0, extIndex + ext.length)
+					}
+				} else if (afterExt.length > 0) {
+					// 扩展名后有其他字符但不是查询参数，截断
+					url = url.substring(0, extIndex + ext.length)
+				}
+				break
+			}
+		}
+		
+		// 将识别到的图片 URL 添加到结果中
+		if (url.length > 0) {
+			imageUrls.push(url)
+			DebugLogger.debug(`提取到图片 URL: ${url}`)
+		}
+	}
+	
+	return imageUrls
+}
+
 // 豆包图像生成支持的模型列表
 const models = [
 	'doubao-seedream-4-0-250828',
@@ -48,8 +115,6 @@ export interface DoubaoImageOptions extends BaseOptions {
 	stream?: boolean
 	// 提示词优化模式
 	optimize_prompt_mode?: 'standard' | 'fast'
-	// 输入图片（支持单图或多图）
-	inputImages?: string[]
 }
 
 /**
@@ -120,8 +185,7 @@ const sendRequestFunc = (settings: DoubaoImageOptions): SendRequest =>
 			sequential_image_generation,
 			max_images,
 			stream,
-			optimize_prompt_mode,
-			inputImages
+			optimize_prompt_mode
 		} = options
 		
 		if (!apiKey) throw new Error(t('API key is required'))
@@ -138,7 +202,20 @@ const sendRequestFunc = (settings: DoubaoImageOptions): SendRequest =>
 		if (!lastMsg) {
 			throw new Error('No user message found in the conversation')
 		}
-		const prompt = lastMsg.content
+		
+		// 从用户消息中提取文本提示词和图片URL
+		let prompt = lastMsg.content || ''
+		const textImageUrls = extractImageUrls(prompt)
+		
+		// 从提示词中移除图片URL，保留纯文本
+		for (const url of textImageUrls) {
+			prompt = prompt.split(url).join(' ')
+		}
+		prompt = prompt.trim()
+		
+		if (!prompt) {
+			throw new Error('请提供文本提示词用于图片生成')
+		}
 
 		// 构建请求数据，严格按照官方 API 格式
 		const data: Record<string, unknown> = {
@@ -148,30 +225,48 @@ const sendRequestFunc = (settings: DoubaoImageOptions): SendRequest =>
 			response_format
 		}
 		
-		// 添加输入图片（支持消息中的图片和配置的图片）
+		// 添加输入图片（支持消息中的网络图片和本地图片）
 		const imageUrls: string[] = []
 		
-		// 从配置中获取输入图片
-		if (inputImages && inputImages.length > 0) {
-			imageUrls.push(...inputImages)
+		// 添加从文本中提取的网络图片URL
+		if (textImageUrls.length > 0) {
+			DebugLogger.debug(`从文本中提取到 ${textImageUrls.length} 个网络图片URL`)
+			imageUrls.push(...textImageUrls)
 		}
 		
 		// 从消息中提取嵌入的图片
 		if (lastMsg.embeds && lastMsg.embeds.length > 0) {
+			DebugLogger.debug(`检测到 ${lastMsg.embeds.length} 个嵌入内容`)
 			for (const embed of lastMsg.embeds) {
 				try {
-					// 尝试将图片转换为 base64
-					const binary = await resolveEmbedAsBinary(embed)
-					if (binary) {
-						// 检测图片格式
-						const uint8Array = new Uint8Array(binary)
-						let mimeType = 'image/png'
-						if (uint8Array[0] === 0xFF && uint8Array[1] === 0xD8) {
-							mimeType = 'image/jpeg'
+					// 检查是否是网络图片
+					const isHttpUrl = embed.link.startsWith('http://') || embed.link.startsWith('https://')
+					
+					if (isHttpUrl) {
+						// 网络图片直接使用 URL
+						DebugLogger.debug(`使用网络图片 URL: ${embed.link}`)
+						imageUrls.push(embed.link)
+					} else {
+						// 本地图片转换为 base64
+						DebugLogger.debug(`处理本地图片: ${embed.link}`)
+						const binary = await resolveEmbedAsBinary(embed)
+						if (binary) {
+							// 检测图片格式
+							const uint8Array = new Uint8Array(binary)
+							let mimeType = 'image/png'
+							if (uint8Array[0] === 0xFF && uint8Array[1] === 0xD8) {
+								mimeType = 'image/jpeg'
+							} else if (uint8Array[0] === 0x47 && uint8Array[1] === 0x49) {
+								mimeType = 'image/gif'
+							} else if (uint8Array[0] === 0x52 && uint8Array[1] === 0x49) {
+								mimeType = 'image/webp'
+							}
+							
+							const base64 = Buffer.from(binary).toString('base64')
+							const dataUrl = `data:${mimeType};base64,${base64}`
+							imageUrls.push(dataUrl)
+							DebugLogger.debug(`本地图片已转换为 base64，格式: ${mimeType}`)
 						}
-						const base64 = Buffer.from(binary).toString('base64')
-						imageUrls.push(`data:${mimeType};
-import { DebugLogger } from '../../../utils/DebugLogger';base64,${base64}`)
 					}
 				} catch (error) {
 					console.error('Failed to process embed image:', error)
@@ -325,7 +420,6 @@ export const doubaoImageVendor: Vendor = {
 		stream: DEFAULT_DOUBAO_IMAGE_OPTIONS.stream,
 		optimize_prompt_mode: DEFAULT_DOUBAO_IMAGE_OPTIONS.optimize_prompt_mode,
 		max_images: 5,
-		inputImages: [],
 		parameters: {}
 	} as DoubaoImageOptions,
 	sendRequestFunc,
