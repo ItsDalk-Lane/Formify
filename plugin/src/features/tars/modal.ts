@@ -1,4 +1,4 @@
-import { App, FuzzyMatch, FuzzySuggestModal } from 'obsidian'
+import { App, FuzzyMatch, FuzzySuggestModal, Modal, Setting, Notice, requestUrl } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { Vendor } from './providers'
 import { getCapabilityEmoji } from './providers/utils'
@@ -91,6 +91,45 @@ export class SelectVendorModal extends FuzzySuggestModal<Vendor> {
 
 	onChooseItem(vendor: Vendor, _evt: MouseEvent | KeyboardEvent) {
 		this.onChoose(vendor)
+	}
+}
+
+/**
+ * AI 服务商配置 Modal
+ * 用于显示和编辑 AI 服务商的完整配置
+ */
+export class ProviderSettingModal extends Modal {
+	private configContainer: HTMLElement
+	private renderCallback: (container: HTMLElement) => void
+	private title: string
+
+	constructor(app: App, title: string, renderCallback: (container: HTMLElement) => void) {
+		super(app)
+		this.title = title
+		this.renderCallback = renderCallback
+	}
+
+	onOpen() {
+		const { contentEl, titleEl } = this
+		
+		// 设置标题
+		titleEl.setText(this.title)
+		
+		// 设置 Modal 样式
+		contentEl.style.maxHeight = '80vh'
+		contentEl.style.overflowY = 'auto'
+		contentEl.style.padding = '20px'
+		
+		// 创建配置容器
+		this.configContainer = contentEl.createDiv({ cls: 'provider-setting-modal-container' })
+		
+		// 调用渲染回调
+		this.renderCallback(this.configContainer)
+	}
+
+	onClose() {
+		const { contentEl } = this
+		contentEl.empty()
 	}
 }
 

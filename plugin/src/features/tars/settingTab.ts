@@ -1,6 +1,6 @@
 import { App, DropdownComponent, Notice, requestUrl, Setting } from 'obsidian'
 import { t } from './lang/helper'
-import { SelectModelModal, SelectVendorModal } from './modal'
+import { SelectModelModal, SelectVendorModal, ProviderSettingModal } from './modal'
 import { BaseOptions, Message, Optional, ProviderSettings, ResolveEmbedAsBinary, Vendor } from './providers'
 import { ClaudeOptions, claudeVendor } from './providers/claude'
 import { DebugLogger } from '../../utils/DebugLogger'
@@ -36,6 +36,8 @@ export class TarsSettingTab {
 	private readonly doubaoRenderers = new WeakMap<BaseOptions, () => void>()
 	private currentOpenProviderIndex: number = -1 // 记录当前展开的 provider 索引
 	private autoSaveEnabled: boolean = true // 控制是否自动保存
+	private providersContainerEl: HTMLElement | null = null // 服务商卡片容器
+	private isProvidersCollapsed: boolean = false // 服务商列表是否折叠
 
 	constructor(private readonly app: App, private readonly context: TarsSettingsContext) {}
 
@@ -70,11 +72,12 @@ export class TarsSettingTab {
 
 		new Setting(containerEl).setName(t('AI assistants')).setHeading()
 
-		new Setting(containerEl)
+		// 创建标题行（可点击折叠/展开）
+		const aiAssistantHeaderSetting = new Setting(containerEl)
 			.setName(t('New AI assistant'))
 			.setDesc(t('For those compatible with the OpenAI protocol, you can select OpenAI.'))
 			.addButton((btn) => {
-				btn.setButtonText(t('Add AI Provider')).onClick(async () => {
+				btn.setButtonText(t('Add AI Provider')).onClick(async (e) => {
 					const onChoose = async (vendor: Vendor) => {
 						const defaultTag = vendor.name
 						const isTagDuplicate = this.settings.providers.map((e) => e.tag).includes(defaultTag)
@@ -87,14 +90,43 @@ export class TarsSettingTab {
 							options: deepCopiedOptions
 						})
 						await this.saveSettings()
+						this.isProvidersCollapsed = false // 添加后展开列表
 						this.render(this.containerEl, true)
 					}
 					new SelectVendorModal(this.app, availableVendors, onChoose).open()
 				})
 			})
 
+		// 添加点击事件来切换折叠状态（但不显示图标）
+		const headerEl = aiAssistantHeaderSetting.settingEl
+		headerEl.style.cursor = 'pointer'
+		headerEl.addEventListener('click', (e) => {
+			// 避免点击按钮时触发折叠
+			if ((e.target as HTMLElement).closest('button')) {
+				return
+			}
+			this.isProvidersCollapsed = !this.isProvidersCollapsed
+			if (this.providersContainerEl) {
+				this.providersContainerEl.style.display = this.isProvidersCollapsed ? 'none' : 'block'
+			}
+		})
+
+		// 创建服务商卡片容器
+		this.providersContainerEl = containerEl.createDiv({ cls: 'ai-providers-container' })
+		this.providersContainerEl.style.display = this.isProvidersCollapsed ? 'none' : 'block'
+
 		if (!this.settings.providers.length) {
-			new Setting(containerEl).setDesc(t('Please add at least one AI assistant to start using the plugin.'))
+			const emptyTip = this.providersContainerEl.createEl('div', { 
+				cls: 'ai-providers-empty-tip'
+			})
+			emptyTip.textContent = t('Please add at least one AI assistant to start using the plugin.')
+			emptyTip.style.cssText = `
+				padding: 12px;
+				color: var(--text-muted);
+				font-size: var(--font-ui-small);
+				text-align: center;
+				font-style: italic;
+			`
 		}
 
 		for (const [index, provider] of this.settings.providers.entries()) {
@@ -364,67 +396,185 @@ export class TarsSettingTab {
 	}
 
 	createProviderSetting = (index: number, settings: ProviderSettings, isOpen: boolean = false) => {
+		const vendor = availableVendors.find((v) => v.name === settings.vendor)
+		if (!vendor) throw new Error('No vendor found ' + settings.vendor)
+		
+		// 使用服务商容器而不是 containerEl
+		const container = this.providersContainerEl || this.containerEl
+
+		// 创建服务商卡片
+		const card = container.createEl('div', { cls: 'ai-provider-card' })
+		card.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 12px 16px;
+			margin-bottom: 8px;
+			background-color: var(--background-secondary);
+			border: 1px solid var(--background-modifier-border);
+			border-radius: var(--radius-m);
+			cursor: pointer;
+			transition: all 0.2s ease;
+		`
+
+		// 左侧信息
+		const leftSection = card.createEl('div', { cls: 'ai-provider-info' })
+		leftSection.style.cssText = `
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+			flex: 1;
+		`
+
+		const titleEl = leftSection.createEl('div', { cls: 'ai-provider-title' })
+		titleEl.style.cssText = `
+			font-size: var(--font-ui-medium);
+			font-weight: 500;
+			color: var(--text-normal);
+		`
+		titleEl.textContent = getSummary(settings.tag, vendor.name)
+
+		const capabilitiesEl = leftSection.createEl('div', { cls: 'ai-provider-capabilities' })
+		capabilitiesEl.style.cssText = `
+			font-size: var(--font-ui-smaller);
+			color: var(--text-muted);
+		`
+		capabilitiesEl.textContent = vendor.capabilities.map((cap) => `${getCapabilityEmoji(cap)} ${t(cap)}`).join('  ')
+
+		// 右侧按钮 - 只保留删除按钮
+		const rightSection = card.createEl('div', { cls: 'ai-provider-actions' })
+		rightSection.style.cssText = `
+			display: flex;
+			gap: 8px;
+			align-items: center;
+		`
+
+		// 删除按钮 - 使用SVG图标
+		const deleteBtn = rightSection.createEl('button', { cls: 'ai-provider-delete-btn' })
+		deleteBtn.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="3 6 5 6 21 6"></polyline>
+				<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+				<line x1="10" y1="11" x2="10" y2="17"></line>
+				<line x1="14" y1="11" x2="14" y2="17"></line>
+			</svg>
+		`
+		deleteBtn.style.cssText = `
+			padding: 4px;
+			background: transparent;
+			border: none;
+			cursor: pointer;
+			color: var(--text-muted);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: var(--radius-s);
+			transition: color 0.2s ease, transform 0.1s ease;
+		`
+		deleteBtn.title = '删除此服务商'
+		
+		// 删除按钮悬停效果
+		deleteBtn.addEventListener('mouseenter', () => {
+			deleteBtn.style.color = 'var(--color-red)'
+		})
+		
+		deleteBtn.addEventListener('mouseleave', () => {
+			deleteBtn.style.color = 'var(--text-muted)'
+		})
+
+		// 悬停效果
+		card.addEventListener('mouseenter', () => {
+			card.style.backgroundColor = 'var(--background-modifier-hover)'
+			card.style.borderColor = 'var(--interactive-accent)'
+		})
+
+		card.addEventListener('mouseleave', () => {
+			card.style.backgroundColor = 'var(--background-secondary)'
+			card.style.borderColor = 'var(--background-modifier-border)'
+		})
+
+		// 点击卡片打开 Modal
+		const openConfigModal = () => {
+			const modal = new ProviderSettingModal(this.app, getSummary(settings.tag, vendor.name), (modalContainer) => {
+				// 在 Modal 中渲染配置内容
+				this.renderProviderConfig(modalContainer, index, settings, vendor)
+			})
+			modal.open()
+		}
+
+		card.addEventListener('click', (e) => {
+			// 如果点击的是删除按钮，不触发卡片点击
+			if (e.target === deleteBtn || (e.target as HTMLElement).closest('button') === deleteBtn) return
+			openConfigModal()
+		})
+
+		// 删除按钮点击事件
+		deleteBtn.addEventListener('click', async (e) => {
+			e.stopPropagation()
+			this.settings.providers.splice(index, 1)
+			await this.context.saveSettings()
+			this.render(this.containerEl)
+		})
+	}
+
+	/**
+	 * 在 Modal 容器中渲染服务商配置内容
+	 */
+	private renderProviderConfig(
+		container: HTMLElement,
+		index: number,
+		settings: ProviderSettings,
+		vendor: Vendor
+	) {
 		// 禁用自动保存，改为手动点击保存按钮
 		const previousAutoSaveState = this.autoSaveEnabled
 		this.autoSaveEnabled = false
-		
-		const vendor = availableVendors.find((v) => v.name === settings.vendor)
-		if (!vendor) throw new Error('No vendor found ' + settings.vendor)
-		const { containerEl } = this
-		const details = containerEl.createEl('details')
-		details.createEl('summary', { text: getSummary(settings.tag, vendor.name), cls: 'tars-setting-h4' })
-		details.open = isOpen
-		
-		// 监听展开/折叠事件，记录当前展开的索引
-		details.addEventListener('toggle', () => {
-			if (details.open) {
-				this.currentOpenProviderIndex = index
-			}
-		})
 
 		const capabilities =
 			t('Supported features') +
 			' : ' +
 			vendor.capabilities.map((cap) => `${getCapabilityEmoji(cap)} ${t(cap)}`).join('    ')
 
-		this.addTagSection(details, settings, index, vendor.name)
+		container.createEl('p', { text: capabilities, cls: 'setting-item-description' })
+
+		this.addTagSection(container, settings, index, vendor.name)
 
 		// model setting
 		const modelConfig = MODEL_FETCH_CONFIGS[vendor.name as keyof typeof MODEL_FETCH_CONFIGS]
 		if (modelConfig) {
 			// 按钮选择模式（支持API获取模型列表 + 自定义输入）
-			this.addModelButtonSection(details, settings.options, modelConfig, capabilities, vendor.name)
+			this.addModelButtonSection(container, settings.options, modelConfig, capabilities, vendor.name)
 		} else if (vendor.models.length > 0) {
 			// 下拉选择模式（预设模型列表 + 自定义输入）
-			this.addModelDropDownSection(details, settings.options, vendor.models, capabilities)
+			this.addModelDropDownSection(container, settings.options, vendor.models, capabilities)
 		} else {
 			// 纯文本输入模式（完全自定义）
-			this.addModelTextSection(details, settings.options, capabilities)
+			this.addModelTextSection(container, settings.options, capabilities)
 		}
 
 		if (vendor.name !== ollamaVendor.name) {
 			this.addAPIkeySection(
-				details,
+				container,
 				settings.options,
 				vendor.websiteToObtainKey ? t('Obtain key from ') + vendor.websiteToObtainKey : ''
 			)
 		}
 
 		if ('apiSecret' in settings.options)
-			this.addAPISecretOptional(details, settings.options as BaseOptions & Pick<Optional, 'apiSecret'>)
+			this.addAPISecretOptional(container, settings.options as BaseOptions & Pick<Optional, 'apiSecret'>)
 
 		// OpenRouter 特殊处理：根据模型自动判断显示网络搜索或图像生成
 		if (vendor.name === openRouterVendor.name) {
 			const options = settings.options as OpenRouterOptions
 			const supportsImageGeneration = options.model ? isImageGenerationModel(options.model) : false
-			
+
 			if (supportsImageGeneration) {
 				// 模型支持图像生成，显示图像生成配置
-				this.addOpenRouterImageGenerationSections(details, options)
+				this.addOpenRouterImageGenerationSections(container, options)
 			} else {
 				// 模型不支持图像生成，显示网络搜索配置
 				if (vendor.capabilities.includes('Web Search')) {
-					new Setting(details)
+					new Setting(container)
 						.setName(t('Web search'))
 						.setDesc(t('Enable web search for AI'))
 						.addToggle((toggle) =>
@@ -433,14 +583,14 @@ export class TarsSettingTab {
 								await this.saveSettings()
 							})
 						)
-					
-					this.addOpenRouterWebSearchSections(details, options)
+
+					this.addOpenRouterWebSearchSections(container, options)
 				}
 			}
 		} else {
 			// 其他提供商的网络搜索配置
 			if (vendor.capabilities.includes('Web Search')) {
-				new Setting(details)
+				new Setting(container)
 					.setName(t('Web search'))
 					.setDesc(t('Enable web search for AI'))
 					.addToggle((toggle) =>
@@ -449,44 +599,43 @@ export class TarsSettingTab {
 							await this.saveSettings()
 						})
 					)
-				
+
 				// OpenRouter 特定的网络搜索配置（已在上面处理）
 			}
 		}
 
 		if (vendor.name === claudeVendor.name) {
-			this.addClaudeSections(details, settings.options as ClaudeOptions)
+			this.addClaudeSections(container, settings.options as ClaudeOptions)
 		}
 
 		if (vendor.name === doubaoVendor.name) {
-			this.addDoubaoSections(details, settings.options as DoubaoOptions)
+			this.addDoubaoSections(container, settings.options as DoubaoOptions)
 		}
 
 		if (vendor.name === gptImageVendor.name) {
-			this.addGptImageSections(details, settings.options as GptImageOptions)
+			this.addGptImageSections(container, settings.options as GptImageOptions)
 		}
 
 		if (vendor.name === doubaoImageVendor.name) {
-			this.addDoubaoImageSections(details, settings.options as DoubaoImageOptions)
+			this.addDoubaoImageSections(container, settings.options as DoubaoImageOptions)
 		}
 
-		this.addBaseURLSection(details, settings.options, vendor.defaultOptions.baseURL)
+		this.addBaseURLSection(container, settings.options, vendor.defaultOptions.baseURL)
 
 		if ('endpoint' in settings.options)
-			this.addEndpointOptional(details, settings.options as BaseOptions & Pick<Optional, 'endpoint'>)
+			this.addEndpointOptional(container, settings.options as BaseOptions & Pick<Optional, 'endpoint'>)
 
 		if ('apiVersion' in settings.options)
-			this.addApiVersionOptional(details, settings.options as BaseOptions & Pick<Optional, 'apiVersion'>)
+			this.addApiVersionOptional(container, settings.options as BaseOptions & Pick<Optional, 'apiVersion'>)
 
-		this.addParametersSection(details, settings.options)
+		this.addParametersSection(container, settings.options)
 
 		const testButtonLabel = t('Test now')
-		new Setting(details)
+		new Setting(container)
 			.setName(t('Test model'))
 			.setDesc(t('Test model description'))
 			.addButton((btn) => {
-				btn
-					.setButtonText(testButtonLabel)
+				btn.setButtonText(testButtonLabel)
 					.setCta()
 					.onClick(async () => {
 						btn.setDisabled(true)
@@ -500,23 +649,19 @@ export class TarsSettingTab {
 					})
 			})
 
-		// 保存和移除按钮
-		const actionSetting = new Setting(details)
-		
-		// 添加保存按钮
-		actionSetting.addButton((btn) => {
-			btn
-				.setButtonText('保存')
+		// 保存按钮
+		new Setting(container).addButton((btn) => {
+			btn.setButtonText('保存')
 				.setCta()
 				.onClick(async () => {
 					// 保存前验证所有标签
-					const tags = this.settings.providers.map(p => p.tag.toLowerCase())
+					const tags = this.settings.providers.map((p) => p.tag.toLowerCase())
 					const uniqueTags = new Set(tags)
 					if (tags.length !== uniqueTags.size) {
 						new Notice('❌ ' + t('Keyword for tag must be unique'))
 						return
 					}
-					
+
 					// 验证标签格式
 					for (const provider of this.settings.providers) {
 						if (!validateTag(provider.tag)) {
@@ -524,40 +669,27 @@ export class TarsSettingTab {
 							return
 						}
 					}
-					
+
 					// 临时启用自动保存来真正保存设置
 					this.autoSaveEnabled = true
 					await this.context.saveSettings()
 					this.autoSaveEnabled = previousAutoSaveState
 					new Notice('✅ 设置已保存')
-					
+
 					// OpenRouter: 保存后检查是否需要重新渲染（模型变化导致功能切换）
 					if (vendor.name === openRouterVendor.name) {
 						this.render(this.containerEl, false, this.currentOpenProviderIndex)
 					}
 				})
 		})
-		
-		// 添加移除按钮
-		actionSetting.addButton((btn) => {
-			btn
-				.setWarning()
-				.setButtonText(t('Remove'))
-				.onClick(async () => {
-					this.settings.providers.splice(index, 1)
-					// 移除操作需要真正保存
-					this.autoSaveEnabled = true
-					await this.context.saveSettings()
-					this.autoSaveEnabled = previousAutoSaveState
-					this.render(this.containerEl)
-				})
-		})
-		
+
 		// 恢复自动保存状态
 		this.autoSaveEnabled = previousAutoSaveState
 	}
 
-	addTagSection = (details: HTMLDetailsElement, settings: ProviderSettings, index: number, defaultTag: string) =>
+	// 旧的 createProviderSetting 方法（使用 details）已被上面的新实现替换
+
+	addTagSection = (details: HTMLElement, settings: ProviderSettings, index: number, defaultTag: string) =>
 		new Setting(details)
 			.setName('✨ ' + t('Assistant message tag'))
 			.setDesc(t('Tag used to trigger AI text generation'))
@@ -578,7 +710,7 @@ export class TarsSettingTab {
 					})
 			)
 
-	addBaseURLSection = (details: HTMLDetailsElement, options: BaseOptions, defaultValue: string) => {
+	addBaseURLSection = (details: HTMLElement, options: BaseOptions, defaultValue: string) => {
 		let textInput: HTMLInputElement | null = null
 		return new Setting(details)
 			.setName('baseURL')
@@ -604,7 +736,7 @@ export class TarsSettingTab {
 			})
 	}
 
-	addAPIkeySection = (details: HTMLDetailsElement, options: BaseOptions, desc: string = '') => {
+	addAPIkeySection = (details: HTMLElement, options: BaseOptions, desc: string = '') => {
 		let isPasswordVisible = false
 		let textInput: HTMLInputElement | null = null
 		let toggleButton: HTMLButtonElement | null = null
@@ -646,7 +778,7 @@ export class TarsSettingTab {
 	}
 
 	addAPISecretOptional = (
-		details: HTMLDetailsElement,
+		details: HTMLElement,
 		options: BaseOptions & Pick<Optional, 'apiSecret'>,
 		desc: string = ''
 	) => {
@@ -691,7 +823,7 @@ export class TarsSettingTab {
 	}
 
 	addModelButtonSection = (
-		details: HTMLDetailsElement,
+		details: HTMLElement,
 		options: BaseOptions,
 		modelConfig: { url: string; requiresApiKey: boolean },
 		desc: string,
@@ -825,7 +957,7 @@ export class TarsSettingTab {
 		return setting
 	}
 
-	addModelDropDownSection = (details: HTMLDetailsElement, options: BaseOptions, models: string[], desc: string) => {
+	addModelDropDownSection = (details: HTMLElement, options: BaseOptions, models: string[], desc: string) => {
 		const CUSTOM_MODEL_KEY = '__custom__'
 		const isCustomModel = !models.includes(options.model) && options.model !== ''
 		
@@ -931,7 +1063,7 @@ export class TarsSettingTab {
 		return setting
 	}
 
-	addModelTextSection = (details: HTMLDetailsElement, options: BaseOptions, desc: string) =>
+	addModelTextSection = (details: HTMLElement, options: BaseOptions, desc: string) =>
 		new Setting(details)
 			.setName(t('Model'))
 			.setDesc(desc)
@@ -945,7 +1077,7 @@ export class TarsSettingTab {
 					})
 			)
 
-	addClaudeSections = (details: HTMLDetailsElement, options: ClaudeOptions) => {
+	addClaudeSections = (details: HTMLElement, options: ClaudeOptions) => {
 		new Setting(details)
 			.setName(t('Thinking'))
 			.setDesc(t('When enabled, Claude will show its reasoning process before giving the final answer.'))
@@ -1001,7 +1133,7 @@ export class TarsSettingTab {
 			)
 	}
 
-	addEndpointOptional = (details: HTMLDetailsElement, options: BaseOptions & Pick<Optional, 'endpoint'>) =>
+	addEndpointOptional = (details: HTMLElement, options: BaseOptions & Pick<Optional, 'endpoint'>) =>
 		new Setting(details)
 			.setName(t('Endpoint'))
 			.setDesc('e.g. https://docs-test-001.openai.azure.com/')
@@ -1025,7 +1157,7 @@ export class TarsSettingTab {
 					})
 			)
 
-	addApiVersionOptional = (details: HTMLDetailsElement, options: BaseOptions & Pick<Optional, 'apiVersion'>) =>
+	addApiVersionOptional = (details: HTMLElement, options: BaseOptions & Pick<Optional, 'apiVersion'>) =>
 		new Setting(details)
 			.setName(t('API version'))
 			.setDesc('e.g. 2024-xx-xx-preview')
@@ -1039,7 +1171,7 @@ export class TarsSettingTab {
 					})
 			)
 
-	addParametersSection = (details: HTMLDetailsElement, options: BaseOptions) => {
+	addParametersSection = (details: HTMLElement, options: BaseOptions) => {
 		const setting = new Setting(details)
 			.setName(t('Additional parameters'))
 			.setDesc(t('Additional parameters description'))
@@ -1080,7 +1212,7 @@ export class TarsSettingTab {
 		return setting
 	}
 
-	addGptImageSections = (details: HTMLDetailsElement, options: GptImageOptions) => {
+	addGptImageSections = (details: HTMLElement, options: GptImageOptions) => {
 		new Setting(details)
 			.setName(t('Image Display Width'))
 			.setDesc(t('Example: 400px width would output as ![[image.jpg|400]]'))
@@ -1182,7 +1314,7 @@ export class TarsSettingTab {
 			)
 	}
 
-	addDoubaoSections = (details: HTMLDetailsElement, options: DoubaoOptions) => {
+	addDoubaoSections = (details: HTMLElement, options: DoubaoOptions) => {
 		const thinkingContainer = details.createDiv({ cls: 'tars-doubao-thinking-section' })
 		const renderThinkingControls = () => {
 			thinkingContainer.empty()
@@ -1368,7 +1500,7 @@ export class TarsSettingTab {
 			})
 	}
 
-	addDoubaoImageSections = (details: HTMLDetailsElement, options: DoubaoImageOptions) => {
+	addDoubaoImageSections = (details: HTMLElement, options: DoubaoImageOptions) => {
 		// 图片显示宽度
 		new Setting(details)
 			.setName(t('Image Display Width'))
@@ -1517,7 +1649,7 @@ export class TarsSettingTab {
 	 * OpenRouter 网络搜索配置部分
 	 * 支持自定义搜索引擎、结果数量和搜索提示
 	 */
-	addOpenRouterWebSearchSections = (details: HTMLDetailsElement, options: OpenRouterOptions) => {
+	addOpenRouterWebSearchSections = (details: HTMLElement, options: OpenRouterOptions) => {
 		// 搜索引擎选择
 		new Setting(details)
 			.setName('搜索引擎')
@@ -1578,7 +1710,7 @@ export class TarsSettingTab {
 	 * OpenRouter 图像生成配置部分
 	 * 支持配置图片宽高比、流式生成、格式和保存方式
 	 */
-	addOpenRouterImageGenerationSections = (details: HTMLDetailsElement, options: OpenRouterOptions) => {
+	addOpenRouterImageGenerationSections = (details: HTMLElement, options: OpenRouterOptions) => {
 		// 图片宽高比配置
 		new Setting(details)
 			.setName('图片宽高比')
