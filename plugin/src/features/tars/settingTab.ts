@@ -37,7 +37,8 @@ export class TarsSettingTab {
 	private currentOpenProviderIndex: number = -1 // 记录当前展开的 provider 索引
 	private autoSaveEnabled: boolean = true // 控制是否自动保存
 	private providersContainerEl: HTMLElement | null = null // 服务商卡片容器
-	private isProvidersCollapsed: boolean = false // 服务商列表是否折叠
+	private isProvidersCollapsed: boolean = true // 服务商列表是否折叠，默认折叠
+	private providerTitleEls: Map<number, HTMLElement> = new Map() // 记录各 provider 卡片标题元素，便于实时更新
 
 	constructor(private readonly app: App, private readonly context: TarsSettingsContext) {}
 
@@ -54,6 +55,9 @@ export class TarsSettingTab {
 	render(containerEl: HTMLElement, expandLastProvider = false, keepOpenIndex: number = -1): void {
 		this.containerEl = containerEl
 		containerEl.empty()
+
+		// 每次渲染时清空标题元素引用，避免引用过期
+		this.providerTitleEls.clear()
 
 		const enabled = this.context.getEnabled()
 		new Setting(containerEl)
@@ -433,6 +437,8 @@ export class TarsSettingTab {
 			color: var(--text-normal);
 		`
 		titleEl.textContent = getSummary(settings.tag, vendor.name)
+		// 记录标题元素，便于在配置中实时更新标题
+		this.providerTitleEls.set(index, titleEl)
 
 		const capabilitiesEl = leftSection.createEl('div', { cls: 'ai-provider-capabilities' })
 		capabilitiesEl.style.cssText = `
@@ -704,8 +710,11 @@ export class TarsSettingTab {
 						if (trimmed.length === 0) return
 						
 						settings.tag = trimmed
-						const summaryElement = details.querySelector('summary')
-						if (summaryElement != null) summaryElement.textContent = getSummary(settings.tag, defaultTag) // 更新summary
+						// 实时更新外部卡片标题
+						const titleEl = this.providerTitleEls.get(index)
+						if (titleEl) {
+							titleEl.textContent = getSummary(settings.tag, defaultTag)
+						}
 						await this.saveSettings()
 					})
 			)
