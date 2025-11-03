@@ -213,5 +213,16 @@ export class Zh implements Local {
 	wait = "等待";
 	wait_time = "等待时间";
 	milliseconds = "毫秒";
+	button = "按钮";
+	button_action_type = "按钮动作类型";
+	open_url = "打开链接";
+	open_file = "打开文件";
+	submit_form = "提交表单";
+	url = "URL 地址";
+	url_required = "URL 地址不能为空";
+	form_file = "表单文件";
+	form_file_required = "表单文件不能为空";
+	select_file = "选择文件";
+	select_form_file = "选择表单文件";
+	all_files = "所有文件";
 }
-

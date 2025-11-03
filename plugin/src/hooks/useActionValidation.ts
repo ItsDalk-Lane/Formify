@@ -5,12 +5,14 @@ import { IFormAction } from "../model/action/IFormAction";
 import { InsertTextFormAction } from "../model/action/InsertTextFormAction";
 import { GenerateFormAction } from "../model/action/OpenFormAction";
 import { SuggestModalFormAction } from "../model/action/SuggestModalFormAction";
+import { ButtonFormAction } from "../model/action/ButtonFormAction";
 import { FormActionType } from "../model/enums/FormActionType";
+import { ButtonActionType } from "../model/enums/ButtonActionType";
 import { TargetFileType } from "../model/enums/TargetFileType";
 import { Strings } from "src/utils/Strings";
 
 
-type FormActionImp = CreateFileFormAction | InsertTextFormAction | UpdateFrontmatterFormAction | GenerateFormAction | SuggestModalFormAction
+type FormActionImp = CreateFileFormAction | InsertTextFormAction | UpdateFrontmatterFormAction | GenerateFormAction | SuggestModalFormAction | ButtonFormAction
 
 export function useActionValidation(action: IFormAction) {
     const formAction = action as FormActionImp;
@@ -30,7 +32,9 @@ function validateAction(action: FormActionImp) {
             content_required: "Content is required",
             properties_must_not_be_empty: "At least one property update is required",
             property_configure_incompleted: "One or more property updates are incomplete",
-            at_leat_one_field_required: "At least one field is required"
+            at_leat_one_field_required: "At least one field is required",
+            url_required: "URL is required",
+            form_file_required: "Form file is required"
         },
         "zh-CN": {
             target_folder_required: "请填写目标文件夹",
@@ -38,7 +42,9 @@ function validateAction(action: FormActionImp) {
             content_required: "请填写内容",
             properties_must_not_be_empty: "至少填写一个属性",
             property_configure_incompleted: "一个或多个属性配置不完整",
-            at_leat_one_field_required: "至少填写一个字段"
+            at_leat_one_field_required: "至少填写一个字段",
+            url_required: "请填写 URL 地址",
+            form_file_required: "请选择表单文件"
 
         },
         "zh-TW": {
@@ -47,7 +53,9 @@ function validateAction(action: FormActionImp) {
             content_required: "請填寫內容",
             properties_must_not_be_empty: "至少填寫一個屬性",
             property_configure_incompleted: "一個或多個屬性配置不完整",
-            at_leat_one_field_required: "至少填寫一個字段"
+            at_leat_one_field_required: "至少填寫一個字段",
+            url_required: "請填寫 URL 地址",
+            form_file_required: "請選擇表單文件"
         }
     }
 
@@ -108,6 +116,26 @@ function validateAction(action: FormActionImp) {
                 if (hasInvalidUpdate) {
                     messages.push(l.property_configure_incompleted);
                 }
+            }
+            break;
+        case FormActionType.BUTTON:
+            const buttonAction = action as ButtonFormAction;
+            switch (buttonAction.buttonActionType) {
+                case ButtonActionType.OPEN_URL:
+                    if (Strings.isEmpty(buttonAction.url)) {
+                        messages.push(l.url_required);
+                    }
+                    break;
+                case ButtonActionType.OPEN_FILE:
+                    if (Strings.isEmpty(buttonAction.filePath)) {
+                        messages.push(l.file_path_required);
+                    }
+                    break;
+                case ButtonActionType.SUBMIT_FORM:
+                    if (Strings.isEmpty(buttonAction.formFilePath)) {
+                        messages.push(l.form_file_required);
+                    }
+                    break;
             }
             break;
     }

@@ -6,6 +6,7 @@ import {
 	MessageSquare,
 	Text,
 	ZapIcon,
+	Mouse,
 } from "lucide-react";
 import { localInstance } from "src/i18n/locals";
 import { FormActionType } from "src/model/enums/FormActionType";
@@ -71,5 +72,10 @@ export const formActionTypeOptions = [
 		value: FormActionType.WAIT,
 		label: localInstance.wait,
 		icon: <Hourglass />,
+	},
+	{
+		value: FormActionType.BUTTON,
+		label: localInstance.button,
+		icon: <Mouse />,
 	},
 ];

@@ -10,6 +10,7 @@ import { UpdateFrontmatterSetting } from "./update-frontmatter/UpdateFrontmatter
 import { WaitSetting } from "./wait/WaitSetting";
 import { RemarkSetting } from "./common/RemarkSetting";
 import { RunCommandSetting } from "./run-command/RunCommandSetting";
+import { ButtonSetting } from "./button/ButtonSetting";
 
 export default function (props: {
 	value: IFormAction;
@@ -28,6 +29,7 @@ export default function (props: {
 			<RunCommandSetting value={value} onChange={onChange} />
 			<GenerateFormSetting value={value} onChange={onChange} />
 			<WaitSetting value={value} onChange={onChange} />
+			<ButtonSetting value={value} onChange={onChange} />
 		</CpsForm>
 	);
 }

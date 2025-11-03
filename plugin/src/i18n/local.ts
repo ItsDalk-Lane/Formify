@@ -122,6 +122,7 @@ export interface Local {
 	open_file_after_submitted: string;
 	open_folder: string;
 	open_form: string;
+	open_page_in: string;
 	open_page_in_current: string;
 	open_page_in_modal: string;
 	open_page_in_split: string;
@@ -201,4 +202,16 @@ export interface Local {
 	wait: string;
 	wait_time: string;
 	milliseconds: string;
+	button: string;
+	button_action_type: string;
+	open_url: string;
+	open_file: string;
+	submit_form: string;
+	url: string;
+	url_required: string;
+	form_file: string;
+	form_file_required: string;
+	select_file: string;
+	select_form_file: string;
+	all_files: string;
 }

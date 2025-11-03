@@ -213,4 +213,16 @@ export class ZhTw implements Local {
 	wait = "等待";
 	wait_time = "等待時間";
 	milliseconds = "毫秒";
+	button = "按鈕";
+	button_action_type = "按鈕動作類型";
+	open_url = "打開鏈接";
+	open_file = "打開文件";
+	submit_form = "提交表單";
+	url = "URL 地址";
+	url_required = "URL 地址不能為空";
+	form_file = "表單文件";
+	form_file_required = "表單文件不能為空";
+	select_file = "選擇文件";
+	select_form_file = "選擇表單文件";
+	all_files = "所有文件";
 }

@@ -12,6 +12,7 @@ import WaitActionService from "./wait/WaitActionService";
 import { hasConditions } from "./util/hasConditions";
 import { FilterService } from "../filter/FilterService";
 import { RunCommandActionService } from "./run-command/RunCommandActionService";
+import { ButtonActionService } from "./button/ButtonActionService";
 
 export interface IActionService {
 
@@ -39,6 +40,7 @@ export class ActionChain {
         new RunCommandActionService(),
         new GenerateFormActionService(),
         new WaitActionService(),
+        new ButtonActionService(),
     ]
 
     constructor(actions: IFormAction[]) {

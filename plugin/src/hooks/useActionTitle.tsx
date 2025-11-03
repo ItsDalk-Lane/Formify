@@ -9,7 +9,9 @@ import {
 } from "../model/action/RunScriptFormAction";
 import { SuggestModalFormAction } from "../model/action/SuggestModalFormAction";
 import { WaitFormAction } from "../model/action/WaitFormAction";
+import { ButtonFormAction } from "../model/action/ButtonFormAction";
 import { FormActionType } from "../model/enums/FormActionType";
+import { ButtonActionType } from "../model/enums/ButtonActionType";
 import { TargetFileType } from "../model/enums/TargetFileType";
 import { formActionTypeOptions } from "../view/edit/setting/action/common/ActionTypeSelect";
 import { allFormInsertPositionOptions } from "../view/edit/setting/action/common/InsertPositionSelect";
@@ -88,6 +90,24 @@ export function useActionTitle(value: IFormAction) {
 				runCommandAction.commandName ||
 				runCommandAction.commandId ||
 				localInstance.no_command_selected;
+		}
+
+		if (value.type === FormActionType.BUTTON) {
+			const buttonAction = value as ButtonFormAction;
+			switch (buttonAction.buttonActionType) {
+				case ButtonActionType.OPEN_URL:
+					title = buttonAction.url || localInstance.url_required;
+					break;
+				case ButtonActionType.OPEN_FILE:
+					title = buttonAction.filePath || localInstance.file_path_required;
+					break;
+				case ButtonActionType.SUBMIT_FORM:
+					title = buttonAction.formFilePath || localInstance.form_file_required;
+					break;
+				default:
+					title = localInstance.unnamed;
+					break;
+			}
 		}
 
 		return {

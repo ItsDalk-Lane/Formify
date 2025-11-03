@@ -213,4 +213,16 @@ export class En implements Local {
 	wait = "Wait";
 	wait_time = "Wait time";
 	milliseconds = "Milliseconds";
+	button = "Button";
+	button_action_type = "Button action type";
+	open_url = "Open URL";
+	open_file = "Open file";
+	submit_form = "Submit form";
+	url = "URL";
+	url_required = "URL is required";
+	form_file = "Form file";
+	form_file_required = "Form file is required";
+	select_file = "Select file";
+	select_form_file = "Select form file";
+	all_files = "All files";
 }
