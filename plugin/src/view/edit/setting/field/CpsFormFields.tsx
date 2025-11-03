@@ -5,11 +5,13 @@ import { FormFieldType } from "src/model/enums/FormFieldType";
 import { IFormField, FormField } from "src/model/field/IFormField";
 import { IOptionsField } from "src/model/field/ISelectField";
 import { Filter, FilterType } from "src/model/filter/Filter";
+import { OperatorType } from "src/model/filter/OperatorType";
 import generateSequenceName from "src/utils/generateSequenceName";
 import { Strings } from "src/utils/Strings";
 import { v4 } from "uuid";
 import { CpsFormFieldItemEditing } from "./CpsFormFieldItemEditing";
 import "./CpsFormFields.css";
+import { NewFieldGridPopover } from "./common/new-field-grid/NewFieldGridPopover";
 
 export default function (props: {
 	fields: IFormField[];
@@ -46,12 +48,12 @@ export default function (props: {
 		[fields, props.onSave]
 	);
 
-	const onFieldAdd = useCallback(() => {
+	const onFieldAdd = useCallback((fieldType: FormFieldType) => {
 		const names = fields.map((f) => f.label);
 		const newField = {
 			id: v4(),
 			label: generateSequenceName(names),
-			type: FormFieldType.TEXT,
+			type: fieldType,
 		};
 		const newFields = [...fields, newField];
 		props.onSave(newFields, []);
@@ -88,9 +90,11 @@ export default function (props: {
 					/>
 				);
 			})}
-			<button className="form--AddButton" onClick={onFieldAdd}>
-				+{localInstance.add_field}
-			</button>
+			<NewFieldGridPopover onSelect={onFieldAdd}>
+				<button className="form--AddButton">
+					+{localInstance.add_field}
+				</button>
+			</NewFieldGridPopover>
 		</div>
 	);
 }

@@ -12,6 +12,13 @@
 	gap: 8px;
 	font-size: 1rem;
 	font-weight: 500;
+	padding: 8px 4px;
+	border-radius: var(--radius-s);
+	transition: background-color 0.2s ease;
+}
+
+.form--CpsFormSettingGroup .form--SettingGroupHeader:hover {
+	background-color: var(--background-modifier-hover);
 }
 
 .form--CpsFormSettingGroup .form--SettingGroupHeader .lucide {

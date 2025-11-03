@@ -16,13 +16,7 @@ export class FormConfig {
     constructor(id: string) {
         this.id = id;
         this.fields = [];
-        const createFileAction = {
-            id: v4(),
-            type: FormActionType.CREATE_FILE,
-            targetFolder: "",
-            fileName: "",
-        }
-        this.actions = [createFileAction];
+        this.actions = [];
         this.autoSubmit = false;
     }
 }
