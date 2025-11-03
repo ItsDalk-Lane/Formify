@@ -62,15 +62,6 @@ export default {
 	'Embed data is empty or invalid': 'Embed data is empty or invalid',
 	'Failed to generate image. no data received from API': 'Failed to generate image. no data received from API',
 
-	// prompt
-	'Load template file: ': 'Load template file: ',
-	'Templates have been updated: ': 'Templates have been updated: ',
-	'Syntax Error Report': 'Syntax Error Report',
-	'Create prompt template file': 'Create prompt template file',
-	'Expected at least 2 sections, heading and content': 'Expected at least 2 sections, heading and content',
-	'Expected heading': 'Expected heading',
-	'Duplicate title:': 'Duplicate title:',
-
 	// editor.ts
 	'Please add a user message first, or wait for the user message to be parsed.':
 		'Please add a user message first, or wait for the user message to be parsed.',
@@ -207,39 +198,6 @@ export default {
 	'AI generate': 'AI generate',
 	'Text generated successfully': 'Text generated successfully',
 	'This is a non-streaming request, please wait...': 'This is a non-streaming request, please wait...',
-
-	promptFileName: 'prompt.en',
-	PRESET_PROMPT_TEMPLATES: `# Instructions
-
-- Collect your commonly used prompts here for use with the Tars plugin commands.
-- This file follows Obsidian's slide format, using \`---\` to separate each page.
-- The first page contains instructions, and each subsequent page is a prompt template.
-- Each template starts with a title in Markdown heading format, titles cannot be repeated. This is followed by the template content. Both title and content are required.
-- If the content contains \`{{s}}\`, it will be replaced with your selected text.
-- If there's no \`{{s}}\`, the selected text will be appended.
-- If no text is selected, the template content will be used as is.
-- If a page contains syntax errors, it won't appear in the command list.
-- If you've edited this file, to load the updated templates into commands, please ==run the 'Load template file' command==, which will also check for syntax errors and display them in a popup.
-
----
-
-# Prompt example
-
-Tell me a joke
-
----
-
-# Translation
-
-Translate the following content into English：{{s}}
-
----
-
-# One-sentence summary
-
-{{s}} Summarize the above content in one sentence
-
-`,
 
 	// Claude thinking settings
 	Thinking: 'Thinking',

@@ -146,10 +146,7 @@ export default class FormPlugin extends Plugin {
 		if (!this.tarsFeatureManager) {
 			this.tarsFeatureManager = new TarsFeatureManager(
 				this,
-				tars.settings,
-				async () => {
-					await this.saveSettings();
-				}
+				tars.settings
 			);
 			this.tarsFeatureManager.initialize();
 			return;

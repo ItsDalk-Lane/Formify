@@ -15,26 +15,21 @@ import {
 import { RequestController } from './editor'
 import { t } from './lang/helper'
 import { ProviderSettings } from './providers'
-import { getTitleFromCmdId, loadTemplateFileCommand, promptTemplateCmd, templateToCmdId } from './prompt'
 import { TarsSettings } from './settings'
 import { StatusBarManager } from './statusBarManager'
 import { getMaxTriggerLineLength, TagEditorSuggest, TagEntry } from './suggest'
-
-type PersistSettings = () => Promise<void>
 
 export class TarsFeatureManager {
 	private statusBarManager: StatusBarManager | null = null
 	private readonly tagLowerCaseMap: Map<string, Omit<TagEntry, 'replacement'>> = new Map()
 	private aborterInstance: AbortController | null = null
 	private tagCmdIds: string[] = []
-	private promptCmdIds: string[] = []
 	private registeredCommandIds: Set<string> = new Set()
 	private tagEditorSuggest: TagEditorSuggest | null = null
 
 	constructor(
 		private readonly plugin: Plugin,
-		private settings: TarsSettings,
-		private readonly persistSettings: PersistSettings
+		private settings: TarsSettings
 	) {}
 
 	initialize() {
@@ -43,17 +38,9 @@ export class TarsFeatureManager {
 		this.statusBarManager = new StatusBarManager(this.plugin.app, statusBarItem)
 
 		this.buildTagCommands(true)
-		this.buildPromptCommands(true)
 
 		const selectCommand = selectMsgAtCursorCmd(this.plugin.app, this.settings)
 		this.registerCommand(selectCommand.id, selectCommand)
-		const loadTemplateCommand = loadTemplateFileCommand(
-			this.plugin.app,
-			this.settings,
-			() => this.persistSettings(),
-			() => this.buildPromptCommands()
-		)
-		this.registerCommand(loadTemplateCommand.id, loadTemplateCommand)
 
 		this.syncEditorSuggest()
 
@@ -85,8 +72,6 @@ export class TarsFeatureManager {
 
 		this.tagCmdIds.forEach((id) => this.plugin.removeCommand(id))
 		this.tagCmdIds = []
-		this.promptCmdIds.forEach((id) => this.plugin.removeCommand(id))
-		this.promptCmdIds = []
 		this.tagLowerCaseMap.clear()
 
 		this.disposeEditorSuggest(true)
@@ -112,7 +97,6 @@ export class TarsFeatureManager {
 			// 否则只进行增量更新
 			console.debug('[Tars] 未检测到 provider 配置变化，执行增量更新')
 			this.buildTagCommands()
-			this.buildPromptCommands()
 		}
 		
 		this.syncOptionalCommands()
@@ -167,15 +151,8 @@ export class TarsFeatureManager {
 		this.tagCmdIds = []
 		this.tagLowerCaseMap.clear()
 
-		// 移除所有 prompt 命令
-		this.promptCmdIds.forEach((cmdId) => {
-			this.plugin.removeCommand(cmdId)
-		})
-		this.promptCmdIds = []
-
 		// 重新构建命令（suppressNotifications = true 避免重复通知）
 		this.buildTagCommands(true)
-		this.buildPromptCommands(true)
 
 		console.debug('[Tars] 所有命令已重建完成')
 	}
@@ -250,31 +227,6 @@ export class TarsFeatureManager {
 		const addedTags = toAdd.map((cmdId) => getMeta(cmdId).tag)
 		if (addedTags.length > 0) {
 			console.debug('Added commands', addedTags)
-		}
-	}
-
-	private buildPromptCommands(suppressNotifications: boolean = false) {
-		const newPromptCmdIds = this.settings.promptTemplates.map(templateToCmdId)
-
-		const toRemove = this.promptCmdIds.filter((cmdId) => !newPromptCmdIds.includes(cmdId))
-		toRemove.forEach((cmdId) => this.plugin.removeCommand(cmdId))
-
-		const toAdd = this.settings.promptTemplates.filter((t) => !this.promptCmdIds.includes(templateToCmdId(t)))
-		toAdd.forEach((t) => {
-			const command = promptTemplateCmd(templateToCmdId(t), t.title, this.plugin.app, this.settings)
-			this.registerCommand(command.id, command, false)
-		})
-
-		this.promptCmdIds = newPromptCmdIds
-		if (suppressNotifications) return
-
-		const removedTitles = toRemove.map((cmdId) => getTitleFromCmdId(cmdId))
-		if (removedTitles.length > 0) {
-			console.debug('Removed commands', removedTitles)
-		}
-		const addedTitles = toAdd.map((t) => t.title)
-		if (addedTitles.length > 0) {
-			console.debug('Added commands', addedTitles)
 		}
 	}
 

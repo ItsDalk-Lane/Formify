@@ -1,4 +1,3 @@
-import { PromptTemplate } from './prompt'
 import { ProviderSettings, Vendor } from './providers'
 import { azureVendor } from './providers/azure'
 import { claudeVendor } from './providers/claude'
@@ -35,7 +34,6 @@ export interface TarsSettings {
 		newChat: string
 		user: string
 	}
-	promptTemplates: PromptTemplate[]
 	enableInternalLink: boolean // For user messages and system messages
 	enableInternalLinkForAssistantMsg: boolean
 	confirmRegenerate: boolean
@@ -63,7 +61,6 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 		newChat: '🚀',
 		user: '💬'
 	},
-	promptTemplates: [],
 	enableInternalLink: true,
 	enableInternalLinkForAssistantMsg: false,
 	answerDelayInMilliseconds: 2000,
@@ -101,5 +98,12 @@ export const availableVendors: Vendor[] = [
 
 const cloneDeep = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 
-export const cloneTarsSettings = (override?: Partial<TarsSettings>): TarsSettings =>
-	Object.assign(cloneDeep(DEFAULT_TARS_SETTINGS), override ? cloneDeep(override) : {})
+export const cloneTarsSettings = (override?: Partial<TarsSettings>): TarsSettings => {
+	const clonedDefaults = cloneDeep(DEFAULT_TARS_SETTINGS)
+	if (!override) {
+		return clonedDefaults
+	}
+	const clonedOverride = cloneDeep(override) as Record<string, unknown>
+	delete clonedOverride.promptTemplates
+	return Object.assign(clonedDefaults, clonedOverride)
+}

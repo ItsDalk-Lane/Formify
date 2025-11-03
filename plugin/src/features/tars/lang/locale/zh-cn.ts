@@ -61,15 +61,6 @@ export default {
 	'Embed data is empty or invalid': '嵌入数据为空或无效',
 	'Failed to generate image. no data received from API': '生成图片失败。没有从 API 接收到数据',
 
-	// prompt
-	'Load template file: ': '加载模板文件: ',
-	'Templates have been updated: ': '模板已更新: ',
-	'Syntax Error Report': '语法错误报告',
-	'Create prompt template file': '创建提示词模板文件',
-	'Expected at least 2 sections, heading and content': '至少需要 2 个部分，标题和内容',
-	'Expected heading': '需要标题',
-	'Duplicate title:': '重复的标题:',
-
 	// editor.ts
 	'Please add a user message first, or wait for the user message to be parsed.':
 		'请先添加用户消息，或者稍等用户消息解析完成',
@@ -203,39 +194,6 @@ export default {
 	'AI generate': 'AI 生成',
 	'Text generated successfully': '文本生成成功',
 	'This is a non-streaming request, please wait...': '这是一个非流式请求，请稍候...',
-
-	promptFileName: 'prompt.zh',
-	PRESET_PROMPT_TEMPLATES: `# 使用说明
-
-- 把你的常用提示词收集到这里，以便在Tars插件的命令中使用。
-- 本文件按照 obsidian 的幻灯片格式，用\`---\`来分隔每一页
-- 第一页是说明，后面的每一页都是一个提示词模板
-- 首先是模板的标题, 以markdown的标题格式, 标题不能重复。接下来都是模板的内容。标题和内容都不可缺少。
-- 如果内容有 \`{{s}}\`，会把 \`{{s}}\`替换为选中的文本
-- 如果没有 \`{{s}}\`，则追加
-- 如果没有选中的文本，则直接使用模板的内容
-- 如果某一页有语法错误，则不会出现在命令中
-- 如果你编辑了该文件，要把更新后的模板加载到命令中，==执行命令“加载模板文件”==，该命令同时会检查语法错误并弹窗显示。
-
----
-
-# 提示词例子
-
-给我讲个笑话
-
----
-
-# 翻译
-
-把以下内容翻译为中文：{{s}}
-
----
-
-# 一句话总结
-
-{{s}} 用一句话总结以上内容
-
-`,
 
 	// Claude thinking settings
 	Thinking: '思考',
