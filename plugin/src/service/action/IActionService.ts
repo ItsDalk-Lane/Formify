@@ -13,6 +13,7 @@ import { hasConditions } from "./util/hasConditions";
 import { FilterService } from "../filter/FilterService";
 import { RunCommandActionService } from "./run-command/RunCommandActionService";
 import { ButtonActionService } from "./button/ButtonActionService";
+import { TextActionService } from "./text/TextActionService";
 
 export interface IActionService {
 
@@ -41,6 +42,7 @@ export class ActionChain {
         new GenerateFormActionService(),
         new WaitActionService(),
         new ButtonActionService(),
+        new TextActionService(),
     ]
 
     constructor(actions: IFormAction[]) {

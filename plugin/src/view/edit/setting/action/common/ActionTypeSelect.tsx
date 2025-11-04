@@ -1,12 +1,13 @@
 import {
-	Code,
-	File,
-	FileJson,
-	Hourglass,
-	MessageSquare,
-	Text,
-	ZapIcon,
-	Mouse,
+    Code,
+    File,
+    FileJson,
+    Hourglass,
+    MessageSquare,
+    Mouse,
+    SquarePen,
+    Text,
+    ZapIcon,
 } from "lucide-react";
 import { localInstance } from "src/i18n/locals";
 import { FormActionType } from "src/model/enums/FormActionType";
@@ -42,6 +43,11 @@ export const formActionTypeOptions = [
 		value: FormActionType.INSERT_TEXT,
 		label: localInstance.insert_text,
 		icon: <Text />,
+	},
+	{
+		value: FormActionType.TEXT,
+		label: localInstance.form_text,
+		icon: <SquarePen />,
 	},
 	{
 		value: FormActionType.UPDATE_FRONTMATTER,

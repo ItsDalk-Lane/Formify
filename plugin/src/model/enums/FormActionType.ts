@@ -8,4 +8,5 @@ export enum FormActionType {
     RUN_COMMAND = "runCommand",
     WAIT = "wait",
     BUTTON = "button",
+    TEXT = "text",
 }

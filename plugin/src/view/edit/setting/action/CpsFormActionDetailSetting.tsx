@@ -11,6 +11,7 @@ import { WaitSetting } from "./wait/WaitSetting";
 import { RemarkSetting } from "./common/RemarkSetting";
 import { RunCommandSetting } from "./run-command/RunCommandSetting";
 import { ButtonSetting } from "./button/ButtonSetting";
+import { TextSetting } from "./text/TextSetting";
 
 export default function (props: {
 	value: IFormAction;
@@ -23,6 +24,7 @@ export default function (props: {
 			<RemarkSetting value={value} onChange={onChange} />
 			<CreateFileSetting value={value} onChange={onChange} />
 			<InsertTextSetting value={value} onChange={onChange} />
+			<TextSetting value={value} onChange={onChange} />
 			<UpdateFrontmatterSetting value={value} onChange={onChange} />
 			<RunScriptSetting value={value} onChange={onChange} />
 			<SuggestModalSetting value={value} onChange={onChange} />

@@ -51,6 +51,31 @@
 	flex-grow: 0;
 }
 
+/* Apply horizontal layout to nested CpsFormItem within text action settings */
+.form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"],
+.form--CpsForm[data-layout="horizontal"] .form--ClearFormatSetting .form--CpsFormItem[data-layout="horizontal"],
+.form--CpsForm[data-layout="horizontal"] .form--DeleteFileSetting .form--CpsFormItem[data-layout="horizontal"],
+.form--CpsForm[data-layout="horizontal"] .form--DeleteContentSetting .form--CpsFormItem[data-layout="horizontal"] {
+	display: flex;
+	align-items: center;
+	flex-direction: row;
+	padding: 0.5em 0;
+}
+
+.form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl,
+.form--CpsForm[data-layout="horizontal"] .form--ClearFormatSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl,
+.form--CpsForm[data-layout="horizontal"] .form--DeleteFileSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl,
+.form--CpsForm[data-layout="horizontal"] .form--DeleteContentSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl {
+	justify-content: flex-end;
+}
+
+.form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child,
+.form--CpsForm[data-layout="horizontal"] .form--ClearFormatSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child,
+.form--CpsForm[data-layout="horizontal"] .form--DeleteFileSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child,
+.form--CpsForm[data-layout="horizontal"] .form--DeleteContentSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child {
+	flex-grow: 0;
+}
+
 /* Vertical layout - use direct parent form's data attribute */
 .form--CpsForm[data-layout="vertical"] > .form--CpsFormItem {
 	display: flex;
@@ -80,6 +105,39 @@
 }
 
 @media screen and (max-width: 768px) {
+	/* Mobile responsive for text action settings */
+	.form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"],
+	.form--CpsForm[data-layout="horizontal"] .form--ClearFormatSetting .form--CpsFormItem[data-layout="horizontal"],
+	.form--CpsForm[data-layout="horizontal"] .form--DeleteFileSetting .form--CpsFormItem[data-layout="horizontal"],
+	.form--CpsForm[data-layout="horizontal"] .form--DeleteContentSetting .form--CpsFormItem[data-layout="horizontal"] {
+		display: flex;
+		flex-direction: column;
+		align-items: initial;
+	}
+	
+	.form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl,
+	.form--CpsForm[data-layout="horizontal"] .form--ClearFormatSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl,
+	.form--CpsForm[data-layout="horizontal"] .form--DeleteFileSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl,
+	.form--CpsForm[data-layout="horizontal"] .form--DeleteContentSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl {
+		justify-content: flex-start;
+		width: 100%;
+	}
+	
+	.form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child,
+	.form--CpsForm[data-layout="horizontal"] .form--ClearFormatSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child,
+	.form--CpsForm[data-layout="horizontal"] .form--DeleteFileSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child,
+	.form--CpsForm[data-layout="horizontal"] .form--DeleteContentSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child {
+		flex-grow: 1;
+	}
+	
+	.form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > input[type="checkbox"],
+	.form--CpsForm[data-layout="horizontal"] .form--ClearFormatSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > input[type="checkbox"],
+	.form--CpsForm[data-layout="horizontal"] .form--DeleteFileSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > input[type="checkbox"],
+	.form--CpsForm[data-layout="horizontal"] .form--DeleteContentSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > input[type="checkbox"] {
+		flex-grow: 0;
+	}
+	
+	/* Mobile responsive for CpsForm's direct children */
 	.form--CpsForm[data-layout="horizontal"] > .form--CpsFormItem {
 		display: flex;
 		flex-direction: column;

@@ -8,6 +8,7 @@ import { SuggestModalFormAction } from "./SuggestModalFormAction";
 import { UpdateFrontmatterFormAction } from "./UpdateFrontmatterFormAction";
 import { WaitFormAction } from "./WaitFormAction";
 import { ButtonFormAction } from "./ButtonFormAction";
+import { TextFormAction } from "./TextFormAction";
 
 export class FormActionFactory {
     static create(type: FormActionType, partial?: Partial<IFormAction>): IFormAction {
@@ -51,6 +52,11 @@ export class FormActionFactory {
                 return new ButtonFormAction({
                     ...partial,
                     type: FormActionType.BUTTON
+                });
+            case FormActionType.TEXT:
+                return new TextFormAction({
+                    ...partial,
+                    type: FormActionType.TEXT
                 });
             default:
                 throw new Error(`Unsupported FormActionType: ${type}`);

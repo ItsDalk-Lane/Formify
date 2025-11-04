@@ -10,6 +10,7 @@ import {
 import { SuggestModalFormAction } from "../model/action/SuggestModalFormAction";
 import { WaitFormAction } from "../model/action/WaitFormAction";
 import { ButtonFormAction } from "../model/action/ButtonFormAction";
+import { TextFormAction } from "../model/action/TextFormAction";
 import { FormActionType } from "../model/enums/FormActionType";
 import { ButtonActionType } from "../model/enums/ButtonActionType";
 import { TargetFileType } from "../model/enums/TargetFileType";
@@ -17,6 +18,7 @@ import { formActionTypeOptions } from "../view/edit/setting/action/common/Action
 import { allFormInsertPositionOptions } from "../view/edit/setting/action/common/InsertPositionSelect";
 import { localInstance } from "src/i18n/locals";
 import { Strings } from "src/utils/Strings";
+import { TextCleanupType } from "src/model/enums/TextCleanupType";
 
 export function useActionTitle(value: IFormAction) {
 	const heading = useMemo(() => {
@@ -108,6 +110,32 @@ export function useActionTitle(value: IFormAction) {
 					title = localInstance.unnamed;
 					break;
 			}
+		}
+
+		if (value.type === FormActionType.TEXT) {
+			const textAction = value as TextFormAction;
+			const modeLabel =
+				textAction.mode === "operation"
+					? localInstance.text_action_operation
+					: localInstance.text_action_cleanup;
+			let detail = "";
+			if (textAction.mode === "cleanup") {
+				const cleanupType =
+					textAction.textCleanupConfig?.type ?? TextCleanupType.CLEAR_FORMAT;
+				switch (cleanupType) {
+					case TextCleanupType.DELETE_FILE:
+						detail = localInstance.text_action_cleanup_feature_delete_file;
+						break;
+					case TextCleanupType.DELETE_CONTENT:
+						detail = localInstance.text_action_cleanup_feature_delete_content;
+						break;
+					case TextCleanupType.CLEAR_FORMAT:
+					default:
+						detail = localInstance.text_action_cleanup_feature_clear_format;
+						break;
+				}
+			}
+			title = detail ? `${modeLabel} · ${detail}` : modeLabel;
 		}
 
 		return {

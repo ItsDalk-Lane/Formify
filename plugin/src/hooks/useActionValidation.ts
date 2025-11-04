@@ -6,13 +6,17 @@ import { InsertTextFormAction } from "../model/action/InsertTextFormAction";
 import { GenerateFormAction } from "../model/action/OpenFormAction";
 import { SuggestModalFormAction } from "../model/action/SuggestModalFormAction";
 import { ButtonFormAction } from "../model/action/ButtonFormAction";
+import { TextFormAction } from "src/model/action/TextFormAction";
 import { FormActionType } from "../model/enums/FormActionType";
 import { ButtonActionType } from "../model/enums/ButtonActionType";
 import { TargetFileType } from "../model/enums/TargetFileType";
+import { TextCleanupType } from "src/model/enums/TextCleanupType";
+import { TargetMode } from "src/model/enums/TargetMode";
+import { ContentDeleteType } from "src/model/enums/ContentDeleteType";
 import { Strings } from "src/utils/Strings";
 
 
-type FormActionImp = CreateFileFormAction | InsertTextFormAction | UpdateFrontmatterFormAction | GenerateFormAction | SuggestModalFormAction | ButtonFormAction
+type FormActionImp = CreateFileFormAction | InsertTextFormAction | UpdateFrontmatterFormAction | GenerateFormAction | SuggestModalFormAction | ButtonFormAction | TextFormAction
 
 export function useActionValidation(action: IFormAction) {
     const formAction = action as FormActionImp;
@@ -34,7 +38,8 @@ function validateAction(action: FormActionImp) {
             property_configure_incompleted: "One or more property updates are incomplete",
             at_leat_one_field_required: "At least one field is required",
             url_required: "URL is required",
-            form_file_required: "Form file is required"
+            form_file_required: "Form file is required",
+            heading_required: "Heading title is required"
         },
         "zh-CN": {
             target_folder_required: "请填写目标文件夹",
@@ -44,7 +49,8 @@ function validateAction(action: FormActionImp) {
             property_configure_incompleted: "一个或多个属性配置不完整",
             at_leat_one_field_required: "至少填写一个字段",
             url_required: "请填写 URL 地址",
-            form_file_required: "请选择表单文件"
+            form_file_required: "请选择表单文件",
+            heading_required: "请输入目标标题"
 
         },
         "zh-TW": {
@@ -55,7 +61,8 @@ function validateAction(action: FormActionImp) {
             property_configure_incompleted: "一個或多個屬性配置不完整",
             at_leat_one_field_required: "至少填寫一個字段",
             url_required: "請填寫 URL 地址",
-            form_file_required: "請選擇表單文件"
+            form_file_required: "請選擇表單文件",
+            heading_required: "請輸入目標標題"
         }
     }
 
@@ -136,6 +143,51 @@ function validateAction(action: FormActionImp) {
                         messages.push(l.form_file_required);
                     }
                     break;
+            }
+            break;
+        case FormActionType.TEXT:
+            const textAction = action as TextFormAction;
+            const cleanup = textAction.textCleanupConfig;
+            if (!cleanup) {
+                break;
+            }
+
+            switch (cleanup.type ?? TextCleanupType.CLEAR_FORMAT) {
+                case TextCleanupType.CLEAR_FORMAT: {
+                    const cfg = cleanup.clearFormatConfig;
+                    if (cfg?.targetMode === TargetMode.SPECIFIED) {
+                        const files = (cfg.targetFiles ?? []).filter((item) => Strings.isNotBlank(item));
+                        if (files.length === 0) {
+                            messages.push(l.file_path_required);
+                        }
+                    }
+                    break;
+                }
+                case TextCleanupType.DELETE_FILE: {
+                    const cfg = cleanup.deleteFileConfig;
+                    if (cfg?.targetMode === TargetMode.SPECIFIED) {
+                        const paths = (cfg.targetPaths ?? []).filter((item) => Strings.isNotBlank(item));
+                        if (paths.length === 0) {
+                            messages.push(l.file_path_required);
+                        }
+                    }
+                    break;
+                }
+                case TextCleanupType.DELETE_CONTENT: {
+                    const cfg = cleanup.deleteContentConfig;
+                    if (cfg?.targetMode === TargetMode.SPECIFIED) {
+                        const files = (cfg.targetFiles ?? []).filter((item) => Strings.isNotBlank(item));
+                        if (files.length === 0) {
+                            messages.push(l.file_path_required);
+                        }
+                    }
+                    if ((cfg?.contentDeleteType ?? ContentDeleteType.ENTIRE_CONTENT) === ContentDeleteType.HEADING_CONTENT) {
+                        if (Strings.isBlank(cfg?.headingTitle)) {
+                            messages.push(l.heading_required);
+                        }
+                    }
+                    break;
+                }
             }
             break;
     }

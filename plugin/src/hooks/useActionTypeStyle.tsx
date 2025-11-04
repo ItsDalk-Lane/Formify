@@ -25,6 +25,13 @@ export function useActionTypeStyle(type: FormActionType) {
 					"--select-button-text-color":
 						"rgba(var(--color-blue-rgb), 1)",
 				};
+		case FormActionType.TEXT:
+			return {
+				"--select-button-background-color":
+					"rgba(var(--color-orange-rgb), 0.12)",
+				"--select-button-text-color":
+					"rgba(var(--color-orange-rgb), 1)",
+			};
 			case FormActionType.RUN_SCRIPT:
 				return {
 					"--select-button-background-color":
