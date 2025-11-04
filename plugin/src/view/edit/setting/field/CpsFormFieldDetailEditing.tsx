@@ -14,6 +14,7 @@ import { DateFieldDefaultValueControl } from "./default-value/DateFieldDefaultVa
 import CpsFormPropertyValueFieldSetting from "./property-value/CpsFormPropertyValueFieldSetting";
 import CpsFormTextAreaFieldSetting from "./textarea/CpsFormTextAreaFieldSetting";
 import CpsFormItem from "src/view/shared/CpsFormItem";
+import { FolderPathControl } from "src/view/shared/control/FolderPathControl";
 
 export function CpsFormFieldDetailEditing(props: {
 	value: IFormField;
@@ -148,6 +149,53 @@ export function CpsFormFieldDetailEditing(props: {
 								setField(v);
 							}}
 						/>
+					</CpsFormItem>
+					<CpsFormItem label={localInstance.extract_file_content}>
+						<ToggleControl
+							value={(field as IFileListField).extractContent === true}
+							onValueChange={(value) => {
+								const f = field as IFileListField;
+								const v = {
+									...f,
+									extractContent: value,
+								};
+								setField(v);
+							}}
+						/>
+					</CpsFormItem>
+					{(field as IFileListField).extractContent && (
+						<CpsFormItem label={localInstance.include_file_metadata}>
+							<ToggleControl
+								value={(field as IFileListField).includeMetadata === true}
+								onValueChange={(value) => {
+									const f = field as IFileListField;
+									const v = {
+										...f,
+										includeMetadata: value,
+									};
+									setField(v);
+								}}
+							/>
+						</CpsFormItem>
+					)}
+					<CpsFormItem label={localInstance.limit_folder_path}>
+						<div style={{ flex: 1 }}>
+							<FolderPathControl
+								field={{
+									...field,
+									placeholder: localInstance.limit_folder_path_placeholder,
+								}}
+								value={(field as IFileListField).folderPath || ""}
+								onValueChange={(value) => {
+									const f = field as IFileListField;
+									const v = {
+										...f,
+										folderPath: value,
+									};
+									setField(v);
+								}}
+							/>
+						</div>
 					</CpsFormItem>
 				</>
 			)}

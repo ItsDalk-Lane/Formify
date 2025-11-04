@@ -181,6 +181,10 @@ export interface Local {
 	to_internal_link: string;
 	top_below_title: string;
 	top_of_content: string;
+	extract_file_content: string;
+	include_file_metadata: string;
+	limit_folder_path: string;
+	limit_folder_path_placeholder: string;
 	type_date: string;
 	type_datetime: string;
 	type_multi_text: string;

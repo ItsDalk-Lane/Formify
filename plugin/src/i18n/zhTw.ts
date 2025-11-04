@@ -225,4 +225,8 @@ export class ZhTw implements Local {
 	select_file = "選擇文件";
 	select_form_file = "選擇表單文件";
 	all_files = "所有文件";
+	extract_file_content = "提取文件內容";
+	include_file_metadata = "包含文件元數據";
+	limit_folder_path = "限制文件夾範圍";
+	limit_folder_path_placeholder = "留空則從整個庫中檢索,指定文件夾路徑則僅檢索該文件夾及其子文件夾";
 }

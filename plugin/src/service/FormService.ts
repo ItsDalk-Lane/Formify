@@ -10,6 +10,9 @@ import { ActionChain, ActionContext } from "./action/IActionService";
 import { FormVisibilies } from "./condition/FormVisibilies";
 import { FormIdValues } from "./FormValues";
 import { FormValidator } from "./validator/FormValidator";
+import { extractContentFromEncodedValue } from "src/view/shared/control/FileListControl";
+import { FormFieldType } from "src/model/enums/FormFieldType";
+import { IFileListField } from "src/model/field/IFileListField";
 
 export interface FormSubmitOptions {
     app: App
@@ -20,9 +23,21 @@ export class FormService {
     async submit(idValues: FormIdValues, config: FormConfig, options: FormSubmitOptions) {
         const actions = getActionsCompatible(config);
         FormValidator.validate(config, idValues);
+        
+        // 处理文件列表字段的编码值，提取纯内容
+        const processedIdValues = { ...idValues };
+        config.fields.forEach(field => {
+            if (field.type === FormFieldType.FILE_LIST) {
+                const fileListField = field as IFileListField;
+                if (fileListField.extractContent && processedIdValues[field.id] !== undefined) {
+                    processedIdValues[field.id] = extractContentFromEncodedValue(processedIdValues[field.id]);
+                }
+            }
+        });
+        
         const chain = new ActionChain(actions);
-        const visibleIdValues = FormVisibilies.getVisibleIdValues(config.fields, idValues);
-        const formLabelValues = FormVisibilies.toFormLabelValues(config.fields, idValues);
+        const visibleIdValues = FormVisibilies.getVisibleIdValues(config.fields, processedIdValues);
+        const formLabelValues = FormVisibilies.toFormLabelValues(config.fields, processedIdValues);
         const actionContext: ActionContext = {
             app: options.app,
             config: config,

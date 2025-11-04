@@ -225,4 +225,8 @@ export class En implements Local {
 	select_file = "Select file";
 	select_form_file = "Select form file";
 	all_files = "All files";
+	extract_file_content = "Extract file content";
+	include_file_metadata = "Include file metadata";
+	limit_folder_path = "Limit folder path";
+	limit_folder_path_placeholder = "Leave blank to search the entire vault, specify folder path to search only that folder and its subfolders";
 }

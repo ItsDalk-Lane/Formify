@@ -225,4 +225,8 @@ export class Zh implements Local {
 	select_file = "选择文件";
 	select_form_file = "选择表单文件";
 	all_files = "所有文件";
+	extract_file_content = "提取文件内容";
+	include_file_metadata = "包含文件元数据";
+	limit_folder_path = "限制文件夹范围";
+	limit_folder_path_placeholder = "留空则从整个库中检索,指定文件夹路径则仅检索该文件夹及其子文件夹";
 }

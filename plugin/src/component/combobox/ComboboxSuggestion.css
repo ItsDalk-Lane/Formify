@@ -31,6 +31,7 @@
 .form--ComboboxContent {
 	z-index: var(--form--modal-layer);
 	width: var(--radix-popover-trigger-width);
+	min-width: 300px; /* 确保最小宽度，避免过窄 */
 	background-color: var(--background-secondary);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-s);
