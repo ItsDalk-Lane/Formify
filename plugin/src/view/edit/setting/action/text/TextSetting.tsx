@@ -3,9 +3,10 @@ import { localInstance } from "src/i18n/locals";
 import { IFormAction } from "src/model/action/IFormAction";
 import { TextActionMode, TextFormAction } from "src/model/action/TextFormAction";
 import { FormActionType } from "src/model/enums/FormActionType";
-import Toggle, { ToggleOption } from "src/component/toggle/Toggle";
+import { Select2, SelectOption2 } from "src/component/select2/Select";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import { TextCleanupSetting } from "./cleanup/TextCleanupSetting";
+import { TextOperationSetting } from "./operation/TextOperationSetting";
 import "./TextSetting.css";
 
 type TextSettingProps = {
@@ -25,15 +26,13 @@ export function TextSetting(props: TextSettingProps) {
     const action = value as TextFormAction;
     const mode: TextActionMode = action.mode ?? "cleanup";
 
-    const modeOptions: ToggleOption<TextActionMode>[] = useMemo(
+    const modeOptions: SelectOption2[] = useMemo(
         () => [
             {
-                id: operationId,
                 label: localInstance.text_action_operation,
                 value: "operation",
             },
             {
-                id: cleanupId,
                 label: localInstance.text_action_cleanup,
                 value: "cleanup",
             },
@@ -59,20 +58,24 @@ export function TextSetting(props: TextSettingProps) {
             <CpsFormItem
                 label={localInstance.mode}
                 description={description}
+                layout="horizontal"
             >
-                <Toggle
+                <Select2
                     options={modeOptions}
                     value={mode}
                     onChange={(newMode) => {
-                        handleActionChange({ mode: newMode });
+                        handleActionChange({ mode: newMode as TextActionMode });
                     }}
                 />
             </CpsFormItem>
 
             {mode === "operation" ? (
-                <div className="form--TextActionOperationPlaceholder">
-                    {localInstance.text_action_operation_description}
-                </div>
+                <TextOperationSetting
+                    action={action}
+                    onChange={(nextAction) => {
+                        onChange(nextAction);
+                    }}
+                />
             ) : (
                 <TextCleanupSetting
                     action={action}

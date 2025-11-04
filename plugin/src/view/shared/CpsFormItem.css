@@ -53,6 +53,7 @@
 
 /* Apply horizontal layout to nested CpsFormItem within text action settings */
 .form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"],
+.form--CpsForm[data-layout="horizontal"] .form--TextOperationSetting .form--CpsFormItem[data-layout="horizontal"],
 .form--CpsForm[data-layout="horizontal"] .form--ClearFormatSetting .form--CpsFormItem[data-layout="horizontal"],
 .form--CpsForm[data-layout="horizontal"] .form--DeleteFileSetting .form--CpsFormItem[data-layout="horizontal"],
 .form--CpsForm[data-layout="horizontal"] .form--DeleteContentSetting .form--CpsFormItem[data-layout="horizontal"] {
@@ -63,6 +64,7 @@
 }
 
 .form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl,
+.form--CpsForm[data-layout="horizontal"] .form--TextOperationSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl,
 .form--CpsForm[data-layout="horizontal"] .form--ClearFormatSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl,
 .form--CpsForm[data-layout="horizontal"] .form--DeleteFileSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl,
 .form--CpsForm[data-layout="horizontal"] .form--DeleteContentSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl {
@@ -70,6 +72,7 @@
 }
 
 .form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child,
+.form--CpsForm[data-layout="horizontal"] .form--TextOperationSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child,
 .form--CpsForm[data-layout="horizontal"] .form--ClearFormatSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child,
 .form--CpsForm[data-layout="horizontal"] .form--DeleteFileSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child,
 .form--CpsForm[data-layout="horizontal"] .form--DeleteContentSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child {
@@ -107,6 +110,7 @@
 @media screen and (max-width: 768px) {
 	/* Mobile responsive for text action settings */
 	.form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"],
+	.form--CpsForm[data-layout="horizontal"] .form--TextOperationSetting .form--CpsFormItem[data-layout="horizontal"],
 	.form--CpsForm[data-layout="horizontal"] .form--ClearFormatSetting .form--CpsFormItem[data-layout="horizontal"],
 	.form--CpsForm[data-layout="horizontal"] .form--DeleteFileSetting .form--CpsFormItem[data-layout="horizontal"],
 	.form--CpsForm[data-layout="horizontal"] .form--DeleteContentSetting .form--CpsFormItem[data-layout="horizontal"] {
@@ -116,6 +120,7 @@
 	}
 	
 	.form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl,
+	.form--CpsForm[data-layout="horizontal"] .form--TextOperationSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl,
 	.form--CpsForm[data-layout="horizontal"] .form--ClearFormatSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl,
 	.form--CpsForm[data-layout="horizontal"] .form--DeleteFileSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl,
 	.form--CpsForm[data-layout="horizontal"] .form--DeleteContentSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl {
@@ -124,6 +129,7 @@
 	}
 	
 	.form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child,
+	.form--CpsForm[data-layout="horizontal"] .form--TextOperationSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child,
 	.form--CpsForm[data-layout="horizontal"] .form--ClearFormatSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child,
 	.form--CpsForm[data-layout="horizontal"] .form--DeleteFileSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child,
 	.form--CpsForm[data-layout="horizontal"] .form--DeleteContentSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > *:first-child {
@@ -131,6 +137,7 @@
 	}
 	
 	.form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > input[type="checkbox"],
+	.form--CpsForm[data-layout="horizontal"] .form--TextOperationSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > input[type="checkbox"],
 	.form--CpsForm[data-layout="horizontal"] .form--ClearFormatSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > input[type="checkbox"],
 	.form--CpsForm[data-layout="horizontal"] .form--DeleteFileSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > input[type="checkbox"],
 	.form--CpsForm[data-layout="horizontal"] .form--DeleteContentSetting .form--CpsFormItem[data-layout="horizontal"] > .form--CpsFormItemControl > input[type="checkbox"] {

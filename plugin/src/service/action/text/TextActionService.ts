@@ -1,4 +1,4 @@
-import { App, normalizePath, Notice, TFile, TFolder, Modal, Setting } from "obsidian";
+import { App, normalizePath, Notice, TFile, TFolder, Modal, Setting, arrayBufferToBase64 } from "obsidian";
 import { IFormAction } from "src/model/action/IFormAction";
 import {
     ClearFormatConfig,
@@ -6,6 +6,7 @@ import {
     DeleteFileConfig,
     TextCleanupConfig,
     TextFormAction,
+    TextOperationConfig,
 } from "src/model/action/TextFormAction";
 import { FormActionType } from "src/model/enums/FormActionType";
 import { TextCleanupType } from "src/model/enums/TextCleanupType";
@@ -15,12 +16,15 @@ import { FolderDeleteOption } from "src/model/enums/FolderDeleteOption";
 import { ContentDeleteType } from "src/model/enums/ContentDeleteType";
 import { ContentDeleteRange } from "src/model/enums/ContentDeleteRange";
 import { HeadingContentDeleteRange } from "src/model/enums/HeadingContentDeleteRange";
+import { TextOperationType } from "src/model/enums/TextOperationType";
 import { Strings } from "src/utils/Strings";
 import { DebugLogger } from "src/utils/DebugLogger";
 import { focusLatestEditor } from "src/utils/focusLatestEditor";
 import { FormTemplateProcessEngine } from "../../engine/FormTemplateProcessEngine";
 import { ActionChain, ActionContext, IActionService } from "../IActionService";
 import { localInstance } from "src/i18n/locals";
+import { TextConverter } from "src/utils/TextConverter";
+import * as fs from "fs/promises";
 
 type CleanupResult = {
     processed: string[];
@@ -43,9 +47,10 @@ export class TextActionService implements IActionService {
                 if (executed) {
                     new Notice(localInstance.submit_success);
                 }
-            } else {
-                DebugLogger.info("[TextActionService] 文本操作模式暂未实现");
-                new Notice(localInstance.text_action_operation_description);
+            } else if (formAction.mode === "operation") {
+                // 执行文本操作
+                const operation = this.ensureOperationConfig(formAction.textOperationConfig);
+                await this.executeOperation(operation, context);
             }
             await chain.next(context);
         } catch (error) {
@@ -53,6 +58,227 @@ export class TextActionService implements IActionService {
             const message = error instanceof Error ? error.message : String(error);
             new Notice(`${localInstance.submit_failed}: ${message}`);
             throw error;
+        }
+    }
+
+    private ensureOperationConfig(config?: TextOperationConfig): TextOperationConfig {
+        return {
+            type: config?.type ?? TextOperationType.COPY_RICH_TEXT,
+            targetMode: config?.targetMode ?? TargetMode.CURRENT,
+            targetFiles: config?.targetFiles ?? [],
+            exportPath: config?.exportPath ?? "",
+            openAfterExport: config?.openAfterExport ?? false,
+        };
+    }
+
+    private async executeOperation(config: TextOperationConfig, context: ActionContext): Promise<void> {
+        switch (config.type) {
+            case TextOperationType.COPY_RICH_TEXT:
+                await this.copyRichText(config, context);
+                break;
+            case TextOperationType.COPY_MARKDOWN:
+                await this.copyMarkdown(config, context);
+                break;
+            case TextOperationType.EXPORT_HTML:
+                await this.exportHtml(config, context);
+                break;
+            case TextOperationType.COPY_PLAIN_TEXT:
+                await this.copyPlainText(config, context);
+                break;
+            case TextOperationType.ADD_SPACES_BETWEEN_CJK_AND_ENGLISH:
+                await this.addSpacesBetweenCJKAndEnglish(config, context);
+                break;
+            default:
+                throw new Error(`Unsupported operation type: ${config.type}`);
+        }
+    }
+
+    /**
+     * 复制富文本（包含格式和base64图片）
+     */
+    private async copyRichText(config: TextOperationConfig, context: ActionContext): Promise<void> {
+        const app = context.app;
+        focusLatestEditor(app);
+
+        const activeFile = app.workspace.getActiveFile();
+        if (!activeFile) {
+            throw new Error(localInstance.no_active_md_file);
+        }
+
+        const editor = app.workspace.activeEditor?.editor;
+        let content: string;
+
+        // 自动检测：如果有选中文本则处理选中部分，否则处理整个文档
+        if (editor) {
+            const selection = editor.getSelection();
+            content = selection || editor.getValue();
+        } else {
+            content = await app.vault.read(activeFile);
+        }
+
+        const htmlContent = await this.convertToHtml(content, activeFile, app);
+
+        await navigator.clipboard.write([
+            new ClipboardItem({
+                'text/html': new Blob([htmlContent], { type: 'text/html' }),
+                'text/plain': new Blob([content], { type: 'text/plain' })
+            })
+        ]);
+
+        new Notice(localInstance.text_operation_copy_success);
+    }
+
+    /**
+     * 复制Markdown格式（标准Markdown链接）
+     */
+    private async copyMarkdown(config: TextOperationConfig, context: ActionContext): Promise<void> {
+        const app = context.app;
+        focusLatestEditor(app);
+
+        const activeFile = app.workspace.getActiveFile();
+        if (!activeFile) {
+            throw new Error(localInstance.no_active_md_file);
+        }
+
+        const editor = app.workspace.activeEditor?.editor;
+        let content: string;
+
+        // 自动检测：如果有选中文本则处理选中部分，否则处理整个文档
+        if (editor) {
+            const selection = editor.getSelection();
+            content = selection || editor.getValue();
+        } else {
+            content = await app.vault.read(activeFile);
+        }
+
+        // 将Obsidian图片链接转换为标准Markdown链接
+        content = await this.replaceImageLinks(content, activeFile, app);
+
+        await navigator.clipboard.writeText(content);
+        new Notice(localInstance.text_operation_copy_markdown_success);
+    }
+
+    /**
+     * 导出为HTML文件
+     */
+    private async exportHtml(config: TextOperationConfig, context: ActionContext): Promise<void> {
+        const app = context.app;
+        focusLatestEditor(app);
+
+        const activeFile = app.workspace.getActiveFile();
+        if (!activeFile) {
+            throw new Error(localInstance.no_active_md_file);
+        }
+
+        const editor = app.workspace.activeEditor?.editor;
+        let content: string;
+
+        // 自动检测：如果有选中文本则处理选中部分，否则处理整个文档
+        if (editor) {
+            const selection = editor.getSelection();
+            content = selection || editor.getValue();
+        } else {
+            content = await app.vault.read(activeFile);
+        }
+
+        const htmlContent = await this.convertToHtml(content, activeFile, app);
+        const fileName = activeFile.basename + '.html';
+
+        // 使用Electron的dialog选择保存目录
+        const { dialog } = require('@electron/remote');
+        const result = await dialog.showOpenDialog({
+            properties: ['openDirectory', 'createDirectory'],
+            title: localInstance.text_operation_select_export_dir,
+            defaultPath: activeFile.parent?.path || ''
+        });
+
+        if (result.canceled || result.filePaths.length === 0) {
+            new Notice(localInstance.text_operation_export_canceled);
+            return;
+        }
+
+        let exportFolderPath = result.filePaths[0];
+        if (exportFolderPath && !exportFolderPath.endsWith('/') && exportFolderPath !== '/') {
+            exportFolderPath += '/';
+        }
+
+        const nodeFsPath = exportFolderPath.replace(/\//g, '\\') + fileName;
+        await fs.mkdir(exportFolderPath, { recursive: true });
+        await fs.writeFile(nodeFsPath, htmlContent);
+
+        new Notice(localInstance.text_operation_export_success + nodeFsPath);
+
+        // 如果配置了导出后打开，则打开文件
+        if (config.openAfterExport) {
+            require('@electron/remote').shell.openPath(nodeFsPath);
+        }
+    }
+
+    /**
+     * 复制纯文本（移除所有Markdown格式）
+     */
+    private async copyPlainText(config: TextOperationConfig, context: ActionContext): Promise<void> {
+        const app = context.app;
+        focusLatestEditor(app);
+
+        const activeFile = app.workspace.getActiveFile();
+        if (!activeFile) {
+            throw new Error(localInstance.no_active_md_file);
+        }
+
+        const editor = app.workspace.activeEditor?.editor;
+        let content: string;
+
+        // 自动检测：如果有选中文本则处理选中部分，否则处理整个文档
+        if (editor) {
+            const selection = editor.getSelection();
+            content = selection || editor.getValue();
+        } else {
+            content = await app.vault.read(activeFile);
+        }
+
+        // 使用TextConverter移除所有Markdown格式
+        const plainText = TextConverter.removeAllMarkdownFormats(content);
+
+        // 复制到剪贴板
+        await navigator.clipboard.writeText(plainText);
+        new Notice(localInstance.text_operation_copy_plain_text_success);
+    }
+
+    /**
+     * 在中英文之间添加空格
+     */
+    private async addSpacesBetweenCJKAndEnglish(config: TextOperationConfig, context: ActionContext): Promise<void> {
+        const app = context.app;
+        focusLatestEditor(app);
+
+        const activeFile = app.workspace.getActiveFile();
+        if (!activeFile) {
+            throw new Error(localInstance.no_active_md_file);
+        }
+
+        const editor = app.workspace.activeEditor?.editor;
+        
+        if (editor) {
+            // 自动检测：如果有选中文本则处理选中部分，否则处理整个文档
+            const selection = editor.getSelection();
+            if (selection) {
+                const processed = TextConverter.addSpacesBetweenCJKAndEnglish(selection);
+                editor.replaceSelection(processed);
+                new Notice(localInstance.text_operation_add_spaces_success);
+            } else {
+                // 如果没有选中文本，处理整个文档
+                const content = editor.getValue();
+                const processed = TextConverter.addSpacesBetweenCJKAndEnglish(content);
+                editor.setValue(processed);
+                new Notice(localInstance.text_operation_add_spaces_success);
+            }
+        } else {
+            // 处理整个文档
+            const content = await app.vault.read(activeFile);
+            const processed = TextConverter.addSpacesBetweenCJKAndEnglish(content);
+            await app.vault.modify(activeFile, processed);
+            new Notice(localInstance.text_operation_add_spaces_success);
         }
     }
 
@@ -482,6 +708,275 @@ export class TextActionService implements IActionService {
         }
         const engine = new FormTemplateProcessEngine();
         return await engine.process(template, context.state, context.app);
+    }
+
+    // ========== 文本操作相关方法 ==========
+
+    /**
+     * 将Obsidian内部图片链接(![[...]])替换为base64内联图片
+     */
+    private async replaceImageWithBase64(imagePath: string, file: TFile, app: App): Promise<{ original: string; replacement: string }> {
+        try {
+            const fileName = imagePath.split('/').pop() || imagePath;
+            const imageFile = app.vault.getFiles().find(f =>
+                f.name.toLowerCase().includes(fileName.toLowerCase())
+            );
+
+            if (!imageFile) {
+                return { original: `![[${imagePath}]]`, replacement: `[${localInstance.text_operation_image_not_found}: ${imagePath}]` };
+            }
+
+            const stat = await app.vault.adapter.stat(imageFile.path);
+            if (stat && stat.size > 10 * 1024 * 1024) {
+                return { original: `![[${imagePath}]]`, replacement: `[${localInstance.text_operation_image_too_large}: ${imagePath}]` };
+            }
+
+            const imageArrayBuffer = await app.vault.readBinary(imageFile);
+            const base64 = arrayBufferToBase64(imageArrayBuffer);
+            const mimeType = this.getMimeType(imagePath);
+
+            return {
+                original: `![[${imagePath}]]`,
+                replacement: `<img src="data:${mimeType};base64,${base64}" alt="${imagePath}" style="max-width: 100%;">`
+            };
+        } catch (error) {
+            DebugLogger.error("[TextActionService] 处理图片失败", error);
+            return { original: `![[${imagePath}]]`, replacement: `[${localInstance.text_operation_image_process_error}: ${imagePath}]` };
+        }
+    }
+
+    /**
+     * 将外部图片链接(file:///)替换为base64内联图片
+     */
+    private async replaceExternalImageWithBase64(imagePath: string): Promise<{ original: string; replacement: string }> {
+        try {
+            let filePath = imagePath.replace(/^file:\/\/\//, '');
+
+            if (process.platform === 'win32') {
+                filePath = filePath.replace(/\//g, '\\');
+            }
+
+            const imageBuffer = await fs.readFile(filePath);
+            const base64 = imageBuffer.toString('base64');
+            const mimeType = this.getMimeType(filePath);
+
+            return {
+                original: `![](${imagePath})`,
+                replacement: `<img src="data:${mimeType};base64,${base64}" alt="${imagePath}" style="max-width: 100%;">`
+            };
+        } catch (error) {
+            DebugLogger.error("[TextActionService] 处理外部图片失败", error);
+            return { original: `![](${imagePath})`, replacement: `[${localInstance.text_operation_external_image_error}: ${imagePath}]` };
+        }
+    }
+
+    /**
+     * 将Obsidian内部图片链接转换为标准Markdown格式（file:///路径）
+     */
+    private async replaceImageLinks(content: string, file: TFile, app: App): Promise<string> {
+        const imageRegex = /!\[\[(.*?)\]\]/g;
+        let result = content;
+
+        for (const match of content.matchAll(imageRegex)) {
+            const imagePath = match[1];
+            const imageFile = app.vault.getFiles().find(f =>
+                f.name.toLowerCase().includes(imagePath.split('/').pop()?.toLowerCase() || '')
+            );
+
+            if (imageFile) {
+                let absolutePath = app.vault.getResourcePath(imageFile)
+                    .replace(/^app:\/\/.*?\//, '')
+                    .replace(/\?.*$/, '')
+                    .replace(/\\/g, '/');
+
+                absolutePath = decodeURI(absolutePath);
+
+                const fileUrl = 'file:///' + absolutePath;
+
+                result = result.replace(
+                    `![[${imagePath}]]`,
+                    `![${imagePath}](${fileUrl})`
+                );
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 获取文件的MIME类型
+     */
+    private getMimeType(filename: string): string {
+        const ext = filename.split('.').pop()?.toLowerCase();
+        switch (ext) {
+            case 'jpg':
+            case 'jpeg':
+                return 'image/jpeg';
+            case 'png':
+                return 'image/png';
+            case 'gif':
+                return 'image/gif';
+            case 'webp':
+                return 'image/webp';
+            case 'svg':
+                return 'image/svg+xml';
+            default:
+                return 'image/png';
+        }
+    }
+
+    /**
+     * 将Markdown转换为HTML格式
+     */
+    private async convertToHtml(content: string, file: TFile, app: App): Promise<string> {
+        const imageRegex = /!\[\[(.*?)\]\]/g;
+        const externalImageRegex = /!\[.*?\]\((file:\/\/\/.+?)\)/g;
+
+        // 处理内部图片
+        const internalImageReplacements = await Promise.all(
+            Array.from(content.matchAll(imageRegex)).map(
+                match => this.replaceImageWithBase64(match[1], file, app)
+            )
+        );
+
+        let htmlContent = content;
+        // 预处理：将连续的空行减少为单个空行
+        htmlContent = htmlContent.replace(/\n\s*\n/g, '\n\n');
+
+        internalImageReplacements.forEach(({ original, replacement }) => {
+            htmlContent = htmlContent.replace(original, replacement);
+        });
+
+        // 处理外部图片
+        const externalImageReplacements = await Promise.all(
+            Array.from(htmlContent.matchAll(externalImageRegex)).map(
+                match => this.replaceExternalImageWithBase64(match[1])
+            )
+        );
+
+        externalImageReplacements.forEach(({ original, replacement }) => {
+            htmlContent = htmlContent.replace(original, replacement);
+        });
+
+        // 处理代码块
+        const codeBlockPlaceholders = new Map<string, string>();
+        let placeholderIndex = 0;
+
+        htmlContent = htmlContent.replace(/(^|\n)```(\w+)?\n([\s\S]*?)\n(?<!\S)```($|\n)/g, (match, p1, lang, code) => {
+            const placeholder = `___CODE_BLOCK_PLACEHOLDER_${placeholderIndex}___`;
+            const language = this.getLanguageFromCodeBlock(match);
+            const lines = code.split('\n');
+
+            let codeHtml = '';
+            for (let i = 0; i < lines.length; i++) {
+                const highlightedLine = this.highlightCodeLine(lines[i]);
+                codeHtml += `<code><span leaf="">${highlightedLine}</span></code>\n`;
+            }
+
+            const lineNumbersHtml = Array.from({ length: lines.length }, (_, i) => `<li></li>`).join('\n');
+
+            const codeBlockHtml = `
+<section class="code-snippet__js code-snippet__fix code-snippet__${language}">
+  <ul class="code-snippet__line-index code-snippet__${language}">
+    ${lineNumbersHtml}
+  </ul>
+  <pre class="code-snippet__js code-snippet code-snippet_nowrap" data-lang="${language}">
+    ${codeHtml.trim()}
+  </pre>
+</section>`;
+
+            codeBlockPlaceholders.set(placeholder, codeBlockHtml);
+            placeholderIndex++;
+            return placeholder;
+        });
+
+        // 转换分隔线
+        htmlContent = htmlContent.replace(/^---$/gm, '<hr style="border: 0; border-top: 1px solid #ddd; margin: 20px 0;">');
+
+        // 转换标题
+        htmlContent = htmlContent.replace(/^(#+)\s+(.*?)$/gm, (match, hashes, title) => {
+            const level = hashes.length;
+            const fontSize = 28 - (level * 2);
+            return `<h${level} style="font-size: ${fontSize}px; font-weight: bold; margin: 10px 0;">${title}</h${level}>`;
+        });
+
+        // 先转换内联格式（避免被换行打断）
+        // 使用[^\n]而不是.来避免跨行匹配
+        htmlContent = htmlContent
+            .replace(/\*\*([^\n*]+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*([^\n*]+?)\*/g, '<em>$1</em>')
+            .replace(/`([^\n`]+?)`/g, '<code style="background-color: #f0f0f0; padding: 2px 4px; border-radius: 3px;">$1</code>');
+
+        // 转换高亮
+        htmlContent = htmlContent.replace(/==([^=\n]+?)==/g, (match, p1) => {
+            return `<span style="background-color: yellow;">${p1}</span>`;
+        });
+
+        // 转换链接（避免跨行）
+        htmlContent = htmlContent
+            .replace(/(?<!\!)\[([^\n\]]+?)\]\(([^\n)]+?)\)/g, '<a href="$2" style="color: #576b95; text-decoration: none;">$1</a>');
+
+        // 最后转换换行
+        htmlContent = htmlContent.replace(/\n/g, '<br>');
+
+        // 恢复代码块
+        codeBlockPlaceholders.forEach((value, key) => {
+            htmlContent = htmlContent.replace(key, value);
+        });
+
+        htmlContent = this.cleanAndFormatHtml(htmlContent);
+        return `<div style="max-width: 800px; margin: 0 auto; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; color: #333; line-height: 1.6;">${htmlContent}</div>`;
+    }
+
+    private cleanAndFormatHtml(html: string): string {
+        // 移除标签之间的多余空白，但保留标签内的内容
+        // 注意：不要移除所有空白，某些空白在Word中是有意义的
+        html = html.replace(/>\s+</g, '><');
+
+        // 移除连续的换行符，只保留一个
+        html = html.replace(/\n\n+/g, '\n');
+
+        // 移除开头和结尾的换行符
+        html = html.trim();
+
+        return html;
+    }
+
+    private getLanguageFromCodeBlock(codeBlockHeader: string): string {
+        const match = codeBlockHeader.match(/```(\w+)?/);
+        return match && match[1] ? match[1] : 'js';
+    }
+
+    private highlightCodeLine(line: string): string {
+        // 替换开头的空格为 &nbsp;
+        let processedLine = line.replace(/^( +)/g, (match) => {
+            return match.replace(/ /g, '&nbsp;');
+        });
+
+        // 替换行内连续的两个或更多空格为 &nbsp;
+        processedLine = processedLine.replace(/ {2,}/g, (match) => {
+            return match.replace(/ /g, '&nbsp;');
+        });
+
+        // 简化语法高亮：只处理字符串
+        processedLine = processedLine.replace(/(["'`])(.*?)\1/g, (match, quote, content) => {
+            const escapedContent = this.escapeHtml(content);
+            return `${quote}<span class="code-snippet__string">${escapedContent}</span>${quote}`;
+        });
+
+        // 恢复之前转义的引号
+        processedLine = processedLine.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&grave;/g, '`');
+
+        return processedLine;
+    }
+
+    private escapeHtml(unsafe: string): string {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/#/g, "&#35;");
     }
 }
 

@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import Toggle, { ToggleOption } from "src/component/toggle/Toggle";
+import { Select2, SelectOption2 } from "src/component/select2/Select";
 import ToggleControl from "src/view/shared/control/ToggleControl";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import { localInstance } from "src/i18n/locals";
@@ -29,15 +29,13 @@ export function DeleteContentSetting(props: DeleteContentSettingProps) {
         });
     };
 
-    const deleteTypeOptions: ToggleOption<ContentDeleteType>[] = useMemo(
+    const deleteTypeOptions: SelectOption2[] = useMemo(
         () => [
             {
-                id: ContentDeleteType.ENTIRE_CONTENT,
                 value: ContentDeleteType.ENTIRE_CONTENT,
                 label: localInstance.text_delete_content_type_entire,
             },
             {
-                id: ContentDeleteType.HEADING_CONTENT,
                 value: ContentDeleteType.HEADING_CONTENT,
                 label: localInstance.text_delete_content_type_heading,
             },
@@ -45,15 +43,13 @@ export function DeleteContentSetting(props: DeleteContentSettingProps) {
         []
     );
 
-    const contentRangeOptions: ToggleOption<ContentDeleteRange>[] = useMemo(
+    const contentRangeOptions: SelectOption2[] = useMemo(
         () => [
             {
-                id: ContentDeleteRange.ALL,
                 value: ContentDeleteRange.ALL,
                 label: localInstance.text_delete_content_range_all,
             },
             {
-                id: ContentDeleteRange.BODY_ONLY,
                 value: ContentDeleteRange.BODY_ONLY,
                 label: localInstance.text_delete_content_range_body,
             },
@@ -61,20 +57,17 @@ export function DeleteContentSetting(props: DeleteContentSettingProps) {
         []
     );
 
-    const headingRangeOptions: ToggleOption<HeadingContentDeleteRange>[] = useMemo(
+    const headingRangeOptions: SelectOption2[] = useMemo(
         () => [
             {
-                id: HeadingContentDeleteRange.TO_SAME_OR_HIGHER,
                 value: HeadingContentDeleteRange.TO_SAME_OR_HIGHER,
                 label: localInstance.text_heading_delete_range_to_same_or_higher,
             },
             {
-                id: HeadingContentDeleteRange.ALL_CHILDREN,
                 value: HeadingContentDeleteRange.ALL_CHILDREN,
                 label: localInstance.text_heading_delete_range_all_children,
             },
             {
-                id: HeadingContentDeleteRange.BODY_ONLY,
                 value: HeadingContentDeleteRange.BODY_ONLY,
                 label: localInstance.text_heading_delete_range_body_only,
             },
@@ -139,12 +132,13 @@ export function DeleteContentSetting(props: DeleteContentSettingProps) {
             <CpsFormItem
                 label={localInstance.text_delete_content_type_label}
                 description={localInstance.text_delete_content_type_description}
+                layout="horizontal"
             >
-                <Toggle
+                <Select2
                     options={deleteTypeOptions}
                     value={config.contentDeleteType}
                     onChange={(value) => {
-                        handleConfigChange({ contentDeleteType: value });
+                        handleConfigChange({ contentDeleteType: value as ContentDeleteType });
                     }}
                 />
             </CpsFormItem>
@@ -153,12 +147,13 @@ export function DeleteContentSetting(props: DeleteContentSettingProps) {
                 <CpsFormItem
                     label={localInstance.text_delete_content_range_label}
                     description={localInstance.text_delete_content_range_description}
+                    layout="horizontal"
                 >
-                    <Toggle
+                    <Select2
                         options={contentRangeOptions}
                         value={config.contentDeleteRange ?? ContentDeleteRange.ALL}
                         onChange={(value) => {
-                            handleConfigChange({ contentDeleteRange: value });
+                            handleConfigChange({ contentDeleteRange: value as ContentDeleteRange });
                         }}
                     />
                 </CpsFormItem>
@@ -169,6 +164,7 @@ export function DeleteContentSetting(props: DeleteContentSettingProps) {
                     <CpsFormItem
                         label={localInstance.text_heading_title_label}
                         description={localInstance.text_heading_title_description}
+                        layout="horizontal"
                     >
                         <input
                             type="text"
@@ -184,12 +180,13 @@ export function DeleteContentSetting(props: DeleteContentSettingProps) {
                     <CpsFormItem
                         label={localInstance.text_heading_delete_range_label}
                         description={localInstance.text_heading_delete_range_description}
+                        layout="horizontal"
                     >
-                        <Toggle
+                        <Select2
                             options={headingRangeOptions}
                             value={config.headingContentDeleteRange ?? HeadingContentDeleteRange.TO_SAME_OR_HIGHER}
                             onChange={(value) => {
-                                handleConfigChange({ headingContentDeleteRange: value });
+                                handleConfigChange({ headingContentDeleteRange: value as HeadingContentDeleteRange });
                             }}
                         />
                     </CpsFormItem>

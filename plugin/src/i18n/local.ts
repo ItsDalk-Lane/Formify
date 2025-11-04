@@ -322,4 +322,35 @@ export interface Local {
 	text_heading_delete_range_body_only: string;
 	text_heading_delete_range_body_only_desc: string;
 	text_delete_content_confirm_placeholder: string;
+	// 文本操作相关
+	text_operation_type_label: string;
+	text_operation_type_description: string;
+	text_operation_type_copy_rich_text: string;
+	text_operation_type_copy_rich_text_desc: string;
+	text_operation_type_copy_markdown: string;
+	text_operation_type_copy_markdown_desc: string;
+	text_operation_type_export_html: string;
+	text_operation_type_export_html_desc: string;
+	text_operation_type_copy_plain_text: string;
+	text_operation_type_copy_plain_text_desc: string;
+	text_operation_type_add_spaces_between_cjk_and_english: string;
+	text_operation_type_add_spaces_between_cjk_and_english_desc: string;
+	text_operation_use_selection_label: string;
+	text_operation_use_selection_description: string;
+	text_operation_export_path_label: string;
+	text_operation_export_path_description: string;
+	text_operation_export_path_placeholder: string;
+	text_operation_open_after_export_label: string;
+	text_operation_open_after_export_description: string;
+	text_operation_copy_success: string;
+	text_operation_copy_markdown_success: string;
+	text_operation_copy_plain_text_success: string;
+	text_operation_add_spaces_success: string;
+	text_operation_select_export_dir: string;
+	text_operation_export_canceled: string;
+	text_operation_export_success: string;
+	text_operation_image_not_found: string;
+	text_operation_image_too_large: string;
+	text_operation_image_process_error: string;
+	text_operation_external_image_error: string;
 }

@@ -8,7 +8,7 @@ import { FolderDeleteOption } from "src/model/enums/FolderDeleteOption";
 import { ContentDeleteType } from "src/model/enums/ContentDeleteType";
 import { ContentDeleteRange } from "src/model/enums/ContentDeleteRange";
 import { HeadingContentDeleteRange } from "src/model/enums/HeadingContentDeleteRange";
-import Toggle, { ToggleOption } from "src/component/toggle/Toggle";
+import { Select2, SelectOption2 } from "src/component/select2/Select";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import { ClearFormatSetting } from "./ClearFormatSetting";
 import { DeleteFileSetting } from "./DeleteFileSetting";
@@ -73,20 +73,17 @@ export function TextCleanupSetting(props: TextCleanupSettingProps) {
 
     const cleanupType = cleanupConfig.type ?? TextCleanupType.CLEAR_FORMAT;
 
-    const options: ToggleOption<TextCleanupType>[] = useMemo(
+    const options: SelectOption2[] = useMemo(
         () => [
             {
-                id: TextCleanupType.CLEAR_FORMAT,
                 value: TextCleanupType.CLEAR_FORMAT,
                 label: localInstance.text_action_cleanup_feature_clear_format,
             },
             {
-                id: TextCleanupType.DELETE_FILE,
                 value: TextCleanupType.DELETE_FILE,
                 label: localInstance.text_action_cleanup_feature_delete_file,
             },
             {
-                id: TextCleanupType.DELETE_CONTENT,
                 value: TextCleanupType.DELETE_CONTENT,
                 label: localInstance.text_action_cleanup_feature_delete_content,
             },
@@ -113,11 +110,12 @@ export function TextCleanupSetting(props: TextCleanupSettingProps) {
             <CpsFormItem
                 label={localInstance.text_action_cleanup}
                 description={localInstance.text_action_cleanup_description}
+                layout="horizontal"
             >
-                <Toggle
+                <Select2
                     options={options}
                     value={cleanupType}
-                    onChange={handleTypeChange}
+                    onChange={(type) => handleTypeChange(type as TextCleanupType)}
                 />
             </CpsFormItem>
 

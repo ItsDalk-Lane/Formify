@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import Toggle, { ToggleOption } from "src/component/toggle/Toggle";
+import { Select2, SelectOption2 } from "src/component/select2/Select";
 import ToggleControl from "src/view/shared/control/ToggleControl";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import { localInstance } from "src/i18n/locals";
@@ -28,15 +28,13 @@ export function DeleteFileSetting(props: DeleteFileSettingProps) {
         });
     };
 
-    const deleteTypeOptions: ToggleOption<DeleteType>[] = useMemo(
+    const deleteTypeOptions: SelectOption2[] = useMemo(
         () => [
             {
-                id: DeleteType.FILE,
                 value: DeleteType.FILE,
                 label: localInstance.text_delete_type_file,
             },
             {
-                id: DeleteType.FOLDER,
                 value: DeleteType.FOLDER,
                 label: localInstance.text_delete_type_folder,
             },
@@ -44,20 +42,17 @@ export function DeleteFileSetting(props: DeleteFileSettingProps) {
         []
     );
 
-    const folderDeleteOptions: ToggleOption<FolderDeleteOption>[] = useMemo(
+    const folderDeleteOptions: SelectOption2[] = useMemo(
         () => [
             {
-                id: FolderDeleteOption.RECURSIVE,
                 value: FolderDeleteOption.RECURSIVE,
                 label: localInstance.text_folder_delete_recursive,
             },
             {
-                id: FolderDeleteOption.FILES_ONLY,
                 value: FolderDeleteOption.FILES_ONLY,
                 label: localInstance.text_folder_delete_files_only,
             },
             {
-                id: FolderDeleteOption.FOLDERS_ONLY,
                 value: FolderDeleteOption.FOLDERS_ONLY,
                 label: localInstance.text_folder_delete_folders_only,
             },
@@ -84,12 +79,13 @@ export function DeleteFileSetting(props: DeleteFileSettingProps) {
                 <CpsFormItem
                     label={localInstance.text_delete_type_label}
                     description={localInstance.text_delete_type_description}
+                    layout="horizontal"
                 >
-                    <Toggle
+                    <Select2
                         options={deleteTypeOptions}
                         value={config.deleteType}
                         onChange={(value) => {
-                            handleConfigChange({ deleteType: value });
+                            handleConfigChange({ deleteType: value as DeleteType });
                         }}
                     />
                 </CpsFormItem>
@@ -140,12 +136,13 @@ export function DeleteFileSetting(props: DeleteFileSettingProps) {
                 <CpsFormItem
                     label={localInstance.text_folder_delete_option_label}
                     description={localInstance.text_folder_delete_option_description}
+                    layout="horizontal"
                 >
-                    <Toggle
+                    <Select2
                         options={folderDeleteOptions}
                         value={config.folderDeleteOption ?? FolderDeleteOption.RECURSIVE}
                         onChange={(value) => {
-                            handleConfigChange({ folderDeleteOption: value });
+                            handleConfigChange({ folderDeleteOption: value as FolderDeleteOption });
                         }}
                     />
                 </CpsFormItem>

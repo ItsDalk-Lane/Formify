@@ -7,8 +7,41 @@ import { FolderDeleteOption } from "../enums/FolderDeleteOption";
 import { ContentDeleteType } from "../enums/ContentDeleteType";
 import { ContentDeleteRange } from "../enums/ContentDeleteRange";
 import { HeadingContentDeleteRange } from "../enums/HeadingContentDeleteRange";
+import { TextOperationType } from "../enums/TextOperationType";
 
 export type TextActionMode = "operation" | "cleanup";
+
+/**
+ * 文本操作配置
+ * 用于配置复制图文、导出HTML等文本操作功能
+ */
+export interface TextOperationConfig {
+    /**
+     * 操作类型
+     */
+    type: TextOperationType;
+
+    /**
+     * 目标模式：当前文件或选中的文件
+     */
+    targetMode: TargetMode;
+
+    /**
+     * 指定的目标文件路径列表（当targetMode为SPECIFIED时使用）
+     */
+    targetFiles?: string[];
+
+    /**
+     * 导出HTML时的保存路径（仅EXPORT_HTML类型使用）
+     * 支持模板变量，如 {{date:YYYY-MM-DD}}
+     */
+    exportPath?: string;
+
+    /**
+     * 是否在导出HTML后打开文件
+     */
+    openAfterExport?: boolean;
+}
 
 export interface ClearFormatConfig {
     targetMode: TargetMode;
@@ -55,7 +88,7 @@ export class TextFormAction extends BaseFormAction {
 
     mode: TextActionMode;
 
-    textOperationConfig?: Record<string, unknown>;
+    textOperationConfig?: TextOperationConfig;
 
     textCleanupConfig?: TextCleanupConfig;
 
@@ -63,6 +96,13 @@ export class TextFormAction extends BaseFormAction {
         super(partial);
         this.type = FormActionType.TEXT;
         this.mode = "cleanup";
+        this.textOperationConfig = {
+            type: TextOperationType.COPY_RICH_TEXT,
+            targetMode: TargetMode.CURRENT,
+            targetFiles: [],
+            exportPath: "",
+            openAfterExport: false,
+        };
         this.textCleanupConfig = {
             type: TextCleanupType.CLEAR_FORMAT,
             clearFormatConfig: {
