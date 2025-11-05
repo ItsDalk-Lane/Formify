@@ -12,6 +12,7 @@ import { RemarkSetting } from "./common/RemarkSetting";
 import { RunCommandSetting } from "./run-command/RunCommandSetting";
 import { ButtonSetting } from "./button/ButtonSetting";
 import { TextSetting } from "./text/TextSetting";
+import { AISetting } from "./ai/AISetting";
 
 export default function (props: {
 	value: IFormAction;
@@ -26,6 +27,7 @@ export default function (props: {
 			<InsertTextSetting value={value} onChange={onChange} />
 			<TextSetting value={value} onChange={onChange} />
 			<UpdateFrontmatterSetting value={value} onChange={onChange} />
+			<AISetting value={value} onChange={onChange} />
 			<RunScriptSetting value={value} onChange={onChange} />
 			<SuggestModalSetting value={value} onChange={onChange} />
 			<RunCommandSetting value={value} onChange={onChange} />

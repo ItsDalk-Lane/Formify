@@ -93,6 +93,36 @@ export function GeneralSettingTabItem(props: { plugin: FormPlugin }) {
 				});
 			});
 
+		// prompt template folder setting
+		new Setting(el)
+			.setName(localInstance.prompt_template_folder)
+			.setDesc(localInstance.prompt_template_folder_desc)
+			.addText((cb) => {
+				cb.setValue(settingsValue.promptTemplateFolder);
+				cb.setPlaceholder(
+					localInstance.prompt_template_folder_placeholder
+				);
+				cb.onChange((v) => {
+					setSettingsValue((prev) => {
+						return {
+							...prev,
+							promptTemplateFolder: v,
+						};
+					});
+				});
+				const suggest = new FolderSuggest(app, cb.inputEl);
+				suggest.onSelect((folder) => {
+					cb.setValue(folder.path);
+					setSettingsValue((prev) => {
+						return {
+							...prev,
+							promptTemplateFolder: folder.path,
+						};
+					});
+					suggest.close();
+				});
+			});
+
 		return () => {
 			el.empty();
 		};

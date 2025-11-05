@@ -19,7 +19,40 @@ summary.tars-setting-h4 {
         color: var(--h4-color);
         font-weight: var(--h4-weight);
         font-family: var(--h4-font);
-        margin-block-start: var(--p-spacing);
-        margin-block-end: var(--p-spacing);
+        margin-block-start: calc(var(--p-spacing) / 3);
+        margin-block-end: calc(var(--p-spacing) / 3);
         cursor: pointer;
+}
+
+/* Tars 区域描述文字样式 */
+.tars-section-desc {
+        font-size: var(--font-ui-smaller);
+        color: var(--text-muted);
+        margin-bottom: 12px;
+}
+
+/* AI Provider 按钮包装器 */
+.ai-provider-button-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+}
+
+/* 系统消息输入框样式 */
+.tars-system-message-input {
+        width: 100%;
+        min-height: 100px;
+        padding: 8px;
+        border: 1px solid var(--background-modifier-border);
+        border-radius: var(--radius-s);
+        background: var(--background-primary);
+        color: var(--text-normal);
+        font-family: var(--font-text);
+        font-size: var(--font-ui-small);
+        resize: vertical;
+}
+
+.tars-system-message-input:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
 }

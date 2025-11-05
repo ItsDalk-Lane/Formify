@@ -11,6 +11,8 @@ import { SuggestModalFormAction } from "../model/action/SuggestModalFormAction";
 import { WaitFormAction } from "../model/action/WaitFormAction";
 import { ButtonFormAction } from "../model/action/ButtonFormAction";
 import { TextFormAction } from "../model/action/TextFormAction";
+import { AIFormAction } from "../model/action/AIFormAction";
+import { AI_MODEL_SELECT_ON_SUBMIT } from "../model/action/AIFormActionConstants";
 import { FormActionType } from "../model/enums/FormActionType";
 import { ButtonActionType } from "../model/enums/ButtonActionType";
 import { TargetFileType } from "../model/enums/TargetFileType";
@@ -136,6 +138,18 @@ export function useActionTitle(value: IFormAction) {
 				}
 			}
 			title = detail ? `${modeLabel} · ${detail}` : modeLabel;
+		}
+
+		if (value.type === FormActionType.AI) {
+			const aiAction = value as AIFormAction;
+			// 如果是"请选择"标记，不显示任何内容
+			if (aiAction.modelTag === AI_MODEL_SELECT_ON_SUBMIT) {
+				title = "";
+			} else if (aiAction.modelTag) {
+				title = aiAction.modelTag;
+			} else {
+				title = localInstance.ai_no_model_configured;
+			}
 		}
 
 		return {

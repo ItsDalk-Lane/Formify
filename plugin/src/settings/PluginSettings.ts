@@ -12,6 +12,8 @@ export interface PluginSettings {
 
     scriptFolder: string;
 
+    promptTemplateFolder: string;
+
     formIntegrations: FormIntegration;
 
     tars: TarsFeatureConfig;
@@ -27,6 +29,7 @@ export interface FormIntegration {
 export const DEFAULT_SETTINGS: PluginSettings = {
     formFolder: "form/forms",
     scriptFolder: "form/scripts",
+    promptTemplateFolder: "form/prompts",
     formIntegrations: {},
     tars: {
         enabled: true,

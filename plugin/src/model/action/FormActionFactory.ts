@@ -9,6 +9,7 @@ import { UpdateFrontmatterFormAction } from "./UpdateFrontmatterFormAction";
 import { WaitFormAction } from "./WaitFormAction";
 import { ButtonFormAction } from "./ButtonFormAction";
 import { TextFormAction } from "./TextFormAction";
+import { AIFormAction } from "./AIFormAction";
 
 export class FormActionFactory {
     static create(type: FormActionType, partial?: Partial<IFormAction>): IFormAction {
@@ -57,6 +58,11 @@ export class FormActionFactory {
                 return new TextFormAction({
                     ...partial,
                     type: FormActionType.TEXT
+                });
+            case FormActionType.AI:
+                return new AIFormAction({
+                    ...partial,
+                    type: FormActionType.AI
                 });
             default:
                 throw new Error(`Unsupported FormActionType: ${type}`);

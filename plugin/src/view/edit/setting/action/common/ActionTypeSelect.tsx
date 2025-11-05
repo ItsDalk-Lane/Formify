@@ -1,4 +1,5 @@
 import {
+    Bot,
     Code,
     File,
     FileJson,
@@ -53,6 +54,11 @@ export const formActionTypeOptions = [
 		value: FormActionType.UPDATE_FRONTMATTER,
 		label: localInstance.update_property,
 		icon: <FileJson />,
+	},
+	{
+		value: FormActionType.AI,
+		label: localInstance.ai_action,
+		icon: <Bot />,
 	},
 	// {
 	// 	value: FormActionType.GENERATE_FORM,

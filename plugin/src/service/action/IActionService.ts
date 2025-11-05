@@ -14,6 +14,7 @@ import { FilterService } from "../filter/FilterService";
 import { RunCommandActionService } from "./run-command/RunCommandActionService";
 import { ButtonActionService } from "./button/ButtonActionService";
 import { TextActionService } from "./text/TextActionService";
+import AIActionService from "./ai/AIActionService";
 
 export interface IActionService {
 
@@ -43,6 +44,7 @@ export class ActionChain {
         new WaitActionService(),
         new ButtonActionService(),
         new TextActionService(),
+        new AIActionService(),
     ]
 
     constructor(actions: IFormAction[]) {

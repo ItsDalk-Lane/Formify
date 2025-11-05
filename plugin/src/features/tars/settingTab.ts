@@ -74,45 +74,82 @@ export class TarsSettingTab {
 			return
 		}
 
-		new Setting(containerEl).setName(t('AI assistants')).setHeading()
-
 		// 创建标题行（可点击折叠/展开）
 		const aiAssistantHeaderSetting = new Setting(containerEl)
 			.setName(t('New AI assistant'))
 			.setDesc(t('For those compatible with the OpenAI protocol, you can select OpenAI.'))
-			.addButton((btn) => {
-				btn.setButtonText(t('Add AI Provider')).onClick(async (e) => {
-					const onChoose = async (vendor: Vendor) => {
-						const defaultTag = vendor.name
-						const isTagDuplicate = this.settings.providers.map((e) => e.tag).includes(defaultTag)
-						const newTag = isTagDuplicate ? '' : defaultTag
 
-						const deepCopiedOptions = JSON.parse(JSON.stringify(vendor.defaultOptions))
-						this.settings.providers.push({
-							tag: newTag,
-							vendor: vendor.name,
-							options: deepCopiedOptions
-						})
-						await this.saveSettings()
-						this.isProvidersCollapsed = false // 添加后展开列表
-						this.render(this.containerEl, true)
-					}
-					new SelectVendorModal(this.app, availableVendors, onChoose).open()
+		// 创建一个包装器来容纳按钮和图标
+		const buttonWrapper = aiAssistantHeaderSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
+		buttonWrapper.style.cssText = 'display: flex; align-items: center; gap: 8px;'
+
+		// 添加AI服务商按钮
+		const addButton = buttonWrapper.createEl('button', { cls: 'mod-cta' })
+		addButton.textContent = t('Add AI Provider')
+		addButton.onclick = async () => {
+			const onChoose = async (vendor: Vendor) => {
+				const defaultTag = vendor.name
+				const isTagDuplicate = this.settings.providers.map((e) => e.tag).includes(defaultTag)
+				const newTag = isTagDuplicate ? '' : defaultTag
+
+				const deepCopiedOptions = JSON.parse(JSON.stringify(vendor.defaultOptions))
+				this.settings.providers.push({
+					tag: newTag,
+					vendor: vendor.name,
+					options: deepCopiedOptions
 				})
-			})
+				await this.saveSettings()
+				this.isProvidersCollapsed = false // 添加后展开列表
+				this.render(this.containerEl, true)
+			}
+			new SelectVendorModal(this.app, availableVendors, onChoose).open()
+		}
 
-		// 添加点击事件来切换折叠状态（但不显示图标）
+		// 添加Chevron图标
+		const chevronIcon = buttonWrapper.createEl('div', { cls: 'ai-provider-chevron' })
+		chevronIcon.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="6 9 12 15 18 9"></polyline>
+			</svg>
+		`
+		chevronIcon.style.cssText = `
+			display: flex;
+			align-items: center;
+			color: var(--text-muted);
+			cursor: pointer;
+			transition: transform 0.2s ease;
+			transform: ${this.isProvidersCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};
+		`
+
+		// 扩大整行的点击区域（除了按钮）
 		const headerEl = aiAssistantHeaderSetting.settingEl
 		headerEl.style.cursor = 'pointer'
+		
+		const toggleProviders = () => {
+			this.isProvidersCollapsed = !this.isProvidersCollapsed
+			chevronIcon.style.transform = this.isProvidersCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'
+			if (this.providersContainerEl) {
+				this.providersContainerEl.style.display = this.isProvidersCollapsed ? 'none' : 'block'
+			}
+		}
+
+		// 点击整行（除按钮和图标外）切换折叠状态
 		headerEl.addEventListener('click', (e) => {
 			// 避免点击按钮时触发折叠
 			if ((e.target as HTMLElement).closest('button')) {
 				return
 			}
-			this.isProvidersCollapsed = !this.isProvidersCollapsed
-			if (this.providersContainerEl) {
-				this.providersContainerEl.style.display = this.isProvidersCollapsed ? 'none' : 'block'
+			// 避免点击图标时重复触发
+			if ((e.target as HTMLElement).closest('.ai-provider-chevron')) {
+				return
 			}
+			toggleProviders()
+		})
+		
+		// 点击图标也能切换折叠状态
+		chevronIcon.addEventListener('click', (e) => {
+			e.stopPropagation()
+			toggleProviders()
 		})
 
 		// 创建服务商卡片容器
@@ -139,14 +176,25 @@ export class TarsSettingTab {
 			this.createProviderSetting(index, provider, shouldOpen)
 		}
 
-		containerEl.createEl('br')
-		new Setting(containerEl)
-			.setName(t('Message tags'))
-			.setDesc(t('Keywords for tags in the text box are separated by spaces'))
-			.setHeading()
+		// 缩小间距
+		const spacer1 = containerEl.createEl('div')
+		spacer1.style.height = '2px'
+
+		// 消息区域（使用 details 标签，与"高级"保持一致）
+		const messageSection = containerEl.createEl('details')
+		const messageSummary = messageSection.createEl('summary', { text: '消息', cls: 'tars-setting-h4' })
+		
+		// 创建描述文字（在 summary 下方）
+		const messageDesc = messageSection.createEl('div', { cls: 'tars-section-desc' })
+		messageDesc.textContent = '标签在文本框中的关键词，之间用空格隔开'
+		messageDesc.style.cssText = `
+			font-size: var(--font-ui-smaller);
+			color: var(--text-muted);
+			margin-bottom: 12px;
+		`
 
 		let newChatTagsInput: HTMLInputElement | null = null
-		new Setting(containerEl)
+		new Setting(messageSection)
 			.setName(this.settings.roleEmojis.newChat + ' ' + t('New chat tags'))
 			.addExtraButton((btn) => {
 				btn
@@ -174,7 +222,7 @@ export class TarsSettingTab {
 			})
 
 		let userTagsInput: HTMLInputElement | null = null
-		new Setting(containerEl)
+		new Setting(messageSection)
 			.setName(this.settings.roleEmojis.user + ' ' + t('User message tags'))
 			.addExtraButton((btn) => {
 				btn
@@ -202,7 +250,7 @@ export class TarsSettingTab {
 			})
 
 		let systemTagsInput: HTMLInputElement | null = null
-		new Setting(containerEl)
+		new Setting(messageSection)
 			.setName(this.settings.roleEmojis.system + ' ' + t('System message tags'))
 			.addExtraButton((btn) => {
 				btn
@@ -229,11 +277,19 @@ export class TarsSettingTab {
 					})
 			})
 
-		containerEl.createEl('br')
+		// "重新生成前是否需要确认"设置项
+		new Setting(messageSection)
+			.setName(t('Confirm before regeneration'))
+			.setDesc(t('Confirm before replacing existing assistant responses when using assistant commands'))
+			.addToggle((toggle) =>
+				toggle.setValue(this.settings.confirmRegenerate).onChange(async (value) => {
+					this.settings.confirmRegenerate = value
+					await this.saveSettings()
+				})
+			)
 
-		new Setting(containerEl).setName(t('System message')).setHeading()
 		let defaultSystemMsgInput: HTMLTextAreaElement | null = null
-		new Setting(containerEl)
+		new Setting(messageSection)
 			.setName(t('Enable default system message'))
 			.setDesc(t('Automatically add a system message when none exists in the conversation'))
 			.addToggle((toggle) =>
@@ -246,30 +302,39 @@ export class TarsSettingTab {
 				})
 			)
 
-		new Setting(containerEl).setName(t('Default system message')).addTextArea((textArea) => {
-			defaultSystemMsgInput = textArea.inputEl
-			textArea
-				.setDisabled(!this.settings.enableDefaultSystemMsg)
-				.setValue(this.settings.defaultSystemMsg)
-				.onChange(async (value) => {
-					this.settings.defaultSystemMsg = value.trim()
-					await this.saveSettings()
-				})
+		// "默认系统消息"设置项 - 修改为上下布局
+		const defaultSystemMsgSetting = new Setting(messageSection)
+			.setName(t('Default system message'))
+		
+		// 移除 Setting 的 flex 布局，改为块级布局
+		defaultSystemMsgSetting.settingEl.style.display = 'block'
+		defaultSystemMsgSetting.infoEl.style.marginBottom = '8px'
+		
+		const textArea = defaultSystemMsgSetting.controlEl.createEl('textarea', {
+			cls: 'tars-system-message-input'
 		})
+		textArea.style.cssText = `
+			width: 100%;
+			min-height: 100px;
+			padding: 8px;
+			border: 1px solid var(--background-modifier-border);
+			border-radius: var(--radius-s);
+			background: var(--background-primary);
+			color: var(--text-normal);
+			font-family: var(--font-text);
+			font-size: var(--font-ui-small);
+			resize: vertical;
+		`
+		textArea.disabled = !this.settings.enableDefaultSystemMsg
+		textArea.value = this.settings.defaultSystemMsg
+		textArea.addEventListener('input', async () => {
+			this.settings.defaultSystemMsg = textArea.value.trim()
+			await this.saveSettings()
+		})
+		defaultSystemMsgInput = textArea
 
-		containerEl.createEl('br')
-
-		new Setting(containerEl)
-			.setName(t('Confirm before regeneration'))
-			.setDesc(t('Confirm before replacing existing assistant responses when using assistant commands'))
-			.addToggle((toggle) =>
-				toggle.setValue(this.settings.confirmRegenerate).onChange(async (value) => {
-					this.settings.confirmRegenerate = value
-					await this.saveSettings()
-				})
-			)
-
-		new Setting(containerEl)
+		// "内部链接"设置项
+		new Setting(messageSection)
 			.setName(t('Internal links'))
 			.setDesc(
 				t(
@@ -283,7 +348,9 @@ export class TarsSettingTab {
 				})
 			)
 
-		containerEl.createEl('br')
+		// 缩小间距
+		const spacer2 = containerEl.createEl('div')
+		spacer2.style.height = '1px'
 
 		const advancedSection = containerEl.createEl('details')
 		advancedSection.createEl('summary', { text: t('Advanced'), cls: 'tars-setting-h4' })

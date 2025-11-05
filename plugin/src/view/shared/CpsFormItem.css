@@ -107,6 +107,33 @@
 	flex-grow: 0;
 }
 
+/* Individual CpsFormItem vertical layout (overrides horizontal form layout) */
+.form--CpsForm[data-layout="horizontal"] > .form--CpsFormItem[data-layout="vertical"],
+.form--CpsFormItem[data-layout="vertical"] {
+	display: flex;
+	flex-direction: column;
+	align-items: initial;
+	padding: 0.5em 0;
+}
+
+.form--CpsForm[data-layout="horizontal"] > .form--CpsFormItem[data-layout="vertical"] > .form--CpsFormItemControl,
+.form--CpsFormItem[data-layout="vertical"] > .form--CpsFormItemControl {
+	justify-content: flex-start;
+	width: 100%;
+}
+
+.form--CpsForm[data-layout="horizontal"] > .form--CpsFormItem[data-layout="vertical"] > .form--CpsFormItemControl > *,
+.form--CpsFormItem[data-layout="vertical"] > .form--CpsFormItemControl > * {
+	width: 100%;
+	flex-grow: 1;
+}
+
+.form--CpsForm[data-layout="horizontal"] > .form--CpsFormItem[data-layout="vertical"] > .form--CpsFormItemControl > input[type="checkbox"],
+.form--CpsFormItem[data-layout="vertical"] > .form--CpsFormItemControl > input[type="checkbox"] {
+	width: auto;
+	flex-grow: 0;
+}
+
 @media screen and (max-width: 768px) {
 	/* Mobile responsive for text action settings */
 	.form--CpsForm[data-layout="horizontal"] .form--TextCleanupSetting .form--CpsFormItem[data-layout="horizontal"],

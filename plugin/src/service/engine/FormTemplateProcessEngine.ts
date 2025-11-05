@@ -24,6 +24,12 @@ export class FormTemplateProcessEngine {
         let res = text;
         res = TemplateParser.compile(res, state);
 
+        // handle {{output:variableName}} - 支持AI动作输出变量引用
+        res = res.replace(/\{\{output:([^}]+)\}\}/g, (match, variableName) => {
+            const value = state.values[variableName];
+            return value !== undefined && value !== null ? String(value) : match;
+        });
+
         // handle {{selection}}
         const selectionVariable = "{{selection}}";
         if (res.includes(selectionVariable)) {

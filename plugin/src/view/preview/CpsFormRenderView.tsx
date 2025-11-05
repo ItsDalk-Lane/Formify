@@ -46,6 +46,10 @@ export function CpsFormRenderView(props: Props) {
 			errorMessage: "",
 		});
 
+		// 立即调用 afterSubmit，关闭模态框（如果有）
+		// 这样用户体验更好，不需要等待动作完成
+		afterSubmit?.(formIdValues);
+
 		try {
 			await onSubmit(formIdValues);
 			setSubmitState({
@@ -53,6 +57,7 @@ export function CpsFormRenderView(props: Props) {
 				error: false,
 				errorMessage: "",
 			});
+			ToastManager.success(localInstance.submit_success);
 		} catch (e) {
 			setSubmitState({
 				submitting: false,
@@ -62,8 +67,6 @@ export function CpsFormRenderView(props: Props) {
 			ToastManager.error(e.message || localInstance.unknown_error, 3000);
 			return;
 		}
-		afterSubmit?.(formIdValues);
-		ToastManager.success(localInstance.submit_success);
 		setFormIdValues(resolveDefaultFormIdValues(fields));
 	};
 

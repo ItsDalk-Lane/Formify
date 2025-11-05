@@ -9,4 +9,5 @@ export enum FormActionType {
     WAIT = "wait",
     BUTTON = "button",
     TEXT = "text",
+    AI = "ai",
 }

@@ -7,16 +7,19 @@ import { GenerateFormAction } from "../model/action/OpenFormAction";
 import { SuggestModalFormAction } from "../model/action/SuggestModalFormAction";
 import { ButtonFormAction } from "../model/action/ButtonFormAction";
 import { TextFormAction } from "src/model/action/TextFormAction";
+import { AIFormAction } from "src/model/action/AIFormAction";
+import { AI_MODEL_SELECT_ON_SUBMIT } from "src/model/action/AIFormActionConstants";
 import { FormActionType } from "../model/enums/FormActionType";
 import { ButtonActionType } from "../model/enums/ButtonActionType";
 import { TargetFileType } from "../model/enums/TargetFileType";
 import { TextCleanupType } from "src/model/enums/TextCleanupType";
 import { TargetMode } from "src/model/enums/TargetMode";
 import { ContentDeleteType } from "src/model/enums/ContentDeleteType";
+import { PromptSourceType } from "src/model/enums/PromptSourceType";
 import { Strings } from "src/utils/Strings";
 
 
-type FormActionImp = CreateFileFormAction | InsertTextFormAction | UpdateFrontmatterFormAction | GenerateFormAction | SuggestModalFormAction | ButtonFormAction | TextFormAction
+type FormActionImp = CreateFileFormAction | InsertTextFormAction | UpdateFrontmatterFormAction | GenerateFormAction | SuggestModalFormAction | ButtonFormAction | TextFormAction | AIFormAction
 
 export function useActionValidation(action: IFormAction) {
     const formAction = action as FormActionImp;
@@ -39,7 +42,10 @@ function validateAction(action: FormActionImp) {
             at_leat_one_field_required: "At least one field is required",
             url_required: "URL is required",
             form_file_required: "Form file is required",
-            heading_required: "Heading title is required"
+            heading_required: "Heading title is required",
+            ai_model_required: "AI model is required",
+            ai_prompt_required: "Prompt content is required",
+            ai_template_file_required: "Template file is required"
         },
         "zh-CN": {
             target_folder_required: "请填写目标文件夹",
@@ -50,7 +56,10 @@ function validateAction(action: FormActionImp) {
             at_leat_one_field_required: "至少填写一个字段",
             url_required: "请填写 URL 地址",
             form_file_required: "请选择表单文件",
-            heading_required: "请输入目标标题"
+            heading_required: "请输入目标标题",
+            ai_model_required: "请选择AI模型",
+            ai_prompt_required: "请填写提示词内容",
+            ai_template_file_required: "请选择模板文件"
 
         },
         "zh-TW": {
@@ -62,7 +71,10 @@ function validateAction(action: FormActionImp) {
             at_leat_one_field_required: "至少填寫一個字段",
             url_required: "請填寫 URL 地址",
             form_file_required: "請選擇表單文件",
-            heading_required: "請輸入目標標題"
+            heading_required: "請輸入目標標題",
+            ai_model_required: "請選擇AI模型",
+            ai_prompt_required: "請填寫提示詞內容",
+            ai_template_file_required: "請選擇模板文件"
         }
     }
 
@@ -187,6 +199,23 @@ function validateAction(action: FormActionImp) {
                         }
                     }
                     break;
+                }
+            }
+            break;
+        case FormActionType.AI:
+            const aiAction = action as AIFormAction;
+            // 只有在不是"请选择"标记时才验证模型
+            if (aiAction.modelTag !== AI_MODEL_SELECT_ON_SUBMIT && Strings.isEmpty(aiAction.modelTag)) {
+                messages.push(l.ai_model_required);
+            }
+            if (aiAction.promptSource === PromptSourceType.TEMPLATE) {
+                // 模板文件不需要验证：
+                // - undefined 或 "" 表示运行时选择（合法）
+                // - 有值表示预配置路径（从下拉列表选择，必然有效）
+                // 因此不做任何验证
+            } else if (aiAction.promptSource === PromptSourceType.CUSTOM) {
+                if (Strings.isEmpty(aiAction.customPrompt)) {
+                    messages.push(l.ai_prompt_required);
                 }
             }
             break;

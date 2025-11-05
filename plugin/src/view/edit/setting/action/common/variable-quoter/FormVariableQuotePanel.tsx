@@ -3,12 +3,17 @@ import { Notice } from "obsidian";
 import { DropdownMenu } from "src/component/dropdown";
 import { localInstance } from "src/i18n/locals";
 import { FormConfig } from "src/model/FormConfig";
+import { FormActionType } from "src/model/enums/FormActionType";
+import { AIFormAction } from "src/model/action/AIFormAction";
 import { Objects } from "src/utils/Objects";
 import "./FormVariableQuotePanel.css";
 import InternalVariablePopover from "./InternalVariablePopover";
 
 export default function (props: { formConfig: FormConfig }) {
 	const fields = props.formConfig.fields || [];
+	const actions = props.formConfig.actions || [];
+	
+	// 收集表单字段变量
 	const fieldNames = fields
 		.map((f) => f.label)
 		.filter((l) => Objects.exists(l) && l !== "")
@@ -20,11 +25,38 @@ export default function (props: { formConfig: FormConfig }) {
 			return acc;
 		}, [] as string[])
 		.map((f) => {
-			return { id: f, label: f, value: f };
+			return { 
+				label: f, 
+				value: `field_${f}`,
+				data: { type: 'field', name: f }
+			};
 		});
 
-	const copyVariable = (fieldName: string) => {
-		navigator.clipboard.writeText(`{{@${fieldName}}}`).then(
+	// 收集 AI 动作的输出变量
+	const outputVariables = actions
+		.filter((action) => action.type === FormActionType.AI)
+		.map((action) => action as AIFormAction)
+		.filter((aiAction) => aiAction.outputVariableName && aiAction.outputVariableName.trim() !== "")
+		.map((aiAction) => {
+			return {
+				label: `output:${aiAction.outputVariableName}`,
+				value: `output_${aiAction.outputVariableName}`,
+				data: { type: 'output', name: aiAction.outputVariableName! }
+			};
+		});
+
+	// 合并所有变量
+	const allVariables = [...fieldNames, ...outputVariables];
+
+	const copyVariable = (item: any) => {
+		if (!item.data) return;
+		
+		const { type, name } = item.data;
+		const variableText = type === 'output' 
+			? `{{output:${name}}}` 
+			: `{{@${name}}}`;
+		
+		navigator.clipboard.writeText(variableText).then(
 			() => {
 				new Notice(localInstance.copy_success);
 			},
@@ -53,9 +85,9 @@ export default function (props: { formConfig: FormConfig }) {
 				<DropdownMenu
 					menuLabel={localInstance.form_variables}
 					menuIcon={<ChevronsUpDown size={16} />}
-					items={fieldNames}
+					items={allVariables}
 					onSelect={(item, e) => {
-						copyVariable(item.value);
+						copyVariable(item);
 					}}
 				/>
 				<span> | </span>
