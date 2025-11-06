@@ -14,11 +14,6 @@ export const TarsSettingTabItem = ({ plugin }: Props) => {
 
 		const panel = new TarsSettingTab(plugin.app, {
 			getSettings: () => plugin.settings.tars.settings,
-			getEnabled: () => plugin.settings.tars.enabled,
-			setEnabled: async (value: boolean) => {
-				plugin.settings.tars.enabled = value;
-				await plugin.saveSettings();
-			},
 			saveSettings: async () => {
 				await plugin.saveSettings();
 			},

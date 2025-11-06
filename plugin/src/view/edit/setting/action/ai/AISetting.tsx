@@ -27,7 +27,7 @@ export function AISetting(props: AISettingProps) {
     const app = useObsidianApp();
 
     // 从app获取插件实例和设置
-    const plugin = (app as any).plugins?.plugins?.["form-flow"];
+    const plugin = (app as any).plugins?.plugins?.["formify"];
     const pluginSettings = plugin?.settings;
 
     // 构建模型选项列表
@@ -45,7 +45,7 @@ export function AISetting(props: AISettingProps) {
                 selectOnSubmitOption,
                 {
                     label: localInstance.ai_no_model_configured,
-                    value: ""
+                    value: "__no_model_configured__"
                 }
             ];
         }

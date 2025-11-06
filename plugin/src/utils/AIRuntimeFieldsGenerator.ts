@@ -56,7 +56,7 @@ export class AIRuntimeFieldsGenerator {
      * 生成模型选择字段
      */
     private static generateModelField(actionIndex: number, app: App): ISelectField | null {
-        const plugin = (app as any).plugins?.plugins?.["form-flow"];
+        const plugin = (app as any).plugins?.plugins?.["formify"];
         const providers = plugin?.settings?.tars?.settings?.providers || [];
         
         if (providers.length === 0) {
@@ -85,7 +85,7 @@ export class AIRuntimeFieldsGenerator {
      * 生成模板选择字段
      */
     private static generateTemplateField(actionIndex: number, app: App): ISelectField | null {
-        const plugin = (app as any).plugins?.plugins?.["form-flow"];
+        const plugin = (app as any).plugins?.plugins?.["formify"];
         const promptTemplateFolder = plugin?.settings?.promptTemplateFolder || "form/prompt-templates";
         
         // 获取模板文件夹中的所有markdown文件

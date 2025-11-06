@@ -26,8 +26,6 @@ import type { TarsSettings } from './settings'
 
 export interface TarsSettingsContext {
 	getSettings: () => TarsSettings
-	getEnabled: () => boolean
-	setEnabled: (value: boolean) => Promise<void>
 	saveSettings: () => Promise<void>
 }
 
@@ -38,6 +36,8 @@ export class TarsSettingTab {
 	private autoSaveEnabled: boolean = true // 控制是否自动保存
 	private providersContainerEl: HTMLElement | null = null // 服务商卡片容器
 	private isProvidersCollapsed: boolean = true // 服务商列表是否折叠，默认折叠
+	private isMessageCollapsed: boolean = true // 消息区域是否折叠，默认折叠
+	private isAdvancedCollapsed: boolean = true // 高级区域是否折叠，默认折叠
 	private providerTitleEls: Map<number, HTMLElement> = new Map() // 记录各 provider 卡片标题元素，便于实时更新
 
 	constructor(private readonly app: App, private readonly context: TarsSettingsContext) {}
@@ -59,20 +59,7 @@ export class TarsSettingTab {
 		// 每次渲染时清空标题元素引用，避免引用过期
 		this.providerTitleEls.clear()
 
-		const enabled = this.context.getEnabled()
-		new Setting(containerEl)
-			.setName(t('Enable Tars feature'))
-			.addToggle((toggle) =>
-				toggle.setValue(enabled).onChange(async (value) => {
-					await this.context.setEnabled(value)
-					this.render(containerEl, expandLastProvider, keepOpenIndex)
-				})
-			)
-
-		if (!enabled) {
-			containerEl.createEl('p', { text: t('Tars feature disabled description') })
-			return
-		}
+		// Tars功能始终启用，移除启用/禁用选项
 
 		// 创建标题行（可点击折叠/展开）
 		const aiAssistantHeaderSetting = new Setting(containerEl)
@@ -81,7 +68,7 @@ export class TarsSettingTab {
 
 		// 创建一个包装器来容纳按钮和图标
 		const buttonWrapper = aiAssistantHeaderSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
-		buttonWrapper.style.cssText = 'display: flex; align-items: center; gap: 8px;'
+		buttonWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
 
 		// 添加AI服务商按钮
 		const addButton = buttonWrapper.createEl('button', { cls: 'mod-cta' })
@@ -115,15 +102,22 @@ export class TarsSettingTab {
 		chevronIcon.style.cssText = `
 			display: flex;
 			align-items: center;
+			justify-content: center;
 			color: var(--text-muted);
 			cursor: pointer;
 			transition: transform 0.2s ease;
 			transform: ${this.isProvidersCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};
+			width: 16px;
+			height: 16px;
 		`
 
 		// 扩大整行的点击区域（除了按钮）
 		const headerEl = aiAssistantHeaderSetting.settingEl
 		headerEl.style.cursor = 'pointer'
+		// 设置直角设计，移除圆角效果
+		headerEl.style.borderRadius = '0px'
+		// 统一内边距，确保标题文字和图标的上下间距一致
+		headerEl.style.padding = '12px 12px'
 		
 		const toggleProviders = () => {
 			this.isProvidersCollapsed = !this.isProvidersCollapsed
@@ -155,6 +149,12 @@ export class TarsSettingTab {
 		// 创建服务商卡片容器
 		this.providersContainerEl = containerEl.createDiv({ cls: 'ai-providers-container' })
 		this.providersContainerEl.style.display = this.isProvidersCollapsed ? 'none' : 'block'
+		this.providersContainerEl.style.backgroundColor = 'var(--background-secondary)'
+		// 设置直角设计，移除圆角效果
+		this.providersContainerEl.style.borderRadius = '0px'
+		this.providersContainerEl.style.border = '1px solid var(--background-modifier-border)'
+		this.providersContainerEl.style.borderTop = 'none'
+		this.providersContainerEl.style.padding = '0 8px 8px 8px'
 
 		if (!this.settings.providers.length) {
 			const emptyTip = this.providersContainerEl.createEl('div', { 
@@ -176,22 +176,81 @@ export class TarsSettingTab {
 			this.createProviderSetting(index, provider, shouldOpen)
 		}
 
-		// 缩小间距
-		const spacer1 = containerEl.createEl('div')
-		spacer1.style.height = '2px'
+		// 移除间隔行，使区域直接相邻
 
-		// 消息区域（使用 details 标签，与"高级"保持一致）
-		const messageSection = containerEl.createEl('details')
-		const messageSummary = messageSection.createEl('summary', { text: '消息', cls: 'tars-setting-h4' })
-		
-		// 创建描述文字（在 summary 下方）
-		const messageDesc = messageSection.createEl('div', { cls: 'tars-section-desc' })
-		messageDesc.textContent = '标签在文本框中的关键词，之间用空格隔开'
-		messageDesc.style.cssText = `
-			font-size: var(--font-ui-smaller);
-			color: var(--text-muted);
-			margin-bottom: 12px;
+		// 消息区域（使用 Setting 组件，与上方保持一致）
+		const messageHeaderSetting = new Setting(containerEl)
+			.setName('消息')
+			.setDesc('标签在文本框中的关键词，之间用空格隔开')
+
+		// 创建一个包装器来容纳图标
+		const messageButtonWrapper = messageHeaderSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
+		messageButtonWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
+
+		// 添加Chevron图标
+		const messageChevronIcon = messageButtonWrapper.createEl('div', { cls: 'ai-provider-chevron' })
+		messageChevronIcon.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="6 9 12 15 18 9"></polyline>
+			</svg>
 		`
+		messageChevronIcon.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			color: var(--text-muted);
+			cursor: pointer;
+			transition: transform 0.2s ease;
+			transform: ${this.isMessageCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};
+			width: 16px;
+			height: 16px;
+		`
+
+		// 扩大整行的点击区域（除了按钮）
+		const messageHeaderEl = messageHeaderSetting.settingEl
+		messageHeaderEl.style.cursor = 'pointer'
+		// 移除背景色设置，使用默认背景色，与"新的AI助手"标题行保持一致
+		// 设置直角设计，移除圆角效果
+		messageHeaderEl.style.borderRadius = '0px'
+		messageHeaderEl.style.border = '1px solid var(--background-modifier-border)'
+		messageHeaderEl.style.marginBottom = '0px'  // 移除底部边距，使区域直接相邻
+		// 统一内边距，确保标题文字和图标的上下间距一致
+		messageHeaderEl.style.padding = '12px 12px'
+
+		// 创建消息设置容器
+		const messageSection = containerEl.createDiv({ cls: 'message-settings-container' })
+		messageSection.style.padding = '0 8px 8px 8px'
+		// 保持折叠区域的背景色为secondary，与标题行形成对比
+		messageSection.style.backgroundColor = 'var(--background-secondary)'
+		// 设置直角设计，移除圆角效果
+		messageSection.style.borderRadius = '0px'
+		messageSection.style.border = '1px solid var(--background-modifier-border)'
+		messageSection.style.borderTop = 'none'
+		// 移除底部边框，使消息区域与高级区域紧密相连
+		// 根据折叠状态设置显示/隐藏
+		messageSection.style.display = this.isMessageCollapsed ? 'none' : 'block'
+
+		// 添加消息区域折叠/展开功能
+		const toggleMessageSection = () => {
+			this.isMessageCollapsed = !this.isMessageCollapsed
+			messageChevronIcon.style.transform = this.isMessageCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'
+			messageSection.style.display = this.isMessageCollapsed ? 'none' : 'block'
+		}
+
+		// 点击整行切换折叠状态
+		messageHeaderEl.addEventListener('click', (e) => {
+			// 避免点击图标时重复触发
+			if ((e.target as HTMLElement).closest('.ai-provider-chevron')) {
+				return
+			}
+			toggleMessageSection()
+		})
+
+		// 点击图标也能切换折叠状态
+		messageChevronIcon.addEventListener('click', (e) => {
+			e.stopPropagation()
+			toggleMessageSection()
+		})
 
 		let newChatTagsInput: HTMLInputElement | null = null
 		new Setting(messageSection)
@@ -348,12 +407,79 @@ export class TarsSettingTab {
 				})
 			)
 
-		// 缩小间距
-		const spacer2 = containerEl.createEl('div')
-		spacer2.style.height = '1px'
+		// 移除间隔行，使区域直接相邻
 
-		const advancedSection = containerEl.createEl('details')
-		advancedSection.createEl('summary', { text: t('Advanced'), cls: 'tars-setting-h4' })
+		// 高级设置区域（使用 Setting 组件，与上方保持一致）
+		const advancedHeaderSetting = new Setting(containerEl)
+			.setName(t('Advanced'))
+
+		// 创建一个包装器来容纳图标
+		const advancedButtonWrapper = advancedHeaderSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
+		advancedButtonWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
+
+		// 添加Chevron图标
+		const advancedChevronIcon = advancedButtonWrapper.createEl('div', { cls: 'ai-provider-chevron' })
+		advancedChevronIcon.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="6 9 12 15 18 9"></polyline>
+			</svg>
+		`
+		advancedChevronIcon.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			color: var(--text-muted);
+			cursor: pointer;
+			transition: transform 0.2s ease;
+			transform: ${this.isAdvancedCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};
+			width: 16px;
+			height: 16px;
+		`
+
+		// 扩大整行的点击区域
+		const advancedHeaderEl = advancedHeaderSetting.settingEl
+		advancedHeaderEl.style.cursor = 'pointer'
+		// 移除背景色设置，使用默认背景色，与"新的AI助手"标题行保持一致
+		// 设置直角设计，移除圆角效果
+		advancedHeaderEl.style.borderRadius = '0px'
+		advancedHeaderEl.style.border = '1px solid var(--background-modifier-border)'
+		advancedHeaderEl.style.marginBottom = '0px'  // 移除底部边距，使区域直接相邻
+		// 统一内边距，确保标题文字和图标的上下间距一致
+		advancedHeaderEl.style.padding = '12px 12px'
+
+		// 创建高级设置容器
+		const advancedSection = containerEl.createDiv({ cls: 'advanced-settings-container' })
+		advancedSection.style.padding = '0 8px 8px 8px'
+		// 保持折叠区域的背景色为secondary，与标题行形成对比
+		advancedSection.style.backgroundColor = 'var(--background-secondary)'
+		// 设置直角设计，移除圆角效果
+		advancedSection.style.borderRadius = '0px'
+		advancedSection.style.border = '1px solid var(--background-modifier-border)'
+		advancedSection.style.borderTop = 'none'
+		// 根据折叠状态设置显示/隐藏
+		advancedSection.style.display = this.isAdvancedCollapsed ? 'none' : 'block'
+
+		// 添加高级区域折叠/展开功能
+		const toggleAdvancedSection = () => {
+			this.isAdvancedCollapsed = !this.isAdvancedCollapsed
+			advancedChevronIcon.style.transform = this.isAdvancedCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'
+			advancedSection.style.display = this.isAdvancedCollapsed ? 'none' : 'block'
+		}
+
+		// 点击整行切换折叠状态
+		advancedHeaderEl.addEventListener('click', (e) => {
+			// 避免点击图标时重复触发
+			if ((e.target as HTMLElement).closest('.ai-provider-chevron')) {
+				return
+			}
+			toggleAdvancedSection()
+		})
+
+		// 点击图标也能切换折叠状态
+		advancedChevronIcon.addEventListener('click', (e) => {
+			e.stopPropagation()
+			toggleAdvancedSection()
+		})
 
 		new Setting(advancedSection)
 			.setName(t('Internal links for assistant messages'))

@@ -146,7 +146,7 @@ export default class AIActionService implements IActionService {
      * 获取AI提供商配置
      */
     private getProvider(aiAction: AIFormAction, context: ActionContext): any {
-        const plugin = (context.app as any).plugins?.plugins?.["form-flow"];
+        const plugin = (context.app as any).plugins?.plugins?.["formify"];
         if (!plugin || !plugin.settings?.tars?.settings?.providers) {
             DebugLogger.error("[AIAction] 无法获取Tars设置");
             return null;
@@ -184,7 +184,7 @@ export default class AIActionService implements IActionService {
             case SystemPromptMode.DEFAULT:
             default:
                 // 使用默认系统提示词
-                const plugin = (context.app as any).plugins?.plugins?.["form-flow"];
+                const plugin = (context.app as any).plugins?.plugins?.["formify"];
                 const defaultSystemMsg = plugin?.settings?.tars?.settings?.defaultSystemMsg;
                 if (defaultSystemMsg) {
                     return await this.processTemplate(defaultSystemMsg, context);
@@ -318,7 +318,7 @@ export default class AIActionService implements IActionService {
      */
     private async selectModelAtRuntime(context: ActionContext): Promise<string | null> {
         return new Promise((resolve) => {
-            const plugin = (context.app as any).plugins?.plugins?.["form-flow"];
+            const plugin = (context.app as any).plugins?.plugins?.["formify"];
             if (!plugin || !plugin.settings?.tars?.settings?.providers) {
                 new Notice(localInstance.ai_no_model_configured, 5000);
                 resolve(null);
@@ -363,7 +363,7 @@ export default class AIActionService implements IActionService {
      */
     private async selectTemplateAtRuntime(context: ActionContext): Promise<string | null> {
         return new Promise((resolve) => {
-            const plugin = (context.app as any).plugins?.plugins?.["form-flow"];
+            const plugin = (context.app as any).plugins?.plugins?.["formify"];
             const templateFolder = plugin?.settings?.promptTemplateFolder || "form/prompt-templates";
             
             // 获取模板文件夹中的所有markdown文件

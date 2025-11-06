@@ -14,8 +14,8 @@ export default function (props: {
 	
 	const items = useMemo(() => {
 		// 获取插件设置中的提示词模板目录
-		const plugin = (app as any).plugins?.plugins?.["form-flow"];
-		const promptTemplateFolder = plugin?.settings?.promptTemplateFolder || "form/prompts";
+		const plugin = (app as any).plugins?.plugins?.["formify"];
+		const promptTemplateFolder = plugin?.settings?.promptTemplateFolder || "form/prompt-templates";
 		
 		// 添加"请选择"选项
 		const selectOnSubmitOption = {

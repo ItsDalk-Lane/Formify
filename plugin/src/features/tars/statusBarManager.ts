@@ -113,8 +113,8 @@ export class StatusBarManager {
 		this.state = {
 			type: 'idle',
 			content: {
-				text: 'Tars',
-				tooltip: t('Tars AI assistant is ready')
+				text: 'Formify',
+				tooltip: t('Formify AI assistant is ready')
 			},
 			timestamp: new Date()
 		}
@@ -176,7 +176,7 @@ export class StatusBarManager {
 
 		this.updateState({
 			content: {
-				text: `Tars: ${characters}${t('characters')}`,
+				text: `Formify: ${characters}${t('characters')}`,
 				tooltip: `${t('Generating...')} ${characters} ${t('characters')}`
 			}
 		})
@@ -191,7 +191,7 @@ export class StatusBarManager {
 		this.updateState({
 			type: 'success',
 			content: {
-				text: `Tars: ${stats.characters}${t('characters')} ${stats.duration}`,
+				text: `Formify: ${stats.characters}${t('characters')} ${stats.duration}`,
 				tooltip: `${t('Round')} ${stats.round} | ${stats.characters}${t('characters')} | ${stats.duration} | ${stats.model}`
 			},
 			data: stats
@@ -214,7 +214,7 @@ export class StatusBarManager {
 		this.updateState({
 			type: 'error',
 			content: {
-				text: `🔴 Tars: ${t('Error')}`,
+				text: `🔴 Formify: ${t('Error')}`,
 				tooltip: `${t('Error')}: ${error.message}`
 			},
 			data: errorInfo
@@ -233,7 +233,7 @@ export class StatusBarManager {
 		this.updateState({
 			type: 'idle',
 			content: {
-				text: `⚠️ Tars: ${t('Generation cancelled')}`,
+				text: `⚠️ Formify: ${t('Generation cancelled')}`,
 				tooltip: t('Generation cancelled')
 			},
 			data: undefined
@@ -252,8 +252,8 @@ export class StatusBarManager {
 		this.updateState({
 			type: 'idle',
 			content: {
-				text: 'Tars',
-				tooltip: t('Tars AI assistant is ready')
+				text: 'Formify',
+				tooltip: t('Formify AI assistant is ready')
 			},
 			data: undefined
 		})

@@ -74,7 +74,6 @@ export default class FormPlugin extends Plugin {
 			...persisted,
 			formIntegrations: persisted.formIntegrations ?? defaultSettings.formIntegrations,
 			tars: {
-				enabled: persisted?.tars?.enabled ?? defaultSettings.tars.enabled,
 				settings: cloneTarsSettings(decryptedTarsSettings),
 			}
 		};
@@ -85,7 +84,6 @@ export default class FormPlugin extends Plugin {
 		this.settings = Object.assign({}, this.settings, rest);
 		if (tars) {
 			this.settings.tars = {
-				enabled: tars.enabled ?? this.settings.tars.enabled,
 				settings: cloneTarsSettings({ ...this.settings.tars.settings, ...tars.settings })
 			};
 		}
@@ -135,14 +133,8 @@ export default class FormPlugin extends Plugin {
 
 	private refreshTarsFeature() {
 		const { tars } = this.settings;
-		if (!tars?.enabled) {
-			if (this.tarsFeatureManager) {
-				this.tarsFeatureManager.dispose();
-				this.tarsFeatureManager = null;
-			}
-			return;
-		}
-
+		// Tars功能始终启用，移除启用/禁用逻辑
+		
 		if (!this.tarsFeatureManager) {
 			this.tarsFeatureManager = new TarsFeatureManager(
 				this,

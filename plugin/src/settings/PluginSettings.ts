@@ -2,7 +2,6 @@ import { cloneTarsSettings } from "src/features/tars";
 import type { TarsSettings } from "src/features/tars";
 
 export interface TarsFeatureConfig {
-    enabled: boolean;
     settings: TarsSettings;
 }
 
@@ -29,10 +28,9 @@ export interface FormIntegration {
 export const DEFAULT_SETTINGS: PluginSettings = {
     formFolder: "form/forms",
     scriptFolder: "form/scripts",
-    promptTemplateFolder: "form/prompts",
+    promptTemplateFolder: "form/prompt-templates",
     formIntegrations: {},
     tars: {
-        enabled: true,
         settings: cloneTarsSettings(),
     },
 };
