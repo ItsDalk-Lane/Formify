@@ -21,7 +21,7 @@ export default class SuggestModalActionService implements IActionService {
         return action.type === FormActionType.SUGGEST_MODAL;
     }
 
-    async run(action: IFormAction, context: ActionContext, chain: ActionChain): Promise<void> {
+    async run(action: IFormAction, context: ActionContext, chain: ActionChain): Promise<any> {
         const state = context.state;
         const suggestAction = action as SuggestModalFormAction;
 
@@ -33,7 +33,9 @@ export default class SuggestModalActionService implements IActionService {
         }
 
         if (!items || items.length === 0) {
-            await chain.next(context);
+            if (chain) {
+                return await chain.next(context);
+            }
             return;
         }
 
@@ -57,10 +59,14 @@ export default class SuggestModalActionService implements IActionService {
                 }
                 selected = await new FormTemplateProcessEngine().process(selected, state, context.app)
                 state.values[suggestAction.fieldName] = selected;
-                resolve(chain.next(context));
+                if (chain) {
+                    resolve(chain.next(context));
+                } else {
+                    resolve(undefined);
+                }
             })
             suggestModal.onCancel = () => {
-                resolve();
+                resolve(undefined);
             }
             suggestModal.setTitle(suggestAction.fieldName)
             suggestModal.open();

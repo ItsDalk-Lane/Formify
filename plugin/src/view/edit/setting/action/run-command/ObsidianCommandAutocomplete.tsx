@@ -1,4 +1,4 @@
-import { CodeIcon } from "lucide-react";
+import { Code } from "lucide-react";
 import { Command } from "obsidian";
 import { useCallback, useMemo } from "react";
 import {
@@ -42,7 +42,7 @@ export function ObsidianCommandAutocomplete(props: {
 				id: command.id,
 				value: command.id,
 				label: command.name,
-				icon: <CodeIcon size={14} />,
+				icon: <Code size={14} />,
 			};
 		});
 	}, []);

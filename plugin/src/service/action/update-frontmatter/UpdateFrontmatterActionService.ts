@@ -15,7 +15,7 @@ export default class UpdateFrontmatterActionService implements IActionService {
         return action.type === FormActionType.UPDATE_FRONTMATTER;
     }
 
-    async run(action: UpdateFrontmatterFormAction, context: ActionContext, chain: ActionChain): Promise<void> {
+    async run(action: UpdateFrontmatterFormAction, context: ActionContext, chain: ActionChain): Promise<any> {
         const app = context.app;
         const engien = new FormTemplateProcessEngine();
         await validateFileName(action, context);
@@ -52,6 +52,8 @@ export default class UpdateFrontmatterActionService implements IActionService {
                 frontmatter[property.name] = convertFrontmatterValue(app, property.name, property.value);
             }
         });
-        return await chain.next(context);
+        if (chain) {
+            return await chain.next(context);
+        }
     }
 }

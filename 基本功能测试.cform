@@ -1,0 +1,240 @@
+{
+  "id": "8b63247b-090b-494f-afe8-0cbc2abcd4c0",
+  "fields": [
+    {
+      "id": "aa3c8f68-7ca5-403b-a001-8c283af35f98",
+      "label": "文本",
+      "type": "text",
+      "defaultValue": "文本",
+      "enableDescription": false
+    },
+    {
+      "id": "1ffb1606-112c-4621-83f4-a62b922e7e5d",
+      "label": "多行文本",
+      "type": "textarea",
+      "defaultValue": "多行文本多行文本多行文本多行文本多行文本多行文本多行文本多行文本多行文本多行文本多行文本多行文本多行文本多行文本"
+    },
+    {
+      "id": "3bef10d6-8241-436a-bee1-885fe1cb5f80",
+      "label": "数字",
+      "type": "number",
+      "defaultValue": "123456789"
+    },
+    {
+      "id": "390ab394-b481-4dad-8918-bc81af864a99",
+      "label": "日期时间",
+      "type": "datetime",
+      "defaultValue": "2025-11-03T19:17",
+      "enableDescription": true,
+      "description": "具体时间"
+    },
+    {
+      "id": "1651a346-8d39-4d64-81bd-cddd5799fe29",
+      "label": "日期",
+      "type": "date",
+      "defaultValue": "2025-11-03",
+      "required": false,
+      "enableDescription": true,
+      "description": "具体时间"
+    },
+    {
+      "id": "1b84ed72-adf2-4d21-b5cf-18da549bcc6b",
+      "label": "时间",
+      "type": "time",
+      "defaultValue": "19:17",
+      "enableDescription": true,
+      "description": "具体时间"
+    },
+    {
+      "id": "16a9c7e0-8f40-4577-9a73-9cf46cbb2a96",
+      "label": "开关",
+      "type": "toggle",
+      "enableDescription": true,
+      "description": "默认关闭"
+    },
+    {
+      "id": "4e27886d-b494-4260-b18d-af1fb57c457b",
+      "label": "下拉列表",
+      "type": "select",
+      "options": [
+        {
+          "id": "fa28e27e-ba01-4c18-801f-6c39db902332",
+          "label": "下拉列表1",
+          "value": ""
+        },
+        {
+          "id": "6fd6a2e1-41a7-42d3-b636-1b73b907ae2a",
+          "label": "下拉列表2",
+          "value": ""
+        },
+        {
+          "id": "52d39706-70bb-4729-b01d-39c76165c73d",
+          "label": "下拉列表3",
+          "value": ""
+        }
+      ],
+      "defaultValue": "下拉列表1"
+    },
+    {
+      "id": "60bd079e-d6d0-441f-b864-1d7288e41903",
+      "label": "单选框",
+      "type": "radio",
+      "options": [
+        {
+          "id": "a3fb69bf-011a-4200-a8de-c24dc38fdb9b",
+          "label": "单选1",
+          "value": ""
+        },
+        {
+          "id": "73e047e9-78c3-4d1f-98e6-4856dad33a38",
+          "label": "单选2",
+          "value": ""
+        },
+        {
+          "id": "72cd266d-93b3-415b-9b23-889a58812d8f",
+          "label": "单选3",
+          "value": ""
+        }
+      ],
+      "defaultValue": "单选3"
+    },
+    {
+      "id": "483b59cb-a84c-46da-96fc-e2f65fcce12c",
+      "label": "密码",
+      "type": "password",
+      "defaultValue": "123456789"
+    },
+    {
+      "id": "66a9a108-f343-48d1-8a65-9650065bacd7",
+      "label": "文件路径",
+      "type": "file_list",
+      "defaultValue": "欢迎.md",
+      "enableDescription": true,
+      "description": "没有转换为内链"
+    },
+    {
+      "id": "925ad4c2-b84a-4136-98c6-b5245d5e37b3",
+      "label": "文件夹路径",
+      "type": "folder_path",
+      "defaultValue": "测试结果"
+    },
+    {
+      "id": "0e000420-9c64-4117-b87f-cb3db2b9ad92",
+      "label": "属性值列表",
+      "type": "property_value_suggestion",
+      "defaultValue": [
+        "DeepSeek"
+      ],
+      "propertyName": "tags",
+      "required": false
+    },
+    {
+      "id": "e29490c0-ec85-4be7-b7a4-563b2c5b7458",
+      "label": "标题",
+      "type": "text",
+      "defaultValue": "{{date:YYMMDDHHmm}}"
+    }
+  ],
+  "actions": [
+    {
+      "id": "0e50152a-1d6b-4587-a5ec-18d658721ee0",
+      "type": "suggestModal",
+      "fieldName": "列表窗口",
+      "suggestSource": "list",
+      "items": [
+        {
+          "id": "ab3219e2-bf92-4b42-ae0a-0f0292441949",
+          "label": "列表窗口选项1",
+          "value": "列表窗口选项1"
+        },
+        {
+          "id": "4d13a501-1d5e-4d06-808c-86807c97204a",
+          "label": "列表窗口选项2",
+          "value": "列表窗口选项2"
+        }
+      ]
+    },
+    {
+      "id": "70ffdf3a-b66c-4206-ae4f-7297e3006a1f",
+      "type": "createFile",
+      "filePath": "{{@文件夹路径}}/{{@标题}}.md",
+      "targetFolder": "",
+      "fileName": "",
+      "openPageIn": "tab",
+      "contentTemplateSource": "text",
+      "content": "---\ntags:\n文本: {{@文本}}\n多行文本: {{@多行文本}}\n数字: {{@数字}}\n日期时间: {{@日期时间}}\n日期: {{@日期}}\n时间: {{@时间}}\n开关: {{@开关}}\n下拉列表: {{@下拉列表}}\n单选框: {{@单选框}}\n密码: {{@密码}}\n文件路径: {{@文件路径}}\n文件夹路径: {{@文件夹路径}}\n列表窗口: {{@列表窗口}}\n属性值列表: {{@属性值列表}}\n更新属性: \n---",
+      "templateFile": "",
+      "conflictResolution": "auto_rename"
+    },
+    {
+      "id": "d7ce0bb9-9547-4ead-aa1c-176378ffcc48",
+      "type": "wait",
+      "waitTime": 300,
+      "unit": "milliseconds"
+    },
+    {
+      "id": "0ddd0222-9715-4e20-8519-721fee35224d",
+      "type": "insertText",
+      "filePath": "{{@文件夹路径}}/{{@标题}}.md",
+      "targetFolder": "",
+      "fileName": "",
+      "openPageIn": "none",
+      "newFileTemplate": "",
+      "targetFileType": "specified_file",
+      "position": "topOfContent",
+      "heading": "",
+      "content": "\n\n文本: {{@文本}}\n多行文本: {{@多行文本}}\n数字: {{@数字}}\n日期时间: {{@日期时间}}\n日期: {{@日期}}\n时间: {{@时间}}\n开关: {{@开关}}\n下拉列表: {{@下拉列表}}\n单选框: {{@单选框}}\n密码: {{@密码}}\n文件路径: {{@文件路径}}\n文件夹路径: {{@文件夹路径}}\n列表窗口: {{@列表窗口}}\n属性值列表: {{@属性值列表}}\n"
+    },
+    {
+      "id": "9025d65b-9972-4179-b723-f44002e6235a",
+      "type": "updateFrontmatter",
+      "filePath": "{{@文件夹路径}}/{{@标题}}.md",
+      "targetFolder": "",
+      "fileName": "",
+      "targetFileType": "specified_file",
+      "propertyUpdates": [
+        {
+          "id": "e9efdb2a-821d-4c6e-9815-6995b88c314b",
+          "name": "更新属性",
+          "value": "{{@属性值列表}}"
+        }
+      ],
+      "newFileTemplate": ""
+    },
+    {
+      "id": "9abcac08-0bfd-4ff7-8ad5-3bd0b2ea6286",
+      "type": "wait",
+      "waitTime": 10000,
+      "unit": "milliseconds"
+    },
+    {
+      "id": "d6c4b50f-854d-4ef3-8673-471409885a09",
+      "type": "runCommand",
+      "commandId": "workspace:close",
+      "commandName": "关闭当前标签页"
+    },
+    {
+      "id": "672e3f26-7156-45e3-8e1c-cc24a2f7f981",
+      "type": "runScript",
+      "variales": [],
+      "scriptSource": "inline",
+      "expression": "",
+      "code": "/**\n * app: obsidian App instance\n * form: use form.fieldName to get field value\n * Notice: toast message, \"new Notice('Hello world')\"\n */\nasync function entry() {\n  const { app, form, requestUrl, obsidian, Notice, $selection, moment } = this.$context;\n  \n  try {\n    // 获取表单字段值，添加类型检查\n    const title = form[\"文本\"] ? String(form[\"文本\"]) : \"无标题\";\n    const number = form[\"数字\"] ? String(form[\"数字\"]) : \"0\";\n    const dropdown = form[\"下拉列表\"] ? String(form[\"下拉列表\"]) : \"默认选项\";\n    \n    // 处理属性值列表，确保它是字符串类型\n    let propertyList = \"\";\n    if (form[\"属性值列表\"]) {\n      if (typeof form[\"属性值列表\"] === \"string\") {\n        propertyList = form[\"属性值列表\"];\n      } else if (Array.isArray(form[\"属性值列表\"])) {\n        // 如果是数组，转换为逗号分隔的字符串\n        propertyList = form[\"属性值列表\"].join(\",\");\n      } else {\n        // 其他类型，转换为字符串\n        propertyList = String(form[\"属性值列表\"]);\n      }\n    }\n    \n    // 生成时间戳\n    const timestamp = moment().format(\"YYYY-MM-DD HH-mm-ss\");\n    const dateFolder = moment().format(\"YYYY/MM\");\n    \n    // 创建安全的文件名（移除所有不允许的字符）\n    // Obsidian不允许的字符: * \" \\ / < > : | ?\n    const safeFileName = title\n      .replace(/[*/:\"<>|?\\\\]/g, '')  // 移除不允许的字符\n      .replace(/\\s+/g, ' ')           // 将多个空格替换为单个空格\n      .trim();                         // 移除首尾空格\n    \n    // 如果清理后的文件名为空，使用默认名称\n    const finalFileName = safeFileName || \"未命名文件\";\n    const fileName = `${timestamp} ${finalFileName}.md`;\n    const filePath = `笔记/${dateFolder}/${fileName}`;\n    \n    // 处理属性值列表（假设是逗号分隔的字符串）\n    let properties = [];\n    if (propertyList && propertyList.trim() !== \"\") {\n      try {\n        properties = propertyList.split(\",\").map(prop => {\n          const parts = prop.split(\":\");\n          if (parts.length >= 2) {\n            const key = parts[0].trim();\n            const value = parts.slice(1).join(\":\").trim(); // 支持值中包含冒号\n            return { key, value };\n          } else if (parts.length === 1) {\n            // 如果没有冒号，将整个字符串作为键，值为空\n            return { key: parts[0].trim(), value: \"\" };\n          }\n        }).filter(prop => prop && prop.key); // 过滤掉空的属性\n      } catch (error) {\n        console.warn(\"解析属性值列表时出错:\", error);\n        new Notice(\"属性值列表格式不正确，请使用'键:值'格式，多个属性用逗号分隔\");\n      }\n    }\n    \n    // 创建文件内容\n    let fileContent = `# ${title}\\n\\n`;\n    fileContent += `> 创建时间: ${timestamp}\\n`;\n    fileContent += `> 数字值: ${number}\\n`;\n    fileContent += `> 下拉选择: ${dropdown}\\n\\n`;\n    \n    // 添加属性值列表内容\n    if (properties.length > 0) {\n      fileContent += `## 属性列表\\n\\n`;\n      properties.forEach(prop => {\n        fileContent += `- **${prop.key}**: ${prop.value}\\n`;\n      });\n      fileContent += \"\\n\";\n    }\n    \n    // 添加YAML前置元数据\n    let yamlFrontmatter = `---\ncreated: \"${timestamp}\"\nnumber: \"${number}\"\ndropdown: \"${dropdown}\"\n`;\n    \n    // 添加属性到YAML前置元数据\n    if (properties.length > 0) {\n      properties.forEach(prop => {\n        // 确保YAML中的值被正确引用\n        yamlFrontmatter += `${prop.key}: \"${prop.value}\"\\n`;\n      });\n    }\n    yamlFrontmatter += \"---\\n\";\n    \n    // 最终文件内容\n    const finalContent = yamlFrontmatter + fileContent;\n    \n    // 确保目录存在\n    const folderPath = `笔记/${dateFolder}`;\n    try {\n      if (!app.vault.getAbstractFileByPath(folderPath)) {\n        await app.vault.createFolder(folderPath);\n      }\n    } catch (folderError) {\n      console.warn(\"创建文件夹时出错:\", folderError);\n      // 如果文件夹创建失败，尝试使用根目录\n      filePath = `笔记/${fileName}`;\n    }\n    \n    // 创建文件\n    const newFile = await app.vault.create(filePath, finalContent);\n    \n    // 显示成功通知\n    new Notice(`成功创建笔记: ${title}`);\n    \n    // 打开新创建的文件\n    const leaf = app.workspace.getLeaf(true);\n    await leaf.openFile(newFile);\n    \n    // 返回创建的文件路径，可以在后续动作中使用 {{@filePath}} 引用\n    form[\"filePath\"] = filePath;\n    \n  } catch (error) {\n    // 错误处理\n    console.error(\"创建笔记时出错:\", error);\n    new Notice(`创建笔记失败: ${error.message}`);\n  }\n}\n\n/**\n * Must reserve export.default and set a entry function\n */\nexports.default = {\n  entry: entry\n}\n",
+      "condition": {
+        "id": "bfd77e19-96f0-42c4-b1b9-8daadc3ef124",
+        "type": "group",
+        "operator": "and",
+        "conditions": [
+          {
+            "id": "e4558623-75a9-4210-8c05-c74abfa3cddf",
+            "type": "filter",
+            "property": "16a9c7e0-8f40-4577-9a73-9cf46cbb2a96",
+            "operator": "equals",
+            "value": true
+          }
+        ]
+      }
+    }
+  ],
+  "autoSubmit": true
+}

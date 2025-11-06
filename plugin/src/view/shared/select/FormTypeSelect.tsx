@@ -1,5 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Check, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
+import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import "./FormTypeSelect.css";
 import { useState } from "react";
 
@@ -32,9 +32,9 @@ export function FormTypeSelect(props: {
 						</span>
 					)}
 					{open ? (
-						<ChevronDownIcon size={16} />
+						<ChevronDown size={16} />
 					) : (
-						<ChevronRightIcon size={16} />
+						<ChevronRight size={16} />
 					)}
 				</button>
 			</DropdownMenu.Trigger>

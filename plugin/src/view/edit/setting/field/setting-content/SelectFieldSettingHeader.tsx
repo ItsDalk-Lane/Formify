@@ -1,4 +1,4 @@
-import { ListIcon, Pencil } from "lucide-react";
+import { List, Pencil } from "lucide-react";
 import { ToggleGroup } from "radix-ui";
 import { useEffect, useState } from "react";
 import { localInstance } from "src/i18n/locals";
@@ -28,7 +28,7 @@ export function SelectFieldSettingHeader(props: {
 		{
 			value: "preview",
 			label: localInstance.preview_mode,
-			icon: <ListIcon size={16} />,
+			icon: <List size={16} />,
 		},
 		{
 			value: "editing",

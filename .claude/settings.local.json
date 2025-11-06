@@ -1,0 +1,11 @@
+{
+  "permissions": {
+
+    "allow": [
+      "grep"
+    ],
+    "defaultMode": "acceptEdits",
+    "deny": [],
+    "ask": []
+  }
+}

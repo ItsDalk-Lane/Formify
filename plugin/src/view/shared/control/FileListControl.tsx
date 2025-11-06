@@ -2,7 +2,7 @@ import { Popover as RadixPopover } from "radix-ui";
 import { useState, useRef, useMemo, useEffect } from "react";
 import "./FileListControl.css";
 
-import { ChevronDown, XIcon } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { useObsidianApp } from "src/context/obsidianAppContext";
 import { localInstance } from "src/i18n/locals";
 import { IFileListField } from "src/model/field/IFileListField";
@@ -358,7 +358,7 @@ function TriggerItems(props: {
 								removeValue(v);
 							}}
 						>
-							<XIcon size={10} />
+							<X size={10} />
 						</span>
 					</span>
 				);

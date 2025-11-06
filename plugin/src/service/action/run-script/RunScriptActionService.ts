@@ -12,7 +12,7 @@ export default class RunScriptActionService implements IActionService {
         return action.type === FormActionType.RUN_SCRIPT;
     }
 
-    async run(action: IFormAction, context: ActionContext, chain: ActionChain): Promise<void> {
+    async run(action: IFormAction, context: ActionContext, chain: ActionChain): Promise<any> {
         const scriptAction = action as RunScriptFormAction;
         const state = context.state;
         const extraContext = {
@@ -33,7 +33,9 @@ export default class RunScriptActionService implements IActionService {
         }
 
         // do next
-        return await chain.next(context);
+        if (chain) {
+            return await chain.next(context);
+        }
     }
 
 }
