@@ -25,24 +25,25 @@ export class FormService {
         const actions = getActionsCompatible(config);
         FormValidator.validate(config, idValues);
         
-        // 处理字段值中的内置变量（{{date}}、{{clipboard}}、{{selection}} 等）
-        const fieldValueProcessor = new FormFieldValueProcessor();
-        const processedIdValues = await fieldValueProcessor.processValues(idValues, options.app);
-        
-        // 处理文件列表字段的编码值，提取纯内容
-        const finalIdValues = { ...processedIdValues };
+        // 先处理文件列表字段的编码值，提取纯内容
+        const decodedIdValues = { ...idValues };
         config.fields.forEach(field => {
             if (field.type === FormFieldType.FILE_LIST) {
                 const fileListField = field as IFileListField;
-                if (fileListField.extractContent && finalIdValues[field.id] !== undefined) {
-                    finalIdValues[field.id] = extractContentFromEncodedValue(finalIdValues[field.id]);
+                if (fileListField.extractContent && decodedIdValues[field.id] !== undefined) {
+                    const extractedContent = extractContentFromEncodedValue(decodedIdValues[field.id]);
+                    decodedIdValues[field.id] = extractedContent;
                 }
             }
         });
         
+        // 然后处理字段值中的内置变量（{{date}}、{{clipboard}}、{{selection}} 等）
+        const fieldValueProcessor = new FormFieldValueProcessor();
+        const processedIdValues = await fieldValueProcessor.processValues(decodedIdValues, options.app);
+        
         const chain = new ActionChain(actions);
-        const visibleIdValues = FormVisibilies.getVisibleIdValues(config.fields, finalIdValues);
-        const formLabelValues = FormVisibilies.toFormLabelValues(config.fields, finalIdValues);
+        const visibleIdValues = FormVisibilies.getVisibleIdValues(config.fields, processedIdValues);
+        const formLabelValues = FormVisibilies.toFormLabelValues(config.fields, processedIdValues);
         const actionContext: ActionContext = {
             app: options.app,
             config: config,

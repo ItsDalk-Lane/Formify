@@ -34,13 +34,19 @@ function decodePathAndContent(encoded: string): { path: string; content: string 
 export function extractContentFromEncodedValue(value: any): any {
 	if (typeof value === 'string') {
 		const decoded = decodePathAndContent(value);
-		return decoded ? decoded.content : value;
+		if (decoded) {
+			return decoded.content;
+		}
+		return value;
 	}
 	if (Array.isArray(value)) {
 		return value.map(v => {
 			if (typeof v === 'string') {
 				const decoded = decodePathAndContent(v);
-				return decoded ? decoded.content : v;
+				if (decoded) {
+					return decoded.content;
+				}
+				return v;
 			}
 			return v;
 		});
@@ -111,6 +117,73 @@ export function FileListControl(props: {
 		}
 	}, [value]);
 
+	// 处理初始默认值：如果启用了内容提取，且当前值是普通文件路径（非编码格式），则进行内容提取
+	useEffect(() => {
+		const processInitialValue = async () => {
+			if (!fileListField.extractContent) {
+				return;
+			}
+
+			const currentValues = Array.isArray(value) ? value : (value ? [value] : []);
+			if (currentValues.length === 0) {
+				return;
+			}
+
+			// 检查是否需要处理
+			const needsProcessing = currentValues.some((v: string) => {
+				const str = String(v);
+				// 如果不包含编码标记，说明是普通路径，需要处理
+				return !str.includes('<<<FILE_PATH>>>');
+			});
+
+			if (!needsProcessing) {
+				return;
+			}
+
+			// 处理每个值
+			const processedValues = await Promise.all(
+				currentValues.map(async (v: string) => {
+					const filePath = String(v);
+					
+					// 如果已经是编码格式，直接返回
+					if (filePath.includes('<<<FILE_PATH>>>')) {
+						return filePath;
+					}
+
+					// 否则进行内容提取
+					const file = app.vault.getFileByPath(filePath);
+					if (!file) {
+						return filePath;
+					}
+
+					try {
+						const content = await app.vault.read(file);
+
+						let processedContent = content;
+						if (!fileListField.includeMetadata) {
+							const frontmatterRegex = /^---\n([\s\S]*?)\n---\n/;
+							processedContent = content.replace(frontmatterRegex, '').trim();
+						}
+
+						const encoded = encodePathAndContent(filePath, processedContent);
+						return encoded;
+					} catch (error) {
+						return filePath;
+					}
+				})
+			);
+
+			// 更新值
+			if (fileListField.multiple) {
+				onValueChange(processedValues);
+			} else {
+				onValueChange(processedValues[0]);
+			}
+		};
+
+		processInitialValue();
+	}, []); // 只在组件挂载时执行一次
+
 	const addValue = async (newValue: string, sourceValue: string[]) => {
 		const toInternalLink = (origin: string): string => {
 			const file = app.vault.getFileByPath(origin);
@@ -136,12 +209,12 @@ export function FileListControl(props: {
 				if (!fileListField.includeMetadata) {
 					// 移除YAML frontmatter
 					const frontmatterRegex = /^---\n([\s\S]*?)\n---\n/;
-					return content.replace(frontmatterRegex, '').trim();
+					const contentWithoutFrontmatter = content.replace(frontmatterRegex, '').trim();
+					return contentWithoutFrontmatter;
 				}
 				
 				return content;
 			} catch (error) {
-				console.error(`读取文件内容失败: ${filePath}`, error);
 				return filePath; // 读取失败时返回路径
 			}
 		};
@@ -150,8 +223,8 @@ export function FileListControl(props: {
 			// 如果启用了内容提取
 			if (extractContent) {
 				const content = await extractFileContent(origin);
-				// 使用编码方式：将路径和内容组合在一起
-				return encodePathAndContent(origin, content);
+				const encoded = encodePathAndContent(origin, content);
+				return encoded;
 			}
 			
 			// 否则按原逻辑处理路径或内链

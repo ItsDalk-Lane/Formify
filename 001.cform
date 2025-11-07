@@ -1,0 +1,28 @@
+{
+  "id": "1c7e8cbf-7ac7-45f1-b5ba-4c19b3f05af8",
+  "fields": [
+    {
+      "id": "0c022e50-c983-42bb-8ce4-2cd2c4a45e87",
+      "label": "用户输入",
+      "type": "file_list",
+      "defaultValue": "测试数据/文本整理.md",
+      "extractContent": true
+    }
+  ],
+  "actions": [
+    {
+      "id": "2e77e52d-6477-445e-bb99-d554e571090d",
+      "type": "insertText",
+      "filePath": "测试结果/CH01.md",
+      "targetFolder": "",
+      "fileName": "",
+      "openPageIn": "none",
+      "newFileTemplate": "",
+      "targetFileType": "specified_file",
+      "position": "endOfContent",
+      "heading": "",
+      "content": "{{@用户输入}}\n\n---\n"
+    }
+  ],
+  "autoSubmit": true
+}
