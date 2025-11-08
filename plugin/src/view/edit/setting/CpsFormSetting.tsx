@@ -11,8 +11,8 @@ import CpsFormItem from "src/view/shared/CpsFormItem";
 import { CpsFormActions } from "./action/CpsFormActions";
 import "./CpsFormSetting.css";
 import { CpsFormSettingGroup } from "./CpsFormSettingGroup";
-import { AsCommandToggle } from "./field/common/AsCommandToggle";
 import CpsFormFields from "./field/CpsFormFields";
+import { AsCommandToggle } from "./field/common/AsCommandToggle";
 
 export default function (props: {
 	filePath: string;

@@ -31,7 +31,6 @@ export default class FormPlugin extends Plugin {
 		await formIntegrationService.initialize(this);
 		this.refreshTarsFeature();
 		this.app.workspace.onLayoutReady(async () => {
-			formIntegrationService.clearStale();
 			formScriptService.initialize(this.app, this.settings.scriptFolder);
 		});
 	}
@@ -40,6 +39,7 @@ export default class FormPlugin extends Plugin {
 		formScriptService.unload();
 		applicationCommandService.unload(this);
 		applicationFileViewService.unload(this);
+		formIntegrationService.cleanup();
 		this.tarsFeatureManager?.dispose();
 		this.tarsFeatureManager = null;
 	}
@@ -69,10 +69,28 @@ export default class FormPlugin extends Plugin {
 			DebugLogger.debug('[Main] API 密钥解密完成')
 		}
 		
+		// 数据迁移：处理旧的formIntegrations到新的formCommands
+		let migratedFormCommands = persisted.formCommands;
+
+		if (!migratedFormCommands && persisted.formIntegrations) {
+			// 从旧的formIntegrations迁移
+			migratedFormCommands = Object.fromEntries(
+				Object.entries(persisted.formIntegrations || {})
+					.map(([path, integration]: [string, any]) => [
+						path,
+						{
+							enabled: integration.asCommand === true,
+							userDisabled: integration.asCommand === false,
+							registeredAt: Date.now()
+						}
+					])
+			);
+		}
+
 		this.settings = {
 			...defaultSettings,
 			...persisted,
-			formIntegrations: persisted.formIntegrations ?? defaultSettings.formIntegrations,
+			formCommands: migratedFormCommands ?? defaultSettings.formCommands,
 			tars: {
 				settings: cloneTarsSettings(decryptedTarsSettings),
 			}

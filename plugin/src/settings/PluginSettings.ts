@@ -13,23 +13,24 @@ export interface PluginSettings {
 
     promptTemplateFolder: string;
 
-    formIntegrations: FormIntegration;
+    formCommands: FormCommandSettings;
 
     tars: TarsFeatureConfig;
 }
 
-export interface FormIntegration {
+export interface FormCommandSettings {
     [filePath: string]: {
-        asCommand?: boolean;
+        enabled: boolean;         // 命令是否启用
+        userDisabled?: boolean;   // 用户是否手动禁用
+        registeredAt?: number;    // 注册时间
     };
 }
-
 
 export const DEFAULT_SETTINGS: PluginSettings = {
     formFolder: "form/forms",
     scriptFolder: "form/scripts",
     promptTemplateFolder: "form/prompt-templates",
-    formIntegrations: {},
+    formCommands: {},
     tars: {
         settings: cloneTarsSettings(),
     },
