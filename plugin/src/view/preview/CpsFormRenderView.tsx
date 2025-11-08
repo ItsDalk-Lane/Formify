@@ -1,4 +1,4 @@
-import { HTMLAttributes, useState, useRef, useMemo } from "react";
+import { HTMLAttributes, useState, useRef, useMemo, useEffect } from "react";
 import { useAnotherKeyToSubmitForm } from "src/hooks/useAnotherKeyToSubmitForm";
 import { useAutoFocus } from "src/hooks/useAutoFocus";
 import { SubmitState } from "src/hooks/useSubmitForm";
@@ -7,6 +7,7 @@ import { IFormField } from "src/model/field/IFormField";
 import { FormVisibilies } from "src/service/condition/FormVisibilies";
 import { FormIdValues } from "src/service/FormValues";
 import { resolveDefaultFormIdValues } from "src/utils/resolveDefaultFormIdValues";
+import { getFieldDefaultValue } from "src/utils/getFieldDefaultValue";
 import ActionFlow from "../shared/action-flow/ActionFlow";
 import { CpsFormFieldControl } from "../shared/control/CpsFormFieldControl";
 import CpsForm from "../shared/CpsForm";
@@ -26,6 +27,7 @@ export function CpsFormRenderView(props: Props) {
 	const [formIdValues, setFormIdValues] = useState<FormIdValues>(
 		resolveDefaultFormIdValues(fields)
 	);
+	
 	const [submitState, setSubmitState] = useState<SubmitState>({
 		submitting: false,
 		error: false,
@@ -35,11 +37,38 @@ export function CpsFormRenderView(props: Props) {
 	const settingRef = useRef<HTMLDivElement>(null);
 	const submitButtonRef = useRef<HTMLButtonElement>(null);
 
+	// 当字段列表变化时，更新formIdValues以包含新字段的默认值
+	useEffect(() => {
+		const currentFieldIds = new Set(Object.keys(formIdValues));
+		const newFieldIds = new Set(fields.map(f => f.id));
+		
+		// 检查是否有新增的字段
+		let hasNewFields = false;
+		for (const fieldId of newFieldIds) {
+			if (!currentFieldIds.has(fieldId)) {
+				hasNewFields = true;
+				break;
+			}
+		}
+		
+		// 如果有新字段，添加它们的默认值
+		if (hasNewFields) {
+			const newValues = { ...formIdValues };
+			fields.forEach(field => {
+				if (!currentFieldIds.has(field.id)) {
+					newValues[field.id] = getFieldDefaultValue(field);
+				}
+			});
+			setFormIdValues(newValues);
+		}
+	}, [fields]);
+
 	const submit = async () => {
 		if (submitState.submitting) {
 			return;
 		}
 
+	
 		setSubmitState({
 			submitting: true,
 			error: false,

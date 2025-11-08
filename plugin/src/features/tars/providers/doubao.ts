@@ -189,12 +189,6 @@ const processMessages = async (
 	const processedMessages = []
 
 	for (const message of messages) {
-		console.log(`[Doubao] 处理消息:`, {
-			role: message.role,
-			content: message.content?.substring(0, 50),
-			embedsCount: message.embeds?.length || 0,
-			embeds: message.embeds?.map((e) => e.link) || []
-		})
 
 		const content: any[] = []
 		let remainingText = message.content ?? ''
@@ -203,7 +197,6 @@ const processMessages = async (
 
 		if (textImageUrls.length > 0) {
 			for (const url of textImageUrls) {
-				console.log(`[Doubao] 识别到文本中的图片URL: ${url}`)
 				imageContentsFromText.push({
 					type: 'image_url' as const,
 					image_url: {
@@ -232,7 +225,6 @@ const processMessages = async (
 		const maxImageSize = 20 * 1024 * 1024
 
 		if (message.embeds && message.embeds.length > 0) {
-			console.log(`[Doubao] 检测到 ${message.embeds.length} 个嵌入内容`)
 			for (const embed of message.embeds) {
 				if (imageCount >= maxImageCount) {
 					console.warn(`已达到最大图片数量限制 ${maxImageCount}，忽略剩余图片`)
@@ -244,7 +236,6 @@ const processMessages = async (
 					let imageContent: any
 
 					if (isHttpUrl) {
-						console.log(`[Doubao] 使用 URL 图片: ${embed.link}`)
 						imageContent = {
 							type: 'image_url' as const,
 							image_url: {
@@ -252,7 +243,6 @@ const processMessages = async (
 							}
 						}
 					} else {
-						console.log(`[Doubao] 处理本地图片: ${embed.link}`)
 						const binary = await resolveEmbedAsBinary(embed)
 						if (binary.byteLength > maxImageSize) {
 							console.warn(`图片大小超过限制 ${maxImageSize / (1024 * 1024)}MB，忽略此图片`)
@@ -355,13 +345,7 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 	const capability = getDoubaoModelCapability(model)
 	let effectiveThinkingType: DoubaoThinkingType | undefined
 
-	console.log('[Doubao] 模型能力检查', {
-		model,
-		capability,
-		requestedThinkingType: thinkingType,
-		requestedReasoningEffort: reasoningEffort
-	})
-
+	
 	if (capability) {
 		const fallbackThinking = capability.thinkingTypes.includes(DEFAULT_DOUBAO_THINKING_TYPE)
 			? DEFAULT_DOUBAO_THINKING_TYPE
@@ -371,12 +355,7 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			? requestedThinking
 			: fallbackThinking
 
-		console.log('[Doubao] 深度思考配置', {
-			fallbackThinking,
-			requestedThinking,
-			effectiveThinkingType
-		})
-
+		
 		if (effectiveThinkingType) {
 			data.thinking = { type: effectiveThinkingType }
 		}
@@ -388,23 +367,15 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 						? reasoningEffort
 						: 'low'
 				data.reasoning_effort = candidate
-				console.log('[Doubao] 设置 reasoning_effort', candidate)
 			} else if (effectiveThinkingType === 'disabled') {
 				data.reasoning_effort = 'minimal'
-				console.log('[Doubao] thinking disabled, 强制 reasoning_effort = minimal')
 			}
 		}
 	} else {
 		console.warn('[Doubao] 当前模型不在能力映射表中:', model)
 	}
 
-	console.log('[Doubao] 最终请求配置', {
-		model,
-		thinking: data.thinking,
-		reasoning_effort: data.reasoning_effort,
-		useResponsesAPI,
-		完整data: JSON.stringify(data, null, 2)
-	})		// 根据 API 类型设置消息字段
+	// 根据 API 类型设置消息字段
 		if (useResponsesAPI) {
 			// Responses API 使用 input 字段
 			data.input = processedMessages
@@ -462,8 +433,6 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		}
 
 	// 发送请求
-	console.log('[Doubao] 准备发送请求到:', endpoint)
-	console.log('[Doubao] 请求体:', JSON.stringify(data, null, 2))
 	
 	const response = await fetch(endpoint, {
 		method: 'POST',
@@ -475,76 +444,47 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		signal: controller.signal
 	})
 
-	console.log('[Doubao] 收到响应:', response.status, response.statusText)
-	
+		
 	if (!response.ok) {
 		const errorText = await response.text()
 		throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
-	}		const reader = response.body?.getReader()
-		if (!reader) throw new Error('Failed to get response reader')
+	}
+	const reader = response.body?.getReader()
+	if (!reader) throw new Error('Failed to get response reader')
 
-		const decoder = new TextDecoder()
-		let buffer = ''
-		let thinkingActive = false
+	const decoder = new TextDecoder()
+	let buffer = ''
+	let thinkingActive = false
 
-		try {
-			while (true) {
-				const { done, value } = await reader.read()
-				if (done) break
+	try {
+		while (true) {
+			const { done, value } = await reader.read()
+			if (done) break
 
-				buffer += decoder.decode(value, { stream: true })
-				const lines = buffer.split('\n')
-				buffer = lines.pop() || ''
+			buffer += decoder.decode(value, { stream: true })
+			const lines = buffer.split('\n')
+			buffer = lines.pop() || ''
 
-				for (const line of lines) {
-					const trimmed = line.trim()
-					if (!trimmed || trimmed === 'data: [DONE]') continue
-					if (!trimmed.startsWith('data: ')) continue
+			for (const line of lines) {
+				const trimmed = line.trim()
+				if (!trimmed || trimmed === 'data: [DONE]') continue
+				if (!trimmed.startsWith('data: ')) continue
 
-					try {
-						const payload = JSON.parse(trimmed.slice(6))
-						console.log('[Doubao] payload.type:', payload.type)
-					
-						if (useResponsesAPI) {
-							const chunkType = payload.type as string | undefined
-							if (chunkType && chunkType.startsWith('response.thinking')) {
-								console.log('[Doubao] ✓ 检测到思考块!', payload)
-								const thinkingText = extractString(payload.delta ?? payload.thinking ?? payload.content)
-								if (thinkingText) {
-									const prefix = !thinkingActive ? ((thinkingActive = true), CALLOUT_BLOCK_START) : ''
-									yield prefix + formatThinking(thinkingText)
-								}
-								continue
-							}
-							if (chunkType === 'response.output_text.delta') {
-								const content = extractString(payload.delta)
-								if (content) {
-									if (thinkingActive) {
-										thinkingActive = false
-										yield CALLOUT_BLOCK_END + content
-									} else {
-										yield content
-									}
-								}
-								continue
-							}
-							if (chunkType === 'response.completed' && thinkingActive) {
-								thinkingActive = false
-								yield CALLOUT_BLOCK_END
-							}
-						} else {
-							const delta = payload.choices?.[0]?.delta ?? {}
-							console.log('[Doubao] delta keys:', Object.keys(delta))
-							
-							// 豆包使用 reasoning_content 字段返回推理过程
-							const reasoningContent = (delta as any).reasoning_content
-							if (reasoningContent) {
-								console.log('[Doubao] ✓ reasoning_content!', reasoningContent.substring(0, 50))
+				try {
+					const payload = JSON.parse(trimmed.slice(6))
+
+					if (useResponsesAPI) {
+						const chunkType = payload.type as string | undefined
+						if (chunkType && chunkType.startsWith('response.thinking')) {
+							const thinkingText = extractString(payload.delta ?? payload.thinking ?? payload.content)
+							if (thinkingText) {
 								const prefix = !thinkingActive ? ((thinkingActive = true), CALLOUT_BLOCK_START) : ''
-								yield prefix + formatThinking(reasoningContent)
+								yield prefix + formatThinking(thinkingText)
 							}
-							
-							const content = (delta as any).content
+							continue
+						}
+						if (chunkType === 'response.output_text.delta') {
+							const content = extractString(payload.delta)
 							if (content) {
 								if (thinkingActive) {
 									thinkingActive = false
@@ -553,25 +493,50 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 									yield content
 								}
 							}
-							const finishReason = payload.choices?.[0]?.finish_reason
-							if (finishReason && thinkingActive) {
+							continue
+						}
+						if (chunkType === 'response.completed' && thinkingActive) {
+							thinkingActive = false
+							yield CALLOUT_BLOCK_END
+						}
+					} else {
+						const delta = payload.choices?.[0]?.delta ?? {}
+
+						// 豆包使用 reasoning_content 字段返回推理过程
+						const reasoningContent = (delta as any).reasoning_content
+						if (reasoningContent) {
+							const prefix = !thinkingActive ? ((thinkingActive = true), CALLOUT_BLOCK_START) : ''
+							yield prefix + formatThinking(reasoningContent)
+						}
+
+						const content = (delta as any).content
+						if (content) {
+							if (thinkingActive) {
 								thinkingActive = false
-								yield CALLOUT_BLOCK_END
+								yield CALLOUT_BLOCK_END + content
+							} else {
+								yield content
 							}
 						}
-					} catch (e) {
-						console.warn('Failed to parse SSE data:', trimmed, e)
+						const finishReason = payload.choices?.[0]?.finish_reason
+						if (finishReason && thinkingActive) {
+							thinkingActive = false
+							yield CALLOUT_BLOCK_END
+						}
 					}
+				} catch (e) {
+					console.warn('Failed to parse SSE data:', trimmed, e)
 				}
 			}
-		} finally {
-			if (thinkingActive) {
-				thinkingActive = false
-				yield CALLOUT_BLOCK_END
-			}
-			reader.releaseLock()
 		}
+	} finally {
+		if (thinkingActive) {
+			thinkingActive = false
+			yield CALLOUT_BLOCK_END
+		}
+		reader.releaseLock()
 	}
+}
 
 const models = Object.keys(DOUBAO_MODEL_CAPABILITY_MAP)
 

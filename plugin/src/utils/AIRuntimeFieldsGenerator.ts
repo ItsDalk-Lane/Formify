@@ -24,7 +24,7 @@ export class AIRuntimeFieldsGenerator {
     static generateRuntimeFields(actions: IFormAction[], app: App): IFormField[] {
         const runtimeFields: IFormField[] = [];
         
-        actions.forEach((action, index) => {
+        actions.forEach((action) => {
             if (action.type !== FormActionType.AI) {
                 return;
             }
@@ -33,7 +33,7 @@ export class AIRuntimeFieldsGenerator {
             
             // 检查是否需要运行时选择模型
             if (aiAction.modelTag === AI_MODEL_SELECT_ON_SUBMIT) {
-                const modelField = this.generateModelField(index, app);
+                const modelField = this.generateModelField(aiAction, app);
                 if (modelField) {
                     runtimeFields.push(modelField);
                 }
@@ -42,7 +42,7 @@ export class AIRuntimeFieldsGenerator {
             // 检查是否需要运行时选择模板
             if (aiAction.promptSource === PromptSourceType.TEMPLATE && 
                 (aiAction.templateFile === "" || aiAction.templateFile === undefined)) {
-                const templateField = this.generateTemplateField(index, app);
+                const templateField = this.generateTemplateField(aiAction, app);
                 if (templateField) {
                     runtimeFields.push(templateField);
                 }
@@ -54,8 +54,10 @@ export class AIRuntimeFieldsGenerator {
     
     /**
      * 生成模型选择字段
+     * @param aiAction AI动作配置
+     * @param app Obsidian App实例
      */
-    private static generateModelField(actionIndex: number, app: App): ISelectField | null {
+    private static generateModelField(aiAction: AIFormAction, app: App): ISelectField | null {
         const plugin = (app as any).plugins?.plugins?.["formify"];
         const providers = plugin?.settings?.tars?.settings?.providers || [];
         
@@ -70,12 +72,15 @@ export class AIRuntimeFieldsGenerator {
             value: provider.tag
         }));
         
+        const fieldId = `__ai_runtime_model_${aiAction.id}__`;
+        
         const field: ISelectField = {
-            id: `__ai_runtime_model_${actionIndex}__`,
+            id: fieldId,
             type: FormFieldType.SELECT,
             label: localInstance.ai_select_model_prompt,
             required: true,
-            options: options
+            options: options,
+            enableCustomValue: true  // 使用 value 而不是 label 作为选项值
         };
         
         return field;
@@ -83,8 +88,10 @@ export class AIRuntimeFieldsGenerator {
     
     /**
      * 生成模板选择字段
+     * @param aiAction AI动作配置
+     * @param app Obsidian App实例
      */
-    private static generateTemplateField(actionIndex: number, app: App): ISelectField | null {
+    private static generateTemplateField(aiAction: AIFormAction, app: App): ISelectField | null {
         const plugin = (app as any).plugins?.plugins?.["formify"];
         const promptTemplateFolder = plugin?.settings?.promptTemplateFolder || "form/prompt-templates";
         
@@ -106,11 +113,12 @@ export class AIRuntimeFieldsGenerator {
         }));
         
         const field: ISelectField = {
-            id: `__ai_runtime_template_${actionIndex}__`,
+            id: `__ai_runtime_template_${aiAction.id}__`,
             type: FormFieldType.SELECT,
             label: localInstance.ai_select_template_prompt,
             required: true,
-            options: options
+            options: options,
+            enableCustomValue: true  // 使用 value 而不是 label 作为选项值
         };
         
         return field;
@@ -118,17 +126,25 @@ export class AIRuntimeFieldsGenerator {
     
     /**
      * 从表单值中提取运行时选择的模型
+     * @param actionId AI动作的唯一ID
+     * @param formValues 表单值对象
+     * @returns 提取到的模型tag,如果未找到则返回null
      */
-    static extractRuntimeModel(actionIndex: number, formValues: Record<string, any>): string | null {
-        const fieldId = `__ai_runtime_model_${actionIndex}__`;
-        return formValues[fieldId] || null;
+    static extractRuntimeModel(actionId: string, formValues: Record<string, any>): string | null {
+        const fieldId = `__ai_runtime_model_${actionId}__`;
+        const value = formValues[fieldId];
+        return value || null;
     }
     
     /**
      * 从表单值中提取运行时选择的模板
+     * @param actionId AI动作的唯一ID
+     * @param formValues 表单值对象
+     * @returns 提取到的模板路径,如果未找到则返回null
      */
-    static extractRuntimeTemplate(actionIndex: number, formValues: Record<string, any>): string | null {
-        const fieldId = `__ai_runtime_template_${actionIndex}__`;
-        return formValues[fieldId] || null;
+    static extractRuntimeTemplate(actionId: string, formValues: Record<string, any>): string | null {
+        const fieldId = `__ai_runtime_template_${actionId}__`;
+        const value = formValues[fieldId];
+        return value || null;
     }
 }

@@ -36,19 +36,22 @@ export default class AIActionService implements IActionService {
         const state = context.state;
 
         try {
-            // 获取当前动作在actions数组中的索引
-            const actionIndex = chain.index - 1;
-            
             // 0. 检查是否需要运行时选择模型
             let modelTag: string | undefined = aiAction.modelTag;
             if (modelTag === AI_MODEL_SELECT_ON_SUBMIT) {
                 // 优先从表单值中读取运行时选择的模型
-                const runtimeModel = AIRuntimeFieldsGenerator.extractRuntimeModel(actionIndex, state.idValues);
+                const runtimeModel = AIRuntimeFieldsGenerator.extractRuntimeModel(aiAction.id, state.idValues);
                 if (runtimeModel) {
                     modelTag = runtimeModel;
-                    DebugLogger.debug(`[AIAction] 从表单读取运行时模型: ${modelTag}`);
+                    DebugLogger.debug(`[AIAction] ✓ 从表单读取运行时模型: ${modelTag} (动作ID: ${aiAction.id})`);
                 } else {
-                    // 如果表单中没有，则弹出对话框选择
+                    // 调试信息:打印state.idValues的内容以帮助诊断
+                    DebugLogger.debug(`[AIAction] ✗ 未能从表单提取运行时模型 (动作ID: ${aiAction.id})`);
+                    DebugLogger.debug(`[AIAction]   期望的字段ID: __ai_runtime_model_${aiAction.id}__`);
+                    DebugLogger.debug(`[AIAction]   state.idValues所有键:`, Object.keys(state.idValues));
+                    DebugLogger.debug(`[AIAction]   state.idValues完整内容:`, state.idValues);
+                    
+                    // 如果表单中没有,则弹出对话框选择
                     const selected = await this.selectModelAtRuntime(context);
                     if (!selected) {
                         // 用户取消选择
@@ -70,12 +73,18 @@ export default class AIActionService implements IActionService {
             let templateFile: string | undefined = aiAction.templateFile;
             if (aiAction.promptSource === PromptSourceType.TEMPLATE && templateFile === "") {
                 // 优先从表单值中读取运行时选择的模板
-                const runtimeTemplate = AIRuntimeFieldsGenerator.extractRuntimeTemplate(actionIndex, state.idValues);
+                const runtimeTemplate = AIRuntimeFieldsGenerator.extractRuntimeTemplate(aiAction.id, state.idValues);
                 if (runtimeTemplate) {
                     templateFile = runtimeTemplate;
-                    DebugLogger.debug(`[AIAction] 从表单读取运行时模板: ${templateFile}`);
+                    DebugLogger.debug(`[AIAction] ✓ 从表单读取运行时模板: ${templateFile} (动作ID: ${aiAction.id})`);
                 } else {
-                    // 如果表单中没有，则弹出对话框选择
+                    // 调试信息:打印state.idValues的内容以帮助诊断
+                    DebugLogger.debug(`[AIAction] ✗ 未能从表单提取运行时模板 (动作ID: ${aiAction.id})`);
+                    DebugLogger.debug(`[AIAction]   期望的字段ID: __ai_runtime_template_${aiAction.id}__`);
+                    DebugLogger.debug(`[AIAction]   state.idValues所有键:`, Object.keys(state.idValues));
+                    DebugLogger.debug(`[AIAction]   state.idValues完整内容:`, state.idValues);
+                    
+                    // 如果表单中没有,则弹出对话框选择
                     const selected = await this.selectTemplateAtRuntime(context);
                     if (!selected) {
                         // 用户取消选择

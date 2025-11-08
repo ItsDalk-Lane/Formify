@@ -147,7 +147,6 @@ export class FormIntegrationService {
 
         // 如果不是强制初始化且已初始化，则跳过
         if (!force && this.isInitialized) {
-            console.log('FormIntegrationService already initialized, skipping...');
             return;
         }
 
@@ -211,7 +210,6 @@ export class FormIntegrationService {
             if (config.isCommandEnabled()) {
                 // 检查命令是否已存在，避免重复注册
                 if (this.isCommandRegistered(commandId)) {
-                    console.log(`Command ${fullCommandId} already exists, skipping registration`);
                     return;
                 }
 

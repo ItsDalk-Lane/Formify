@@ -59,6 +59,15 @@ export class FormVisibilies {
         visibleFields.forEach((field) => {
             visibleIdValues[field.id] = values[field.id];
         });
+        
+        // 保留所有虚拟字段（以 __ 开头的字段 ID，如运行时 AI 字段）的值
+        // 虚拟字段不在 fields 数组中，但需要传递到后续处理逻辑
+        Object.keys(values).forEach((id) => {
+            if (id.startsWith('__') && !(id in visibleIdValues)) {
+                visibleIdValues[id] = values[id];
+            }
+        });
+        
         return visibleIdValues;
     }
 }
