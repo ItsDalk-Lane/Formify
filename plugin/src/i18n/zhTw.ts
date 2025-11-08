@@ -228,7 +228,7 @@ export class ZhTw implements Local {
 	select_file = "選擇文件";
 	select_form_file = "選擇表單文件";
 	all_files = "所有文件";
-	form_text = "文本";
+	form_text = "編輯文本";
 	text_action_operation = "文本操作";
 	text_action_operation_description = "選擇需要執行的文本操作功能";
 	text_action_cleanup = "文本清理";

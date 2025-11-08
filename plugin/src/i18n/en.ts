@@ -228,7 +228,7 @@ export class En implements Local {
 	select_file = "Select file";
 	select_form_file = "Select form file";
 	all_files = "All files";
-	form_text = "Text";
+	form_text = "Edit Text";
 	text_action_operation = "Text Operation";
 	text_action_operation_description = "Select the text operation task to perform";
 	text_action_cleanup = "Text Cleanup";

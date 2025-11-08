@@ -13,6 +13,7 @@ import "./CpsFormSetting.css";
 import { CpsFormSettingGroup } from "./CpsFormSettingGroup";
 import CpsFormFields from "./field/CpsFormFields";
 import { AsCommandToggle } from "./field/common/AsCommandToggle";
+import { useState, useEffect } from "react";
 
 export default function (props: {
 	filePath: string;
@@ -21,9 +22,29 @@ export default function (props: {
 }) {
 	const { formConfig, onChange } = props;
 	const app = useObsidianApp();
-	const commandKeys = formIntegrationService
-		.getShortcut(props.filePath, app)
-		.join(",");
+	const [commandKeys, setCommandKeys] = useState<string>("");
+
+	// 异步获取快捷键
+	useEffect(() => {
+		let mounted = true;
+
+		const loadShortcuts = async () => {
+			try {
+				const keys = await formIntegrationService.getShortcut(props.filePath, app);
+				if (mounted) {
+					setCommandKeys(keys.join(","));
+				}
+			} catch (error) {
+				console.warn(`Failed to load shortcuts for ${props.filePath}:`, error);
+			}
+		};
+
+		loadShortcuts();
+
+		return () => {
+			mounted = false;
+		};
+	}, [props.filePath, app]);
 
 	// 递归替换对象中的标签引用
 	const replaceLabelsInObject = (
@@ -63,10 +84,12 @@ export default function (props: {
 	};
 
 	const onFieldsChanged = (fields: IFormField[], modified: IFormField[]) => {
-		let newConfig = {
+		// 创建新的FormConfig实例
+		let newConfig = new FormConfig(formConfig.id);
+		Object.assign(newConfig, {
 			...formConfig,
 			fields: fields,
-		};
+		});
 
 		if (modified.length > 0) {
 			// 创建旧标签到新标签的映射
@@ -81,7 +104,8 @@ export default function (props: {
 
 			// 如果有需要替换的标签，递归替换对象中的标签引用
 			if (labelMapping.size > 0) {
-				newConfig = replaceLabelsInObject(newConfig, labelMapping);
+				const updatedConfig = replaceLabelsInObject(newConfig, labelMapping);
+				Object.assign(newConfig, updatedConfig);
 			}
 		}
 
@@ -116,11 +140,12 @@ export default function (props: {
 								<CpsFormActions
 									config={formConfig}
 									onChange={(action) => {
-										const newConfig = {
+										const newConfig = new FormConfig(formConfig.id);
+										Object.assign(newConfig, {
 											...formConfig,
 											action: undefined,
 											actions: action,
-										};
+										});
 										onChange(newConfig);
 									}}
 								/>
@@ -167,10 +192,11 @@ export default function (props: {
 									<ToggleControl
 										value={formConfig.autoSubmit === true}
 										onValueChange={(v) => {
-											const newConfig = {
+											const newConfig = new FormConfig(formConfig.id);
+											Object.assign(newConfig, {
 												...formConfig,
 												autoSubmit: v,
-											};
+											});
 											onChange(newConfig);
 										}}
 									/>

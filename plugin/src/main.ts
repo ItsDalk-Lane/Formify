@@ -69,28 +69,9 @@ export default class FormPlugin extends Plugin {
 			DebugLogger.debug('[Main] API 密钥解密完成')
 		}
 		
-		// 数据迁移：处理旧的formIntegrations到新的formCommands
-		let migratedFormCommands = persisted.formCommands;
-
-		if (!migratedFormCommands && persisted.formIntegrations) {
-			// 从旧的formIntegrations迁移
-			migratedFormCommands = Object.fromEntries(
-				Object.entries(persisted.formIntegrations || {})
-					.map(([path, integration]: [string, any]) => [
-						path,
-						{
-							enabled: integration.asCommand === true,
-							userDisabled: integration.asCommand === false,
-							registeredAt: Date.now()
-						}
-					])
-			);
-		}
-
 		this.settings = {
 			...defaultSettings,
 			...persisted,
-			formCommands: migratedFormCommands ?? defaultSettings.formCommands,
 			tars: {
 				settings: cloneTarsSettings(decryptedTarsSettings),
 			}
@@ -145,7 +126,7 @@ export default class FormPlugin extends Plugin {
 		DebugLogger.setDebugLevel(this.settings.tars?.settings?.debugLevel ?? 'error');
 		
 		formScriptService.refresh(this.settings.scriptFolder)
-		formIntegrationService.initialize(this);
+		formIntegrationService.initialize(this, true);
 		this.refreshTarsFeature();
 	}
 

@@ -228,7 +228,7 @@ export class Zh implements Local {
 	select_file = "选择文件";
 	select_form_file = "选择表单文件";
 	all_files = "所有文件";
-	form_text = "文本";
+	form_text = "编辑文本";
 	text_action_operation = "文本操作";
 	text_action_operation_description = "选择需要执行的文本操作功能";
 	text_action_cleanup = "文本清理";
