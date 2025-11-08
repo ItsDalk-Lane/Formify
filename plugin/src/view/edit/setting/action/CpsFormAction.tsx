@@ -17,6 +17,7 @@ import { Filter, FilterType } from "src/model/filter/Filter";
 import { OperatorType } from "src/model/filter/OperatorType";
 import { FormCondition } from "src/view/shared/filter-content/FormCondition";
 import { v4 } from "uuid";
+import { hasConditions } from "src/service/action/util/hasConditions";
 import ActionTypeSelect from "./common/ActionTypeSelect";
 import CpsFormActionDetailSetting from "./CpsFormActionDetailSetting";
 import useSortableItem from "src/hooks/useSortableItem";
@@ -56,13 +57,28 @@ export default function (props: {
 	};
 
 	const fieldConditionLength = useMemo(() => {
-		if (!value.condition) {
+		// 使用新的hasConditions逻辑来计算实际有效的条件数量
+		if (!value.condition || !value.condition.conditions) {
 			return 0;
 		}
-		if (!value.condition.conditions) {
-			return 0;
-		}
-		return value.condition.conditions.length;
+
+		// 计算实际有效的过滤条件数量（不包括空组）
+		const countValidFilters = (conditions: any[]): number => {
+			if (!conditions || conditions.length === 0) {
+				return 0;
+			}
+
+			return conditions.reduce((count, condition) => {
+				if (condition.type === FilterType.group) {
+					return count + countValidFilters(condition.conditions || []);
+				} else if (condition.property && condition.operator) {
+					return count + 1;
+				}
+				return count;
+			}, 0);
+		};
+
+		return countValidFilters(value.condition.conditions);
 	}, [value.condition]);
 	return (
 		<div
@@ -128,9 +144,14 @@ export default function (props: {
 						<FilterRoot
 							filter={condition}
 							onFilterChange={(filter: Filter) => {
+								// 只有当filter有实际条件时才保存，否则设为null
+								const hasValidConditions = filter &&
+									filter.conditions &&
+									filter.conditions.length > 0;
+
 								const newValue = {
 									...value,
-									condition: filter,
+									condition: hasValidConditions ? filter : null,
 								};
 								saveAction(newValue);
 							}}
