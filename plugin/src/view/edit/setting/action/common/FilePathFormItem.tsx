@@ -1,12 +1,14 @@
 import { Popover as RadixPopover } from "radix-ui";
 import "./FilePathFormItem.css";
-import { FileEdit } from "lucide-react";
-import { TFile, Notice } from "obsidian";
+import { FileEdit, Folder, File } from "lucide-react";
+import { TFile, TFolder, Notice } from "obsidian";
 import { useMemo, useCallback, useState, useRef, useEffect } from "react";
+import { debounce } from "obsidian";
 import { useObsidianApp } from "src/context/obsidianAppContext";
 import { localInstance } from "src/i18n/locals";
 import { openFilePathDirectly } from "src/utils/openFilePathDirectly";
 import { Strings } from "src/utils/Strings";
+import { PathMatcher, PathMatchResult } from "src/utils/PathMatcher";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import { useTriggerSideOffset } from "src/hooks/useTriggerSideOffset";
 
@@ -24,10 +26,7 @@ export function FilePathFormItem(props: {
 			return false;
 		}
 		const file = app.vault.getAbstractFileByPath(value);
-		if (file instanceof TFile) {
-			return true;
-		}
-		return false;
+		return file !== null; // 支持文件和文件夹
 	}, [value]);
 
 	const openFile = useCallback((filePath: string) => {
@@ -40,6 +39,8 @@ export function FilePathFormItem(props: {
 			new Notice(localInstance.file_not_found + ": " + filePath);
 			return;
 		}
+
+		// 使用统一的文件打开方式（支持文件和文件夹）
 		openFilePathDirectly(app, filePath, "modal");
 	}, []);
 
@@ -72,31 +73,56 @@ function MarkdownFileList(props: {
 	const { value, onChange } = props;
 	const [open, setOpen] = useState(false);
 	const [activeIndex, setActiveIndex] = useState(-1);
+	const [searchValue, setSearchValue] = useState(value);
+	const [isLoading, setIsLoading] = useState(false);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const listRef = useRef<HTMLDivElement>(null);
 	const triggerRef = useRef<HTMLSpanElement>(null);
 	const app = useObsidianApp();
-	const items = useMemo(() => {
-		const files = app.vault.getMarkdownFiles();
-		const options = files
-			.filter((f) => {
-				if (value === "") {
-					return true;
-				}
-				const path = Strings.safeToLowerCaseString(f.path);
-				const searchValue = Strings.safeToLowerCaseString(value);
-				return path.includes(searchValue);
-			})
-			.slice(0, 100)
-			.map((f) => {
-				return {
-					id: f.path,
-					value: f.path,
-					label: f.path,
-				};
-			});
-		return options;
+
+	// 同步外部value变化到内部searchValue
+	useEffect(() => {
+		setSearchValue(value);
 	}, [value]);
+
+	// 防抖搜索函数
+	const debouncedSearch = useMemo(
+		() => debounce((newValue: string) => {
+			setSearchValue(newValue);
+			setIsLoading(false);
+		}, 150),
+		[]
+	);
+	const items = useMemo(() => {
+		try {
+			// 获取所有文件和文件夹
+			const allFiles = PathMatcher.getAllFilesAndFolders(app.vault);
+
+			// 使用智能路径匹配算法
+			const matchResults = PathMatcher.matchPaths(searchValue, allFiles);
+
+			// 限制结果数量并转换为组件所需格式
+			const options = matchResults
+				.slice(0, 100)
+				.map((result: PathMatchResult) => {
+					return {
+						id: result.path,
+						value: result.path,
+						label: result.path,
+						type: result.type,
+						name: result.name,
+						extension: result.extension,
+						score: result.score
+					};
+				});
+
+			return options;
+		} catch (error) {
+			console.error("路径匹配失败:", error);
+			new Notice("路径检索失败，请重试");
+			return [];
+		}
+	}, [searchValue]);
 
 	// 滚动到活跃项
 	useEffect(() => {
@@ -172,6 +198,8 @@ function MarkdownFileList(props: {
 						onChange={(e) => {
 							const newValue = e.target.value;
 							onChange(newValue);
+							setIsLoading(true);
+							debouncedSearch(newValue);
 						}}
 						placeholder={props.placeholder}
 						onKeyDown={handleKeyDown}
@@ -180,7 +208,16 @@ function MarkdownFileList(props: {
 						className="form--FormFilePathSuggestList"
 						ref={listRef}
 					>
-						{items.map((item, index) => {
+						{isLoading && (
+							<div className="form--FilePathLoading">
+								搜索中...
+							</div>
+						)}
+						{!isLoading && items.map((item, index) => {
+							const icon = item.type === 'folder' ?
+								<Folder size={14} className="form--FilePathIcon" /> :
+								<File size={14} className="form--FilePathIcon" />;
+
 							return (
 								<div
 									key={item.id}
@@ -194,7 +231,16 @@ function MarkdownFileList(props: {
 										setOpen(false);
 									}}
 								>
-									{item.label}
+									<div className="form--FilePathItemContent">
+										{icon}
+										<div className="form--FilePathText">
+											<div className="form--FilePathName">{item.name}</div>
+											{item.type === 'file' && item.extension && (
+												<div className="form--FilePathExtension">.{item.extension}</div>
+											)}
+											<div className="form--FilePathPath">{item.value}</div>
+										</div>
+									</div>
 								</div>
 							);
 						})}
