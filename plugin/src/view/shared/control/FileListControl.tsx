@@ -185,7 +185,7 @@ export function FileListControl(props: {
 		}
 	}, [value]);
 
-	// 处理初始默认值：如果启用了内容提取，且当前值是普通文件路径（非编码格式），则进行内容提取
+	// 处理初始默认值：如果启用了内容提取，处理所有值（包括已编码和未编码的）
 	useEffect(() => {
 		const processInitialValue = async () => {
 			if (!fileListField.extractContent) {
@@ -197,37 +197,34 @@ export function FileListControl(props: {
 				return;
 			}
 
-			// 检查是否需要处理
-			const needsProcessing = currentValues.some((v: string) => {
-				const str = String(v);
-				// 如果不包含编码标记，说明是普通路径，需要处理
-				return !str.includes('<<<FILE_PATH>>>');
-			});
-
-			if (!needsProcessing) {
-				return;
-			}
-
-			// 处理每个值
+			// 处理每个值，包括已编码的值（为了更新元数据处理逻辑）
 			const processedValues = await Promise.all(
 				currentValues.map(async (v: string) => {
-					const filePath = String(v);
-					
-					// 如果已经是编码格式，直接返回
-					if (filePath.includes('<<<FILE_PATH>>>')) {
-						return filePath;
+					const originalValue = String(v);
+
+					// 如果已经是编码格式，先解码获取文件路径
+					let filePath: string;
+					if (originalValue.includes('<<<FILE_PATH>>>')) {
+						const decoded = decodePathAndContent(originalValue);
+						if (decoded) {
+							filePath = decoded.path;
+						} else {
+							filePath = originalValue;
+						}
+					} else {
+						filePath = originalValue;
 					}
 
-					// 否则进行内容提取
+					// 重新读取文件并使用当前元数据设置处理内容
 					const file = app.vault.getFileByPath(filePath);
 					if (!file) {
-						return filePath;
+						return originalValue; // 文件不存在时返回原值
 					}
 
 					try {
 						const content = await app.vault.read(file);
 
-						// 使用增强的元数据处理函数
+						// 使用当前字段的元数据设置重新处理内容
 						const processedContent = processContentWithMetadata(
 							content,
 							fileListField.includeMetadata || false
@@ -236,21 +233,29 @@ export function FileListControl(props: {
 						const encoded = encodePathAndContent(filePath, processedContent);
 						return encoded;
 					} catch (error) {
-						return filePath;
+						console.warn(`Failed to reprocess file "${filePath}":`, error);
+						return originalValue; // 读取失败时返回原值
 					}
 				})
 			);
 
-			// 更新值
-			if (fileListField.multiple) {
-				onValueChange(processedValues);
-			} else {
-				onValueChange(processedValues[0]);
+			// 检查是否有变化，如果有则更新
+			const hasChanged = processedValues.some((newValue, index) => {
+				return newValue !== currentValues[index];
+			});
+
+			if (hasChanged) {
+				// 更新值
+				if (fileListField.multiple) {
+					onValueChange(processedValues);
+				} else {
+					onValueChange(processedValues[0]);
+				}
 			}
 		};
 
 		processInitialValue();
-	}, []); // 只在组件挂载时执行一次
+	}, [fileListField.includeMetadata]); // 当元数据设置改变时重新处理
 
 	const addValue = async (newValue: string, sourceValue: string[]) => {
 		const toInternalLink = (origin: string): string => {
