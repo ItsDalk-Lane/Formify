@@ -25,13 +25,16 @@ export class FormService {
         const actions = getActionsCompatible(config);
         FormValidator.validate(config, idValues);
         
-        // 先处理文件列表字段的编码值，提取纯内容
+        // 先处理文件列表字段的编码值，提取内容（根据元数据设置）
         const decodedIdValues = { ...idValues };
         config.fields.forEach(field => {
             if (field.type === FormFieldType.FILE_LIST) {
                 const fileListField = field as IFileListField;
                 if (fileListField.extractContent && decodedIdValues[field.id] !== undefined) {
-                    const extractedContent = extractContentFromEncodedValue(decodedIdValues[field.id]);
+                    const extractedContent = extractContentFromEncodedValue(
+                        decodedIdValues[field.id],
+                        fileListField.includeMetadata
+                    );
                     decodedIdValues[field.id] = extractedContent;
                 }
             }

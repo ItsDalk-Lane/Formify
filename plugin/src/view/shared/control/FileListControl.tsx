@@ -30,12 +30,13 @@ function decodePathAndContent(encoded: string): { path: string; content: string 
 	return { path, content };
 }
 
-// 导出函数用于从编码的值中提取纯内容（用于表单提交等场景）
-export function extractContentFromEncodedValue(value: any): any {
+// 导出函数用于从编码的值中提取内容（支持动态元数据设置）
+export function extractContentFromEncodedValue(value: any, includeMetadata: boolean = true): any {
 	if (typeof value === 'string') {
 		const decoded = decodePathAndContent(value);
 		if (decoded) {
-			return decoded.content;
+			// 使用增强的元数据处理函数
+			return processContentWithMetadata(decoded.content, includeMetadata);
 		}
 		return value;
 	}
@@ -44,7 +45,8 @@ export function extractContentFromEncodedValue(value: any): any {
 			if (typeof v === 'string') {
 				const decoded = decodePathAndContent(v);
 				if (decoded) {
-					return decoded.content;
+					// 使用增强的元数据处理函数
+					return processContentWithMetadata(decoded.content, includeMetadata);
 				}
 				return v;
 			}
@@ -52,6 +54,72 @@ export function extractContentFromEncodedValue(value: any): any {
 		});
 	}
 	return value;
+}
+
+// 兼容性函数：保持向后兼容，默认包含元数据
+export function extractContentFromEncodedValueLegacy(value: any): any {
+	return extractContentFromEncodedValue(value, true);
+}
+
+// 增强的元数据处理函数：支持多种元数据格式和选项
+export function processContentWithMetadata(
+	content: string,
+	includeMetadata: boolean,
+	options: {
+		stripFrontmatter?: boolean;
+		preserveFormatting?: boolean;
+	} = {}
+): string {
+	const { stripFrontmatter = !includeMetadata, preserveFormatting = true } = options;
+
+	if (!stripFrontmatter) {
+		return content;
+	}
+
+	// 处理多种 YAML frontmatter 格式
+	const frontmatterPatterns = [
+		// 标准 YAML 格式：---\n...\n---
+		/^---\s*\n([\s\S]*?)\n---\s*\n?/,
+		// 替代格式：---\r\n...\r\n---
+		/^---\s*\r\n([\s\S]*?)\r\n---\s*\r\n?/,
+		// 简化格式：---\n...（用于没有结束标记的情况）
+		/^---\s*\n([\s\S]*?)$/m
+	];
+
+	let processedContent = content;
+
+	for (const pattern of frontmatterPatterns) {
+		if (pattern.test(processedContent)) {
+			processedContent = processedContent.replace(pattern, '');
+			break; // 只移除第一个匹配的 frontmatter
+		}
+	}
+
+	// 根据格式化选项处理内容
+	if (preserveFormatting) {
+		return processedContent.trim();
+	} else {
+		// 移除多余的空行和空白字符
+		return processedContent.replace(/\n\s*\n\s*\n/g, '\n\n').trim();
+	}
+}
+
+// 提取文件的元数据（如果需要单独处理元数据）
+export function extractFrontmatter(content: string): string | null {
+	const frontmatterPattern = /^---\s*\n([\s\S]*?)\n---\s*\n?/;
+	const match = content.match(frontmatterPattern);
+
+	if (match && match[1]) {
+		return match[1].trim();
+	}
+
+	return null;
+}
+
+// 检查内容是否包含 frontmatter
+export function hasFrontmatter(content: string): boolean {
+	const frontmatterPattern = /^---\s*\n/;
+	return frontmatterPattern.test(content);
 }
 
 export function FileListControl(props: {
@@ -159,11 +227,11 @@ export function FileListControl(props: {
 					try {
 						const content = await app.vault.read(file);
 
-						let processedContent = content;
-						if (!fileListField.includeMetadata) {
-							const frontmatterRegex = /^---\n([\s\S]*?)\n---\n/;
-							processedContent = content.replace(frontmatterRegex, '').trim();
-						}
+						// 使用增强的元数据处理函数
+						const processedContent = processContentWithMetadata(
+							content,
+							fileListField.includeMetadata || false
+						);
 
 						const encoded = encodePathAndContent(filePath, processedContent);
 						return encoded;
@@ -201,19 +269,15 @@ export function FileListControl(props: {
 			if (!file) {
 				return filePath; // 文件不存在时返回路径
 			}
-			
+
 			try {
 				const content = await app.vault.read(file);
-				
-				// 如果不包含元数据，则移除YAML Frontmatter
-				if (!fileListField.includeMetadata) {
-					// 移除YAML frontmatter
-					const frontmatterRegex = /^---\n([\s\S]*?)\n---\n/;
-					const contentWithoutFrontmatter = content.replace(frontmatterRegex, '').trim();
-					return contentWithoutFrontmatter;
-				}
-				
-				return content;
+
+				// 使用增强的元数据处理函数
+				return processContentWithMetadata(
+					content,
+					fileListField.includeMetadata || false
+				);
 			} catch (error) {
 				return filePath; // 读取失败时返回路径
 			}
