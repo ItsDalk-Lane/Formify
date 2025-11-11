@@ -14,15 +14,18 @@ import { extractContentFromEncodedValue } from "src/view/shared/control/FileList
 import { FormFieldType } from "src/model/enums/FormFieldType";
 import { IFileListField } from "src/model/field/IFileListField";
 import { FormFieldValueProcessor } from "./engine/FormFieldValueProcessor";
+import { FormExecutionManager } from "./FormExecutionManager";
 
 export interface FormSubmitOptions {
-    app: App
+    app: App;
+    abortSignal?: AbortSignal;  // 用于中断表单执行的信号
 }
 
 export class FormService {
 
     async submit(idValues: FormIdValues, config: FormConfig, options: FormSubmitOptions) {
         const actions = getActionsCompatible(config);
+        
         FormValidator.validate(config, idValues);
         
         // 先处理文件列表字段的编码值，提取内容（根据元数据设置）
@@ -53,7 +56,8 @@ export class FormService {
             state: {
                 idValues: visibleIdValues,
                 values: formLabelValues,
-            }
+            },
+            abortSignal: options.abortSignal  // 传递中断信号
         }
         chain.validate(actionContext);
         // run all action sequentially
@@ -61,19 +65,39 @@ export class FormService {
     }
 
     async submitDirectly(formConfig: FormConfig, app: App) {
+        const executionManager = FormExecutionManager.getInstance(app);
+        
         try {
+            // 启动执行监控
+            const abortController = executionManager.startExecution(
+                formConfig.enableExecutionTimeout ?? false,
+                formConfig.executionTimeoutThreshold ?? 30
+            );
+            
             const formIdValues = resolveDefaultFormIdValues(formConfig.fields);
             const context: FormSubmitOptions = {
                 app: app,
+                abortSignal: abortController.signal,
             };
             const promise = this.submit(formIdValues, formConfig, context);
-            showPromiseToast(promise, {
-                loadingMessage: localInstance.handling,
-                successMessage: localInstance.submit_success,
-                successDuration: 3000
+            
+            // 完成后清理
+            promise.finally(() => {
+                executionManager.finishExecution();
             });
+            
+            // 根据配置决定是否显示提交成功提示
+            if (formConfig.showSubmitSuccessToast !== false) {
+                showPromiseToast(promise, {
+                    loadingMessage: localInstance.handling,
+                    successMessage: localInstance.submit_success,
+                    successDuration: 3000
+                });
+            }
+            
             return promise;
         } catch (e) {
+            executionManager.finishExecution();
             ToastManager.error(e.message || localInstance.unknown_error, 5000);
         }
     }

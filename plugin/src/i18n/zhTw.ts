@@ -16,6 +16,15 @@ export class ZhTw implements Local {
 	at_cursor = "當前游標處";
 	auto_submit = "自動提交";
 	auto_submit_description = "通過命令打開表單時自動提交，不顯示表單界面";
+	show_submit_success_toast = "顯示提交成功提示";
+	show_submit_success_toast_description = "提交表單成功後顯示提示消息";
+	enable_second_precision = "啟用秒級精度";
+	enable_execution_timeout = "啟用表單執行逾時控制";
+	execution_timeout_threshold = "逾時閾值（秒）";
+	execution_timeout_threshold_description = "表單執行超過此時間後顯示停止按鈕，最小值為 5 秒";
+	execution_timeout_min_value_error = "逾時閾值不能低於 5 秒";
+	stop_execution = "停止執行";
+	execution_stopped = "表單執行已停止";
 	basic_setting = "基本設定";
 	tars_setting = "AI 助手";
 	bottom_below_title = "指定標題下最後一行";
@@ -108,6 +117,8 @@ export class ZhTw implements Local {
 	label = "名稱";
 	less_than = "小於";
 	less_than_or_equal = "小於等於";
+	time_before = "早於";
+	time_after = "晚於";
 	list = "列表";
 	locate_position_in_file_list = "在檔案目錄中定位";
 	mode = "模式";

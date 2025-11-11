@@ -15,15 +15,21 @@ import CpsFormItem from "../shared/CpsFormItem";
 import { ToastManager } from "../../component/toast/ToastManager";
 import CpsFormButtonLoading from "./animation/CpsFormButtonLoading";
 import CalloutBlock from "src/component/callout-block/CalloutBlock";
+import { FormConfig } from "src/model/FormConfig";
+import { useObsidianApp } from "src/context/obsidianAppContext";
+import { FormExecutionManager } from "src/service/FormExecutionManager";
 
 type Props = {
 	fields: IFormField[];
-	onSubmit: (values: FormIdValues) => Promise<void>;
+	onSubmit: (values: FormIdValues, abortSignal?: AbortSignal) => Promise<void>;
 	afterSubmit?: (values: FormIdValues) => void;
+	showSubmitSuccessToast?: boolean;  // 是否显示提交成功提示
+	formConfig?: FormConfig;  // 表单配置，用于获取超时控制设置
 } & Omit<HTMLAttributes<HTMLDivElement>, "defaultValue">;
 
 export function CpsFormRenderView(props: Props) {
-	const { fields, onSubmit, afterSubmit, className, ...rest } = props;
+	const { fields, onSubmit, afterSubmit, showSubmitSuccessToast = true, formConfig, className, ...rest } = props;
+	const app = useObsidianApp();
 	const [formIdValues, setFormIdValues] = useState<FormIdValues>(
 		resolveDefaultFormIdValues(fields)
 	);
@@ -68,6 +74,16 @@ export function CpsFormRenderView(props: Props) {
 			return;
 		}
 
+		const shouldDeferAfterSubmit = !!formConfig?.enableExecutionTimeout;
+		const submittedValues = { ...formIdValues };
+		let aborted = false;
+
+		// 使用全局执行管理器
+		const executionManager = FormExecutionManager.getInstance(app);
+		const abortController = executionManager.startExecution(
+			formConfig?.enableExecutionTimeout ?? false,
+			formConfig?.executionTimeoutThreshold ?? 30
+		);
 	
 		setSubmitState({
 			submitting: true,
@@ -76,18 +92,36 @@ export function CpsFormRenderView(props: Props) {
 		});
 
 		// 立即调用 afterSubmit，关闭模态框（如果有）
-		// 这样用户体验更好，不需要等待动作完成
-		afterSubmit?.(formIdValues);
+		// 当启用超时控制时延迟到执行完成后再关闭，方便用户查看停止按钮
+		if (!shouldDeferAfterSubmit) {
+			afterSubmit?.(submittedValues);
+		}
 
 		try {
-			await onSubmit(formIdValues);
+			await onSubmit(formIdValues, abortController.signal);
+			
+			// 检查是否被中断
+			if (abortController.signal.aborted) {
+				aborted = true;
+				return;
+			}
+			
 			setSubmitState({
 				submitting: false,
 				error: false,
 				errorMessage: "",
 			});
-			ToastManager.success(localInstance.submit_success);
+			// 根据配置决定是否显示提交成功提示
+			if (showSubmitSuccessToast) {
+				ToastManager.success(localInstance.submit_success);
+			}
 		} catch (e) {
+			// 检查是否被中断
+			if (abortController.signal.aborted) {
+				aborted = true;
+				return;
+			}
+			
 			setSubmitState({
 				submitting: false,
 				error: true,
@@ -95,12 +129,20 @@ export function CpsFormRenderView(props: Props) {
 			});
 			ToastManager.error(e.message || localInstance.unknown_error, 3000);
 			return;
+		} finally {
+			executionManager.finishExecution();
+			if (shouldDeferAfterSubmit && !aborted) {
+				afterSubmit?.(submittedValues);
+			}
 		}
 		setFormIdValues(resolveDefaultFormIdValues(fields));
 	};
+	
+	// 停止表单执行已由全局管理器处理，不再需要本地实现
 
 	useAnotherKeyToSubmitForm(
 		() => {
+			// 注意：这里不传递 abortSignal，因为快捷键提交时没有超时控制
 			onSubmit(formIdValues);
 		},
 		settingRef,

@@ -16,6 +16,15 @@ export class Zh implements Local {
 	at_cursor = "当前光标处";
 	auto_submit = "自动提交";
 	auto_submit_description = "通过命令打开表单时自动提交，不显示表单界面";
+	show_submit_success_toast = "显示提交成功提示";
+	show_submit_success_toast_description = "提交表单成功后显示提示消息";
+	enable_second_precision = "启用秒级精度";
+	enable_execution_timeout = "启用表单执行超时控制";
+	execution_timeout_threshold = "超时阈值（秒）";
+	execution_timeout_threshold_description = "表单执行超过此时间后显示停止按钮，最小值为 5 秒";
+	execution_timeout_min_value_error = "超时阈值不能低于 5 秒";
+	stop_execution = "停止执行";
+	execution_stopped = "表单执行已停止";
 	basic_setting = "基本设置";
 	tars_setting = "AI 助手";
 	bottom_below_title = "指定标题下最后一行";
@@ -108,6 +117,8 @@ export class Zh implements Local {
 	label = "名称";
 	less_than = "小于";
 	less_than_or_equal = "小于等于";
+	time_before = "早于";
+	time_after = "晚于";
 	list = "列表";
 	locate_position_in_file_list = "在文件目录中定位";
 	mode = "模式";

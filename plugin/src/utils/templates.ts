@@ -45,19 +45,19 @@ export function processObTemplateInContext(templateContent: any, context: Contex
     const timeWithOffsetRegex = /{{time:([+-]\d+.*?)}}/g;
     res = res.replace(timeWithOffsetRegex, (match, offset) => {
         const calculatedTime = DateTimeCalculator.calculateTimeOffset(momentTime, offset);
-        return calculatedTime.format("HH:mm");
+        return calculatedTime.format("HH:mm:ss");
     });
 
     // 处理 {{time:format}} 格式（普通时间格式化）
     const timeFormatRegex = /{{time:((?![+-]\d).*?)}}/g;
     res = res.replace(timeFormatRegex, (match, format) => {
-        return momentTime.format(format?.trim() || "HH:mm");
+        return momentTime.format(format?.trim() || "HH:mm:ss");
     });
 
     // 处理 {{time}} 格式（默认格式）
     const timeRegex = /{{time}}/g;
     res = res.replace(timeRegex, () => {
-        return momentTime.format("HH:mm");
+        return momentTime.format("HH:mm:ss");
     });
 
     // 处理 {{random:<length>}} 格式（生成随机字符串）

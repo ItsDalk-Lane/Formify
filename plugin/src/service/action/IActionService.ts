@@ -27,6 +27,7 @@ export interface ActionContext {
     state: FormState;
     config: FormConfig;
     app: App;
+    abortSignal?: AbortSignal;  // 用于中断表单执行的信号
 }
 
 export class ActionChain {
@@ -61,31 +62,46 @@ export class ActionChain {
         }
     }
 
-    async next(context: ActionContext) {
+    async next(context: ActionContext): Promise<void> {
+        // 检查是否已中断
+        if (context.abortSignal?.aborted) {
+            return Promise.resolve();
+        }
+        
         if (this.index >= this.actions.length) {
             return Promise.resolve();
         }
+
         const action = this.actions[this.index];
         this.index++;
-        const actionService = this.actionServices.find(service => service.accept(action, context));
-        if (!actionService) {
+        
+        // 执行前再次检查
+        if (context.abortSignal?.aborted) {
+            return Promise.resolve();
+        }
+
+        // 检查条件
+        if (action.condition) {
+            const result = FilterService.match(
+                action.condition,
+                (property) => property ? context.state.idValues[property] : undefined,
+                (value) => value
+            );
+            if (!result) {
+                // 条件不匹配，直接跳到下一个
+                return this.next(context);
+            }
+        }
+
+        // 条件匹配或无条件，执行当前动作
+        const service = this.actionServices.find(s => s.accept(action, context));
+        if (!service) {
             throw new Error(`No action service found for action type ${action.type}`);
         }
+        
+        await service.run(action, context, this);
 
-        if (hasConditions(action)) {
-            const idValues = context.state.idValues;
-            const isMatch = FilterService.match(action.condition!,
-                prop => prop ? idValues[prop] : undefined,
-                value => value === undefined ? undefined : value
-            )
-            if (isMatch) {
-                await actionService.run(action, context, this);
-            } else {
-                await this.next(context);
-            }
-        } else {
-            await actionService.run(action, context, this);
-        }
-
+        // 继续执行下一个动作
+        return this.next(context);
     }
 }

@@ -16,6 +16,15 @@ export class En implements Local {
 	at_cursor = "At cursor";
 	auto_submit = "Auto submit";
 	auto_submit_description = "Automatically submit the form without showing the UI when opened via command";
+	show_submit_success_toast = "Show success toast";
+	show_submit_success_toast_description = "Display a success message after form submission";
+	enable_second_precision = "Enable second precision";
+	enable_execution_timeout = "Enable execution timeout control";
+	execution_timeout_threshold = "Timeout threshold (seconds)";
+	execution_timeout_threshold_description = "Show stop button after form execution exceeds this time, minimum value is 5 seconds";
+	execution_timeout_min_value_error = "Timeout threshold cannot be less than 5 seconds";
+	stop_execution = "Stop execution";
+	execution_stopped = "Form execution stopped";
 	basic_setting = "Basic settings";
 	tars_setting = "AI Assistants";
 	bottom_below_title = "Bottom below title";
@@ -108,6 +117,8 @@ export class En implements Local {
 	label = "Label";
 	less_than = "Less than";
 	less_than_or_equal = "Less than or equal";
+	time_before = "Before";
+	time_after = "After";
 	list = "List";
 	locate_position_in_file_list = "Locate position in file list";
 	mode = "Mode";

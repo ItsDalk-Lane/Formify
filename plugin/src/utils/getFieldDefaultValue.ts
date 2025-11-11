@@ -41,7 +41,7 @@ export function getFieldDefaultValue(
                 case FormFieldType.DATE:
                     return DateTime.now().toISODate();
                 case FormFieldType.TIME:
-                    return DateTime.now().toFormat("HH:mm");
+                    return DateTime.now().toFormat("HH:mm:ss");
                 case FormFieldType.DATETIME:
                     return DateTime.now().toFormat(OBSIDIAN_DATETIME_YAML_VALUE_FORMAT);
             }

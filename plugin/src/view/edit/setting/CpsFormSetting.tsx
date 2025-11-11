@@ -201,6 +201,73 @@ export default function (props: {
 										}}
 									/>
 								</CpsFormItem>
+								<CpsFormItem label={localInstance.show_submit_success_toast}>
+									<span className="form--FormFieldLabelDescription">
+										{localInstance.show_submit_success_toast_description}
+									</span>
+									<ToggleControl
+										value={formConfig.showSubmitSuccessToast !== false}
+										onValueChange={(v) => {
+											const newConfig = new FormConfig(formConfig.id);
+											Object.assign(newConfig, {
+												...formConfig,
+												showSubmitSuccessToast: v,
+											});
+											onChange(newConfig);
+										}}
+									/>
+								</CpsFormItem>
+								<CpsFormItem label={localInstance.enable_execution_timeout}>
+									<span className="form--FormFieldLabelDescription">
+										{localInstance.execution_timeout_threshold_description}
+									</span>
+									<ToggleControl
+										value={formConfig.enableExecutionTimeout === true}
+										onValueChange={(v) => {
+											const newConfig = new FormConfig(formConfig.id);
+											Object.assign(newConfig, {
+												...formConfig,
+												enableExecutionTimeout: v,
+											});
+											onChange(newConfig);
+										}}
+									/>
+								</CpsFormItem>
+								{formConfig.enableExecutionTimeout && (
+									<CpsFormItem label={localInstance.execution_timeout_threshold}>
+										<input
+											type="number"
+											min="5"
+											step="1"
+											value={formConfig.executionTimeoutThreshold ?? 30}
+											onChange={(e) => {
+												const value = parseInt(e.target.value);
+												if (value < 5) {
+													// 如果值小于5，显示错误提示
+													return;
+												}
+												const newConfig = new FormConfig(formConfig.id);
+												Object.assign(newConfig, {
+													...formConfig,
+													executionTimeoutThreshold: value,
+												});
+												onChange(newConfig);
+											}}
+											onBlur={(e) => {
+												const value = parseInt(e.target.value);
+												if (value < 5) {
+													// 重置为最小值
+													const newConfig = new FormConfig(formConfig.id);
+													Object.assign(newConfig, {
+														...formConfig,
+														executionTimeoutThreshold: 5,
+													});
+													onChange(newConfig);
+												}
+											}}
+										/>
+									</CpsFormItem>
+								)}
 							</CpsFormSettingGroup>
 						</CpsForm>
 					),

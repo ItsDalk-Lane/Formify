@@ -11,6 +11,7 @@ import { FolderPathControl } from "./FolderPathControl";
 import RadioControl from "./RadioControl";
 import SelectControl from "./SelectControl";
 import ToggleControl from "./ToggleControl";
+import { BaseTimeField } from "src/model/field/time/BaseTimeField";
 
 export function CpsFormFieldControl(props: {
 	field: IFormField;
@@ -92,11 +93,17 @@ export function CpsFormFieldControl(props: {
 	}
 
 	if (field.type === FormFieldType.TIME) {
+		const timeField = field as BaseTimeField;
+		// 根据 enableSecondPrecision 属性决定是否启用秒级精度
+		// 默认启用秒级精度（向后兼容）
+		const stepValue = timeField.enableSecondPrecision !== false ? "1" : "60";
+		
 		return (
 			<input
 				id={field.id}
 				data-name={field.label}
 				type="time"
+				step={stepValue}
 				value={actualValue}
 				required={field.required}
 				onChange={(e) => onValueChange(e.target.value)}

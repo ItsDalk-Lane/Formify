@@ -8,6 +8,8 @@ import { isTimeFormField } from "src/utils/isTimeFormField";
 import { CpsFormFieldControl } from "src/view/shared/control/CpsFormFieldControl";
 import "./DateFieldDefaultValueControl.css";
 import Toggle from "src/component/toggle/Toggle";
+import ToggleControl from "src/view/shared/control/ToggleControl";
+import { FormFieldType } from "src/model/enums/FormFieldType";
 
 export function DateFieldDefaultValueControl(props: {
 	field: IFormField;
@@ -59,6 +61,24 @@ export function DateFieldDefaultValueControl(props: {
 						onChange(newField);
 					}}
 				/>
+			)}
+			{/* 仅当字段类型为 TIME 时显示秒级精度控制开关 */}
+			{field.type === FormFieldType.TIME && (
+				<div style={{ marginTop: "8px" }}>
+					<label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+						<span>{localInstance.enable_second_precision}</span>
+						<ToggleControl
+							value={dateField.enableSecondPrecision !== false}
+							onValueChange={(v) => {
+								const newField = {
+									...field,
+									enableSecondPrecision: v,
+								} as BaseTimeField;
+								onChange(newField);
+							}}
+						/>
+					</label>
+				</div>
 			)}
 		</div>
 	);

@@ -9,6 +9,8 @@ import { GteOperatorHandler } from "./number/GteOperatorHandler";
 import { GtOperatorHandler } from "./number/GtOperatorHandler";
 import { LteOperatorHandler } from "./number/LteOperatorHandler";
 import { LtOperatorHandler } from "./number/LtOperatorHandler";
+import { TimeBeforeOperatorHandler } from "./time/TimeBeforeOperatorHandler";
+import { TimeAfterOperatorHandler } from "./time/TimeAfterOperatorHandler";
 
 export class OperatorHandlers {
 
@@ -22,7 +24,9 @@ export class OperatorHandlers {
         new ContainsOperatorHandler(),
         new NotContainsOperatorHandler(),
         new HasValueOperatorHandler(),
-        new NoValueOperatorHandler()
+        new NoValueOperatorHandler(),
+        new TimeBeforeOperatorHandler(),
+        new TimeAfterOperatorHandler()
         // new InOperatorHandler(),
         // new NInOperatorHandler(),
         // new LikeOperatorHandler(),

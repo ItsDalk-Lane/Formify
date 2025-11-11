@@ -12,6 +12,9 @@ export class FormConfig {
     action?: IFormAction;
     actions: IFormAction[];
     autoSubmit: boolean;
+    showSubmitSuccessToast?: boolean;  // 是否显示提交成功提示，默认为true
+    enableExecutionTimeout?: boolean;  // 是否启用表单执行超时控制，默认为false
+    executionTimeoutThreshold?: number; // 超时阈值（秒），默认为30秒，最小值为5秒
     commandId?: string;        // 命令ID，一旦生成永不改变
     commandEnabled?: boolean;  // 命令启用状态
 
@@ -20,6 +23,9 @@ export class FormConfig {
         this.fields = [];
         this.actions = [];
         this.autoSubmit = false;
+        this.showSubmitSuccessToast = true;  // 默认显示提交成功提示
+        this.enableExecutionTimeout = false; // 默认不启用超时控制
+        this.executionTimeoutThreshold = 30; // 默认30秒
         this.commandEnabled = true;  // 默认启用命令
     }
 

@@ -14,6 +14,15 @@ export interface Local {
 	at_cursor: string;
 	auto_submit_description: string;
 	auto_submit: string;
+	show_submit_success_toast: string;
+	show_submit_success_toast_description: string;
+	enable_second_precision: string;
+	enable_execution_timeout: string;
+	execution_timeout_threshold: string;
+	execution_timeout_threshold_description: string;
+	execution_timeout_min_value_error: string;
+	stop_execution: string;
+	execution_stopped: string;
 	basic_setting: string;
 	tars_setting: string;
 	bottom_below_title: string;
@@ -102,6 +111,8 @@ export interface Local {
 	label: string;
 	less_than_or_equal: string;
 	less_than: string;
+	time_before: string;
+	time_after: string;
 	list: string;
 	locate_position_in_file_list: string;
 	mode: string;

@@ -64,6 +64,17 @@ export function ConditionOperator(props: {
 		},
 	];
 
+	const timeOperators = [
+		{
+			value: OperatorType.TimeBefore,
+			label: localInstance.time_before,
+		},
+		{
+			value: OperatorType.TimeAfter,
+			label: localInstance.time_after,
+		},
+	];
+
 	const listOperators = [
 		{
 			value: OperatorType.Contains,
@@ -85,6 +96,15 @@ export function ConditionOperator(props: {
 			field?.type === FormFieldType.TOGGLE
 		) {
 			return [...commomOperators, ...checkedOperators];
+		}
+
+		// 日期时间类型字段支持时间比较符
+		if (
+			field?.type === FormFieldType.DATE ||
+			field?.type === FormFieldType.TIME ||
+			field?.type === FormFieldType.DATETIME
+		) {
+			return [...commomOperators, ...timeOperators, ...valueOperators];
 		}
 
 		const isList = [FormFieldType.SELECT, FormFieldType.RADIO].includes(

@@ -25,21 +25,24 @@ export default function (props: Props) {
 		return [...formConfig.fields, ...runtimeFields];
 	}, [formConfig.fields, formConfig.actions, app]);
 	
-	const onSubmit = async (values: FormIdValues) => {
-		const context: FormSubmitOptions = {
+	const formService = new FormService();
+	
+	const submit = async (idValues: FormIdValues, abortSignal?: AbortSignal) => {
+		await formService.submit(idValues, formConfig, {
 			app: app,
-		};
-		const formService = new FormService();
-		await formService.submit(values, formConfig, context);
+			abortSignal: abortSignal,
+		});
 	};
 
 	return (
 		<CpsFormRenderView
 			fields={fieldsWithRuntime}
-			onSubmit={onSubmit}
+			onSubmit={submit}
 			afterSubmit={(state) => {
 				viewOptions.afterSubmit?.(state);
 			}}
+			showSubmitSuccessToast={formConfig.showSubmitSuccessToast}
+			formConfig={formConfig}
 		/>
 	);
 }

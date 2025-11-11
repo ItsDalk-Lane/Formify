@@ -11,7 +11,7 @@ export const internalFieldNames = [
 	},
 	{
 		name: "{{time}}",
-		description: DateTime.now().toFormat("HH:mm"),
+		description: DateTime.now().toFormat("HH:mm:ss"),
 	},
 	{
 		name: "{{date:YYYY-MM-DDTHH:mm}}",
@@ -28,7 +28,7 @@ export const internalFieldNames = [
 	},
 	{
 		name: "{{time:+1小时}}",
-		description: DateTime.now().plus({ hours: 1 }).toFormat("HH:mm") + " (当前时间+1小时)",
+		description: DateTime.now().plus({ hours: 1 }).toFormat("HH:mm:ss") + " (当前时间+1小时)",
 		tooltip: "支持时间运算：\n• {{time:+数字小时}} 或 {{time:+数字hour}}\n• {{time:-数字小时}} 或 {{time:-数字hour}}\n• {{time:+数字分钟}} 或 {{time:+数字minute}}\n• {{time:-数字分钟}} 或 {{time:-数字minute}}\n• 支持组合：{{time:+1小时30分钟}}",
 	},
 	{
