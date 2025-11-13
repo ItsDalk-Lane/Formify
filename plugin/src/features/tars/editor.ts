@@ -535,7 +535,13 @@ export const generate = async (
 
 		statusBarManager.setSuccessStatus(stats)
 
-		if (llmResponse.length === 0) {
+		// 检查是否有有效内容（文本或图片）
+		const hasValidContent = llmResponse.length > 0 ||
+			/\!\[\[.*?\]\]/.test(llmResponse) || // 检查是否有图片附件标记
+			/📷.*?图片/.test(llmResponse) || // 检查是否有图片生成标记
+			/data:image/.test(llmResponse) // 检查是否有 base64 图片数据
+
+		if (!hasValidContent) {
 			throw new Error(t('No text generated'))
 		}
 
@@ -553,7 +559,11 @@ export const generate = async (
 		if (controller.signal.aborted) {
 			throw new DOMException('Operation was aborted', 'AbortError')
 		}
-		new Notice(t('Text generated successfully'))
+		// 根据内容类型显示不同的成功消息
+		const successMessage = /\!\[\[.*?\]\]/.test(llmResponse) || /📷.*?图片/.test(llmResponse)
+			? '✅ 图片生成成功！'
+			: t('Text generated successfully')
+		new Notice(successMessage)
 	} finally {
 		requestController.cleanup()
 	}

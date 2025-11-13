@@ -22,13 +22,33 @@ export interface OpenRouterOptions extends BaseOptions {
 	imageDisplayWidth?: number // 图片显示宽度
 }
 
+// 已知的 OpenRouter 图像生成模型（根据官方文档更新）
+export const IMAGE_GENERATION_MODELS = [
+	'google/gemini-2.5-flash-image-preview', // 官方推荐的图片生成模型
+	'google/gemini-2.0-flash-exp', // 支持图片生成
+	'google/gemini-2.0-flash-thinking-exp',
+	'google/gemini-2.0-flash-exp:freedom',
+	'google/gemini-2.0-flash-exp:extended',
+	'google/gemini-2.0-flash-exp-image-gen'
+]
+
 /**
  * 判断模型是否支持图像生成
- * 根据模型名称中是否包含 "image" 来判断
+ * 根据已知的图像生成模型列表来判断
  */
 export const isImageGenerationModel = (model: string): boolean => {
 	if (!model) return false
-	return model.toLowerCase().includes('image')
+
+	const modelName = model.toLowerCase()
+
+	// 检查是否在已知图像生成模型列表中
+	if (IMAGE_GENERATION_MODELS.includes(model)) {
+		return true
+	}
+
+	// 检查模型名称中是否包含 "image" 或特定关键字
+	return modelName.includes('image') ||
+		   modelName.includes('gemini') // Gemini 系列模型支持图片生成
 }
 
 /**
@@ -65,6 +85,11 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 
 		// 根据模型自动判断是否支持图像生成
 		const supportsImageGeneration = isImageGenerationModel(model)
+
+		// 如果是图像生成请求但模型不在已知列表中，给出警告
+		if (supportsImageGeneration && !IMAGE_GENERATION_MODELS.includes(model)) {
+			console.warn(`模型 ${model} 可能不支持图像生成，建议使用以下模型之一：`, IMAGE_GENERATION_MODELS.slice(0, 5))
+		}
 
 		// 检查是否是图像生成请求
 		const isImageGenerationRequest = supportsImageGeneration || messages.some(msg => 
@@ -157,10 +182,15 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 				if (errorJson.error) {
 					const error = errorJson.error
 					errorMessage = error.message || errorText
-					
+
+					// 针对无效模型名称的特殊错误提示
+					if (errorMessage.includes('invalid model name') || errorMessage.includes('invalid_model')) {
+						errorMessage = `❌ 无效的模型名称：${model}\n\n推荐的图像生成模型：\n• google/gemini-2.5-flash-image-preview\n• google/gemini-2.0-flash-exp\n• openai/gpt-4o\n• anthropic/claude-3-5-sonnet\n\n请在 OpenRouter 设置中选择正确的模型名称。`
+					}
+
 					// 针对图像生成的特殊错误提示
-					if (supportsImageGeneration && (
-						errorMessage.includes('modalities') || 
+					else if (supportsImageGeneration && (
+						errorMessage.includes('modalities') ||
 						errorMessage.includes('output_modalities') ||
 						errorMessage.includes('not support')
 					)) {
@@ -174,127 +204,221 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 			throw new Error(errorMessage)
 		}
 
-		const reader = response.body?.getReader()
-		if (!reader) {
-			throw new Error('Response body is not readable')
-		}
-		const decoder = new TextDecoder()
-		let buffer = ''
-		
-		// 用于累积图像数据
-		let hasGeneratedImages = false
+		// 检查是否为流式响应
+		const contentType = response.headers.get('content-type') || ''
+		const isStreamingResponse = contentType.includes('text/event-stream') || data.stream
 
-		try {
-			while (true) {
-				const { done, value } = await reader.read()
-				if (done) break
-				// Append new chunk to buffer
-				buffer += decoder.decode(value, { stream: true })
-				// Process complete lines from buffer
+		if (isStreamingResponse) {
+			// 处理流式响应（Server-Sent Events）
+			const reader = response.body?.getReader()
+			if (!reader) {
+				throw new Error('Response body is not readable')
+			}
+			const decoder = new TextDecoder()
+			let buffer = ''
+
+			// 用于累积图像数据
+			let hasGeneratedImages = false
+
+			try {
 				while (true) {
-					const lineEnd = buffer.indexOf('\n')
-					if (lineEnd === -1) break
-					const line = buffer.slice(0, lineEnd).trim()
-					buffer = buffer.slice(lineEnd + 1)
-					if (line.startsWith('data: ')) {
-						const data = line.slice(6)
-						if (data === '[DONE]') break
-						try {
-							const parsed = JSON.parse(data)
-							
-							// 处理文本内容
-							const content = parsed.choices?.[0]?.delta?.content
-							if (content) {
-								yield content
-							}
-							
-							// 处理图像内容（流式或非流式）
-							const delta = parsed.choices?.[0]?.delta
-							const message = parsed.choices?.[0]?.message
-							
-							if ((delta?.images || message?.images) && !hasGeneratedImages) {
-								hasGeneratedImages = true
-								const images = delta?.images || message?.images
-								
-								yield '\n\n'
-								
-								// 处理生成的图像
-								for (let i = 0; i < images.length; i++) {
-									const image = images[i]
-									const imageUrl = image.image_url?.url
-									
-									if (!imageUrl) {
-										console.warn('图像数据缺失 URL')
-										continue
-									}
-									
-									// 如果配置为保存为附件
-									if (imageSaveAsAttachment && saveAttachment) {
-										try {
-											// 从 base64 data URL 中提取数据
-											if (imageUrl.startsWith('data:')) {
-												const base64Data = imageUrl.split(',')[1]
-												const buffer = Buffer.from(base64Data, 'base64')
-												const arrayBuffer = buffer.buffer.slice(
-													buffer.byteOffset,
-													buffer.byteOffset + buffer.byteLength
-												)
-												
-												// 生成文件名
-												const now = new Date()
-												const formatTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
-												const indexFlag = images.length > 1 ? `-${i + 1}` : ''
-												const filename = `openrouter-${formatTime}${indexFlag}.png`
-												
-												// 保存附件
-												await saveAttachment(filename, arrayBuffer)
-												
-												// 输出图片引用
-												yield `![[${filename}|${imageDisplayWidth}]]\n\n`
-											} else {
-												// 如果是 URL 形式但配置要保存为附件，需要下载
-												yield `⚠️ 检测到 URL 格式图片，但配置为保存附件。请手动下载：\n${imageUrl}\n\n`
+					const { done, value } = await reader.read()
+					if (done) break
+					// Append new chunk to buffer
+					buffer += decoder.decode(value, { stream: true })
+					// Process complete lines from buffer
+					while (true) {
+						const lineEnd = buffer.indexOf('\n')
+						if (lineEnd === -1) break
+						const line = buffer.slice(0, lineEnd).trim()
+						buffer = buffer.slice(lineEnd + 1)
+						if (line.startsWith('data: ')) {
+							const data = line.slice(6)
+							if (data === '[DONE]') break
+							try {
+								const parsed = JSON.parse(data)
+
+								// 处理文本内容
+								const content = parsed.choices?.[0]?.delta?.content
+								if (content) {
+									yield content
+								}
+
+								// 处理图像内容（流式）- 根据官方文档
+								const delta = parsed.choices?.[0]?.delta
+
+								if (delta?.images) {
+									const images = delta.images
+
+									// 处理流式图像（每个图像块都处理）
+									for (let i = 0; i < images.length; i++) {
+										const image = images[i]
+										const imageUrl = image.image_url?.url
+
+										if (!imageUrl) {
+											console.warn('流式图像数据缺失 URL')
+											continue
+										}
+
+										console.log('收到流式图像数据:', imageUrl.substring(0, 50) + '...')
+
+										// 如果配置为保存为附件
+										if (imageSaveAsAttachment && saveAttachment) {
+											try {
+												if (imageUrl.startsWith('data:')) {
+													const base64Data = imageUrl.split(',')[1]
+													const buffer = Buffer.from(base64Data, 'base64')
+													const arrayBuffer = buffer.buffer.slice(
+														buffer.byteOffset,
+														buffer.byteOffset + buffer.byteLength
+													)
+
+													// 生成文件名
+													const now = new Date()
+													const formatTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
+													const indexFlag = images.length > 1 ? `-${i + 1}` : ''
+													const filename = `openrouter-${formatTime}${indexFlag}.png`
+
+													await saveAttachment(filename, arrayBuffer)
+													yield `![[${filename}|${imageDisplayWidth}]]\n\n`
+												} else {
+													yield `⚠️ 检测到 URL 格式图片，但配置为保存附件。请手动下载：\n${imageUrl}\n\n`
+												}
+											} catch (error) {
+												console.error('保存流式图片失败:', error)
+												yield `❌ 图片保存失败，URL: ${imageUrl}\n\n`
 											}
-										} catch (error) {
-											console.error('保存图片失败:', error)
-											yield `❌ 图片保存失败，URL: ${imageUrl}\n\n`
-										}
-									} else {
-										// 直接输出 URL 或 base64
-										if (imageUrl.startsWith('data:')) {
-											yield `📷 生成的图片（Base64格式）：\n${imageUrl.substring(0, 100)}...\n\n`
 										} else {
-											yield `📷 生成的图片：\n${imageUrl}\n\n`
+											if (imageUrl.startsWith('data:')) {
+												yield `📷 生成的图片（Base64格式）：\n${imageUrl.substring(0, 100)}...\n\n`
+											} else {
+												yield `📷 生成的图片：\n${imageUrl}\n\n`
+											}
 										}
 									}
 								}
-							}
-							
-							// 处理网络搜索的 annotations（URL citations）
-							// OpenRouter 会在消息中返回 url_citation 注释
-							if (parsed.choices?.[0]?.message?.annotations) {
-								const annotations = parsed.choices[0].message.annotations
-								for (const annotation of annotations) {
-									if (annotation.type === 'url_citation') {
-										const citation = annotation.url_citation
-										// 可以选择在这里处理引用信息
-										// 例如：记录日志或在界面上显示
-										// DebugLogger.debug('Web search citation', {
-										// 	url: citation.url,
-										// 	title: citation.title,
-										// 	content: citation.content
-										// })
+
+								// 处理网络搜索的 annotations（URL citations）
+								// OpenRouter 会在消息中返回 url_citation 注释
+								if (parsed.choices?.[0]?.message?.annotations) {
+									const annotations = parsed.choices[0].message.annotations
+									for (const annotation of annotations) {
+										if (annotation.type === 'url_citation') {
+											const citation = annotation.url_citation
+											// 可以选择在这里处理引用信息
+											// 例如：记录日志或在界面上显示
+											// DebugLogger.debug('Web search citation', {
+											// 	url: citation.url,
+											// 	title: citation.title,
+											// 	content: citation.content
+											// })
+										}
 									}
 								}
+							} catch {
+								// Ignore invalid JSON
 							}
-						} catch {
-							// Ignore invalid JSON
 						}
 					}
 				}
+			} finally {
+				reader.cancel()
 			}
-		} finally {
-			reader.cancel()
+		} else {
+			// 处理非流式响应（JSON 格式）
+			const responseText = await response.text()
+			try {
+				const parsed = JSON.parse(responseText)
+
+				// 处理文本内容
+				const content = parsed.choices?.[0]?.message?.content
+				if (content) {
+					yield content
+				}
+
+				// 处理图像内容
+				const message = parsed.choices?.[0]?.message
+				if (message?.images) {
+					const images = message.images
+
+					yield '\n\n'
+
+					// 处理生成的图像
+					for (let i = 0; i < images.length; i++) {
+						const image = images[i]
+						const imageUrl = image.image_url?.url
+
+						if (!imageUrl) {
+							console.warn('图像数据缺失 URL')
+							continue
+						}
+
+						// 如果配置为保存为附件
+						if (imageSaveAsAttachment && saveAttachment) {
+							try {
+								// 从 base64 data URL 中提取数据
+								if (imageUrl.startsWith('data:')) {
+									const base64Data = imageUrl.split(',')[1]
+									const buffer = Buffer.from(base64Data, 'base64')
+									const arrayBuffer = buffer.buffer.slice(
+										buffer.byteOffset,
+										buffer.byteOffset + buffer.byteLength
+									)
+
+									// 生成文件名
+									const now = new Date()
+									const formatTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
+									const indexFlag = images.length > 1 ? `-${i + 1}` : ''
+									const filename = `openrouter-${formatTime}${indexFlag}.png`
+
+									// 保存附件
+									await saveAttachment(filename, arrayBuffer)
+
+									// 输出图片引用
+									yield `![[${filename}|${imageDisplayWidth}]]\n\n`
+								} else {
+									// 如果是 URL 形式但配置要保存为附件，需要下载
+									yield `⚠️ 检测到 URL 格式图片，但配置为保存附件。请手动下载：\n${imageUrl}\n\n`
+								}
+							} catch (error) {
+								console.error('保存图片失败:', error)
+								yield `❌ 图片保存失败，URL: ${imageUrl}\n\n`
+							}
+						} else {
+							// 直接输出 URL 或 base64
+							if (imageUrl.startsWith('data:')) {
+								yield `📷 生成的图片（Base64格式）：\n${imageUrl.substring(0, 100)}...\n\n`
+							} else {
+								yield `📷 生成的图片：\n${imageUrl}\n\n`
+							}
+						}
+					}
+				}
+
+				// 处理网络搜索的 annotations（URL citations）
+				if (message?.annotations) {
+					const annotations = message.annotations
+					for (const annotation of annotations) {
+						if (annotation.type === 'url_citation') {
+							const citation = annotation.url_citation
+							// 可以选择在这里处理引用信息
+							// DebugLogger.debug('Web search citation', {
+							// 	url: citation.url,
+							// 	title: citation.title,
+							// 	content: citation.content
+							// })
+						}
+					}
+				}
+
+				// 如果既没有文本也没有图像，确保至少输出一些内容
+				if (!content && !message?.images) {
+					yield '📷 图像生成完成，但没有可显示的内容。'
+				}
+			} catch (error) {
+				console.error('解析非流式响应失败:', error)
+				throw new Error(`解析响应失败: ${error.message}`)
+			}
 		}
 	}
 
@@ -503,7 +627,7 @@ export const openRouterVendor: Vendor = {
 	defaultOptions: {
 		apiKey: '',
 		baseURL: 'https://openrouter.ai/api/v1/chat/completions',
-		model: '',
+		model: 'google/gemini-2.5-flash-image-preview', // 默认使用支持图像生成的模型
 		enableWebSearch: false,
 		webSearchEngine: undefined, // undefined 表示自动选择：OpenAI 和 Anthropic 使用 native，其他使用 exa
 		webSearchMaxResults: 5,
