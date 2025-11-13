@@ -1,11 +1,17 @@
 import { EmbedCache, Notice } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SaveAttachment, SendRequest, Vendor } from '.'
-import { arrayBufferToBase64, getCapabilityEmoji, getMimeTypeFromFilename } from './utils'
+import { arrayBufferToBase64, getCapabilityEmoji, getMimeTypeFromFilename, CALLOUT_BLOCK_START, CALLOUT_BLOCK_END } from './utils'
+
+// OpenRouter Reasoning Effort 级别
+export type OpenRouterReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
+
+// OpenRouter Reasoning Effort 选项
+export const OPENROUTER_REASONING_EFFORT_OPTIONS: OpenRouterReasoningEffort[] = ['minimal', 'low', 'medium', 'high']
 
 /**
  * OpenRouter 选项接口
- * 扩展基础选项以支持网络搜索和图像生成功能
+ * 扩展基础选项以支持网络搜索、图像生成和推理功能
  */
 export interface OpenRouterOptions extends BaseOptions {
 	// 网络搜索配置
@@ -20,35 +26,23 @@ export interface OpenRouterOptions extends BaseOptions {
 	imageResponseFormat?: 'url' | 'b64_json' // 图片返回格式
 	imageSaveAsAttachment?: boolean // 是否保存为附件（false则返回URL）
 	imageDisplayWidth?: number // 图片显示宽度
+	
+	// Reasoning 推理配置（支持 Responses API Beta）
+	enableReasoning?: boolean // 是否启用推理功能
+	reasoningEffort?: OpenRouterReasoningEffort // 推理努力级别：minimal/low/medium/high
 }
-
-// 已知的 OpenRouter 图像生成模型（根据官方文档更新）
-export const IMAGE_GENERATION_MODELS = [
-	'google/gemini-2.5-flash-image-preview', // 官方推荐的图片生成模型
-	'google/gemini-2.0-flash-exp', // 支持图片生成
-	'google/gemini-2.0-flash-thinking-exp',
-	'google/gemini-2.0-flash-exp:freedom',
-	'google/gemini-2.0-flash-exp:extended',
-	'google/gemini-2.0-flash-exp-image-gen'
-]
 
 /**
  * 判断模型是否支持图像生成
- * 根据已知的图像生成模型列表来判断
+ * 严格按照 OpenRouter 的命名规则：只有模型名称包含 "image" 的模型才支持图像生成
  */
 export const isImageGenerationModel = (model: string): boolean => {
 	if (!model) return false
 
+	// 严格检查：只有模型名称中包含 "image" 的才认为是图像生成模型
+	// 这符合 OpenRouter 的命名规范，图像生成模型都会在名称中包含 "image" 关键字
 	const modelName = model.toLowerCase()
-
-	// 检查是否在已知图像生成模型列表中
-	if (IMAGE_GENERATION_MODELS.includes(model)) {
-		return true
-	}
-
-	// 检查模型名称中是否包含 "image" 或特定关键字
-	return modelName.includes('image') ||
-		   modelName.includes('gemini') // Gemini 系列模型支持图片生成
+	return modelName.includes('image')
 }
 
 /**
@@ -78,22 +72,29 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 			imageResponseFormat = 'b64_json',
 			imageSaveAsAttachment = true,
 			imageDisplayWidth = 400,
+			enableReasoning = false,
+			reasoningEffort = 'medium',
 			...remains 
 		} = options
 		if (!apiKey) throw new Error(t('API key is required'))
 		if (!model) throw new Error(t('Model is required'))
 
+		// 判断是否使用 Responses API（启用 Reasoning 时需要）
+		const useResponsesAPI = enableReasoning
+		
+		// 确定使用的 API 端点
+		let endpoint = baseURL
+		if (useResponsesAPI && baseURL.includes('/chat/completions')) {
+			// 启用 Reasoning 时，自动切换到 Responses API
+			endpoint = baseURL.replace('/chat/completions', '/responses')
+		}
+
 		// 根据模型自动判断是否支持图像生成
 		const supportsImageGeneration = isImageGenerationModel(model)
 
-		// 如果是图像生成请求但模型不在已知列表中，给出警告
-		if (supportsImageGeneration && !IMAGE_GENERATION_MODELS.includes(model)) {
-			console.warn(`模型 ${model} 可能不支持图像生成，建议使用以下模型之一：`, IMAGE_GENERATION_MODELS.slice(0, 5))
-		}
-
 		// 检查是否是图像生成请求
-		const isImageGenerationRequest = supportsImageGeneration || messages.some(msg => 
-			msg.content?.toLowerCase().includes('生成图片') || 
+		const isImageGenerationRequest = supportsImageGeneration || messages.some(msg =>
+			msg.content?.toLowerCase().includes('生成图片') ||
 			msg.content?.toLowerCase().includes('生成图像') ||
 			msg.content?.toLowerCase().includes('generate image')
 		)
@@ -103,20 +104,45 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 			throw new Error('图像生成需要 saveAttachment 函数支持')
 		}
 
-		// 如果模型支持图像生成但检测到非图像模型特征，给出警告
-		if (supportsImageGeneration && !isImageGenerationModel(model)) {
-			new Notice('⚠️ 警告：当前模型可能不支持图像生成功能。请在 OpenRouter 模型页面确认该模型的输出模态是否包含 "image"', 6000)
-		}
-
-		const formattedMessages = await Promise.all(messages.map((msg) => formatMsg(msg, resolveEmbedAsBinary)))
+	const formattedMessages = await Promise.all(messages.map((msg) => formatMsg(msg, resolveEmbedAsBinary, useResponsesAPI)))
+	
+	// 构建请求数据
+	const data: Record<string, unknown> = {
+		model,
+		// Reasoning 模式必须使用 stream，图像生成时根据配置决定
+		stream: useResponsesAPI ? true : (imageStream || !isImageGenerationRequest),
+	}
+	
+	// 根据 API 类型设置消息字段和参数
+	if (useResponsesAPI) {
+		// Responses API 使用 input 字段
+		data.input = formattedMessages
 		
-		// 构建请求数据
-		const data: Record<string, unknown> = {
-			model,
-			messages: formattedMessages,
-			stream: imageStream || !isImageGenerationRequest, // 图像生成时根据配置决定是否流式
-			...remains
+		// Responses API 需要 max_output_tokens 而不是 max_tokens
+		const remainsObj = remains as any
+		if (remainsObj.max_tokens) {
+			data.max_output_tokens = remainsObj.max_tokens
+			// 从 remains 中移除 max_tokens，避免参数冲突
+			const { max_tokens, ...otherParams } = remainsObj
+			Object.assign(data, otherParams)
+		} else {
+			// 设置默认的 max_output_tokens
+			data.max_output_tokens = 9000
+			Object.assign(data, remains)
 		}
+		
+		// 添加 reasoning 配置
+		if (enableReasoning) {
+			data.reasoning = {
+				effort: reasoningEffort
+			}
+			new Notice(getCapabilityEmoji('Reasoning') + 'Reasoning 模式 (' + reasoningEffort + ')')
+		}
+	} else {
+		// Chat Completions API 使用 messages 字段
+		data.messages = formattedMessages
+		Object.assign(data, remains)
+	}
 
 		// 如果模型支持图像生成，添加 modalities 和 image_config
 		if (supportsImageGeneration) {
@@ -161,7 +187,7 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 			new Notice(getCapabilityEmoji('Web Search') + 'Web Search')
 		}
 
-		const response = await fetch(baseURL, {
+		const response = await fetch(endpoint, {
 			method: 'POST',
 			headers: {
 				Authorization: `Bearer ${apiKey}`,
@@ -219,6 +245,9 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 
 			// 用于累积图像数据
 			let hasGeneratedImages = false
+			
+			// 用于追踪推理过程状态
+			let reasoningActive = false
 
 			try {
 				while (true) {
@@ -237,8 +266,45 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 							if (data === '[DONE]') break
 							try {
 								const parsed = JSON.parse(data)
+								
+								// 处理 Responses API 的推理过程（reasoning）
+								if (useResponsesAPI && parsed.type) {
+									const eventType = parsed.type as string
+									
+									// 处理推理内容
+									if (eventType === 'response.reasoning.delta') {
+										const reasoningText = parsed.delta
+										if (reasoningText) {
+											const prefix = !reasoningActive ? ((reasoningActive = true), CALLOUT_BLOCK_START) : ''
+											const formattedReasoning = reasoningText.replace(/\n/g, '\n> ')
+											yield prefix + formattedReasoning
+										}
+										continue
+									}
+									
+									// 处理输出文本
+									if (eventType === 'response.output_text.delta') {
+										const content = parsed.delta
+										if (content) {
+											if (reasoningActive) {
+												reasoningActive = false
+												yield CALLOUT_BLOCK_END + content
+											} else {
+												yield content
+											}
+										}
+										continue
+									}
+									
+									// 处理完成事件
+									if (eventType === 'response.completed' && reasoningActive) {
+										reasoningActive = false
+										yield CALLOUT_BLOCK_END
+										continue
+									}
+								}
 
-								// 处理文本内容
+								// 处理 Chat Completions API 的文本内容
 								const content = parsed.choices?.[0]?.delta?.content
 								if (content) {
 									yield content
@@ -322,6 +388,10 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 					}
 				}
 			} finally {
+				if (reasoningActive) {
+					reasoningActive = false
+					yield CALLOUT_BLOCK_END
+				}
 				reader.cancel()
 			}
 		} else {
@@ -430,6 +500,7 @@ type ContentItem =
 			}
 	  }
 	| { type: 'text'; text: string }
+	| { type: 'input_text'; text: string }
 	| { type: 'file'; file: { filename: string; file_data: string } }
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp']
@@ -567,8 +638,9 @@ const formatEmbed = async (embed: EmbedCache, resolveEmbedAsBinary: ResolveEmbed
  * 
  * 注意：根据 OpenRouter API 规范，当只有纯文本时返回字符串格式，
  * 当包含图片时返回数组格式（遵循 OpenAI 标准）
+ * Responses API 使用 input_text 类型，Chat Completions API 使用 text 类型
  */
-const formatMsg = async (msg: Message, resolveEmbedAsBinary: ResolveEmbedAsBinary) => {
+const formatMsg = async (msg: Message, resolveEmbedAsBinary: ResolveEmbedAsBinary, useResponsesAPI = false) => {
 	// 处理文本内容和提取图片 URL
 	let remainingText = msg.content ?? ''
 	const textImageUrls = extractImageUrls(remainingText)
@@ -597,10 +669,17 @@ const formatMsg = async (msg: Message, resolveEmbedAsBinary: ResolveEmbedAsBinar
 	
 	// 根据 OpenRouter 文档建议：先添加文本，再添加图片
 	if (sanitizedText) {
-		content.push({
-			type: 'text' as const,
-			text: sanitizedText
-		})
+		if (useResponsesAPI) {
+			content.push({
+				type: 'input_text' as const,
+				text: sanitizedText
+			})
+		} else {
+			content.push({
+				type: 'text' as const,
+				text: sanitizedText
+			})
+		}
 	}
 	
 	// 添加从文本中提取的图片 URL
@@ -627,7 +706,7 @@ export const openRouterVendor: Vendor = {
 	defaultOptions: {
 		apiKey: '',
 		baseURL: 'https://openrouter.ai/api/v1/chat/completions',
-		model: 'google/gemini-2.5-flash-image-preview', // 默认使用支持图像生成的模型
+		model: '', // 默认为空，由用户选择模型
 		enableWebSearch: false,
 		webSearchEngine: undefined, // undefined 表示自动选择：OpenAI 和 Anthropic 使用 native，其他使用 exa
 		webSearchMaxResults: 5,
@@ -637,11 +716,13 @@ export const openRouterVendor: Vendor = {
 		imageResponseFormat: 'b64_json',
 		imageSaveAsAttachment: true,
 		imageDisplayWidth: 400,
+		enableReasoning: false,
+		reasoningEffort: 'medium',
 		parameters: {}
 	} as OpenRouterOptions,
 	sendRequestFunc,
 	models: [],
 	websiteToObtainKey: 'https://openrouter.ai',
-	capabilities: ['Text Generation', 'Image Vision', 'PDF Vision', 'Web Search', 'Image Generation']
+	capabilities: ['Text Generation', 'Image Vision', 'PDF Vision', 'Web Search', 'Image Generation', 'Reasoning']
 }
 

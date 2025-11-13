@@ -762,28 +762,48 @@ export class TarsSettingTab {
 		if ('apiSecret' in settings.options)
 			this.addAPISecretOptional(container, settings.options as BaseOptions & Pick<Optional, 'apiSecret'>)
 
-		// OpenRouter 特殊处理：根据模型自动判断显示网络搜索或图像生成
+		// OpenRouter 特殊处理：根据模型判断显示不同功能配置
 		if (vendor.name === openRouterVendor.name) {
 			const options = settings.options as OpenRouterOptions
-			const supportsImageGeneration = options.model ? isImageGenerationModel(options.model) : false
+			// 严格判断：只有模型名称包含 "image" 的才支持图像生成
+			const supportsImageGeneration = isImageGenerationModel(options.model)
 
+			// 网络搜索配置（非图像生成模型时显示）
+			// 也要处理没有选择模型的情况，默认显示网络搜索配置
+			if (!supportsImageGeneration && vendor.capabilities.includes('Web Search')) {
+				new Setting(container)
+					.setName(t('Web search'))
+					.setDesc(t('Enable web search for AI'))
+					.addToggle((toggle) =>
+						toggle.setValue(settings.options.enableWebSearch ?? false).onChange(async (value) => {
+							settings.options.enableWebSearch = value
+							await this.saveSettings()
+						})
+					)
+
+				this.addOpenRouterWebSearchSections(container, options)
+			}
+
+			// 图像生成配置（仅当模型真正支持时显示）
 			if (supportsImageGeneration) {
-				// 模型支持图像生成，显示图像生成配置
 				this.addOpenRouterImageGenerationSections(container, options)
-			} else {
-				// 模型不支持图像生成，显示网络搜索配置
-				if (vendor.capabilities.includes('Web Search')) {
-					new Setting(container)
-						.setName(t('Web search'))
-						.setDesc(t('Enable web search for AI'))
-						.addToggle((toggle) =>
-							toggle.setValue(settings.options.enableWebSearch ?? false).onChange(async (value) => {
-								settings.options.enableWebSearch = value
-								await this.saveSettings()
-							})
-						)
+			}
 
-					this.addOpenRouterWebSearchSections(container, options)
+			// Reasoning 推理功能配置（仅非图像生成模型支持）
+			if (!supportsImageGeneration && vendor.capabilities.includes('Reasoning')) {
+				new Setting(container)
+					.setName('启用推理功能')
+					.setDesc('启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示')
+					.addToggle((toggle) =>
+						toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
+							options.enableReasoning = value
+							await this.saveSettings()
+						})
+					)
+
+				// 仅在启用 Reasoning 时显示详细配置
+				if (options.enableReasoning) {
+					this.addOpenRouterReasoningSections(container, options)
 				}
 			}
 		} else {
@@ -1976,6 +1996,31 @@ export class TarsSettingTab {
 						})
 				)
 		}
+	}
+
+	/**
+	 * OpenRouter Reasoning 推理配置部分
+	 * 支持配置推理努力级别
+	 */
+	addOpenRouterReasoningSections = (details: HTMLElement, options: OpenRouterOptions) => {
+		// Reasoning 努力级别配置
+		new Setting(details)
+			.setName('推理努力级别')
+			.setDesc('控制模型推理的计算努力程度。更高的级别会进行更深入的推理，但会消耗更多 token')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						'minimal': 'Minimal（最小）',
+						'low': 'Low（低）',
+						'medium': 'Medium（中等，推荐）',
+						'high': 'High（高）'
+					})
+					.setValue(options.reasoningEffort || 'medium')
+					.onChange(async (value) => {
+						options.reasoningEffort = value as OpenRouterOptions['reasoningEffort']
+						await this.saveSettings()
+					})
+			)
 	}
 
 	private async testProviderConfiguration(provider: ProviderSettings): Promise<boolean> {
