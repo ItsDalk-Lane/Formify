@@ -699,7 +699,7 @@ export class TarsSettingTab {
 		const openConfigModal = () => {
 			const modal = new ProviderSettingModal(this.app, getSummary(settings.tag, vendor.name), (modalContainer) => {
 				// 在 Modal 中渲染配置内容
-				this.renderProviderConfig(modalContainer, index, settings, vendor)
+				this.renderProviderConfig(modalContainer, index, settings, vendor, modal)
 			})
 			modal.open()
 		}
@@ -731,7 +731,8 @@ export class TarsSettingTab {
 		container: HTMLElement,
 		index: number,
 		settings: ProviderSettings,
-		vendor: Vendor
+		vendor: Vendor,
+		modal?: ProviderSettingModal
 	) {
 		// 禁用自动保存，改为手动点击保存按钮
 		const previousAutoSaveState = this.autoSaveEnabled
@@ -915,6 +916,11 @@ export class TarsSettingTab {
 					// OpenRouter: 保存后检查是否需要重新渲染（模型变化导致功能切换）
 					if (vendor.name === openRouterVendor.name) {
 						this.render(this.containerEl, false, this.currentOpenProviderIndex)
+					}
+					
+					// 关闭模态框
+					if (modal) {
+						modal.close()
 					}
 				})
 		})

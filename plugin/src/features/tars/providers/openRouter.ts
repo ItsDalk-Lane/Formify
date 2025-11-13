@@ -34,12 +34,25 @@ export interface OpenRouterOptions extends BaseOptions {
 
 /**
  * 判断模型是否支持图像生成
- * 严格按照 OpenRouter 的命名规则：只有模型名称包含 "image" 的模型才支持图像生成
+ * 检查模型是否同时支持图像输入和图像输出
  */
 export const isImageGenerationModel = (model: string): boolean => {
 	if (!model) return false
 
-	// 严格检查：只有模型名称中包含 "image" 的才认为是图像生成模型
+	// 检查模型是否在已知的图像生成模型列表中
+	const knownImageGenerationModels = [
+		'openai/gpt-5-image-mini',
+		'openai/gpt-5-image',
+		'google/gemini-2.5-flash-image',
+		'google/gemini-2.5-flash-image-preview'
+	]
+	
+	// 严格匹配已知的图像生成模型
+	if (knownImageGenerationModels.includes(model)) {
+		return true
+	}
+	
+	// 对于其他模型，检查名称中是否包含 "image" 关键字
 	// 这符合 OpenRouter 的命名规范，图像生成模型都会在名称中包含 "image" 关键字
 	const modelName = model.toLowerCase()
 	return modelName.includes('image')
@@ -99,9 +112,9 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 			msg.content?.toLowerCase().includes('generate image')
 		)
 
-		// 如果是图像生成但未提供 saveAttachment 且配置要保存为附件，则抛出错误
+		// 如果是图像生成但未提供 saveAttachment 且配置要保存为附件，则抛出警告而非错误
 		if (isImageGenerationRequest && imageSaveAsAttachment && !saveAttachment) {
-			throw new Error('图像生成需要 saveAttachment 函数支持')
+			console.warn('⚠️ 图像生成配置为保存附件，但未提供 saveAttachment 函数，将返回 URL 格式')
 		}
 
 	const formattedMessages = await Promise.all(messages.map((msg) => formatMsg(msg, resolveEmbedAsBinary, useResponsesAPI)))
@@ -206,7 +219,45 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 			let errorText = await response.text()
 			let errorMessage = `OpenRouter API 错误 (${response.status}): ${errorText}`
 			
-			// 尝试解析错误信息
+			// 针对 403 Forbidden 错误的特殊处理
+			if (response.status === 403) {
+				errorMessage = `❌ OpenRouter API 访问被拒绝 (403 Forbidden)\n\n可能的原因：\n` +
+					`1. API Key 无效或已过期\n` +
+					`2. API Key 没有访问此模型的权限\n` +
+					`3. 账户余额不足或超出配额\n` +
+					`4. API Key 格式错误（应该是 sk-or-v1-xxxxxx）\n\n` +
+					`解决方法：\n` +
+					`• 在 OpenRouter 设置中检查 API Key 是否正确\n` +
+					`• 访问 https://openrouter.ai/keys 验证 API Key\n` +
+					`• 访问 https://openrouter.ai/credits 检查账户余额\n` +
+					`• 确认模型访问权限：${model}`
+				
+				// 尝试解析更详细的错误信息
+				try {
+					const errorJson = JSON.parse(errorText)
+					if (errorJson.error?.message) {
+						errorMessage += `\n\nAPI 返回的详细错误：${errorJson.error.message}`
+					}
+				} catch {
+					// 忽略 JSON 解析错误
+				}
+				
+				throw new Error(errorMessage)
+			}
+			
+			// 针对 401 Unauthorized 错误的特殊处理
+			if (response.status === 401) {
+				errorMessage = `❌ OpenRouter API 认证失败 (401 Unauthorized)\n\n` +
+					`API Key 未提供或无效。\n\n` +
+					`解决方法：\n` +
+					`• 在插件设置 > OpenRouter 中配置有效的 API Key\n` +
+					`• 访问 https://openrouter.ai/keys 获取或创建新的 API Key\n` +
+					`• 确保 API Key 格式正确（sk-or-v1-xxxxxx）`
+				
+				throw new Error(errorMessage)
+			}
+			
+			// 尝试解析其他错误信息
 			try {
 				const errorJson = JSON.parse(errorText)
 				if (errorJson.error) {
@@ -225,6 +276,16 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 						errorMessage.includes('not support')
 					)) {
 						errorMessage = `❌ 模型不支持图像生成：${errorMessage}\n\n请确保：\n1. 模型的 output_modalities 包含 "image"\n2. 在 OpenRouter 模型页面筛选支持图像生成的模型\n3. 推荐使用 google/gemini-2.5-flash-image-preview`
+					}
+					
+					// 针对速率限制错误
+					else if (response.status === 429 || errorMessage.includes('rate limit')) {
+						errorMessage = `❌ 请求频率超限 (429 Too Many Requests)\n\n` +
+							`您的请求过于频繁。\n\n` +
+							`解决方法：\n` +
+							`• 稍等片刻后再试\n` +
+							`• 检查账户配额限制\n` +
+							`• 考虑升级 OpenRouter 账户套餐`
 					}
 				}
 			} catch {
@@ -326,54 +387,63 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 									yield content
 								}
 
-								// 处理图像内容（流式）- 根据官方文档
-								const delta = parsed.choices?.[0]?.delta
+						// 处理图像内容（流式）- 根据官方文档
+						const delta = parsed.choices?.[0]?.delta
 
-								if (delta?.images) {
-									const images = delta.images
+						if (delta?.images) {
+							const images = delta.images
 
-									// 处理流式图像（每个图像块都处理）
-									for (let i = 0; i < images.length; i++) {
-										const image = images[i]
-										const imageUrl = image.image_url?.url
+							// 处理流式图像（每个图像块都处理）
+							for (let i = 0; i < images.length; i++) {
+								const image = images[i]
+								const imageUrl = image.image_url?.url
 
-										if (!imageUrl) {
-											continue
-										}
+								if (!imageUrl) {
+									continue
+								}
 
-										// 如果配置为保存为附件
-										if (imageSaveAsAttachment && saveAttachment) {
-											try {
-												if (imageUrl.startsWith('data:')) {
-													const base64Data = imageUrl.split(',')[1]
-													const buffer = Buffer.from(base64Data, 'base64')
-													const arrayBuffer = buffer.buffer.slice(
-														buffer.byteOffset,
-														buffer.byteOffset + buffer.byteLength
-													)
+								hasGeneratedImages = true
 
-													// 生成文件名
-													const now = new Date()
-													const formatTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
-													const indexFlag = images.length > 1 ? `-${i + 1}` : ''
-													const filename = `openrouter-${formatTime}${indexFlag}.png`
-
-													await saveAttachment(filename, arrayBuffer)
-													yield `![[${filename}|${imageDisplayWidth}]]\n\n`
-												} else {
-													yield `⚠️ 检测到 URL 格式图片，但配置为保存附件。请手动下载：\n${imageUrl}\n\n`
-												}
-											} catch (error) {
-												console.error('保存流式图片失败:', error)
-												yield `❌ 图片保存失败，URL: ${imageUrl}\n\n`
+								// 如果配置为保存为附件
+								if (imageSaveAsAttachment && saveAttachment) {
+								try {
+									if (imageUrl.startsWith('data:')) {
+										const base64Data = imageUrl.split(',')[1]
+											if (!base64Data) {
+												throw new Error('无效的 base64 数据')
 											}
+											
+											// 使用 Uint8Array 替代 Buffer (更兼容浏览器环境)
+											const binaryString = atob(base64Data)
+											const bytes = new Uint8Array(binaryString.length)
+											for (let j = 0; j < binaryString.length; j++) {
+												bytes[j] = binaryString.charCodeAt(j)
+											}
+											const arrayBuffer = bytes.buffer
+
+											// 生成文件名
+											const now = new Date()
+											const formatTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
+											const indexFlag = images.length > 1 ? `-${i + 1}` : ''
+										const filename = `openrouter-${formatTime}${indexFlag}.png`
+
+										await saveAttachment(filename, arrayBuffer)
+										yield `![[${filename}|${imageDisplayWidth}]]\n\n`
 										} else {
-											if (imageUrl.startsWith('data:')) {
-												yield `📷 生成的图片（Base64格式）：\n${imageUrl.substring(0, 100)}...\n\n`
-											} else {
-												yield `📷 生成的图片：\n${imageUrl}\n\n`
-											}
+											yield `⚠️ 检测到 URL 格式图片，但配置为保存附件。图片 URL：${imageUrl}\n\n`
 										}
+									} catch (error) {
+										console.error('❌ 保存流式图片失败:', error)
+										const errorMsg = error instanceof Error ? error.message : String(error)
+										yield `❌ 图片保存失败: ${errorMsg}\n\n`
+									}
+								} else {
+									if (imageUrl.startsWith('data:')) {
+										yield `📷 生成的图片（Base64 格式，长度: ${imageUrl.length}）\n\n`
+									} else {
+										yield `📷 生成的图片 URL：${imageUrl}\n\n`
+									}
+								}
 									}
 								}
 
@@ -479,7 +549,6 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 							const imageUrl = image.image_url?.url
 
 							if (!imageUrl) {
-								console.warn('图像数据缺失 URL')
 								continue
 							}
 
@@ -489,11 +558,17 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 									// 从 base64 data URL 中提取数据
 									if (imageUrl.startsWith('data:')) {
 										const base64Data = imageUrl.split(',')[1]
-										const buffer = Buffer.from(base64Data, 'base64')
-										const arrayBuffer = buffer.buffer.slice(
-											buffer.byteOffset,
-											buffer.byteOffset + buffer.byteLength
-										)
+										if (!base64Data) {
+											throw new Error('无效的 base64 数据')
+										}
+										
+										// 使用 Uint8Array 替代 Buffer (更兼容浏览器环境)
+										const binaryString = atob(base64Data)
+										const bytes = new Uint8Array(binaryString.length)
+										for (let j = 0; j < binaryString.length; j++) {
+											bytes[j] = binaryString.charCodeAt(j)
+										}
+										const arrayBuffer = bytes.buffer
 
 										// 生成文件名
 										const now = new Date()
@@ -501,25 +576,24 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 										const indexFlag = images.length > 1 ? `-${i + 1}` : ''
 										const filename = `openrouter-${formatTime}${indexFlag}.png`
 
-										// 保存附件
+										// 保存附件到系统附件文件夹
 										await saveAttachment(filename, arrayBuffer)
 
 										// 输出图片引用
 										yield `![[${filename}|${imageDisplayWidth}]]\n\n`
 									} else {
-										// 如果是 URL 形式但配置要保存为附件，需要下载
-										yield `⚠️ 检测到 URL 格式图片，但配置为保存附件。请手动下载：\n${imageUrl}\n\n`
+										// 如果是 URL 形式但配置要保存为附件
+										yield `⚠️ 检测到 URL 格式图片，但配置为保存附件。图片 URL：${imageUrl}\n\n`
 									}
 								} catch (error) {
-									console.error('保存图片失败:', error)
-									yield `❌ 图片保存失败，URL: ${imageUrl}\n\n`
+									const errorMsg = error instanceof Error ? error.message : String(error)
 								}
 							} else {
 								// 直接输出 URL 或 base64
 								if (imageUrl.startsWith('data:')) {
-									yield `📷 生成的图片（Base64格式）：\n${imageUrl.substring(0, 100)}...\n\n`
+									yield `📷 生成的图片（Base64 格式，长度: ${imageUrl.length}）\n\n`
 								} else {
-									yield `📷 生成的图片：\n${imageUrl}\n\n`
+									yield `📷 生成的图片 URL：${imageUrl}\n\n`
 								}
 							}
 						}
@@ -541,9 +615,11 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 						}
 					}
 
-					// 如果既没有文本也没有图像，确保至少输出一些内容
+					// 如果既没有文本也没有图像，提示用户
 					if (!content && !message?.images) {
-						yield '📷 图像生成完成，但没有可显示的内容。'
+						if (supportsImageGeneration) {
+							yield '⚠️ 图像生成请求完成，但 API 未返回图片数据。请检查模型配置或提示词。'
+						}
 					}
 				}
 			} catch (error) {

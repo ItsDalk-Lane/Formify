@@ -539,7 +539,10 @@ export const generate = async (
 		const hasValidContent = llmResponse.length > 0 ||
 			/\!\[\[.*?\]\]/.test(llmResponse) || // 检查是否有图片附件标记
 			/📷.*?图片/.test(llmResponse) || // 检查是否有图片生成标记
-			/data:image/.test(llmResponse) // 检查是否有 base64 图片数据
+			/data:image/.test(llmResponse) || // 检查是否有 base64 图片数据
+			/📷.*?生成的图片/.test(llmResponse) || // 检查是否有图片生成提示
+			/📷.*?Base64格式/.test(llmResponse) || // 检查是否有Base64格式图片
+			/http[s]?:\/\/.*\.(jpg|jpeg|png|gif|webp)/.test(llmResponse) // 检查是否有图片URL
 
 		if (!hasValidContent) {
 			throw new Error(t('No text generated'))
