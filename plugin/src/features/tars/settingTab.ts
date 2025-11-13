@@ -19,6 +19,8 @@ import { grokVendor } from './providers/grok'
 import { kimiVendor } from './providers/kimi'
 import { ollamaVendor } from './providers/ollama'
 import { OpenRouterOptions, openRouterVendor, isImageGenerationModel } from './providers/openRouter'
+import { qianFanVendor } from './providers/qianFan'
+import { qwenVendor, QwenOptions } from './providers/qwen'
 import { siliconFlowVendor } from './providers/siliconflow'
 import { zhipuVendor, ZhipuOptions, ZHIPU_THINKING_TYPE_OPTIONS, DEFAULT_ZHIPU_THINKING_TYPE, isReasoningModel } from './providers/zhipu'
 import { getCapabilityEmoji } from './providers/utils'
@@ -835,6 +837,10 @@ export class TarsSettingTab {
 
 		if (vendor.name === zhipuVendor.name) {
 			this.addZhipuSections(container, settings.options as ZhipuOptions)
+		}
+
+		if (vendor.name === qwenVendor.name) {
+			this.addQwenSections(container, settings.options as QwenOptions)
 		}
 
 		if (vendor.name === gptImageVendor.name) {
@@ -2112,6 +2118,32 @@ export class TarsSettingTab {
 				.setDesc('注意：当前模型可能不支持推理功能。支持的模型：GLM-4.6, GLM-4.5, GLM-4.5v')
 				.setDisabled(true)
 		}
+	}
+
+	private addQwenSections = (details: HTMLElement, options: QwenOptions) => {
+		// 添加思考模式开关
+		new Setting(details)
+			.setName('思考模式')
+			.setDesc('启用 Qwen 模型的推理过程输出。启用后，模型会在回复前展示思考过程。所有模型都可以尝试此功能，API会自动判断是否支持。')
+			.addToggle((toggle) => {
+				toggle.setValue(options.enableThinking ?? false).onChange(async (value) => {
+					options.enableThinking = value
+					await this.saveSettings()
+				})
+			})
+
+		// 模型兼容性信息（更友好的提示）
+		const knownThinkingModels = [
+			'qwen3-max-preview',
+			'qwen-plus', 'qwen-plus-latest', 'qwen-plus-2025-04-28',
+			'qwen-flash', 'qwen-flash-2025-07-28',
+			'qwen-turbo', 'qwen-turbo-latest', 'qwen-turbo-2025-04-28'
+		]
+
+		new Setting(details)
+			.setName('思考模式说明')
+			.setDesc(`已确认支持思考模式的模型：${knownThinkingModels.join(', ')}。其他模型也可能支持，API会自动处理。`)
+			.setDisabled(true)
 	}
 }
 
