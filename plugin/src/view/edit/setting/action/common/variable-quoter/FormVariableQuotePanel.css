@@ -3,6 +3,13 @@
 	flex-direction: column;
 	gap: 0.5rem;
 	border-radius: 0.25rem;
+	align-items: flex-start;
+}
+
+/* 确保描述文字左对齐 */
+.form--FormVariableQuotePanel .form--CpsFormDescription {
+	text-align: left;
+	align-self: flex-start;
 }
 
 .form--FormVariables {
@@ -11,12 +18,14 @@
 	padding: 4px;
 	flex-wrap: wrap;
 	align-items: center;
+	justify-content: flex-start;
+	width: 100%;
 }
 
 .form--FormVariable {
 	display: flex;
 	align-items: center;
-	justify-content: center;
+	justify-content: flex-start;
 	padding: 0.25rem 0.5rem;
 	border-radius: 0.25rem;
 	background-color: var(--background-primary-alt);
@@ -25,6 +34,7 @@
 	border: 1px solid var(--background-modifier-border);
 	cursor: pointer;
 	transition: background-color 0.2s ease, color 0.2s ease;
+	text-align: left;
 }
 
 .form--InternalFormVariable {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { localInstance } from "src/i18n/locals";
 import { ConfirmPopover } from "src/component/confirm/ConfirmPopover";
 import "./CpsFormSetting.css";
@@ -12,10 +12,7 @@ export function CpsFormSettingGroup(props: {
 	showBatchActions?: boolean;
 	selectMode?: boolean;
 	onToggleSelectMode?: () => void;
-	onSelectAll?: () => void;
-	onSelectNone?: () => void;
 	onDeleteSelected?: () => void;
-	batchActions?: { all: () => void; none: () => void; delete: () => void };
 }) {
 	const [collapsed, setCollapsed] = useState(props.defaultCollapsed ?? true);
 
@@ -73,42 +70,17 @@ export function CpsFormSettingGroup(props: {
 				</div>
 				<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
 					{props.showBatchActions && props.selectMode && (
-						<>
+						<ConfirmPopover onConfirm={() => {
+							if (props.onDeleteSelected) props.onDeleteSelected();
+						}}>
 							<button
 								className="form--BatchActionButton"
-								onClick={(e) => {
-									e.stopPropagation();
-									if (props.onSelectAll) props.onSelectAll();
-									else if (props.batchActions?.all) props.batchActions.all();
-								}}
-								title={localInstance.all}
+								onClick={(e) => e.stopPropagation()}
+								title={localInstance.delete}
 							>
-								{localInstance.all}
+								<Trash2 size={16} />
 							</button>
-							<button
-								className="form--BatchActionButton"
-								onClick={(e) => {
-									e.stopPropagation();
-									if (props.onSelectNone) props.onSelectNone();
-									else if (props.batchActions?.none) props.batchActions.none();
-								}}
-								title={localInstance.none}
-							>
-								{localInstance.none}
-							</button>
-							<ConfirmPopover onConfirm={() => {
-								if (props.onDeleteSelected) props.onDeleteSelected();
-								else if (props.batchActions?.delete) props.batchActions.delete();
-							}}>
-								<button
-									className="form--BatchActionButton"
-									onClick={(e) => e.stopPropagation()}
-									title={localInstance.delete}
-								>
-									{localInstance.delete}
-								</button>
-							</ConfirmPopover>
-						</>
+						</ConfirmPopover>
 					)}
 					<div onClick={(e) => e.stopPropagation()}>
 						{collapsed ? (

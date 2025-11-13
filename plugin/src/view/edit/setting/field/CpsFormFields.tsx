@@ -117,14 +117,7 @@ export default function (props: {
         <div className="form--CpsFormFieldsSetting">
             {fields.map((field, index) => {
                 return (
-                    <CpsFormFieldItemEditing
-                        key={field.id}
-                        index={index}
-                        field={field as FormField}
-                        onDelete={onFieldDeleted}
-                        onChange={onFieldSave}
-                        onDuplicate={onDuplicate}
-                    >
+                    <div key={field.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         {selectMode && (
                             <input
                                 type="checkbox"
@@ -132,7 +125,14 @@ export default function (props: {
                                 onChange={() => handleToggleSelection(field.id)}
                             />
                         )}
-                    </CpsFormFieldItemEditing>
+                        <CpsFormFieldItemEditing
+                            index={index}
+                            field={field as FormField}
+                            onDelete={onFieldDeleted}
+                            onChange={onFieldSave}
+                            onDuplicate={onDuplicate}
+                        />
+                    </div>
                 );
             })}
             <NewFieldGridPopover onSelect={onFieldAdd}>

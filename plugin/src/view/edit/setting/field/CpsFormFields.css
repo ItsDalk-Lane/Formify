@@ -3,6 +3,19 @@
 	flex-direction: column;
 	gap: 8px;
 	width: 100%;
+	flex: 1;
+}
+
+.form--CpsFormFieldsSetting > div {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+}
+
+.form--CpsFormFieldsSetting > div .form--CpsFormFieldSetting {
+	flex: 1;
+	width: 100%;
 }
 
 .form--CpsFormFieldSetting {

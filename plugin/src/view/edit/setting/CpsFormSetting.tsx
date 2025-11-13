@@ -122,18 +122,14 @@ export default function (props: {
 
 	// 字段批量操作处理函数
 	const handleFieldToggleSelectMode = () => {
-		setFieldSelectMode(!fieldSelectMode);
 		if (!fieldSelectMode) {
+			// 如果当前未选中，则全选所有字段
+			setFieldSelectedIds(formConfig.fields.map(f => f.id));
+		} else {
+			// 如果当前已选中，则清空选择
 			setFieldSelectedIds([]);
 		}
-	};
-
-	const handleFieldSelectAll = () => {
-		setFieldSelectedIds(formConfig.fields.map(f => f.id));
-	};
-
-	const handleFieldSelectNone = () => {
-		setFieldSelectedIds([]);
+		setFieldSelectMode(!fieldSelectMode);
 	};
 
 	const handleFieldDeleteSelected = () => {
@@ -154,23 +150,27 @@ export default function (props: {
 			}
 			return Array.from(s);
 		});
+
+		// 如果取消选中后没有选中的项目，则退出批量选择模式
+		setFieldSelectedIds(prev => {
+			if (prev.length === 0) {
+				setFieldSelectMode(false);
+			}
+			return prev;
+		});
 	};
 
 	// 动作批量操作处理函数
 	const handleActionToggleSelectMode = () => {
-		setActionSelectMode(!actionSelectMode);
+		const actions = formConfig.actions || [];
 		if (!actionSelectMode) {
+			// 如果当前未选中，则全选所有动作
+			setActionSelectedIds(actions.map(a => a.id));
+		} else {
+			// 如果当前已选中，则清空选择
 			setActionSelectedIds([]);
 		}
-	};
-
-	const handleActionSelectAll = () => {
-		const actions = formConfig.actions || [];
-		setActionSelectedIds(actions.map(a => a.id));
-	};
-
-	const handleActionSelectNone = () => {
-		setActionSelectedIds([]);
+		setActionSelectMode(!actionSelectMode);
 	};
 
 	const handleActionDeleteSelected = () => {
@@ -197,6 +197,14 @@ export default function (props: {
 			}
 			return Array.from(s);
 		});
+
+		// 如果取消选中后没有选中的项目，则退出批量选择模式
+		setActionSelectedIds(prev => {
+			if (prev.length === 0) {
+				setActionSelectMode(false);
+			}
+			return prev;
+		});
 	};
 
 	return (
@@ -216,8 +224,6 @@ export default function (props: {
 								showBatchActions={true}
 								selectMode={fieldSelectMode}
 								onToggleSelectMode={handleFieldToggleSelectMode}
-								onSelectAll={handleFieldSelectAll}
-								onSelectNone={handleFieldSelectNone}
 								onDeleteSelected={handleFieldDeleteSelected}
 							>
 								<CpsFormFields
@@ -235,8 +241,6 @@ export default function (props: {
 								showBatchActions={true}
 								selectMode={actionSelectMode}
 								onToggleSelectMode={handleActionToggleSelectMode}
-								onSelectAll={handleActionSelectAll}
-								onSelectNone={handleActionSelectNone}
 								onDeleteSelected={handleActionDeleteSelected}
 							>
 								<CpsFormActions

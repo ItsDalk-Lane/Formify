@@ -48,6 +48,7 @@
 	user-select: text;
 }
 
+
 .form--FormFieldLabelDescription {
 	font-size: var(--font-ui-small);
 	color: var(--text-faint);
@@ -71,7 +72,7 @@
 
 /* 批量操作按钮样式 */
 .form--BatchActionButton {
-	background: none !important;
+	background: transparent !important;
 	border: none !important;
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
@@ -84,22 +85,40 @@
 	justify-content: center;
 	min-height: 24px;
 	font-weight: 400;
-	outline: none;
-	box-shadow: none;
+	outline: none !important;
+	box-shadow: none !important;
+	background-color: transparent !important;
+	background-image: none !important;
+	-webkit-appearance: none !important;
+	-moz-appearance: none !important;
+	appearance: none !important;
 }
 
 .form--BatchActionButton:hover {
 	color: var(--text-normal);
-	background: none !important;
+	background: transparent !important;
+	background-color: transparent !important;
+	background-image: none !important;
 }
 
 .form--BatchActionButton:active {
 	color: var(--text-normal);
-	background: none !important;
+	background: transparent !important;
+	background-color: transparent !important;
+	background-image: none !important;
 	transform: scale(0.95);
 }
 
 .form--BatchActionButton:focus {
-	outline: none;
-	box-shadow: none;
+	outline: none !important;
+	box-shadow: none !important;
+	background: transparent !important;
+	background-color: transparent !important;
+	background-image: none !important;
+}
+
+/* 确保图标也没有背景 */
+.form--BatchActionButton svg {
+	background: transparent !important;
+	fill: currentColor;
 }
