@@ -5,12 +5,20 @@ import { NotEqOperatorHandler } from "./common/NotEqOperatorHandler";
 import { NoValueOperatorHandler } from "./common/NoValueOperatorHandler";
 import { ContainsOperatorHandler } from "./list/ContainsOperatorHandler";
 import { NotContainsOperatorHandler } from "./list/NotContainsOperatorHandler";
+import { ContainsAnyOperatorHandler } from "./list/ContainsAnyOperatorHandler";
 import { GteOperatorHandler } from "./number/GteOperatorHandler";
 import { GtOperatorHandler } from "./number/GtOperatorHandler";
 import { LteOperatorHandler } from "./number/LteOperatorHandler";
 import { LtOperatorHandler } from "./number/LtOperatorHandler";
 import { TimeBeforeOperatorHandler } from "./time/TimeBeforeOperatorHandler";
 import { TimeAfterOperatorHandler } from "./time/TimeAfterOperatorHandler";
+import { TimeBeforeOrEqualOperatorHandler } from "./time/TimeBeforeOrEqualOperatorHandler";
+import { TimeAfterOrEqualOperatorHandler } from "./time/TimeAfterOrEqualOperatorHandler";
+import { RegexMatchOperatorHandler } from "./string/RegexMatchOperatorHandler";
+import { FileContainsOperatorHandler } from "./file/FileContainsOperatorHandler";
+import { ArrayLengthEqualsOperatorHandler } from "./array/ArrayLengthEqualsOperatorHandler";
+import { ArrayLengthGreaterOperatorHandler } from "./array/ArrayLengthGreaterOperatorHandler";
+import { ArrayLengthLessOperatorHandler } from "./array/ArrayLengthLessOperatorHandler";
 
 export class OperatorHandlers {
 
@@ -22,11 +30,19 @@ export class OperatorHandlers {
         new LtOperatorHandler(),
         new LteOperatorHandler(),
         new ContainsOperatorHandler(),
+        new ContainsAnyOperatorHandler(),
         new NotContainsOperatorHandler(),
         new HasValueOperatorHandler(),
         new NoValueOperatorHandler(),
+        new RegexMatchOperatorHandler(),
+        new FileContainsOperatorHandler(),
+        new ArrayLengthEqualsOperatorHandler(),
+        new ArrayLengthGreaterOperatorHandler(),
+        new ArrayLengthLessOperatorHandler(),
         new TimeBeforeOperatorHandler(),
-        new TimeAfterOperatorHandler()
+        new TimeAfterOperatorHandler(),
+        new TimeBeforeOrEqualOperatorHandler(),
+        new TimeAfterOrEqualOperatorHandler()
         // new InOperatorHandler(),
         // new NInOperatorHandler(),
         // new LikeOperatorHandler(),

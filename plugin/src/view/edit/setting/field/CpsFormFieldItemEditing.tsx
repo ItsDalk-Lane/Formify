@@ -6,11 +6,12 @@ import { FormFieldContext } from "./hooks/FormFieldContext";
 import useSortableItem from "src/hooks/useSortableItem";
 
 export function CpsFormFieldItemEditing(props: {
-	index: number;
-	field: FormField;
-	onDelete: (field: IFormField) => void;
-	onChange: (field: IFormField) => void;
-	onDuplicate: (field: IFormField) => void;
+    index: number;
+    field: FormField;
+    onDelete: (field: IFormField) => void;
+    onChange: (field: IFormField) => void;
+    onDuplicate: (field: IFormField) => void;
+    children?: React.ReactNode;
 }) {
 	const { field, onChange } = props;
 	const { closestEdge, dragging, draggedOver, setElRef, setDragHandleRef } =
@@ -30,7 +31,7 @@ export function CpsFormFieldItemEditing(props: {
 					onDelete={props.onDelete}
 					onDuplicate={props.onDuplicate}
 					setDragHandleRef={setDragHandleRef}
-				></FormFieldSettingHeader>
+                    >{props.children}</FormFieldSettingHeader>
 				<CpsFormFieldSettingContent field={field} onChange={onChange} />
 				{closestEdge && <DropIndicator edge={closestEdge} gap="1px" />}
 			</div>

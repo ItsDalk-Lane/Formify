@@ -43,6 +43,7 @@ export class Zh implements Local {
 	confirm_to_delete = "您确认要删除吗？";
 	confirm_to_operation = "确认要执行该操作吗？";
 	contains = "包含";
+	contains_any = "包含任意";
 	content = "内容";
 	content_below_heading = "指定标题下的内容";
 	content_template = "内容模板";
@@ -118,7 +119,9 @@ export class Zh implements Local {
 	less_than = "小于";
 	less_than_or_equal = "小于等于";
 	time_before = "早于";
+	time_before_or_equal = "早于或等于";
 	time_after = "晚于";
+	time_after_or_equal = "晚于或等于";
 	list = "列表";
 	locate_position_in_file_list = "在文件目录中定位";
 	mode = "模式";
@@ -133,6 +136,7 @@ export class Zh implements Local {
 	no_value = "无值";
 	none = "无";
 	not_contains = "不包含";
+	regex_match = "正则匹配";
 	not_equal = "不等于";
 	now = "现在";
 	official_site = "官网";

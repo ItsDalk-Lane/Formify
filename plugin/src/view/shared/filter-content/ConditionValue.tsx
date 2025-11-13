@@ -16,8 +16,8 @@ export function ConditionValue(props: {
 	const { filter } = props;
 	const propertyId = filter.property || "";
 	const field = formConfig.fields.find((f) => f.id === propertyId);
-	const { value, onChange } = props;
-	if (!field) {
+  const { value, onChange } = props;
+  if (!field) {
 		return (
 			<input
 				type="text"
@@ -26,7 +26,33 @@ export function ConditionValue(props: {
 				placeholder={localInstance.value}
 			/>
 		);
-	}
+  }
+
+  if (filter.operator === OperatorType.RegexMatch) {
+    return (
+      <input
+        type="text"
+        value={typeof value === 'string' ? value : (value?.pattern ?? '')}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={localInstance.regex_match}
+      />
+    );
+  }
+
+  if (
+    filter.operator === OperatorType.ArrayLengthEquals ||
+    filter.operator === OperatorType.ArrayLengthGreater ||
+    filter.operator === OperatorType.ArrayLengthLess
+  ) {
+    return (
+      <input
+        type="number"
+        value={typeof value === 'number' ? value : (value ? parseInt(String(value)) || 0 : 0)}
+        onChange={(e) => onChange(parseInt(e.target.value))}
+        placeholder={localInstance.value}
+      />
+    );
+  }
 	if (
 		field.type === FormFieldType.RADIO ||
 		field.type === FormFieldType.SELECT

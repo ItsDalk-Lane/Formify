@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 import useSortable from "src/hooks/useSortable";
 import { localInstance } from "src/i18n/locals";
 import { FormFieldType } from "src/model/enums/FormFieldType";
@@ -11,13 +11,16 @@ import { Strings } from "src/utils/Strings";
 import { v4 } from "uuid";
 import { CpsFormFieldItemEditing } from "./CpsFormFieldItemEditing";
 import "./CpsFormFields.css";
+import { ConfirmPopover } from "src/component/confirm/ConfirmPopover";
 import { NewFieldGridPopover } from "./common/new-field-grid/NewFieldGridPopover";
 
 export default function (props: {
-	fields: IFormField[];
-	onSave: (fields: IFormField[], modified: IFormField[]) => void;
+    fields: IFormField[];
+    onSave: (fields: IFormField[], modified: IFormField[]) => void;
 }) {
-	const { fields } = props;
+    const { fields } = props;
+    const [selectMode, setSelectMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
 	useSortable({
 		items: fields || [],
 		getId: (item) => item.id,
@@ -59,8 +62,8 @@ export default function (props: {
 		props.onSave(newFields, []);
 	}, [fields, props.onSave]);
 
-	const onDuplicate = useCallback(
-		(field: IFormField) => {
+    const onDuplicate = useCallback(
+        (field: IFormField) => {
 			const newField = {
 				...field,
 				id: v4(),
@@ -74,29 +77,64 @@ export default function (props: {
 			props.onSave(newFields, []);
 		},
 		[fields, props.onSave]
-	);
+    );
 
-	return (
-		<div className="form--CpsFormFieldsSetting">
-			{fields.map((field, index) => {
-				return (
-					<CpsFormFieldItemEditing
-						key={field.id}
-						index={index}
-						field={field as FormField}
-						onDelete={onFieldDeleted}
-						onChange={onFieldSave}
-						onDuplicate={onDuplicate}
-					/>
-				);
-			})}
-			<NewFieldGridPopover onSelect={onFieldAdd}>
-				<button className="form--AddButton">
-					+{localInstance.add_field}
-				</button>
-			</NewFieldGridPopover>
-		</div>
-	);
+    return (
+        <div className="form--CpsFormFieldsSetting">
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <button className="form--AddButton" onClick={() => setSelectMode(!selectMode)}>
+                    {selectMode ? localInstance.cancel : localInstance.more}
+                </button>
+                {selectMode && (
+                    <>
+                        <button className="form--AddButton" onClick={() => setSelectedIds(fields.map(f => f.id))}> {localInstance.all} </button>
+                        <button className="form--AddButton" onClick={() => setSelectedIds([])}> {localInstance.none} </button>
+                        <ConfirmPopover onConfirm={() => {
+                            const toDelete = new Set(selectedIds);
+                            const newFields = fields.filter(f => !toDelete.has(f.id));
+                            props.onSave(newFields, []);
+                            setSelectedIds([]);
+                            setSelectMode(false);
+                        }}>
+                            <button className="form--AddButton">{localInstance.delete}</button>
+                        </ConfirmPopover>
+                    </>
+                )}
+            </div>
+            {fields.map((field, index) => {
+                return (
+                    <CpsFormFieldItemEditing
+                        key={field.id}
+                        index={index}
+                        field={field as FormField}
+                        onDelete={onFieldDeleted}
+                        onChange={onFieldSave}
+                        onDuplicate={onDuplicate}
+                    >
+                        {selectMode && (
+                            <input
+                                type="checkbox"
+                                checked={selectedIds.includes(field.id)}
+                                onChange={(e) => {
+                                    const id = field.id;
+                                    setSelectedIds(prev => {
+                                        const s = new Set(prev);
+                                        if (e.target.checked) s.add(id); else s.delete(id);
+                                        return Array.from(s);
+                                    });
+                                }}
+                            />
+                        )}
+                    </CpsFormFieldItemEditing>
+                );
+            })}
+            <NewFieldGridPopover onSelect={onFieldAdd}>
+                <button className="form--AddButton">
+                    +{localInstance.add_field}
+                </button>
+            </NewFieldGridPopover>
+        </div>
+    );
 }
 
 function updateField(updated: IFormField, fields: IFormField[]) {

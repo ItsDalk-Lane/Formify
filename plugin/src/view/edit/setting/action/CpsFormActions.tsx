@@ -9,12 +9,16 @@ import { v4 } from "uuid";
 import { NewActionGridPopover } from "./common/new-action-grid/NewActionGridPopover";
 import FormVariableQuotePanel from "./common/variable-quoter/FormVariableQuotePanel";
 import CpsFormAction from "./CpsFormAction";
+import { useState } from "react";
+import { ConfirmPopover } from "src/component/confirm/ConfirmPopover";
 
 export function CpsFormActions(props: {
-	config: FormConfig;
-	onChange: (actions: IFormAction[]) => void;
+    config: FormConfig;
+    onChange: (actions: IFormAction[]) => void;
 }) {
-	const { config } = props;
+    const { config } = props;
+    const [selectMode, setSelectMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
 	const saveAction = (action: IFormAction[]) => {
 		props.onChange(action);
 	};
@@ -28,59 +32,87 @@ export function CpsFormActions(props: {
 		},
 	});
 
-	const addAction = (type: FormActionType) => {
-		const newAction = FormActionFactory.create(type);
-		const newActions = [...actions, newAction];
-		saveAction(newActions);
-	};
+    const addAction = (type: FormActionType) => {
+        const newAction = FormActionFactory.create(type);
+        const newActions = [...actions, newAction];
+        saveAction(newActions);
+    };
 
-	return (
-		<div className="form--CpsFormActionsSetting">
-			<FormVariableQuotePanel formConfig={config} />
-			{actions.map((action, index) => {
-				return (
-					<CpsFormAction
-						key={action.id}
-						value={action}
-						defaultOpen={actions.length === 1}
-						onChange={(v) => {
-							const newActions = actions.map((a, i) => {
-								if (v.id === a.id) {
-									return v;
-								}
-								return a;
-							});
-							saveAction(newActions);
-						}}
-						onDelete={(v) => {
-							const newActions = actions.filter(
-								(a) => a.id !== v.id
-							);
-							saveAction(newActions);
-						}}
-						onDuplicate={(v) => {
-							const newAction = {
-								...v,
-								id: v4(),
-							};
-							const originIndex = actions.findIndex(
-								(a) => a.id === v.id
-							);
-							const newActions = [
-								...actions.slice(0, originIndex + 1),
-								newAction,
-								...actions.slice(originIndex + 1),
-							];
-							saveAction(newActions);
-						}}
-					/>
-				);
-			})}
-			<NewActionGridPopover onSelect={addAction}>
-				<button className="form--AddButton">
-					+ {localInstance.add_action}
-				</button>
-			</NewActionGridPopover>
-		</div>
-	);
+    return (
+        <div className="form--CpsFormActionsSetting">
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <button className="form--AddButton" onClick={() => setSelectMode(!selectMode)}>
+                    {selectMode ? localInstance.cancel : localInstance.more}
+                </button>
+                {selectMode && (
+                    <>
+                        <button className="form--AddButton" onClick={() => setSelectedIds(actions.map(a => a.id))}>{localInstance.all}</button>
+                        <button className="form--AddButton" onClick={() => setSelectedIds([])}>{localInstance.none}</button>
+                        <ConfirmPopover onConfirm={() => {
+                            const toDelete = new Set(selectedIds);
+                            const newActions = actions.filter(a => !toDelete.has(a.id));
+                            saveAction(newActions);
+                            setSelectedIds([]);
+                            setSelectMode(false);
+                        }}>
+                            <button className="form--AddButton">{localInstance.delete}</button>
+                        </ConfirmPopover>
+                    </>
+                )}
+            </div>
+            <FormVariableQuotePanel formConfig={config} />
+            {actions.map((action, index) => {
+                return (
+                    <div key={action.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {selectMode && (
+                            <input
+                                type="checkbox"
+                                checked={selectedIds.includes(action.id)}
+                                onChange={(e) => {
+                                    const id = action.id;
+                                    setSelectedIds(prev => {
+                                        const s = new Set(prev);
+                                        if (e.target.checked) s.add(id); else s.delete(id);
+                                        return Array.from(s);
+                                    });
+                                }}
+                            />
+                        )}
+                        <CpsFormAction
+                            value={action}
+                            defaultOpen={actions.length === 1}
+                            onChange={(v) => {
+                                const newActions = actions.map((a) => {
+                                    if (v.id === a.id) {
+                                        return v;
+                                    }
+                                    return a;
+                                });
+                                saveAction(newActions);
+                            }}
+                            onDelete={(v) => {
+                                const newActions = actions.filter((a) => a.id !== v.id);
+                                saveAction(newActions);
+                            }}
+                            onDuplicate={(v) => {
+                                const newAction = { ...v, id: v4() };
+                                const originIndex = actions.findIndex((a) => a.id === v.id);
+                                const newActions = [
+                                    ...actions.slice(0, originIndex + 1),
+                                    newAction,
+                                    ...actions.slice(originIndex + 1),
+                                ];
+                                saveAction(newActions);
+                            }}
+                        />
+                    </div>
+                );
+            })}
+            <NewActionGridPopover onSelect={addAction}>
+                <button className="form--AddButton">
+                    + {localInstance.add_action}
+                </button>
+            </NewActionGridPopover>
+        </div>
+    );
 }

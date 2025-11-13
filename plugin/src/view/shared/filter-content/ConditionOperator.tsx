@@ -64,30 +64,42 @@ export function ConditionOperator(props: {
 		},
 	];
 
-	const timeOperators = [
-		{
-			value: OperatorType.TimeBefore,
-			label: localInstance.time_before,
-		},
-		{
-			value: OperatorType.TimeAfter,
-			label: localInstance.time_after,
-		},
-	];
+    const timeOperators = [
+        {
+            value: OperatorType.TimeBefore,
+            label: localInstance.time_before,
+        },
+        {
+            value: OperatorType.TimeBeforeOrEqual,
+            label: (localInstance as any).time_before_or_equal ?? localInstance.time_before,
+        },
+        {
+            value: OperatorType.TimeAfter,
+            label: localInstance.time_after,
+        },
+        {
+            value: OperatorType.TimeAfterOrEqual,
+            label: (localInstance as any).time_after_or_equal ?? localInstance.time_after,
+        },
+    ];
 
-	const listOperators = [
-		{
-			value: OperatorType.Contains,
-			label: localInstance.contains,
-		},
-		{
-			value: OperatorType.NotContains,
-			label: localInstance.not_contains,
-		},
-	];
+    const listOperators = [
+        {
+            value: OperatorType.Contains,
+            label: localInstance.contains,
+        },
+        {
+            value: OperatorType.ContainsAny,
+            label: (localInstance as any).contains_any ?? localInstance.contains,
+        },
+        {
+            value: OperatorType.NotContains,
+            label: localInstance.not_contains,
+        },
+    ];
 
-	const options = useMemo(() => {
-		const field = formConfig.fields.find((f) => f.id === propertyId);
+  const options = useMemo(() => {
+    const field = formConfig.fields.find((f) => f.id === propertyId);
 		if (field?.type === FormFieldType.NUMBER) {
 			return [...commomOperators, ...numberOperators, ...valueOperators];
 		}
@@ -99,22 +111,50 @@ export function ConditionOperator(props: {
 		}
 
 		// 日期时间类型字段支持时间比较符
-		if (
-			field?.type === FormFieldType.DATE ||
-			field?.type === FormFieldType.TIME ||
-			field?.type === FormFieldType.DATETIME
-		) {
-			return [...commomOperators, ...timeOperators, ...valueOperators];
-		}
+    if (
+            field?.type === FormFieldType.DATE ||
+            field?.type === FormFieldType.TIME ||
+            field?.type === FormFieldType.DATETIME
+        ) {
+            return [...commomOperators, ...timeOperators, ...valueOperators];
+        }
 
-		const isList = [FormFieldType.SELECT, FormFieldType.RADIO].includes(
-			field?.type as FormFieldType
-		);
-		if (isList) {
-			return [...commomOperators, ...listOperators, ...valueOperators];
-		}
+    const isList = [FormFieldType.SELECT, FormFieldType.RADIO].includes(
+      field?.type as FormFieldType
+    );
+    if (isList) {
+            return [
+                ...commomOperators,
+                ...listOperators,
+                { value: OperatorType.ArrayLengthEquals, label: localInstance.equal },
+                { value: OperatorType.ArrayLengthGreater, label: localInstance.greater_than },
+                { value: OperatorType.ArrayLengthLess, label: localInstance.less_than },
+                ...valueOperators,
+            ];
+    }
 
-		return [...commomOperators, ...valueOperators];
+        if (field?.type === FormFieldType.FILE_LIST) {
+            return [
+                ...commomOperators,
+                { value: OperatorType.Contains, label: localInstance.contains },
+                { value: OperatorType.RegexMatch, label: (localInstance as any).regex_match ?? 'Regex' },
+                { value: OperatorType.FileContains, label: localInstance.content },
+                { value: OperatorType.ArrayLengthEquals, label: localInstance.equal },
+                { value: OperatorType.ArrayLengthGreater, label: localInstance.greater_than },
+                { value: OperatorType.ArrayLengthLess, label: localInstance.less_than },
+                ...valueOperators,
+            ];
+        }
+
+    if (field?.type === FormFieldType.TEXT || field?.type === FormFieldType.TEXTAREA) {
+            return [
+                ...commomOperators,
+                { value: OperatorType.RegexMatch, label: (localInstance as any).regex_match ?? 'Regex' },
+                ...valueOperators,
+            ];
+        }
+
+        return [...commomOperators, ...valueOperators];
 	}, [propertyId, formConfig]);
 
 	return <Select2 value={operator} onChange={onChange} options={options} />;

@@ -43,6 +43,7 @@ export class ZhTw implements Local {
 	confirm_to_delete = "您確認要刪除嗎？";
 	confirm_to_operation = "確認要執行該操作嗎？";
 	contains = "包含";
+	contains_any = "包含任意";
 	content = "內容";
 	content_below_heading = "指定標題下的內容";
 	content_template = "內容模板";
@@ -118,7 +119,9 @@ export class ZhTw implements Local {
 	less_than = "小於";
 	less_than_or_equal = "小於等於";
 	time_before = "早於";
+	time_before_or_equal = "早於或等於";
 	time_after = "晚於";
+	time_after_or_equal = "晚於或等於";
 	list = "列表";
 	locate_position_in_file_list = "在檔案目錄中定位";
 	mode = "模式";
@@ -201,6 +204,7 @@ export class ZhTw implements Local {
 	text_content = "文字內容";
 	title = "標題";
 	to_internal_link = "轉為內鏈";
+	regex_match = "正則匹配";
 	today = "今天";
 	top_below_title = "指定標題下首行";
 	top_of_content = "內容首行";

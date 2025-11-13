@@ -595,7 +595,7 @@ export class TarsSettingTab {
 			)
 	}
 
-	createProviderSetting = (index: number, settings: ProviderSettings, isOpen: boolean = false) => {
+    createProviderSetting = (index: number, settings: ProviderSettings, isOpen: boolean = false) => {
 		const vendor = availableVendors.find((v) => v.name === settings.vendor)
 		if (!vendor) throw new Error('No vendor found ' + settings.vendor)
 		
@@ -704,20 +704,25 @@ export class TarsSettingTab {
 			modal.open()
 		}
 
-		card.addEventListener('click', (e) => {
-			// 如果点击的是删除按钮，不触发卡片点击
-			if (e.target === deleteBtn || (e.target as HTMLElement).closest('button') === deleteBtn) return
-			openConfigModal()
-		})
+        card.addEventListener('click', (e) => {
+            // 如果点击的是删除按钮，不触发卡片点击
+            if (e.target === deleteBtn || (e.target as HTMLElement).closest('button') === deleteBtn) return
+            openConfigModal()
+        })
 
-		// 删除按钮点击事件
-		deleteBtn.addEventListener('click', async (e) => {
-			e.stopPropagation()
-			this.settings.providers.splice(index, 1)
-			await this.context.saveSettings()
-			this.render(this.containerEl)
-		})
-	}
+        // 删除按钮点击事件
+        deleteBtn.addEventListener('click', async (e) => {
+            e.stopPropagation()
+            this.settings.providers.splice(index, 1)
+            await this.context.saveSettings()
+            this.render(this.containerEl)
+        })
+
+        if (isOpen) {
+            this.currentOpenProviderIndex = index
+            openConfigModal()
+        }
+    }
 
 	/**
 	 * 在 Modal 容器中渲染服务商配置内容
@@ -2213,4 +2218,3 @@ const MODEL_FETCH_CONFIGS = {
 		requiresApiKey: true
 	}
 } as const
-

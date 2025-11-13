@@ -11,11 +11,15 @@ export enum OperatorType {
     LessThan = "less_than",
     LessThanOrEqual = "less_than_or_equal",
     RegexMatch = "regex_match",
+    FileContains = "file_contains",
     // Time Operators
     TimeAfter = "time_after",
     TimeAfterOrEqual = "time_after_or_equal",
     TimeBefore = "time_before",
     TimeBeforeOrEqual = "time_before_or_equal",
+    ArrayLengthEquals = "array_length_equals",
+    ArrayLengthGreater = "array_length_greater",
+    ArrayLengthLess = "array_length_less",
     // checkbox
     Checked = "checked",
     Unchecked = "unchecked",

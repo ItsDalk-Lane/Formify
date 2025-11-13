@@ -40,6 +40,7 @@ export interface Local {
 	confirm_to_operation: string;
 	confirm: string;
 	contains: string;
+	contains_any: string;
 	content_template: string;
 	content: string;
 	copy_failed: string;
@@ -112,7 +113,9 @@ export interface Local {
 	less_than_or_equal: string;
 	less_than: string;
 	time_before: string;
+	time_before_or_equal: string;
 	time_after: string;
+	time_after_or_equal: string;
 	list: string;
 	locate_position_in_file_list: string;
 	mode: string;
@@ -193,6 +196,7 @@ export interface Local {
 	text_content: string;
 	title: string;
 	to_internal_link: string;
+	regex_match: string;
 	top_below_title: string;
 	top_of_content: string;
 	type_date: string;

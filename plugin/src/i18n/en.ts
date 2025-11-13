@@ -43,6 +43,7 @@ export class En implements Local {
 	confirm_to_delete = "Are you sure you want to delete?";
 	confirm_to_operation = "Are you sure you want to perform this action?";
 	contains = "Contains";
+	contains_any = "Contains any";
 	content = "Content";
 	content_below_heading = "Content below specified heading";
 	content_template = "Content template";
@@ -118,7 +119,9 @@ export class En implements Local {
 	less_than = "Less than";
 	less_than_or_equal = "Less than or equal";
 	time_before = "Before";
+	time_before_or_equal = "Before or equal";
 	time_after = "After";
+	time_after_or_equal = "After or equal";
 	list = "List";
 	locate_position_in_file_list = "Locate position in file list";
 	mode = "Mode";
@@ -133,6 +136,7 @@ export class En implements Local {
 	no_value = "No value";
 	none = "None";
 	not_contains = "Does not contain";
+	regex_match = "Regex match";
 	not_equal = "Not equal";
 	now = "Now";
 	official_site = "Official site";
