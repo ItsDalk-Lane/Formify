@@ -338,9 +338,18 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		// 构建请求数据
 		const data: any = {
 			model,
-			stream: true,
-			...remains
+			stream: true
 		}
+
+		// 只添加通用的、非模型特定的参数
+		// 过滤掉可能不被所有模型支持的参数
+		const { 
+			reasoningEffort: _, 
+			thinkingType: __, 
+			effort: ___,  // 也过滤掉直接的 effort 参数
+			...generalParams 
+		} = remains as any
+		Object.assign(data, generalParams)
 
 	const capability = getDoubaoModelCapability(model)
 	let effectiveThinkingType: DoubaoThinkingType | undefined
@@ -360,17 +369,14 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			data.thinking = { type: effectiveThinkingType }
 		}
 
-		if (capability.supportsReasoningEffort) {
-			if (effectiveThinkingType === 'enabled') {
-				const candidate =
-					reasoningEffort && DOUBAO_REASONING_EFFORT_OPTIONS.includes(reasoningEffort)
-						? reasoningEffort
-						: 'low'
-				data.reasoning_effort = candidate
-			} else if (effectiveThinkingType === 'disabled') {
-				data.reasoning_effort = 'minimal'
-			}
-		}
+		// 豆包API不支持effort参数，根据官方文档
+		// 即使模型标记为supportsReasoningEffort，也不添加effort参数
+		// 注释掉以下代码：
+		// if (capability && capability.supportsReasoningEffort && effectiveThinkingType === 'enabled') {
+		// 	if (reasoningEffort && DOUBAO_REASONING_EFFORT_OPTIONS.includes(reasoningEffort)) {
+		// 		data.effort = reasoningEffort
+		// 	}
+		// }
 	} else {
 		console.warn('[Doubao] 当前模型不在能力映射表中:', model)
 	}
@@ -405,11 +411,11 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 
 				data.tools = [webSearchTool]
 
-				// 不启用思考功能，避免输出思考过程
-				// 如果需要启用，可以取消下面的注释
-				// if (webSearchConfig?.enableThinking) {
-				// 	data.thinking = { type: 'auto' }
-				// }
+				// 根据配置决定是否启用思考功能
+				if (webSearchConfig?.enableThinking !== false && effectiveThinkingType) {
+					data.thinking = { type: effectiveThinkingType }
+					console.log('[Doubao] Web Search模式下已启用thinking参数:', data.thinking)
+				}
 
 				// 如果配置了系统提示词，添加到消息开头
 				if (webSearchConfig?.systemPrompt) {
@@ -431,6 +437,14 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			// Chat Completions API 使用 messages 字段
 			data.messages = processedMessages
 		}
+
+		// 调试日志：豆包API请求参数
+		console.log('[Doubao] API请求参数:', {
+			model,
+			thinking: data.thinking,
+			hasWebSearch: !!data.tools,
+			apiType: useResponsesAPI ? 'Responses API' : 'Chat Completions API'
+		})
 
 	// 发送请求
 	

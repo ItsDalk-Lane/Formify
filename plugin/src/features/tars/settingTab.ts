@@ -20,6 +20,7 @@ import { kimiVendor } from './providers/kimi'
 import { ollamaVendor } from './providers/ollama'
 import { OpenRouterOptions, openRouterVendor, isImageGenerationModel } from './providers/openRouter'
 import { siliconFlowVendor } from './providers/siliconflow'
+import { zhipuVendor, ZhipuOptions, ZHIPU_THINKING_TYPE_OPTIONS, DEFAULT_ZHIPU_THINKING_TYPE, isReasoningModel } from './providers/zhipu'
 import { getCapabilityEmoji } from './providers/utils'
 import { availableVendors, DEFAULT_TARS_SETTINGS } from './settings'
 import type { TarsSettings } from './settings'
@@ -821,7 +822,8 @@ export class TarsSettingTab {
 
 				// OpenRouter 特定的网络搜索配置（已在上面处理）
 			}
-		}
+
+			}
 
 		if (vendor.name === claudeVendor.name) {
 			this.addClaudeSections(container, settings.options as ClaudeOptions)
@@ -829,6 +831,10 @@ export class TarsSettingTab {
 
 		if (vendor.name === doubaoVendor.name) {
 			this.addDoubaoSections(container, settings.options as DoubaoOptions)
+		}
+
+		if (vendor.name === zhipuVendor.name) {
+			this.addZhipuSections(container, settings.options as ZhipuOptions)
 		}
 
 		if (vendor.name === gptImageVendor.name) {
@@ -1679,6 +1685,7 @@ export class TarsSettingTab {
 						} else {
 							reasoningDropdown.setDisabled(true)
 							reasoningDropdown.setValue('minimal')
+							options.reasoningEffort = 'minimal'
 						}
 					}
 					await this.saveSettings()
@@ -2066,6 +2073,44 @@ export class TarsSettingTab {
 			}
 			new Notice(`${t('Model test failed')}: ${message}`)
 			return false
+		}
+	}
+
+	private addZhipuSections = (details: HTMLElement, options: ZhipuOptions) => {
+		// 直接显示推理类型配置（通过选择推理类型来控制是否启用推理）
+		this.addZhipuReasoningSections(details, options)
+	}
+
+	private addZhipuReasoningSections = (details: HTMLElement, options: ZhipuOptions) => {
+		// 推理类型选择
+		const supportedTypes = ZHIPU_THINKING_TYPE_OPTIONS.map(opt => opt.value)
+		const initialType: import('./providers/zhipu').ZhipuThinkingType = options.thinkingType && supportedTypes.includes(options.thinkingType)
+			? options.thinkingType
+			: DEFAULT_ZHIPU_THINKING_TYPE
+
+		new Setting(details)
+			.setName('推理类型')
+			.setDesc('控制 Zhipu AI 模型的推理行为')
+			.addDropdown((dropdown) => {
+				for (const option of ZHIPU_THINKING_TYPE_OPTIONS) {
+					dropdown.addOption(option.value, option.label)
+				}
+				dropdown.setValue(initialType)
+				dropdown.onChange(async (value) => {
+					const newThinkingType = value as import('./providers/zhipu').ZhipuThinkingType
+					options.thinkingType = newThinkingType
+					// 根据选择的推理类型自动设置 enableReasoning 状态
+					options.enableReasoning = newThinkingType !== 'disabled'
+					await this.saveSettings()
+				})
+			})
+
+		// 模型兼容性提示
+		if (!isReasoningModel(options.model)) {
+			new Setting(details)
+				.setName('模型兼容性提示')
+				.setDesc('注意：当前模型可能不支持推理功能。支持的模型：GLM-4.6, GLM-4.5, GLM-4.5v')
+				.setDisabled(true)
 		}
 	}
 }

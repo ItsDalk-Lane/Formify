@@ -81,7 +81,7 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 
 		// 判断是否使用 Responses API（启用 Reasoning 时需要）
 		const useResponsesAPI = enableReasoning
-		
+
 		// 确定使用的 API 端点
 		let endpoint = baseURL
 		if (useResponsesAPI && baseURL.includes('/chat/completions')) {
@@ -115,9 +115,13 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 	
 	// 根据 API 类型设置消息字段和参数
 	if (useResponsesAPI) {
-		// Responses API 使用 input 字段
-		data.input = formattedMessages
-		
+		// Responses API 使用 input 字段，格式为消息数组
+		data.input = formattedMessages.map(msg => ({
+			type: 'message',
+			role: msg.role,
+			content: Array.isArray(msg.content) ? msg.content : [{ type: 'input_text', text: msg.content }]
+		}))
+
 		// Responses API 需要 max_output_tokens 而不是 max_tokens
 		const remainsObj = remains as any
 		if (remainsObj.max_tokens) {
@@ -130,13 +134,13 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 			data.max_output_tokens = 9000
 			Object.assign(data, remains)
 		}
-		
+
 		// 添加 reasoning 配置
 		if (enableReasoning) {
 			data.reasoning = {
 				effort: reasoningEffort
 			}
-			new Notice(getCapabilityEmoji('Reasoning') + 'Reasoning 模式 (' + reasoningEffort + ')')
+			new Notice(getCapabilityEmoji('Reasoning') + '推理模式 (' + reasoningEffort + ') - 模型: ' + model)
 		}
 	} else {
 		// Chat Completions API 使用 messages 字段
@@ -268,39 +272,51 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 								const parsed = JSON.parse(data)
 								
 								// 处理 Responses API 的推理过程（reasoning）
-								if (useResponsesAPI && parsed.type) {
-									const eventType = parsed.type as string
-									
-									// 处理推理内容
-									if (eventType === 'response.reasoning.delta') {
-										const reasoningText = parsed.delta
-										if (reasoningText) {
-											const prefix = !reasoningActive ? ((reasoningActive = true), CALLOUT_BLOCK_START) : ''
-											const formattedReasoning = reasoningText.replace(/\n/g, '\n> ')
-											yield prefix + formattedReasoning
-										}
+								if (useResponsesAPI) {
+									// 首先检查推理内容字段（参考 Doubao/Kimi 模式）
+									const reasonContent = parsed.reasoning_content || parsed.delta?.reasoning_content
+									if (reasonContent) {
+										const prefix = !reasoningActive ? ((reasoningActive = true), CALLOUT_BLOCK_START + '🤔 **推理过程：**\n') : ''
+										// 使用标准的格式化方式：每行前面加上引用符号
+										yield prefix + reasonContent.replace(/\n/g, '\n> ')
 										continue
 									}
-									
-									// 处理输出文本
-									if (eventType === 'response.output_text.delta') {
-										const content = parsed.delta
-										if (content) {
-											if (reasoningActive) {
-												reasoningActive = false
-												yield CALLOUT_BLOCK_END + content
-											} else {
-												yield content
+
+									// 同时支持 OpenRouter 特有的事件类型
+									if (parsed.type) {
+										const eventType = parsed.type as string
+
+										// 处理推理内容
+										if (eventType === 'response.reasoning.delta' || eventType === 'response.reasoning_text.delta') {
+											const reasoningText = parsed.delta
+											if (reasoningText) {
+												const prefix = !reasoningActive ? ((reasoningActive = true), CALLOUT_BLOCK_START + '🤔 **推理过程：**\n') : ''
+												// 使用标准的格式化方式：每行前面加上引用符号
+												yield prefix + reasoningText.replace(/\n/g, '\n> ')
 											}
+											continue
 										}
-										continue
-									}
-									
-									// 处理完成事件
-									if (eventType === 'response.completed' && reasoningActive) {
-										reasoningActive = false
-										yield CALLOUT_BLOCK_END
-										continue
+
+										// 处理输出文本
+										if (eventType === 'response.output_text.delta') {
+											const content = parsed.delta
+											if (content) {
+												if (reasoningActive) {
+													reasoningActive = false
+													yield CALLOUT_BLOCK_END + '\n\n**回答：**\n\n' + content
+												} else {
+													yield content
+												}
+											}
+											continue
+										}
+
+										// 处理完成事件
+										if (eventType === 'response.completed' && reasoningActive) {
+											reasoningActive = false
+											yield CALLOUT_BLOCK_END
+											continue
+										}
 									}
 								}
 
@@ -322,11 +338,8 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 										const imageUrl = image.image_url?.url
 
 										if (!imageUrl) {
-											console.warn('流式图像数据缺失 URL')
 											continue
 										}
-
-										console.log('收到流式图像数据:', imageUrl.substring(0, 50) + '...')
 
 										// 如果配置为保存为附件
 										if (imageSaveAsAttachment && saveAttachment) {
@@ -400,90 +413,138 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 			try {
 				const parsed = JSON.parse(responseText)
 
-				// 处理文本内容
-				const content = parsed.choices?.[0]?.message?.content
-				if (content) {
-					yield content
-				}
+				// 处理 Responses API 的非流式响应
+				if (useResponsesAPI && parsed.output) {
+					let hasReasoning = false
+					let finalText = ''
 
-				// 处理图像内容
-				const message = parsed.choices?.[0]?.message
-				if (message?.images) {
-					const images = message.images
-
-					yield '\n\n'
-
-					// 处理生成的图像
-					for (let i = 0; i < images.length; i++) {
-						const image = images[i]
-						const imageUrl = image.image_url?.url
-
-						if (!imageUrl) {
-							console.warn('图像数据缺失 URL')
-							continue
-						}
-
-						// 如果配置为保存为附件
-						if (imageSaveAsAttachment && saveAttachment) {
-							try {
-								// 从 base64 data URL 中提取数据
-								if (imageUrl.startsWith('data:')) {
-									const base64Data = imageUrl.split(',')[1]
-									const buffer = Buffer.from(base64Data, 'base64')
-									const arrayBuffer = buffer.buffer.slice(
-										buffer.byteOffset,
-										buffer.byteOffset + buffer.byteLength
-									)
-
-									// 生成文件名
-									const now = new Date()
-									const formatTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
-									const indexFlag = images.length > 1 ? `-${i + 1}` : ''
-									const filename = `openrouter-${formatTime}${indexFlag}.png`
-
-									// 保存附件
-									await saveAttachment(filename, arrayBuffer)
-
-									// 输出图片引用
-									yield `![[${filename}|${imageDisplayWidth}]]\n\n`
-								} else {
-									// 如果是 URL 形式但配置要保存为附件，需要下载
-									yield `⚠️ 检测到 URL 格式图片，但配置为保存附件。请手动下载：\n${imageUrl}\n\n`
+					// 遍历 output 数组处理推理和文本内容
+					for (const output of parsed.output) {
+						if (output.type === 'reasoning') {
+							if (!hasReasoning) {
+								hasReasoning = true
+								finalText += CALLOUT_BLOCK_START + '🤔 **推理过程：**\n'
+							}
+							// 处理主要的推理内容
+							if (output.content && Array.isArray(output.content)) {
+								for (const contentItem of output.content) {
+									if (contentItem.type === 'input_text' && contentItem.text) {
+										// 使用标准的格式化方式：每行前面加上引用符号
+										finalText += contentItem.text.replace(/\n/g, '\n> ')
+									}
 								}
-							} catch (error) {
-								console.error('保存图片失败:', error)
-								yield `❌ 图片保存失败，URL: ${imageUrl}\n\n`
 							}
-						} else {
-							// 直接输出 URL 或 base64
-							if (imageUrl.startsWith('data:')) {
-								yield `📷 生成的图片（Base64格式）：\n${imageUrl.substring(0, 100)}...\n\n`
+							// 如果有 summary，显示摘要
+							if (output.summary && Array.isArray(output.summary)) {
+								for (const summaryItem of output.summary) {
+									finalText += '\n> ' + summaryItem
+								}
+							}
+						} else if (output.type === 'message' && output.content) {
+							const textContent = output.content.find((item: any) => item.type === 'output_text')?.text
+							if (textContent) {
+								if (hasReasoning) {
+									finalText += CALLOUT_BLOCK_END + '\n\n**回答：**\n\n' + textContent
+								} else {
+									finalText += textContent
+								}
+							}
+						}
+					}
+
+					if (finalText) {
+						yield finalText
+					}
+				} else {
+					// 处理 Chat Completions API 的文本内容
+					const content = parsed.choices?.[0]?.message?.content
+					if (content) {
+						yield content
+					}
+				}
+
+				// 处理图像内容（仅在 Chat Completions API 中）
+				if (!useResponsesAPI) {
+					const message = parsed.choices?.[0]?.message
+					const content = parsed.choices?.[0]?.message?.content
+
+					if (message?.images) {
+						const images = message.images
+
+						yield '\n\n'
+
+						// 处理生成的图像
+						for (let i = 0; i < images.length; i++) {
+							const image = images[i]
+							const imageUrl = image.image_url?.url
+
+							if (!imageUrl) {
+								console.warn('图像数据缺失 URL')
+								continue
+							}
+
+							// 如果配置为保存为附件
+							if (imageSaveAsAttachment && saveAttachment) {
+								try {
+									// 从 base64 data URL 中提取数据
+									if (imageUrl.startsWith('data:')) {
+										const base64Data = imageUrl.split(',')[1]
+										const buffer = Buffer.from(base64Data, 'base64')
+										const arrayBuffer = buffer.buffer.slice(
+											buffer.byteOffset,
+											buffer.byteOffset + buffer.byteLength
+										)
+
+										// 生成文件名
+										const now = new Date()
+										const formatTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
+										const indexFlag = images.length > 1 ? `-${i + 1}` : ''
+										const filename = `openrouter-${formatTime}${indexFlag}.png`
+
+										// 保存附件
+										await saveAttachment(filename, arrayBuffer)
+
+										// 输出图片引用
+										yield `![[${filename}|${imageDisplayWidth}]]\n\n`
+									} else {
+										// 如果是 URL 形式但配置要保存为附件，需要下载
+										yield `⚠️ 检测到 URL 格式图片，但配置为保存附件。请手动下载：\n${imageUrl}\n\n`
+									}
+								} catch (error) {
+									console.error('保存图片失败:', error)
+									yield `❌ 图片保存失败，URL: ${imageUrl}\n\n`
+								}
 							} else {
-								yield `📷 生成的图片：\n${imageUrl}\n\n`
+								// 直接输出 URL 或 base64
+								if (imageUrl.startsWith('data:')) {
+									yield `📷 生成的图片（Base64格式）：\n${imageUrl.substring(0, 100)}...\n\n`
+								} else {
+									yield `📷 生成的图片：\n${imageUrl}\n\n`
+								}
 							}
 						}
 					}
-				}
 
-				// 处理网络搜索的 annotations（URL citations）
-				if (message?.annotations) {
-					const annotations = message.annotations
-					for (const annotation of annotations) {
-						if (annotation.type === 'url_citation') {
-							const citation = annotation.url_citation
-							// 可以选择在这里处理引用信息
-							// DebugLogger.debug('Web search citation', {
-							// 	url: citation.url,
-							// 	title: citation.title,
-							// 	content: citation.content
-							// })
+					// 处理网络搜索的 annotations（URL citations）
+					if (message?.annotations) {
+						const annotations = message.annotations
+						for (const annotation of annotations) {
+							if (annotation.type === 'url_citation') {
+								const citation = annotation.url_citation
+								// 可以选择在这里处理引用信息
+								// DebugLogger.debug('Web search citation', {
+								// 	url: citation.url,
+								// 	title: citation.title,
+								// 	content: citation.content
+								// })
+							}
 						}
 					}
-				}
 
-				// 如果既没有文本也没有图像，确保至少输出一些内容
-				if (!content && !message?.images) {
-					yield '📷 图像生成完成，但没有可显示的内容。'
+					// 如果既没有文本也没有图像，确保至少输出一些内容
+					if (!content && !message?.images) {
+						yield '📷 图像生成完成，但没有可显示的内容。'
+					}
 				}
 			} catch (error) {
 				console.error('解析非流式响应失败:', error)
