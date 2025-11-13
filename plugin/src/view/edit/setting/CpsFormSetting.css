@@ -68,3 +68,38 @@
 	padding: var(--size-4-1) var(--size-4-2);
 	border-radius: var(--radius-m);
 }
+
+/* 批量操作按钮样式 */
+.form--BatchActionButton {
+	background: none !important;
+	border: none !important;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	padding: 2px 8px;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	transition: color 0.2s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 24px;
+	font-weight: 400;
+	outline: none;
+	box-shadow: none;
+}
+
+.form--BatchActionButton:hover {
+	color: var(--text-normal);
+	background: none !important;
+}
+
+.form--BatchActionButton:active {
+	color: var(--text-normal);
+	background: none !important;
+	transform: scale(0.95);
+}
+
+.form--BatchActionButton:focus {
+	outline: none;
+	box-shadow: none;
+}

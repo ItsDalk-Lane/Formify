@@ -15,10 +15,20 @@ import { ConfirmPopover } from "src/component/confirm/ConfirmPopover";
 export function CpsFormActions(props: {
     config: FormConfig;
     onChange: (actions: IFormAction[]) => void;
+    selectMode?: boolean;
+    onToggleSelectMode?: () => void;
+    onSelectAll?: () => void;
+    onSelectNone?: () => void;
+    onDeleteSelected?: () => void;
+    selectedIds?: string[];
+    onToggleSelection?: (id: string) => void;
 }) {
     const { config } = props;
-    const [selectMode, setSelectMode] = useState(false);
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [internalSelectMode, setInternalSelectMode] = useState(false);
+    const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
+
+    const selectMode = props.selectMode ?? internalSelectMode;
+    const selectedIds = props.selectedIds ?? internalSelectedIds;
 	const saveAction = (action: IFormAction[]) => {
 		props.onChange(action);
 	};
@@ -38,28 +48,32 @@ export function CpsFormActions(props: {
         saveAction(newActions);
     };
 
+    const handleToggleSelectMode = () => {
+        if (props.onToggleSelectMode) {
+            props.onToggleSelectMode();
+        } else {
+            setInternalSelectMode(!internalSelectMode);
+        }
+    };
+
+    const handleToggleSelection = (id: string) => {
+        if (props.onToggleSelection) {
+            props.onToggleSelection(id);
+        } else {
+            setInternalSelectedIds(prev => {
+                const s = new Set(prev);
+                if (s.has(id)) {
+                    s.delete(id);
+                } else {
+                    s.add(id);
+                }
+                return Array.from(s);
+            });
+        }
+    };
+
     return (
         <div className="form--CpsFormActionsSetting">
-            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                <button className="form--AddButton" onClick={() => setSelectMode(!selectMode)}>
-                    {selectMode ? localInstance.cancel : localInstance.more}
-                </button>
-                {selectMode && (
-                    <>
-                        <button className="form--AddButton" onClick={() => setSelectedIds(actions.map(a => a.id))}>{localInstance.all}</button>
-                        <button className="form--AddButton" onClick={() => setSelectedIds([])}>{localInstance.none}</button>
-                        <ConfirmPopover onConfirm={() => {
-                            const toDelete = new Set(selectedIds);
-                            const newActions = actions.filter(a => !toDelete.has(a.id));
-                            saveAction(newActions);
-                            setSelectedIds([]);
-                            setSelectMode(false);
-                        }}>
-                            <button className="form--AddButton">{localInstance.delete}</button>
-                        </ConfirmPopover>
-                    </>
-                )}
-            </div>
             <FormVariableQuotePanel formConfig={config} />
             {actions.map((action, index) => {
                 return (
@@ -68,14 +82,7 @@ export function CpsFormActions(props: {
                             <input
                                 type="checkbox"
                                 checked={selectedIds.includes(action.id)}
-                                onChange={(e) => {
-                                    const id = action.id;
-                                    setSelectedIds(prev => {
-                                        const s = new Set(prev);
-                                        if (e.target.checked) s.add(id); else s.delete(id);
-                                        return Array.from(s);
-                                    });
-                                }}
+                                onChange={() => handleToggleSelection(action.id)}
                             />
                         )}
                         <CpsFormAction

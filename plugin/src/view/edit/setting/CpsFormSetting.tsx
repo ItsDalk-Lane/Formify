@@ -24,6 +24,14 @@ export default function (props: {
 	const app = useObsidianApp();
 	const [commandKeys, setCommandKeys] = useState<string>("");
 
+	// 字段批量操作状态
+	const [fieldSelectMode, setFieldSelectMode] = useState(false);
+	const [fieldSelectedIds, setFieldSelectedIds] = useState<string[]>([]);
+
+	// 动作批量操作状态
+	const [actionSelectMode, setActionSelectMode] = useState(false);
+	const [actionSelectedIds, setActionSelectedIds] = useState<string[]>([]);
+
 	// 异步获取快捷键
 	useEffect(() => {
 		let mounted = true;
@@ -112,6 +120,85 @@ export default function (props: {
 		onChange(newConfig);
 	};
 
+	// 字段批量操作处理函数
+	const handleFieldToggleSelectMode = () => {
+		setFieldSelectMode(!fieldSelectMode);
+		if (!fieldSelectMode) {
+			setFieldSelectedIds([]);
+		}
+	};
+
+	const handleFieldSelectAll = () => {
+		setFieldSelectedIds(formConfig.fields.map(f => f.id));
+	};
+
+	const handleFieldSelectNone = () => {
+		setFieldSelectedIds([]);
+	};
+
+	const handleFieldDeleteSelected = () => {
+		const toDelete = new Set(fieldSelectedIds);
+		const newFields = formConfig.fields.filter(f => !toDelete.has(f.id));
+		onFieldsChanged(newFields, []);
+		setFieldSelectedIds([]);
+		setFieldSelectMode(false);
+	};
+
+	const handleFieldToggleSelection = (id: string) => {
+		setFieldSelectedIds(prev => {
+			const s = new Set(prev);
+			if (s.has(id)) {
+				s.delete(id);
+			} else {
+				s.add(id);
+			}
+			return Array.from(s);
+		});
+	};
+
+	// 动作批量操作处理函数
+	const handleActionToggleSelectMode = () => {
+		setActionSelectMode(!actionSelectMode);
+		if (!actionSelectMode) {
+			setActionSelectedIds([]);
+		}
+	};
+
+	const handleActionSelectAll = () => {
+		const actions = formConfig.actions || [];
+		setActionSelectedIds(actions.map(a => a.id));
+	};
+
+	const handleActionSelectNone = () => {
+		setActionSelectedIds([]);
+	};
+
+	const handleActionDeleteSelected = () => {
+		const toDelete = new Set(actionSelectedIds);
+		const newActions = (formConfig.actions || []).filter(a => !toDelete.has(a.id));
+		const newConfig = new FormConfig(formConfig.id);
+		Object.assign(newConfig, {
+			...formConfig,
+			action: undefined,
+			actions: newActions,
+		});
+		onChange(newConfig);
+		setActionSelectedIds([]);
+		setActionSelectMode(false);
+	};
+
+	const handleActionToggleSelection = (id: string) => {
+		setActionSelectedIds(prev => {
+			const s = new Set(prev);
+			if (s.has(id)) {
+				s.delete(id);
+			} else {
+				s.add(id);
+			}
+			return Array.from(s);
+		});
+	};
+
 	return (
 		<Tab
 			items={[
@@ -126,16 +213,31 @@ export default function (props: {
 							<CpsFormSettingGroup
 								icon={<ClipboardIcon />}
 								title={localInstance.form_fields_setting}
+								showBatchActions={true}
+								selectMode={fieldSelectMode}
+								onToggleSelectMode={handleFieldToggleSelectMode}
+								onSelectAll={handleFieldSelectAll}
+								onSelectNone={handleFieldSelectNone}
+								onDeleteSelected={handleFieldDeleteSelected}
 							>
 								<CpsFormFields
 									fields={formConfig.fields}
 									onSave={onFieldsChanged}
+									selectMode={fieldSelectMode}
+									selectedIds={fieldSelectedIds}
+									onToggleSelection={handleFieldToggleSelection}
 								/>
 							</CpsFormSettingGroup>
 
 							<CpsFormSettingGroup
 								icon={<Zap />}
 								title={localInstance.form_action_setting}
+								showBatchActions={true}
+								selectMode={actionSelectMode}
+								onToggleSelectMode={handleActionToggleSelectMode}
+								onSelectAll={handleActionSelectAll}
+								onSelectNone={handleActionSelectNone}
+								onDeleteSelected={handleActionDeleteSelected}
 							>
 								<CpsFormActions
 									config={formConfig}
@@ -148,6 +250,9 @@ export default function (props: {
 										});
 										onChange(newConfig);
 									}}
+									selectMode={actionSelectMode}
+									selectedIds={actionSelectedIds}
+									onToggleSelection={handleActionToggleSelection}
 								/>
 							</CpsFormSettingGroup>
 						</CpsForm>

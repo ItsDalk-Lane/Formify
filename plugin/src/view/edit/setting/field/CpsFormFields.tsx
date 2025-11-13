@@ -17,10 +17,20 @@ import { NewFieldGridPopover } from "./common/new-field-grid/NewFieldGridPopover
 export default function (props: {
     fields: IFormField[];
     onSave: (fields: IFormField[], modified: IFormField[]) => void;
+    selectMode?: boolean;
+    onToggleSelectMode?: () => void;
+    onSelectAll?: () => void;
+    onSelectNone?: () => void;
+    onDeleteSelected?: () => void;
+    selectedIds?: string[];
+    onToggleSelection?: (id: string) => void;
 }) {
     const { fields } = props;
-    const [selectMode, setSelectMode] = useState(false);
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [internalSelectMode, setInternalSelectMode] = useState(false);
+    const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
+
+    const selectMode = props.selectMode ?? internalSelectMode;
+    const selectedIds = props.selectedIds ?? internalSelectedIds;
 	useSortable({
 		items: fields || [],
 		getId: (item) => item.id,
@@ -79,28 +89,32 @@ export default function (props: {
 		[fields, props.onSave]
     );
 
+    const handleToggleSelectMode = () => {
+        if (props.onToggleSelectMode) {
+            props.onToggleSelectMode();
+        } else {
+            setInternalSelectMode(!internalSelectMode);
+        }
+    };
+
+    const handleToggleSelection = (id: string) => {
+        if (props.onToggleSelection) {
+            props.onToggleSelection(id);
+        } else {
+            setInternalSelectedIds(prev => {
+                const s = new Set(prev);
+                if (s.has(id)) {
+                    s.delete(id);
+                } else {
+                    s.add(id);
+                }
+                return Array.from(s);
+            });
+        }
+    };
+
     return (
         <div className="form--CpsFormFieldsSetting">
-            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                <button className="form--AddButton" onClick={() => setSelectMode(!selectMode)}>
-                    {selectMode ? localInstance.cancel : localInstance.more}
-                </button>
-                {selectMode && (
-                    <>
-                        <button className="form--AddButton" onClick={() => setSelectedIds(fields.map(f => f.id))}> {localInstance.all} </button>
-                        <button className="form--AddButton" onClick={() => setSelectedIds([])}> {localInstance.none} </button>
-                        <ConfirmPopover onConfirm={() => {
-                            const toDelete = new Set(selectedIds);
-                            const newFields = fields.filter(f => !toDelete.has(f.id));
-                            props.onSave(newFields, []);
-                            setSelectedIds([]);
-                            setSelectMode(false);
-                        }}>
-                            <button className="form--AddButton">{localInstance.delete}</button>
-                        </ConfirmPopover>
-                    </>
-                )}
-            </div>
             {fields.map((field, index) => {
                 return (
                     <CpsFormFieldItemEditing
@@ -115,14 +129,7 @@ export default function (props: {
                             <input
                                 type="checkbox"
                                 checked={selectedIds.includes(field.id)}
-                                onChange={(e) => {
-                                    const id = field.id;
-                                    setSelectedIds(prev => {
-                                        const s = new Set(prev);
-                                        if (e.target.checked) s.add(id); else s.delete(id);
-                                        return Array.from(s);
-                                    });
-                                }}
+                                onChange={() => handleToggleSelection(field.id)}
                             />
                         )}
                     </CpsFormFieldItemEditing>
