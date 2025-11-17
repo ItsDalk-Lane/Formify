@@ -17,9 +17,9 @@ export interface PluginSettings {
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
-    formFolder: "form/forms",
-    scriptFolder: "form/scripts",
-    promptTemplateFolder: "form/prompt-templates",
+    formFolder: "System/formify",
+    scriptFolder: "System/scripts",
+    promptTemplateFolder: "System/ai prompts",
     tars: {
         settings: cloneTarsSettings(),
     },
