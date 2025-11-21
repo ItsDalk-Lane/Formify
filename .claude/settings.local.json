@@ -1,8 +1,11 @@
 {
   "permissions": {
-
     "allow": [
-      "grep"
+      "grep",
+      "file.write",
+      "file.read",
+      "file.create",
+      "file.edit"
     ],
     "defaultMode": "acceptEdits",
     "deny": [],
