@@ -152,9 +152,19 @@ interface IFormAction {
   id: string;           // 唯一 ID
   type: FormActionType; // 动作类型
   condition?: Filter;   // 执行条件
-  remark?: string;      // 备注信息
+  customTitle?: string; // 自定义标题
 }
 ```
+
+#### 动作标题生成逻辑
+
+- **优先级**: 自定义标题 > 系统生成标题
+- **自定义标题**: 用户手动输入的标题（`customTitle` 字段）
+- **系统生成标题**: 根据动作类型和配置自动生成
+- **验证规则**:
+  - 最多 50 个字符
+  - 不允许特殊字符：`<>{}[]|\`~`
+  - 自动去除首尾空格
 
 ### 4. 服务注册模式
 所有动作服务都实现 `IActionService` 接口：

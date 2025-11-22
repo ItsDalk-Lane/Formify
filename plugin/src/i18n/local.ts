@@ -165,7 +165,9 @@ export interface Local {
 	register_as_command_description: string;
 	register_as_command: string;
 	remove_value: string;
-	remark: string;
+	custom_title: string;
+	custom_title_description: string;
+	enter_custom_title: string;
 	required: string;
 	reset_and_restart: string;
 	reset_code: string;

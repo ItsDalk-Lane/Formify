@@ -172,7 +172,9 @@ export class Zh implements Local {
 	register_as_command = "注册为命令";
 	register_as_command_description = "注册为命令后可以设置快捷键打开表单";
 	remove_value = "删除值";
-	remark = "备注";
+		custom_title = "自定义标题";
+		custom_title_description = "输入自定义动作标题，留空则使用系统生成的标题";
+		enter_custom_title = "输入自定义标题（可选）";
 	required = "必填";
 	reset_and_restart = "重置并重启";
 	reset_code = "重置代码";

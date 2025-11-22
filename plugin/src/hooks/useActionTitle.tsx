@@ -28,6 +28,14 @@ export function useActionTitle(value: IFormAction) {
 			formActionTypeOptions.find((t) => t.value === value.type)?.label ||
 			"";
 
+		// 优先使用自定义标题
+		if (value.customTitle && value.customTitle.trim()) {
+			return {
+				type: typeLabel,
+				title: value.customTitle.trim(),
+			};
+		}
+
 		let title = "";
 
 		if (value.type === FormActionType.SUGGEST_MODAL) {

@@ -103,13 +103,6 @@ export default function (props: {
 				setDragHandleRef={setDragHandleRef}
 			/>
 			<div className="form--CpsFormActionBottomSection">
-				<div className="form--CpsFormActionRemark">
-					{value.remark && (
-						<span className="form--CpsFormActionRemarkText">
-							{value.remark}
-						</span>
-					)}
-				</div>
 				<div className="form--CpsFormActionCondition">
 					<button
 						className="form--VisibilityConditionButton"

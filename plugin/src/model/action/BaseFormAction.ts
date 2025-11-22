@@ -6,7 +6,7 @@ import { IFormAction } from "./IFormAction";
 export abstract class BaseFormAction implements IFormAction {
     id: string;
     condition?: Filter | null | undefined;
-    remark?: string | undefined;
+    customTitle?: string | undefined;
 
     abstract type: FormActionType;
     

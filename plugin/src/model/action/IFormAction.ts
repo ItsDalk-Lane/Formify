@@ -5,7 +5,7 @@ export interface IFormAction {
   id: string;
   type: FormActionType;
   condition?: Filter | null;
-  remark?: string;
+  customTitle?: string;
 }
 
 

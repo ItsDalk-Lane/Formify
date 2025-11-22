@@ -172,7 +172,9 @@ export class En implements Local {
 	register_as_command = "Register as command";
 	register_as_command_description = "After registration, you can assign a shortcut to open the form";
 	remove_value = "Remove value";
-	remark = "Remark";
+		custom_title = "Custom Title";
+		custom_title_description = "Enter a custom action title, leave empty to use system-generated title";
+		enter_custom_title = "Enter custom title (optional)";
 	required = "Required";
 	reset_and_restart = "Reset and restart";
 	reset_code = "Reset code";

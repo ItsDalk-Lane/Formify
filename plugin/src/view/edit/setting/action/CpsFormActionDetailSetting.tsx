@@ -8,7 +8,7 @@ import { RunScriptSetting } from "./run-script/RunScriptSetting";
 import { SuggestModalSetting } from "./suggest-modal/SuggestModalSetting";
 import { UpdateFrontmatterSetting } from "./update-frontmatter/UpdateFrontmatterSetting";
 import { WaitSetting } from "./wait/WaitSetting";
-import { RemarkSetting } from "./common/RemarkSetting";
+import { CustomTitleSetting } from "./common/CustomTitleSetting";
 import { RunCommandSetting } from "./run-command/RunCommandSetting";
 import { ButtonSetting } from "./button/ButtonSetting";
 import { TextSetting } from "./text/TextSetting";
@@ -22,7 +22,7 @@ export default function (props: {
 
 	return (
 		<CpsForm layout="horizontal">
-			<RemarkSetting value={value} onChange={onChange} />
+			<CustomTitleSetting value={value} onChange={onChange} />
 			<CreateFileSetting value={value} onChange={onChange} />
 			<InsertTextSetting value={value} onChange={onChange} />
 			<TextSetting value={value} onChange={onChange} />
