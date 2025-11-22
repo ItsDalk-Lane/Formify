@@ -25,5 +25,19 @@ export class LoopVariableScope {
         }
         return undefined;
     }
+
+    /**
+     * 清除所有作用域（主要用于测试）
+     */
+    static clear(): void {
+        this.scopeStack = [];
+    }
+
+    /**
+     * 获取当前作用域栈的深度（用于测试）
+     */
+    static getDepth(): number {
+        return this.scopeStack.length;
+    }
 }
 

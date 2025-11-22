@@ -4,6 +4,7 @@ import TemplateParser from "./TemplateParser";
 import { getEditorSelection } from "src/utils/getEditorSelection";
 import { processObTemplate } from "src/utils/templates";
 import { convertVariableToString, logTypeConversion, validateFormValues, TypeConversionError } from "src/utils/typeSafety";
+import { LoopVariableScope } from "src/utils/LoopVariableScope";
 
 export class FormTemplateProcessEngine {
     async process(text: string, state: FormState, app: App) {
@@ -45,6 +46,26 @@ export class FormTemplateProcessEngine {
 
         let res = text;
         res = TemplateParser.compile(res, state);
+
+        // handle {{variableName}} - 支持循环变量引用（无@前缀，非output:格式）
+        // 使用更精确的正则表达式避免与{{@...}}和{{output:...}}冲突
+        res = res.replace(/\{\{(?![@:])([^}]+)\}\}/g, (match, variableName) => {
+            const trimmedName = variableName.trim();
+
+            // 优先从循环变量作用域获取
+            const loopValue = LoopVariableScope.getValue(trimmedName);
+            if (loopValue !== undefined) {
+                return String(loopValue);
+            }
+
+            // 然后从表单状态获取
+            const formValue = state.values[trimmedName];
+            if (formValue !== undefined && formValue !== null) {
+                return String(formValue);
+            }
+
+            return match;
+        });
 
         // handle {{output:variableName}} - 支持AI动作输出变量引用
         res = res.replace(/\{\{output:([^}]+)\}\}/g, (match, variableName) => {
