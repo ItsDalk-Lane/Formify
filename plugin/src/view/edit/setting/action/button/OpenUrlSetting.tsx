@@ -4,6 +4,8 @@ import { localInstance } from "src/i18n/locals";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import useFormConfig from "src/hooks/useFormConfig";
 import { useVariables } from "src/hooks/useVariables";
+import { useVariablesWithLoop } from "src/hooks/useVariablesWithLoop";
+import { useLoopContext } from "src/contexts/LoopContext";
 import CodeEditor from "../common/code-editor/CodeEditor";
 import { timeTemplatePreviewExtension } from "../common/code-editor/FormTimeVariableWidget";
 import { createFormVariableSuggestions } from "../common/code-editor/FormVariableSuggest";
@@ -14,29 +16,28 @@ export function OpenUrlSetting(props: {
 	onChange: (value: ButtonFormAction) => void;
 }) {
 	const { value } = props;
-	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const formConfig = useFormConfig();
-	const fieldNames = useVariables(value.id, formConfig);
+	const loopContext = useLoopContext();
+	const isInsideLoop = loopContext.isInsideLoop;
 
-	// 自动调整 textarea 高度
-	useEffect(() => {
-		const textarea = textareaRef.current;
-		if (textarea) {
-			textarea.style.height = 'auto';
-			textarea.style.height = textarea.scrollHeight + 'px';
-		}
-	}, [value.url]);
+	// 根据是否在循环内选择合适的hook
+	const fieldNames = isInsideLoop
+		? useVariablesWithLoop(value.id, formConfig, isInsideLoop)
+		: useVariables(value.id, formConfig);
 
-	// 创建变量建议
-	const variableSuggestions = useMemo(() => {
-		return fieldNames.map(f => ({
-			label: f.label,
-			info: f.info,
-		}));
+	const extensionKey = useMemo(() => {
+		return fieldNames.map((f) => f.label).join("|");
 	}, [fieldNames]);
 
-	const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-		const url = e.target.value;
+	const editorExtensions = useMemo(() => {
+		return [
+			formVariableExtension,
+			createFormVariableSuggestions(fieldNames),
+			timeTemplatePreviewExtension,
+		];
+	}, [fieldNames]);
+
+	const handleUrlChange = (url: string) => {
 		const newAction: ButtonFormAction = {
 			...value,
 			url,
@@ -45,35 +46,22 @@ export function OpenUrlSetting(props: {
 	};
 
 	return (
-		<>
-			<CpsFormItem
-				label={localInstance.url}
-				style={{
-					flexDirection: "column",
-					alignItems: "initial",
-				}}
-			>
-				<textarea
-					ref={textareaRef}
-					value={value.url || ""}
-					onChange={handleInput}
-					placeholder="https://example.com"
-					style={{
-						width: "100%",
-						minHeight: "32px",
-						maxHeight: "300px",
-						resize: "none",
-						overflow: "auto",
-						fontFamily: "inherit",
-						fontSize: "inherit",
-						padding: "8px",
-						border: "1px solid var(--background-modifier-border)",
-						borderRadius: "4px",
-						backgroundColor: "var(--background-primary)",
-						color: "var(--text-normal)",
-					}}
-				/>
-			</CpsFormItem>
-		</>
+		<CpsFormItem
+			label={localInstance.url}
+			style={{
+				flexDirection: "column",
+				alignItems: "initial",
+			}}
+		>
+			<CodeEditor
+				height="40px"
+				initialValue={value.url || ""}
+				onChange={handleUrlChange}
+				placeholder="https://example.com"
+				language="text"
+				extensions={editorExtensions}
+				extensionsKey={extensionKey}
+			/>
+		</CpsFormItem>
 	);
 }

@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import useFormConfig from "src/hooks/useFormConfig";
 import { useVariables } from "src/hooks/useVariables";
+import { useVariablesWithLoop } from "src/hooks/useVariablesWithLoop";
+import { useLoopContext } from "src/contexts/LoopContext";
 import { localInstance } from "src/i18n/locals";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import CodeEditor from "./code-editor/CodeEditor";
@@ -17,6 +19,9 @@ export default function (props: {
 }) {
 	const { actionId, content, onChange } = props;
 	const formConfig = useFormConfig();
+	const loopContext = useLoopContext();
+	const isInsideLoop = loopContext.isInsideLoop;
+
 	const internalVariableNames = internalFieldNames.map((f) => {
 		return {
 			label: f.name,
@@ -24,7 +29,11 @@ export default function (props: {
 		};
 	});
 
-	const fieldNames = useVariables(actionId, formConfig);
+	// 根据是否在循环内选择合适的hook
+	const fieldNames = isInsideLoop
+		? useVariablesWithLoop(actionId, formConfig, isInsideLoop)
+		: useVariables(actionId, formConfig);
+
 	const extensionKey = useMemo(() => {
 		return fieldNames.map((f) => f.label).join("|");
 	}, [fieldNames]);

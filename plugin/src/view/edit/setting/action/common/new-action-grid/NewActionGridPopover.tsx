@@ -7,9 +7,10 @@ import "./NewActionGridPopover.css";
 type Props = {
 	onSelect: (action: FormActionType) => void;
 	children: React.ReactNode;
+	isInsideLoop?: boolean; // 是否在循环内部，用于控制动作显示
 };
 
-export function NewActionGridPopover({ children, onSelect }: Props) {
+export function NewActionGridPopover({ children, onSelect, isInsideLoop = false }: Props) {
 	const [open, setOpen] = useState(false);
 	const handleSelect = (action: FormActionType) => {
 		onSelect(action);
@@ -18,7 +19,7 @@ export function NewActionGridPopover({ children, onSelect }: Props) {
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
 			{children}
-			<NewActionGrid onSelect={handleSelect} />
+			<NewActionGrid onSelect={handleSelect} isInsideLoop={isInsideLoop} />
 		</Popover>
 	);
 }

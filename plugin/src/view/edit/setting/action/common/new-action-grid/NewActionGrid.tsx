@@ -1,26 +1,28 @@
 import { useMemo, useState } from "react";
 import { localInstance } from "src/i18n/locals";
 import { FormActionType } from "src/model/enums/FormActionType";
-import { formActionTypeOptions } from "../ActionTypeSelect";
+import { getFormActionTypeOptions } from "../ActionTypeSelect";
 import "./NewActionGrid.css";
 
 type Props = {
 	onSelect: (action: FormActionType) => void;
 	contentProps?: React.HTMLAttributes<HTMLDivElement>;
+	isInsideLoop?: boolean; // 是否在循环内部，用于控制动作显示
 };
 
 export function NewActionGrid(props: Props) {
 	const [query, setQuery] = useState("");
-	const { onSelect } = props;
+	const { onSelect, isInsideLoop = false } = props;
 
 	const filteredOptions = useMemo(() => {
-		return formActionTypeOptions.filter((item) => {
+		const options = getFormActionTypeOptions(isInsideLoop);
+		return options.filter((item) => {
 			return (
 				item.label.toLowerCase().includes(query.toLowerCase()) ||
 				item.value.toLowerCase().includes(query.toLowerCase())
 			);
 		});
-	}, [query]);
+	}, [query, isInsideLoop]);
 
 	const handleSelect = (item: FormActionType) => {
 		setQuery("");

@@ -10,6 +10,8 @@ import { localInstance } from "src/i18n/locals";
 import { Select2, SelectOption2 } from "src/component/select2/Select";
 import PromptTemplateFileSuggestInput from "src/component/combobox/PromptTemplateFileSuggestInput";
 import { useObsidianApp } from "src/context/obsidianAppContext";
+import LoopAwareTextAreaSetting from "../common/LoopAwareTextAreaSetting";
+import LoopAwareInputSetting from "../common/LoopAwareInputSetting";
 
 type AISettingProps = {
     value: IFormAction;
@@ -156,26 +158,17 @@ export function AISetting(props: AISettingProps) {
 
             {/* 自定义系统提示词 - 仅在选择自定义模式时显示 */}
             {action.systemPromptMode === SystemPromptMode.CUSTOM && (
-                <CpsFormItem
+                <LoopAwareTextAreaSetting
+                    actionId={action.id}
+                    value={action.customSystemPrompt || ""}
+                    placeholder={localInstance.ai_custom_system_prompt_placeholder}
+                    onChange={(value) => {
+                        handleActionChange({ customSystemPrompt: value });
+                    }}
                     label={localInstance.ai_custom_system_prompt}
-                    layout="vertical"
-                >
-                    <textarea
-                        ref={customSystemPromptRef}
-                        className="form--textarea"
-                        value={action.customSystemPrompt || ""}
-                        placeholder={localInstance.ai_custom_system_prompt_placeholder}
-                        onChange={(e) => {
-                            handleActionChange({ customSystemPrompt: e.target.value });
-                            adjustTextAreaHeight(e.target);
-                        }}
-                        style={{
-                            width: "100%",
-                            minHeight: "80px",
-                            resize: "vertical"
-                        }}
-                    />
-                </CpsFormItem>
+                    required={false}
+                    description={undefined}
+                />
             )}
 
             {/* 提示词设置 */}
@@ -222,44 +215,30 @@ export function AISetting(props: AISettingProps) {
 
             {/* 自定义内容 - 仅在选择自定义时显示 */}
             {action.promptSource === PromptSourceType.CUSTOM && (
-                <CpsFormItem
+                <LoopAwareTextAreaSetting
+                    actionId={action.id}
+                    value={action.customPrompt || ""}
+                    placeholder={localInstance.ai_custom_prompt_placeholder}
+                    onChange={(value) => {
+                        handleActionChange({ customPrompt: value });
+                    }}
                     label={localInstance.ai_custom_prompt}
-                    layout="vertical"
-                    required
-                >
-                    <textarea
-                        ref={customPromptRef}
-                        className="form--textarea"
-                        value={action.customPrompt || ""}
-                        placeholder={localInstance.ai_custom_prompt_placeholder}
-                        onChange={(e) => {
-                            handleActionChange({ customPrompt: e.target.value });
-                            adjustTextAreaHeight(e.target);
-                        }}
-                        style={{
-                            width: "100%",
-                            minHeight: "120px",
-                            resize: "vertical"
-                        }}
-                    />
-                </CpsFormItem>
+                    required={true}
+                    description={undefined}
+                />
             )}
 
             {/* 输出变量名称 */}
-            <CpsFormItem
+            <LoopAwareInputSetting
+                actionId={action.id}
+                value={action.outputVariableName || ""}
+                placeholder={localInstance.ai_output_variable_name_placeholder}
+                onChange={(value) => {
+                    handleActionChange({ outputVariableName: value });
+                }}
                 label={localInstance.ai_output_variable_name}
                 description={localInstance.ai_output_variable_description}
-            >
-                <input
-                    type="text"
-                    className="form--input"
-                    value={action.outputVariableName || ""}
-                    placeholder={localInstance.ai_output_variable_name_placeholder}
-                    onChange={(e) => {
-                        handleActionChange({ outputVariableName: e.target.value });
-                    }}
-                />
-            </CpsFormItem>
+            />
         </>
     );
 }

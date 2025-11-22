@@ -11,6 +11,7 @@ import FormVariableQuotePanel from "./common/variable-quoter/FormVariableQuotePa
 import CpsFormAction from "./CpsFormAction";
 import { useState } from "react";
 import { ConfirmPopover } from "src/component/confirm/ConfirmPopover";
+import { useLoopContext } from "src/contexts/LoopContext";
 
 export function CpsFormActions(props: {
     config: FormConfig;
@@ -22,8 +23,11 @@ export function CpsFormActions(props: {
     onDeleteSelected?: () => void;
     selectedIds?: string[];
     onToggleSelection?: (id: string) => void;
+    isInsideLoop?: boolean; // 是否在循环内部，用于控制动作显示（已废弃，使用LoopContext）
 }) {
     const { config } = props;
+    const loopContext = useLoopContext();
+    const isInsideLoop = loopContext.isInsideLoop;
     const [internalSelectMode, setInternalSelectMode] = useState(false);
     const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
 
@@ -74,7 +78,7 @@ export function CpsFormActions(props: {
 
     return (
         <div className="form--CpsFormActionsSetting">
-            <FormVariableQuotePanel formConfig={config} />
+            <FormVariableQuotePanel formConfig={config} isInsideLoop={isInsideLoop} />
             {actions.map((action, index) => {
                 return (
                     <div key={action.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -116,7 +120,7 @@ export function CpsFormActions(props: {
                     </div>
                 );
             })}
-            <NewActionGridPopover onSelect={addAction}>
+            <NewActionGridPopover onSelect={addAction} isInsideLoop={isInsideLoop}>
                 <button className="form--AddButton">
                     + {localInstance.add_action}
                 </button>

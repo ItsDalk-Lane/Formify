@@ -243,7 +243,9 @@ export default class LoopActionService implements IActionService {
             loopContext,
         };
 
-        LoopVariableScope.push(loopContext.variables);
+        // 创建循环变量元数据
+        const variableMeta = LoopVariableScope.createStandardVariableMeta(loopContext.variables);
+        LoopVariableScope.push(loopContext.variables, variableMeta);
         try {
             await this.runActionGroupWithStrategy(loopAction, actionGroup, iterationContext);
         } catch (error) {

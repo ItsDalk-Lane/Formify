@@ -37,7 +37,8 @@ export default function (props: {
 	);
 }
 
-export const formActionTypeOptions = [
+// 所有动作类型选项（包含循环控制动作）
+const allFormActionTypeOptions = [
 	{
 		value: FormActionType.CREATE_FILE,
 		label: localInstance.create_file,
@@ -109,3 +110,25 @@ export const formActionTypeOptions = [
 		icon: <Mouse />,
 	},
 ];
+
+/**
+ * 获取动作类型选项，支持基于上下文过滤
+ * @param isInsideLoop 是否在循环内部，为true时显示所有动作，为false时过滤掉循环控制动作
+ * @returns 过滤后的动作类型选项
+ */
+export const getFormActionTypeOptions = (isInsideLoop: boolean = false) => {
+	if (isInsideLoop) {
+		// 循环内部：显示所有动作，包括循环控制动作
+		return allFormActionTypeOptions;
+	} else {
+		// 循环外部：过滤掉循环控制动作
+		return allFormActionTypeOptions.filter(
+			(option) =>
+				option.value !== FormActionType.BREAK &&
+				option.value !== FormActionType.CONTINUE
+		);
+	}
+};
+
+// 保持向后兼容的导出
+export const formActionTypeOptions = getFormActionTypeOptions();

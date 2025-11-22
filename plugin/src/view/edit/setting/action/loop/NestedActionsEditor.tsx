@@ -3,6 +3,7 @@ import { IFormAction } from "src/model/action/IFormAction";
 import { LoopFormAction } from "src/model/action/LoopFormAction";
 import { FormConfig } from "src/model/FormConfig";
 import { CpsFormActions } from "../CpsFormActions";
+import { LoopProvider } from "src/contexts/LoopContext";
 
 export function NestedActionsEditor(props: {
 	loopAction: LoopFormAction;
@@ -17,11 +18,15 @@ export function NestedActionsEditor(props: {
 	nestedConfig.actions = actions;
 	nestedConfig.actionGroups = formConfig.actionGroups;
 
-	const availableVariables = [
-		loopAction.itemVariableName || "item",
-		loopAction.indexVariableName || "index",
-		loopAction.totalVariableName || "total",
-	];
+	// 循环上下文值
+	const loopContextValue = {
+		isInsideLoop: true,
+		loopVariables: [
+			loopAction.itemVariableName || "item",
+			loopAction.indexVariableName || "index",
+			loopAction.totalVariableName || "total",
+		]
+	};
 
 	return (
 		<div className="form--LoopNestedActions">
@@ -29,14 +34,11 @@ export function NestedActionsEditor(props: {
 				<div className="form--LoopNestedActionsTitle">
 					{localInstance.loop_nested_actions}
 				</div>
-				<div className="form--LoopVariableHint">
-					{availableVariables.map((variable) => (
-						<span key={variable}>{variable}</span>
-					))}
-				</div>
 			</div>
 
-			<CpsFormActions config={nestedConfig} onChange={onActionsChange} />
+			<LoopProvider value={loopContextValue}>
+				<CpsFormActions config={nestedConfig} onChange={onActionsChange} />
+			</LoopProvider>
 		</div>
 	);
 }

@@ -8,10 +8,14 @@ import { FormConfig } from "src/model/FormConfig";
 import { FormActionType } from "src/model/enums/FormActionType";
 import { AIFormAction } from "src/model/action/AIFormAction";
 import { Objects } from "src/utils/Objects";
+import { LoopVariableScope, LoopVariableMeta } from "src/utils/LoopVariableScope";
 import "./FormVariableQuotePanel.css";
 import InternalVariablePopover from "./InternalVariablePopover";
 
-export default function (props: { formConfig: FormConfig }) {
+export default function (props: {
+    formConfig: FormConfig;
+    isInsideLoop?: boolean; // 是否在循环内部，用于控制是否显示循环变量
+}) {
 	const fields = props.formConfig.fields || [];
 	const actions = props.formConfig.actions || [];
 
@@ -84,17 +88,57 @@ export default function (props: { formConfig: FormConfig }) {
 			};
 		});
 
+	// 收集循环变量（仅在循环内部显示）
+	let loopVariables: any[] = [];
+	if (props.isInsideLoop) {
+		let loopVars: LoopVariableMeta[] = [];
+
+		if (LoopVariableScope.isInsideLoop()) {
+			// 运行时：从实际作用域获取
+			loopVars = LoopVariableScope.getAvailableVariables();
+		} else {
+			// 编辑时：提供模拟数据用于显示
+			loopVars = [
+				{ name: "item", description: "当前循环元素", isStandard: true },
+				{ name: "index", description: "当前循环索引（从0开始）", isStandard: true },
+				{ name: "total", description: "循环总次数", isStandard: true },
+				{ name: "iteration", description: "当前迭代次数（从1开始）", isStandard: true }
+			];
+		}
+
+		loopVariables = loopVars.map((meta: LoopVariableMeta) => ({
+			label: meta.name,
+			value: `loop_${meta.name}`,
+			data: {
+				type: 'loop',
+				name: meta.name,
+				description: meta.description || '循环变量'
+			}
+		}));
+	}
+
 	// 合并所有变量
-	const allVariables = [...fieldNames, ...outputVariables];
+	const allVariables = [...fieldNames, ...outputVariables, ...loopVariables];
 
 	const copyVariable = (item: any) => {
 		if (!item.data) return;
-		
+
 		const { type, name } = item.data;
-		const variableText = type === 'output' 
-			? `{{output:${name}}}` 
-			: `{{@${name}}}`;
-		
+		let variableText: string;
+
+		switch (type) {
+			case 'output':
+				variableText = `{{output:${name}}}`;
+				break;
+			case 'loop':
+				variableText = `{{${name}}}`;
+				break;
+			case 'field':
+			default:
+				variableText = `{{@${name}}}`;
+				break;
+		}
+
 		navigator.clipboard.writeText(variableText).then(
 			() => {
 				new Notice(localInstance.copy_success);
