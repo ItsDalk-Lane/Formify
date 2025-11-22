@@ -111,6 +111,7 @@ export function CpsFormActions(props: {
                                 ];
                                 saveAction(newActions);
                             }}
+                            formConfig={config}
                         />
                     </div>
                 );

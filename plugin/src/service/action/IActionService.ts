@@ -15,6 +15,9 @@ import { RunCommandActionService } from "./run-command/RunCommandActionService";
 import { ButtonActionService } from "./button/ButtonActionService";
 import { TextActionService } from "./text/TextActionService";
 import AIActionService from "./ai/AIActionService";
+import LoopActionService from "./loop/LoopActionService";
+import { BreakActionService } from "./loop/BreakActionService";
+import { ContinueActionService } from "./loop/ContinueActionService";
 
 export interface IActionService {
 
@@ -23,11 +26,22 @@ export interface IActionService {
     run(action: IFormAction, context: ActionContext, chain: ActionChain): Promise<any>;
 }
 
+export interface LoopContext {
+    variables: Record<string, any>;
+    depth: number;
+    canBreak: boolean;
+    canContinue: boolean;
+    breakRequested?: boolean;
+    continueRequested?: boolean;
+    parent?: LoopContext;
+}
+
 export interface ActionContext {
     state: FormState;
     config: FormConfig;
     app: App;
     abortSignal?: AbortSignal;  // 用于中断表单执行的信号
+    loopContext?: LoopContext;
 }
 
 export class ActionChain {
@@ -46,6 +60,9 @@ export class ActionChain {
         new ButtonActionService(),
         new TextActionService(),
         new AIActionService(),
+        new LoopActionService(),
+        new BreakActionService(),
+        new ContinueActionService(),
     ]
 
     constructor(actions: IFormAction[]) {

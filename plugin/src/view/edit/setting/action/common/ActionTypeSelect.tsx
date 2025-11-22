@@ -1,12 +1,15 @@
 import {
     Bot,
     Code,
+    CornerDownRight,
     File,
     FileJson,
     Hourglass,
     MessageSquare,
     Mouse,
+    RefreshCcw,
     SquarePen,
+    SquareSlash,
     Text,
     ZapIcon,
 } from "lucide-react";
@@ -84,6 +87,21 @@ export const formActionTypeOptions = [
 		value: FormActionType.WAIT,
 		label: localInstance.wait,
 		icon: <Hourglass />,
+	},
+	{
+		value: FormActionType.LOOP,
+		label: localInstance.loop,
+		icon: <RefreshCcw />,
+	},
+	{
+		value: FormActionType.BREAK,
+		label: localInstance.break_loop,
+		icon: <SquareSlash />,
+	},
+	{
+		value: FormActionType.CONTINUE,
+		label: localInstance.continue_loop,
+		icon: <CornerDownRight />,
 	},
 	{
 		value: FormActionType.BUTTON,

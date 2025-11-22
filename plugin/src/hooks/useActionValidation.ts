@@ -9,6 +9,10 @@ import { ButtonFormAction } from "../model/action/ButtonFormAction";
 import { TextFormAction } from "src/model/action/TextFormAction";
 import { AIFormAction } from "src/model/action/AIFormAction";
 import { AI_MODEL_SELECT_ON_SUBMIT } from "src/model/action/AIFormActionConstants";
+import { LoopFormAction } from "src/model/action/LoopFormAction";
+import { LoopType } from "src/model/enums/LoopType";
+import { BreakFormAction } from "src/model/action/BreakFormAction";
+import { ContinueFormAction } from "src/model/action/ContinueFormAction";
 import { FormActionType } from "../model/enums/FormActionType";
 import { ButtonActionType } from "../model/enums/ButtonActionType";
 import { TargetFileType } from "../model/enums/TargetFileType";
@@ -19,7 +23,18 @@ import { PromptSourceType } from "src/model/enums/PromptSourceType";
 import { Strings } from "src/utils/Strings";
 
 
-type FormActionImp = CreateFileFormAction | InsertTextFormAction | UpdateFrontmatterFormAction | GenerateFormAction | SuggestModalFormAction | ButtonFormAction | TextFormAction | AIFormAction
+type FormActionImp =
+    | CreateFileFormAction
+    | InsertTextFormAction
+    | UpdateFrontmatterFormAction
+    | GenerateFormAction
+    | SuggestModalFormAction
+    | ButtonFormAction
+    | TextFormAction
+    | AIFormAction
+    | LoopFormAction
+    | BreakFormAction
+    | ContinueFormAction;
 
 export function useActionValidation(action: IFormAction) {
     const formAction = action as FormActionImp;
@@ -45,7 +60,12 @@ function validateAction(action: FormActionImp) {
             heading_required: "Heading title is required",
             ai_model_required: "AI model is required",
             ai_prompt_required: "Prompt content is required",
-            ai_template_file_required: "Template file is required"
+            ai_template_file_required: "Template file is required",
+            loop_action_group_required: "Loop requires at least one nested action",
+            loop_data_source_required: "Loop data source is required",
+            loop_condition_required: "Loop condition expression is required",
+            loop_count_range_required: "Count loop requires start and end values",
+            loop_pagination_config_required: "Pagination loop requires full configuration"
         },
         "zh-CN": {
             target_folder_required: "请填写目标文件夹",
@@ -59,7 +79,12 @@ function validateAction(action: FormActionImp) {
             heading_required: "请输入目标标题",
             ai_model_required: "请选择AI模型",
             ai_prompt_required: "请填写提示词内容",
-            ai_template_file_required: "请选择模板文件"
+            ai_template_file_required: "请选择模板文件",
+            loop_action_group_required: "请为循环配置需要执行的动作",
+            loop_data_source_required: "请填写循环数据源",
+            loop_condition_required: "请填写循环条件表达式",
+            loop_count_range_required: "请填写计数循环的起始和结束值",
+            loop_pagination_config_required: "请完善分页循环的配置"
 
         },
         "zh-TW": {
@@ -74,7 +99,12 @@ function validateAction(action: FormActionImp) {
             heading_required: "請輸入目標標題",
             ai_model_required: "請選擇AI模型",
             ai_prompt_required: "請填寫提示詞內容",
-            ai_template_file_required: "請選擇模板文件"
+            ai_template_file_required: "請選擇模板文件",
+            loop_action_group_required: "請為循環設定需要執行的動作",
+            loop_data_source_required: "請填寫循環資料來源",
+            loop_condition_required: "請填寫循環條件表示式",
+            loop_count_range_required: "請填寫計數循環的起始與結束值",
+            loop_pagination_config_required: "請完善分頁循環的參數設定"
         }
     }
 
@@ -218,6 +248,43 @@ function validateAction(action: FormActionImp) {
                     messages.push(l.ai_prompt_required);
                 }
             }
+            break;
+        case FormActionType.LOOP:
+            const loopAction = action as LoopFormAction;
+            if (!loopAction.actionGroupId) {
+                messages.push(l.loop_action_group_required);
+            }
+            switch (loopAction.loopType) {
+                case LoopType.LIST:
+                    if (Strings.isEmpty(loopAction.listDataSource)) {
+                        messages.push(l.loop_data_source_required);
+                    }
+                    break;
+                case LoopType.CONDITION:
+                    if (Strings.isEmpty(loopAction.conditionExpression)) {
+                        messages.push(l.loop_condition_required);
+                    }
+                    break;
+                case LoopType.COUNT:
+                    if (
+                        loopAction.countStart === undefined ||
+                        loopAction.countEnd === undefined
+                    ) {
+                        messages.push(l.loop_count_range_required);
+                    }
+                    break;
+                case LoopType.PAGINATION:
+                    if (
+                        !loopAction.paginationConfig ||
+                        Strings.isEmpty(loopAction.paginationConfig.hasNextPageCondition)
+                    ) {
+                        messages.push(l.loop_pagination_config_required);
+                    }
+                    break;
+            }
+            break;
+        case FormActionType.BREAK:
+        case FormActionType.CONTINUE:
             break;
     }
 

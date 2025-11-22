@@ -1,5 +1,6 @@
 import { v4 } from "uuid";
 import { IFormAction } from "./action/IFormAction";
+import { ActionGroup } from "./ActionGroup";
 import { FormActionType } from "./enums/FormActionType";
 import { IFormField } from "./field/IFormField";
 
@@ -11,6 +12,7 @@ export class FormConfig {
      */
     action?: IFormAction;
     actions: IFormAction[];
+    actionGroups: ActionGroup[];
     autoSubmit: boolean;
     showSubmitSuccessToast?: boolean;  // 是否显示提交成功提示，默认为true
     enableExecutionTimeout?: boolean;  // 是否启用表单执行超时控制，默认为false
@@ -22,6 +24,7 @@ export class FormConfig {
         this.id = id;
         this.fields = [];
         this.actions = [];
+        this.actionGroups = [];
         this.autoSubmit = false;
         this.showSubmitSuccessToast = true;  // 默认显示提交成功提示
         this.enableExecutionTimeout = false; // 默认不启用超时控制

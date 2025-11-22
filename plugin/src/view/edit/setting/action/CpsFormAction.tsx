@@ -26,6 +26,7 @@ import { DragHandler } from "src/component/drag-handler/DragHandler";
 import Dialog2 from "src/component/dialog/Dialog2";
 import { FilterRoot } from "src/component/filter/FilterRoot";
 import "./CpsFormAction.css";
+import { FormConfig } from "src/model/FormConfig";
 
 export default function (props: {
 	value: IFormAction;
@@ -33,6 +34,7 @@ export default function (props: {
 	onDelete: (action: IFormAction) => void;
 	onDuplicate: (action: IFormAction) => void;
 	defaultOpen?: boolean;
+	formConfig: FormConfig;
 }) {
 	const [open, setOpen] = useState(props.defaultOpen === true);
 	const { value, onDelete, onDuplicate } = props;
@@ -123,6 +125,7 @@ export default function (props: {
 					<CpsFormActionDetailSetting
 						value={value}
 						onChange={saveAction}
+						formConfig={props.formConfig}
 					/>
 				</div>
 			)}

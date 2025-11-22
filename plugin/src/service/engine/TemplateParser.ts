@@ -1,4 +1,5 @@
 import { FormState } from "../FormState";
+import { LoopVariableScope } from "src/utils/LoopVariableScope";
 
 export default class {
 
@@ -72,6 +73,11 @@ export default class {
 
     private static evaluateExpression(expr: string, state: FormState): string {
         const propertyName = expr;
+        const scopedValue = LoopVariableScope.getValue(propertyName);
+        if (scopedValue !== undefined) {
+            return scopedValue === null ? "" : String(scopedValue);
+        }
+
         const value = state.values[propertyName];
         if (value === undefined || value === null) {
             return "";

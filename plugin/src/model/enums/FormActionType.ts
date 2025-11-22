@@ -10,4 +10,7 @@ export enum FormActionType {
     BUTTON = "button",
     TEXT = "text",
     AI = "ai",
+    LOOP = "loop",
+    BREAK = "break",
+    CONTINUE = "continue",
 }

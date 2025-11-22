@@ -13,6 +13,8 @@ import { ButtonFormAction } from "../model/action/ButtonFormAction";
 import { TextFormAction } from "../model/action/TextFormAction";
 import { AIFormAction } from "../model/action/AIFormAction";
 import { AI_MODEL_SELECT_ON_SUBMIT } from "../model/action/AIFormActionConstants";
+import { LoopFormAction } from "src/model/action/LoopFormAction";
+import { LoopType } from "src/model/enums/LoopType";
 import { FormActionType } from "../model/enums/FormActionType";
 import { ButtonActionType } from "../model/enums/ButtonActionType";
 import { TargetFileType } from "../model/enums/TargetFileType";
@@ -158,6 +160,50 @@ export function useActionTitle(value: IFormAction) {
 			} else {
 				title = localInstance.ai_no_model_configured;
 			}
+		}
+
+		if (value.type === FormActionType.LOOP) {
+			const loopAction = value as LoopFormAction;
+			let loopLabel = "";
+			switch (loopAction.loopType) {
+				case LoopType.LIST:
+					loopLabel = localInstance.loop_type_list;
+					break;
+				case LoopType.CONDITION:
+					loopLabel = localInstance.loop_type_condition;
+					break;
+				case LoopType.COUNT:
+					loopLabel = localInstance.loop_type_count;
+					break;
+				case LoopType.PAGINATION:
+					loopLabel = localInstance.loop_type_pagination;
+					break;
+				default:
+					loopLabel = localInstance.loop;
+			}
+
+			let detail = "";
+			if (loopAction.loopType === LoopType.LIST) {
+				detail = loopAction.listDataSource || localInstance.loop_data_source;
+			} else if (loopAction.loopType === LoopType.CONDITION) {
+				detail =
+					loopAction.conditionExpression ||
+					localInstance.loop_condition_expression;
+			} else if (loopAction.loopType === LoopType.COUNT) {
+				detail = `${loopAction.countStart ?? 0} ~ ${loopAction.countEnd ?? 0}`;
+			} else if (loopAction.loopType === LoopType.PAGINATION) {
+				detail = loopAction.paginationConfig?.currentPageVariable || "";
+			}
+
+			title = detail ? `${loopLabel} · ${detail}` : loopLabel;
+		}
+
+		if (value.type === FormActionType.BREAK) {
+			title = localInstance.break_loop;
+		}
+
+		if (value.type === FormActionType.CONTINUE) {
+			title = localInstance.continue_loop;
 		}
 
 		return {

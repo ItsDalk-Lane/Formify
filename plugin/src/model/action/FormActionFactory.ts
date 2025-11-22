@@ -10,6 +10,9 @@ import { WaitFormAction } from "./WaitFormAction";
 import { ButtonFormAction } from "./ButtonFormAction";
 import { TextFormAction } from "./TextFormAction";
 import { AIFormAction } from "./AIFormAction";
+import { LoopFormAction } from "./LoopFormAction";
+import { BreakFormAction } from "./BreakFormAction";
+import { ContinueFormAction } from "./ContinueFormAction";
 
 export class FormActionFactory {
     static create(type: FormActionType, partial?: Partial<IFormAction>): IFormAction {
@@ -63,6 +66,21 @@ export class FormActionFactory {
                 return new AIFormAction({
                     ...partial,
                     type: FormActionType.AI
+                });
+            case FormActionType.LOOP:
+                return new LoopFormAction({
+                    ...partial,
+                    type: FormActionType.LOOP
+                });
+            case FormActionType.BREAK:
+                return new BreakFormAction({
+                    ...partial,
+                    type: FormActionType.BREAK
+                });
+            case FormActionType.CONTINUE:
+                return new ContinueFormAction({
+                    ...partial,
+                    type: FormActionType.CONTINUE
                 });
             default:
                 throw new Error(`Unsupported FormActionType: ${type}`);

@@ -13,12 +13,15 @@ import { RunCommandSetting } from "./run-command/RunCommandSetting";
 import { ButtonSetting } from "./button/ButtonSetting";
 import { TextSetting } from "./text/TextSetting";
 import { AISetting } from "./ai/AISetting";
+import { LoopSetting } from "./loop/LoopSetting";
+import { FormConfig } from "src/model/FormConfig";
 
 export default function (props: {
 	value: IFormAction;
 	onChange: (value: IFormAction) => void;
+	formConfig: FormConfig;
 }) {
-	const { value, onChange } = props;
+	const { value, onChange, formConfig } = props;
 
 	return (
 		<CpsForm layout="horizontal">
@@ -34,6 +37,7 @@ export default function (props: {
 			<GenerateFormSetting value={value} onChange={onChange} />
 			<WaitSetting value={value} onChange={onChange} />
 			<ButtonSetting value={value} onChange={onChange} />
+			<LoopSetting value={value} onChange={onChange} formConfig={formConfig} />
 		</CpsForm>
 	);
 }
