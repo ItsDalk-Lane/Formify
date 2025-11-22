@@ -350,9 +350,8 @@ export default function (props: {
 											step="1"
 											value={formConfig.executionTimeoutThreshold ?? 30}
 											onChange={(e) => {
-												const value = parseInt(e.target.value);
-												if (value < 5) {
-													// 如果值小于5，显示错误提示
+												const value = parseInt(e.target.value, 10);
+												if (Number.isNaN(value)) {
 													return;
 												}
 												const newConfig = new FormConfig(formConfig.id);
@@ -363,13 +362,13 @@ export default function (props: {
 												onChange(newConfig);
 											}}
 											onBlur={(e) => {
-												const value = parseInt(e.target.value);
-												if (value < 5) {
-													// 重置为最小值
+												const value = parseInt(e.target.value, 10);
+												const normalizedValue = Number.isNaN(value) ? 5 : Math.max(5, value);
+												if (normalizedValue !== (formConfig.executionTimeoutThreshold ?? 30)) {
 													const newConfig = new FormConfig(formConfig.id);
 													Object.assign(newConfig, {
 														...formConfig,
-														executionTimeoutThreshold: 5,
+														executionTimeoutThreshold: normalizedValue,
 													});
 													onChange(newConfig);
 												}

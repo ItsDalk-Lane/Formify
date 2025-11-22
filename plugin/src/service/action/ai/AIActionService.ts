@@ -9,6 +9,7 @@ import { ActionChain, ActionContext, IActionService } from "../IActionService";
 import { FormTemplateProcessEngine } from "src/service/engine/FormTemplateProcessEngine";
 import { availableVendors } from "src/features/tars/settings";
 import { Message } from "src/features/tars/providers";
+import { CALLOUT_BLOCK_END, CALLOUT_BLOCK_START } from "src/features/tars/providers/utils";
 import { localInstance } from "src/i18n/locals";
 import { DebugLogger } from "src/utils/DebugLogger";
 import CommonSuggestModal from "src/component/modal/CommonSuggestModal";
@@ -133,7 +134,7 @@ export default class AIActionService implements IActionService {
             DebugLogger.debug("[AIAction] 用户提示词:", userPrompt);
 
             // 3. 调用AI并获取响应
-            const response = await this.callAI(provider, messages, context);
+            const response = await this.callAI(provider, messages, context, { includeReasoning: false });
             DebugLogger.debug("[AIAction] AI响应:", response);
 
             // 4. 存储响应到输出变量
@@ -270,7 +271,12 @@ export default class AIActionService implements IActionService {
     /**
      * 调用AI API
      */
-    private async callAI(provider: any, messages: Message[], context: ActionContext): Promise<string> {
+    private async callAI(
+        provider: any,
+        messages: Message[],
+        context: ActionContext,
+        options?: { includeReasoning?: boolean }
+    ): Promise<string> {
         // 查找对应的vendor
         const vendor = availableVendors.find((v) => v.name === provider.vendor);
         if (!vendor) {
@@ -284,9 +290,20 @@ export default class AIActionService implements IActionService {
         
         // 创建中断控制器
         const controller = new AbortController();
+        const linkedAbortHandler = () => {
+            controller.abort();
+        };
+
+        if (context.abortSignal) {
+            if (context.abortSignal.aborted) {
+                linkedAbortHandler();
+            } else {
+                context.abortSignal.addEventListener("abort", linkedAbortHandler);
+            }
+        }
         
         // 收集响应
-        let response = "";
+        let streamedResponse = "";
         const notice = new Notice(localInstance.ai_executing, 0);
 
         try {
@@ -297,19 +314,23 @@ export default class AIActionService implements IActionService {
                 async () => new ArrayBuffer(0), // resolveEmbedAsBinary - 不支持嵌入
                 undefined // saveAttachment - 不支持保存附件
             )) {
-                response += chunk;
+                streamedResponse += chunk;
                 // 更新通知显示当前接收的字符数
-                notice.setMessage(`${localInstance.ai_executing} (${response.length} ${localInstance.ai_characters})`);
+                notice.setMessage(`${localInstance.ai_executing} (${streamedResponse.length} ${localInstance.ai_characters})`);
             }
 
             notice.hide();
             
-            if (response.length === 0) {
+            let finalResponse = options?.includeReasoning === false
+                ? this.removeReasoningContent(streamedResponse)
+                : streamedResponse;
+
+            if (finalResponse.length === 0) {
                 throw new Error(localInstance.ai_response_empty);
             }
 
             new Notice(localInstance.ai_execution_success, 3000);
-            return response;
+            return finalResponse;
         } catch (error) {
             notice.hide();
             
@@ -318,7 +339,46 @@ export default class AIActionService implements IActionService {
             }
             
             throw error;
+        } finally {
+            if (context.abortSignal) {
+                context.abortSignal.removeEventListener("abort", linkedAbortHandler);
+            }
         }
+    }
+
+    /**
+     * 移除推理过程内容，只保留最终回答
+     */
+    private removeReasoningContent(content: string): string {
+        if (!content.includes(CALLOUT_BLOCK_START)) {
+            return content;
+        }
+
+        const startToken = CALLOUT_BLOCK_START;
+        const endToken = CALLOUT_BLOCK_END;
+        let sanitized = "";
+        let searchStartIndex = 0;
+
+        while (true) {
+            const startIndex = content.indexOf(startToken, searchStartIndex);
+            if (startIndex === -1) {
+                sanitized += content.slice(searchStartIndex);
+                break;
+            }
+
+            sanitized += content.slice(searchStartIndex, startIndex);
+
+            const endIndex = content.indexOf(endToken, startIndex + startToken.length);
+            if (endIndex === -1) {
+                // 如果没有结束标记，认为剩余内容都是推理过程，直接丢弃
+                searchStartIndex = content.length;
+                break;
+            }
+
+            searchStartIndex = endIndex + endToken.length;
+        }
+
+        return sanitized;
     }
 
     /**
