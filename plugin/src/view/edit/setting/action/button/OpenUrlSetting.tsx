@@ -22,7 +22,7 @@ export function OpenUrlSetting(props: {
 
 	// 根据是否在循环内选择合适的hook
 	const fieldNames = isInsideLoop
-		? useVariablesWithLoop(value.id, formConfig, isInsideLoop)
+		? useVariablesWithLoop(value.id, formConfig, isInsideLoop, loopContext.loopType)
 		: useVariables(value.id, formConfig);
 
 	const extensionKey = useMemo(() => {

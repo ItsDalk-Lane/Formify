@@ -1,5 +1,6 @@
 import { FormConfig } from "src/model/FormConfig";
 import { FormActionType } from "src/model/enums/FormActionType";
+import { LoopType } from "src/model/enums/LoopType";
 import { GenerateFormAction } from "src/model/action/OpenFormAction";
 import { SuggestModalFormAction } from "src/model/action/SuggestModalFormAction";
 import { LoopFormAction } from "src/model/action/LoopFormAction";
@@ -14,6 +15,102 @@ const DEFAULT_COLLECT_OPTIONS: Required<VariableCollectOptions> = {
     includeSystemReserved: true,
     includeEmpty: false
 };
+
+/**
+ * 根据循环类型获取对应的循环变量信息
+ */
+function getLoopVariablesByType(loopType?: LoopType): Array<{
+    standardName: string;
+    description: string;
+    getUserDefinedName: (action: LoopFormAction) => string | undefined;
+}> {
+    // 基础变量：所有循环类型都有
+    const baseVars = [
+        {
+            standardName: "index",
+            description: "当前循环索引（从0开始）",
+            getUserDefinedName: (action: LoopFormAction) => action.indexVariableName
+        },
+        {
+            standardName: "iteration",
+            description: "当前迭代次数（从1开始）",
+            getUserDefinedName: () => "iteration"
+        }
+    ];
+
+    if (!loopType) {
+        return baseVars;
+    }
+
+    switch (loopType) {
+        case LoopType.LIST:
+            return [
+                {
+                    standardName: "item",
+                    description: "当前循环元素",
+                    getUserDefinedName: (action: LoopFormAction) => action.itemVariableName
+                },
+                ...baseVars,
+                {
+                    standardName: "total",
+                    description: "循环总次数",
+                    getUserDefinedName: (action: LoopFormAction) => action.totalVariableName
+                }
+            ];
+
+        case LoopType.CONDITION:
+            // 条件循环：只有 index, iteration（不包含item和total，因为它们在条件循环中无意义）
+            return baseVars;
+
+        case LoopType.COUNT:
+            return [
+                {
+                    standardName: "item",
+                    description: "当前计数值",
+                    getUserDefinedName: (action: LoopFormAction) => action.itemVariableName
+                },
+                ...baseVars,
+                {
+                    standardName: "total",
+                    description: "计数目标值",
+                    getUserDefinedName: (action: LoopFormAction) => action.totalVariableName
+                }
+            ];
+
+        case LoopType.PAGINATION:
+            return [
+                {
+                    standardName: "item",
+                    description: "当前页数据项",
+                    getUserDefinedName: (action: LoopFormAction) => action.itemVariableName
+                },
+                ...baseVars,
+                {
+                    standardName: "total",
+                    description: "总数据条数",
+                    getUserDefinedName: (action: LoopFormAction) => action.totalVariableName
+                },
+                {
+                    standardName: "currentPage",
+                    description: "当前页码（从1开始）",
+                    getUserDefinedName: () => "currentPage"
+                },
+                {
+                    standardName: "pageSize",
+                    description: "每页大小",
+                    getUserDefinedName: () => "pageSize"
+                },
+                {
+                    standardName: "totalPage",
+                    description: "总页数",
+                    getUserDefinedName: () => "totalPage"
+                }
+            ];
+
+        default:
+            return baseVars;
+    }
+}
 
 export class VariableRegistry {
     static collectAllVariables(formConfig: FormConfig, options?: VariableCollectOptions): VariableInfo[] {
@@ -108,26 +205,27 @@ export class VariableRegistry {
                 }
                 case FormActionType.LOOP: {
                     const loopAction = action as LoopFormAction;
-                    const loopVariables = [
-                        loopAction.itemVariableName,
-                        loopAction.indexVariableName,
-                        loopAction.totalVariableName
-                    ];
-                    loopVariables.forEach((name, varIndex) => {
+                    const loopVariableInfos = getLoopVariablesByType(loopAction.loopType);
+
+                    loopVariableInfos.forEach((varInfo, varIndex) => {
+                        const name = varInfo.getUserDefinedName(loopAction);
                         if (!this.shouldInclude(name, opts)) {
                             return;
                         }
                         result.push({
-                            name,
+                            name: name!,
                             source: VariableSource.LOOP_VAR,
                             sourceId: loopAction.id,
-                            description: "",
+                            description: varInfo.description,
                             location: {
                                 actionId: loopAction.id,
                                 actionType: action.type,
                                 index,
                                 path: `loopVariables.${varIndex}`,
                                 actionGroupId: loopAction.actionGroupId
+                            },
+                            meta: {
+                                loopType: loopAction.loopType
                             }
                         });
                     });

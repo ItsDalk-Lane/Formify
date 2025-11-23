@@ -1,7 +1,4 @@
-import { useMemo } from "react";
 import useFormConfig from "src/hooks/useFormConfig";
-import { useVariablesWithLoop } from "src/hooks/useVariablesWithLoop";
-import { useLoopContext } from "src/contexts/LoopContext";
 import { localInstance } from "src/i18n/locals";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 

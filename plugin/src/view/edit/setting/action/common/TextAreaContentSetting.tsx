@@ -23,7 +23,7 @@ export default function (props: {
 
 	// 根据是否在循环内选择合适的hook
 	const fieldNames = isInsideLoop
-		? useVariablesWithLoop(actionId, formConfig, isInsideLoop)
+		? useVariablesWithLoop(actionId, formConfig, isInsideLoop, loopContext.loopType)
 		: useVariables(actionId, formConfig);
 
 	const extensionKey = useMemo(() => {

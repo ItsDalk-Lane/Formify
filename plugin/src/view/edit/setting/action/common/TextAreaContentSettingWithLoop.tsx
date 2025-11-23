@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import useFormConfig from "src/hooks/useFormConfig";
 import { useVariablesWithLoop } from "src/hooks/useVariablesWithLoop";
+import { useLoopContext } from "src/contexts/LoopContext";
 import { localInstance } from "src/i18n/locals";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import CodeEditor from "./code-editor/CodeEditor";
@@ -17,7 +18,8 @@ export default function (props: {
 }) {
 	const { actionId, content, onChange, isInsideLoop = false } = props;
 	const formConfig = useFormConfig();
-	const fieldNames = useVariablesWithLoop(actionId, formConfig, isInsideLoop);
+	const loopContext = useLoopContext();
+	const fieldNames = useVariablesWithLoop(actionId, formConfig, isInsideLoop, loopContext.loopType);
 	const extensionKey = useMemo(() => {
 		return fieldNames.map((f) => f.label).join("|");
 	}, [fieldNames]);

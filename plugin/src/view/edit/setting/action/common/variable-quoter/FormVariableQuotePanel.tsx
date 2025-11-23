@@ -6,9 +6,11 @@ import { GenerateFormAction } from "src/model/action/OpenFormAction";
 import { SuggestModalFormAction } from "src/model/action/SuggestModalFormAction";
 import { FormConfig } from "src/model/FormConfig";
 import { FormActionType } from "src/model/enums/FormActionType";
+import { LoopType } from "src/model/enums/LoopType";
 import { AIFormAction } from "src/model/action/AIFormAction";
 import { Objects } from "src/utils/Objects";
 import { LoopVariableScope, LoopVariableMeta } from "src/utils/LoopVariableScope";
+import { useLoopContext } from "src/contexts/LoopContext";
 import "./FormVariableQuotePanel.css";
 import InternalVariablePopover from "./InternalVariablePopover";
 
@@ -16,6 +18,61 @@ export default function (props: {
     formConfig: FormConfig;
     isInsideLoop?: boolean; // 是否在循环内部，用于控制是否显示循环变量
 }) {
+    const loopContext = useLoopContext();
+    const actualLoopType = loopContext.isInsideLoop ? loopContext.loopType : undefined;
+
+    /**
+     * 根据循环类型获取对应的循环变量列表（从 useVariablesWithLoop.tsx 复制）
+     */
+    function getLoopVariablesByType(loopType?: LoopType): LoopVariableMeta[] {
+        // 基础变量：所有循环类型都有
+        const baseVars: LoopVariableMeta[] = [
+            { name: "index", description: "当前循环索引（从0开始）", isStandard: true },
+            { name: "iteration", description: "当前迭代次数（从1开始）", isStandard: true }
+        ];
+
+        if (!loopType) {
+            // 如果没有指定循环类型，返回基础变量
+            return baseVars;
+        }
+
+        switch (loopType) {
+            case LoopType.LIST:
+                // 列表循环：item, index, total, iteration
+                return [
+                    { name: "item", description: "当前循环元素", isStandard: true },
+                    ...baseVars,
+                    { name: "total", description: "循环总次数", isStandard: true }
+                ];
+
+            case LoopType.CONDITION:
+                // 条件循环：只有 index, iteration（不包含item和total，因为它们在条件循环中无意义）
+                return baseVars;
+
+            case LoopType.COUNT:
+                // 计数循环：item, index, total, iteration
+                return [
+                    { name: "item", description: "当前计数值", isStandard: true },
+                    ...baseVars,
+                    { name: "total", description: "计数目标值", isStandard: true }
+                ];
+
+            case LoopType.PAGINATION:
+                // 分页循环：item, index, total, iteration, currentPage, pageSize, totalPage
+                return [
+                    { name: "item", description: "当前页数据项", isStandard: true },
+                    ...baseVars,
+                    { name: "total", description: "总数据条数", isStandard: true },
+                    { name: "currentPage", description: "当前页码（从1开始）", isStandard: true },
+                    { name: "pageSize", description: "每页大小", isStandard: true },
+                    { name: "totalPage", description: "总页数", isStandard: true }
+                ];
+
+            default:
+                // 未知循环类型，返回基础变量
+                return baseVars;
+        }
+    }
 	const fields = props.formConfig.fields || [];
 	const actions = props.formConfig.actions || [];
 
@@ -97,13 +154,8 @@ export default function (props: {
 			// 运行时：从实际作用域获取
 			loopVars = LoopVariableScope.getAvailableVariables();
 		} else {
-			// 编辑时：提供模拟数据用于显示
-			loopVars = [
-				{ name: "item", description: "当前循环元素", isStandard: true },
-				{ name: "index", description: "当前循环索引（从0开始）", isStandard: true },
-				{ name: "total", description: "循环总次数", isStandard: true },
-				{ name: "iteration", description: "当前迭代次数（从1开始）", isStandard: true }
-			];
+			// 编辑时：根据循环类型提供模拟数据用于显示
+			loopVars = getLoopVariablesByType(actualLoopType);
 		}
 
 		loopVariables = loopVars.map((meta: LoopVariableMeta) => ({

@@ -9,6 +9,59 @@ import { LoopVariableScope, LoopVariableMeta } from "../utils/LoopVariableScope"
 import { VariableSource } from "../types/variable";
 import { localInstance } from "src/i18n/locals";
 
+/**
+ * 根据循环类型获取对应的循环变量列表
+ */
+function getLoopVariablesByType(loopType?: LoopType): LoopVariableMeta[] {
+    // 基础变量：所有循环类型都有
+    const baseVars: LoopVariableMeta[] = [
+        { name: "index", description: "当前循环索引（从0开始）", isStandard: true },
+        { name: "iteration", description: "当前迭代次数（从1开始）", isStandard: true }
+    ];
+
+    if (!loopType) {
+        // 如果没有指定循环类型，返回基础变量
+        return baseVars;
+    }
+
+    switch (loopType) {
+        case LoopType.LIST:
+            // 列表循环：item, index, total, iteration
+            return [
+                { name: "item", description: "当前循环元素", isStandard: true },
+                ...baseVars,
+                { name: "total", description: "循环总次数", isStandard: true }
+            ];
+
+        case LoopType.CONDITION:
+            // 条件循环：只有 index, iteration（不包含item和total，因为它们在条件循环中无意义）
+            return baseVars;
+
+        case LoopType.COUNT:
+            // 计数循环：item, index, total, iteration
+            return [
+                { name: "item", description: "当前计数值", isStandard: true },
+                ...baseVars,
+                { name: "total", description: "计数目标值", isStandard: true }
+            ];
+
+        case LoopType.PAGINATION:
+            // 分页循环：item, index, total, iteration, currentPage, pageSize, totalPage
+            return [
+                { name: "item", description: "当前页数据项", isStandard: true },
+                ...baseVars,
+                { name: "total", description: "总数据条数", isStandard: true },
+                { name: "currentPage", description: "当前页码（从1开始）", isStandard: true },
+                { name: "pageSize", description: "每页大小", isStandard: true },
+                { name: "totalPage", description: "总页数", isStandard: true }
+            ];
+
+        default:
+            // 未知循环类型，返回基础变量
+            return baseVars;
+    }
+}
+
 // 定义变量项的类型
 export interface VariableItem {
     label: string;
@@ -94,20 +147,7 @@ export function useVariablesWithLoop(
                 loopVars = LoopVariableScope.getAvailableVariables();
             } else {
                 // 编辑时：根据循环类型提供模拟数据用于自动补全
-                const baseLoopVars = [
-                    { name: "index", description: "当前循环索引（从0开始）", isStandard: true },
-                    { name: "iteration", description: "当前迭代次数（从1开始）", isStandard: true }
-                ];
-
-                // 非条件循环才添加item和total变量
-                if (loopType !== LoopType.CONDITION) {
-                    baseLoopVars.push(
-                        { name: "item", description: "当前循环元素", isStandard: true },
-                        { name: "total", description: "循环总次数", isStandard: true }
-                    );
-                }
-
-                loopVars = baseLoopVars;
+                loopVars = getLoopVariablesByType(loopType);
             }
 
             // 将循环变量添加到字段列表中
