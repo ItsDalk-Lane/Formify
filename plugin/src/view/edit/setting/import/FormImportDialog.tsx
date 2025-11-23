@@ -601,27 +601,37 @@ export function FormImportDialog({
                             padding: '12px',
                             background: 'var(--background-secondary)',
                             borderRadius: '6px',
-                            cursor: 'pointer',
                             marginBottom: '8px'
-                        }}
-                        onClick={() => {
-                            const newValue = !importOptions.partialImport.importFields;
-                            updatePartialImportConfig('importFields', newValue);
-                            if (newValue && selectedFormData?.fields) {
-                                updatePartialImportConfig('fieldIds', selectedFormData.fields.map(f => f.id));
-                            } else {
-                                updatePartialImportConfig('fieldIds', []);
-                            }
                         }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <input
                                     type="checkbox"
                                     checked={importOptions.partialImport.importFields}
-                                    onChange={() => {}}
-                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={(e) => {
+                                        const newValue = e.target.checked;
+                                        updatePartialImportConfig('importFields', newValue);
+                                        if (newValue && selectedFormData?.fields) {
+                                            updatePartialImportConfig('fieldIds', selectedFormData.fields.map(f => f.id));
+                                        } else {
+                                            updatePartialImportConfig('fieldIds', []);
+                                        }
+                                    }}
                                 />
-                                <span>表单字段</span>
-                            </label>
+                                <span
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => {
+                                        const newValue = !importOptions.partialImport.importFields;
+                                        updatePartialImportConfig('importFields', newValue);
+                                        if (newValue && selectedFormData?.fields) {
+                                            updatePartialImportConfig('fieldIds', selectedFormData.fields.map(f => f.id));
+                                        } else {
+                                            updatePartialImportConfig('fieldIds', []);
+                                        }
+                                    }}
+                                >
+                                    表单字段
+                                </span>
+                            </div>
                             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                                 {selectedFormData?.fields?.length || 0} 个字段
                             </span>
@@ -634,35 +644,6 @@ export function FormImportDialog({
                                 border: '1px solid var(--background-modifier-border)',
                                 borderRadius: '6px'
                             }}>
-                                <div style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    padding: '8px 12px',
-                                    background: 'var(--background-secondary)',
-                                    borderRadius: '4px',
-                                    marginBottom: '8px',
-                                    cursor: 'pointer'
-                                }}
-                                onClick={() => {
-                                    const currentFieldIds = importOptions.partialImport.fieldIds || [];
-                                    const allFieldIds = selectedFormData.fields.map(f => f.id);
-                                    const allSelected = currentFieldIds.length === selectedFormData.fields.length;
-
-                                    if (allSelected) {
-                                        updatePartialImportConfig('fieldIds', []);
-                                    } else {
-                                        updatePartialImportConfig('fieldIds', allFieldIds);
-                                    }
-                                }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={(importOptions.partialImport.fieldIds || []).length === selectedFormData.fields.length}
-                                        onChange={() => {}}
-                                        onClick={(e) => e.stopPropagation()}
-                                    />
-                                    <span style={{ fontSize: '12px', fontWeight: '500' }}>全选</span>
-                                </div>
                                 <div style={{
                                     display: 'grid',
                                     gap: '6px',
@@ -719,27 +700,37 @@ export function FormImportDialog({
                             padding: '12px',
                             background: 'var(--background-secondary)',
                             borderRadius: '6px',
-                            cursor: 'pointer',
                             marginBottom: '8px'
-                        }}
-                        onClick={() => {
-                            const newValue = !importOptions.partialImport.importActions;
-                            updatePartialImportConfig('importActions', newValue);
-                            if (newValue && selectedFormData?.actions) {
-                                updatePartialImportConfig('actionIds', selectedFormData.actions.map(a => a.id));
-                            } else {
-                                updatePartialImportConfig('actionIds', []);
-                            }
                         }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <input
                                     type="checkbox"
                                     checked={importOptions.partialImport.importActions}
-                                    onChange={() => {}}
-                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={(e) => {
+                                        const newValue = e.target.checked;
+                                        updatePartialImportConfig('importActions', newValue);
+                                        if (newValue && selectedFormData?.actions) {
+                                            updatePartialImportConfig('actionIds', selectedFormData.actions.map(a => a.id));
+                                        } else {
+                                            updatePartialImportConfig('actionIds', []);
+                                        }
+                                    }}
                                 />
-                                <span>表单动作</span>
-                            </label>
+                                <span
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => {
+                                        const newValue = !importOptions.partialImport.importActions;
+                                        updatePartialImportConfig('importActions', newValue);
+                                        if (newValue && selectedFormData?.actions) {
+                                            updatePartialImportConfig('actionIds', selectedFormData.actions.map(a => a.id));
+                                        } else {
+                                            updatePartialImportConfig('actionIds', []);
+                                        }
+                                    }}
+                                >
+                                    表单动作
+                                </span>
+                            </div>
                             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                                 {selectedFormData?.actions?.length || 0} 个动作
                             </span>
@@ -752,35 +743,6 @@ export function FormImportDialog({
                                 border: '1px solid var(--background-modifier-border)',
                                 borderRadius: '6px'
                             }}>
-                                <div style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    padding: '8px 12px',
-                                    background: 'var(--background-secondary)',
-                                    borderRadius: '4px',
-                                    marginBottom: '8px',
-                                    cursor: 'pointer'
-                                }}
-                                onClick={() => {
-                                    const currentActionIds = importOptions.partialImport.actionIds || [];
-                                    const allActionIds = selectedFormData.actions.map(a => a.id);
-                                    const allSelected = currentActionIds.length === selectedFormData.actions.length;
-
-                                    if (allSelected) {
-                                        updatePartialImportConfig('actionIds', []);
-                                    } else {
-                                        updatePartialImportConfig('actionIds', allActionIds);
-                                    }
-                                }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={(importOptions.partialImport.actionIds || []).length === selectedFormData.actions.length}
-                                        onChange={() => {}}
-                                        onClick={(e) => e.stopPropagation()}
-                                    />
-                                    <span style={{ fontSize: '12px', fontWeight: '500' }}>全选</span>
-                                </div>
                                 <div style={{
                                     display: 'grid',
                                     gap: '6px',
@@ -835,31 +797,45 @@ export function FormImportDialog({
                             padding: '12px',
                             background: 'var(--background-secondary)',
                             borderRadius: '6px',
-                            cursor: 'pointer',
                             marginBottom: '8px'
-                        }}
-                        onClick={() => {
-                            const newValue = !importOptions.partialImport.importOtherSettings;
-                            updatePartialImportConfig('importOtherSettings', newValue);
-                            // 当启用其他设置时，默认启用所有子项
-                            if (newValue) {
-                                updateOtherSetting('showSubmitSuccessToast', true);
-                                updateOtherSetting('enableExecutionTimeout', false);
-                                updateOtherSetting('executionTimeoutThreshold', 30);
-                            } else {
-                                updateOtherSetting('showSubmitSuccessToast', false);
-                                updateOtherSetting('enableExecutionTimeout', false);
-                            }
                         }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <input
                                     type="checkbox"
                                     checked={importOptions.partialImport.importOtherSettings}
-                                    onChange={() => {}}
-                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={(e) => {
+                                        const newValue = e.target.checked;
+                                        updatePartialImportConfig('importOtherSettings', newValue);
+                                        // 当启用其他设置时，默认启用所有子项
+                                        if (newValue) {
+                                            updateOtherSetting('showSubmitSuccessToast', true);
+                                            updateOtherSetting('enableExecutionTimeout', true);
+                                            updateOtherSetting('executionTimeoutThreshold', 30);
+                                        } else {
+                                            updateOtherSetting('showSubmitSuccessToast', false);
+                                            updateOtherSetting('enableExecutionTimeout', false);
+                                        }
+                                    }}
                                 />
-                                <span>其他设置</span>
-                            </label>
+                                <span
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => {
+                                        const newValue = !importOptions.partialImport.importOtherSettings;
+                                        updatePartialImportConfig('importOtherSettings', newValue);
+                                        // 当启用其他设置时，默认启用所有子项
+                                        if (newValue) {
+                                            updateOtherSetting('showSubmitSuccessToast', true);
+                                            updateOtherSetting('enableExecutionTimeout', true);
+                                            updateOtherSetting('executionTimeoutThreshold', 30);
+                                        } else {
+                                            updateOtherSetting('showSubmitSuccessToast', false);
+                                            updateOtherSetting('enableExecutionTimeout', false);
+                                        }
+                                    }}
+                                >
+                                    其他设置
+                                </span>
+                            </div>
                             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                                 表单配置选项
                             </span>
@@ -872,37 +848,6 @@ export function FormImportDialog({
                                 border: '1px solid var(--background-modifier-border)',
                                 borderRadius: '6px'
                             }}>
-                                <div style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    padding: '8px 12px',
-                                    background: 'var(--background-secondary)',
-                                    borderRadius: '4px',
-                                    marginBottom: '8px',
-                                    cursor: 'pointer'
-                                }}
-                                onClick={() => {
-                                    const currentSettings = importOptions.partialImport.otherSettings || {};
-                                    const showToast = currentSettings.showSubmitSuccessToast !== false;
-                                    const enableTimeout = currentSettings.enableExecutionTimeout === true;
-                                    const allSelected = showToast && enableTimeout;
-
-                                    updateOtherSetting('showSubmitSuccessToast', !allSelected);
-                                    updateOtherSetting('enableExecutionTimeout', !allSelected);
-                                    updateOtherSetting('executionTimeoutThreshold', !allSelected ? 30 : currentSettings.executionTimeoutThreshold || 30);
-                                }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={
-                                            (importOptions.partialImport.otherSettings?.showSubmitSuccessToast !== false) &&
-                                            (importOptions.partialImport.otherSettings?.enableExecutionTimeout === true)
-                                        }
-                                        onChange={() => {}}
-                                        onClick={(e) => e.stopPropagation()}
-                                    />
-                                    <span style={{ fontSize: '12px', fontWeight: '500' }}>全选</span>
-                                </div>
                                 <div style={{ display: 'grid', gap: '8px' }}>
                                     <label style={{
                                         display: 'flex',
