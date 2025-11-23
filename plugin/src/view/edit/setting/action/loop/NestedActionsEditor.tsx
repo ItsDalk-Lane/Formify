@@ -2,6 +2,7 @@ import { localInstance } from "src/i18n/locals";
 import { IFormAction } from "src/model/action/IFormAction";
 import { LoopFormAction } from "src/model/action/LoopFormAction";
 import { FormConfig } from "src/model/FormConfig";
+import { LoopType } from "src/model/enums/LoopType";
 import { CpsFormActions } from "../CpsFormActions";
 import { LoopProvider } from "src/contexts/LoopContext";
 
@@ -19,13 +20,22 @@ export function NestedActionsEditor(props: {
 	nestedConfig.actionGroups = formConfig.actionGroups;
 
 	// 循环上下文值
+	const baseLoopVariables = [
+		loopAction.indexVariableName || "index",
+	];
+
+	// 非条件循环才添加item和total变量
+	if (loopAction.loopType !== LoopType.CONDITION) {
+		baseLoopVariables.push(
+			loopAction.itemVariableName || "item",
+			loopAction.totalVariableName || "total"
+		);
+	}
+
 	const loopContextValue = {
 		isInsideLoop: true,
-		loopVariables: [
-			loopAction.itemVariableName || "item",
-			loopAction.indexVariableName || "index",
-			loopAction.totalVariableName || "total",
-		]
+		loopVariables: baseLoopVariables,
+		loopType: loopAction.loopType
 	};
 
 	return (

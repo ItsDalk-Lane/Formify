@@ -3,6 +3,7 @@ import { GenerateFormAction } from "../model/action/OpenFormAction";
 import { SuggestModalFormAction } from "../model/action/SuggestModalFormAction";
 import { AIFormAction } from "../model/action/AIFormAction";
 import { FormActionType } from "../model/enums/FormActionType";
+import { LoopType } from "../model/enums/LoopType";
 import { FormConfig } from "../model/FormConfig";
 import { LoopVariableScope, LoopVariableMeta } from "../utils/LoopVariableScope";
 import { VariableSource } from "../types/variable";
@@ -21,7 +22,8 @@ export interface VariableItem {
 export function useVariablesWithLoop(
     actionId: string,
     formConfig: FormConfig,
-    isInsideLoop: boolean = false
+    isInsideLoop: boolean = false,
+    loopType?: LoopType
 ): VariableItem[] {
     return useMemo(() => {
         const actions = formConfig.actions || [];
@@ -91,13 +93,21 @@ export function useVariablesWithLoop(
                 // 运行时：从实际作用域获取
                 loopVars = LoopVariableScope.getAvailableVariables();
             } else {
-                // 编辑时：提供模拟数据用于自动补全
-                loopVars = [
-                    { name: "item", description: "当前循环元素", isStandard: true },
+                // 编辑时：根据循环类型提供模拟数据用于自动补全
+                const baseLoopVars = [
                     { name: "index", description: "当前循环索引（从0开始）", isStandard: true },
-                    { name: "total", description: "循环总次数", isStandard: true },
                     { name: "iteration", description: "当前迭代次数（从1开始）", isStandard: true }
                 ];
+
+                // 非条件循环才添加item和total变量
+                if (loopType !== LoopType.CONDITION) {
+                    baseLoopVars.push(
+                        { name: "item", description: "当前循环元素", isStandard: true },
+                        { name: "total", description: "循环总次数", isStandard: true }
+                    );
+                }
+
+                loopVars = baseLoopVars;
             }
 
             // 将循环变量添加到字段列表中
@@ -113,5 +123,5 @@ export function useVariablesWithLoop(
         }
 
         return fields;
-    }, [formConfig, actionId, isInsideLoop]);
+    }, [formConfig, actionId, isInsideLoop, loopType]);
 }

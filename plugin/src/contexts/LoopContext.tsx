@@ -1,4 +1,5 @@
 import React, { createContext, useContext, ReactNode } from 'react';
+import { LoopType } from 'src/model/enums/LoopType';
 
 /**
  * 循环上下文接口
@@ -6,6 +7,7 @@ import React, { createContext, useContext, ReactNode } from 'react';
 export interface LoopContextValue {
     isInsideLoop: boolean;
     loopVariables?: string[]; // 可用的循环变量名列表
+    loopType?: LoopType; // 循环类型
 }
 
 /**

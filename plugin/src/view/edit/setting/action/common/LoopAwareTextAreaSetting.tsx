@@ -25,7 +25,7 @@ export default function LoopAwareTextAreaSetting(props: {
 
 	// 根据是否在循环内选择合适的hook
 	const fieldNames = isInsideLoop
-		? useVariablesWithLoop(actionId, formConfig, isInsideLoop)
+		? useVariablesWithLoop(actionId, formConfig, isInsideLoop, loopContext.loopType)
 		: [] as any; // 非循环时暂时用空数组，避免类型错误
 
 	const extensionKey = useMemo(() => {

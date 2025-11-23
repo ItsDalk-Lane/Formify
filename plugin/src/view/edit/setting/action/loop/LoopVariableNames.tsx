@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import useFormConfig from "src/hooks/useFormConfig";
 import { localInstance } from "src/i18n/locals";
 import { LoopFormAction } from "src/model/action/LoopFormAction";
+import { LoopType } from "src/model/enums/LoopType";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import CpsForm from "src/view/shared/CpsForm";
 import { LoopVariableValidator } from "src/utils/LoopVariableValidator";
@@ -65,34 +66,41 @@ export function LoopVariableNames(props: {
 	const indexValid = LoopVariableValidator.isValid(action.indexVariableName);
 	const totalValid = LoopVariableValidator.isValid(action.totalVariableName);
 
+	const isConditionLoop = action.loopType === LoopType.CONDITION;
+
 	return (
 		<CpsForm layout="horizontal" className="form--LoopVariableNames">
-			<CpsFormItem label={localInstance.loop_item_variable}>
-				<input
-					data-invalid={!itemValid || !!conflicts.item}
-					type="text"
-					value={action.itemVariableName ?? DEFAULT_ITEM}
-					onChange={(event) => {
-						updateConflict("item", null);
-						onChange({
-							itemVariableName: event.target.value,
-						});
-					}}
-					onBlur={() => runConflictCheck("item")}
-				/>
-			</CpsFormItem>
-			{!itemValid && (
-				<p className="form--LoopVariableError">
-					{localInstance.loop_variable_names}
-				</p>
+			{/* item变量：在条件循环时隐藏 */}
+			{!isConditionLoop && (
+				<>
+					<CpsFormItem label={localInstance.loop_item_variable}>
+						<input
+							data-invalid={!itemValid || !!conflicts.item}
+							type="text"
+							value={action.itemVariableName ?? DEFAULT_ITEM}
+							onChange={(event) => {
+								updateConflict("item", null);
+								onChange({
+									itemVariableName: event.target.value,
+								});
+							}}
+							onBlur={() => runConflictCheck("item")}
+						/>
+					</CpsFormItem>
+					{!itemValid && (
+						<p className="form--LoopVariableError">
+							{localInstance.loop_variable_names}
+						</p>
+					)}
+					<FieldNameConflictWarning
+						conflict={conflicts.item}
+						onApplySuggestion={(value) => {
+							onChange({ itemVariableName: value });
+							updateConflict("item", null);
+						}}
+					/>
+				</>
 			)}
-			<FieldNameConflictWarning
-				conflict={conflicts.item}
-				onApplySuggestion={(value) => {
-					onChange({ itemVariableName: value });
-					updateConflict("item", null);
-				}}
-			/>
 
 			<CpsFormItem label={localInstance.loop_index_variable}>
 				<input
@@ -121,32 +129,37 @@ export function LoopVariableNames(props: {
 				}}
 			/>
 
-			<CpsFormItem label={localInstance.loop_total_variable}>
-				<input
-					data-invalid={!totalValid || !!conflicts.total}
-					type="text"
-					value={action.totalVariableName ?? DEFAULT_TOTAL}
-					onChange={(event) => {
-						updateConflict("total", null);
-						onChange({
-							totalVariableName: event.target.value,
-						});
-					}}
-					onBlur={() => runConflictCheck("total")}
-				/>
-			</CpsFormItem>
-			{!totalValid && (
-				<p className="form--LoopVariableError">
-					{localInstance.loop_variable_names}
-				</p>
+			{/* total变量：在条件循环时隐藏 */}
+			{!isConditionLoop && (
+				<>
+					<CpsFormItem label={localInstance.loop_total_variable}>
+						<input
+							data-invalid={!totalValid || !!conflicts.total}
+							type="text"
+							value={action.totalVariableName ?? DEFAULT_TOTAL}
+							onChange={(event) => {
+								updateConflict("total", null);
+								onChange({
+									totalVariableName: event.target.value,
+								});
+							}}
+							onBlur={() => runConflictCheck("total")}
+						/>
+					</CpsFormItem>
+					{!totalValid && (
+						<p className="form--LoopVariableError">
+							{localInstance.loop_variable_names}
+						</p>
+					)}
+					<FieldNameConflictWarning
+						conflict={conflicts.total}
+						onApplySuggestion={(value) => {
+							onChange({ totalVariableName: value });
+							updateConflict("total", null);
+						}}
+					/>
+				</>
 			)}
-			<FieldNameConflictWarning
-				conflict={conflicts.total}
-				onApplySuggestion={(value) => {
-					onChange({ totalVariableName: value });
-					updateConflict("total", null);
-				}}
-			/>
 		</CpsForm>
 	);
 }
