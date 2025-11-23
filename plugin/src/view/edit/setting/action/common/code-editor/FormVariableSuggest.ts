@@ -1,23 +1,17 @@
 import { autocompletion, Completion, CompletionContext, CompletionResult, startCompletion } from "@codemirror/autocomplete";
 import { EditorView } from "@codemirror/view";
-
-// 定义变量补全项的类型
-type VariableCompletionItem = {
-    label: string;
-    detail?: string;
-    info?: string;
-    type?: string;
-}
+import type { VariableItem } from "src/hooks/useVariablesWithLoop";
 
 /**
  * 表单变量自动补全源
  */
-export function formVariableCompletions(variables: VariableCompletionItem[]) {
+export function formVariableCompletions(variables: VariableItem[]) {
     const mapping: Completion[] = variables.map(variable => ({
         label: variable.label,
         detail: variable.detail,
         info: variable.info,
         type: variable.type,
+        boost: 200 - (variable.priority ?? 0),
         apply: (view, completion, from, to) => {
             // 获取行文本，检查前后文
             const pos = view.state.selection.main.head;
@@ -49,8 +43,7 @@ export function formVariableCompletions(variables: VariableCompletionItem[]) {
                 selection: { anchor: from + text.length },
                 userEvent: "input.complete"
             });
-        },
-        boost: 99
+        }
     }));
 
     return (context: CompletionContext): CompletionResult | null => {
@@ -140,7 +133,7 @@ export function formVariableCompletions(variables: VariableCompletionItem[]) {
  * 创建表单变量自动补全扩展
  * @param variables 要补全的变量列表
  */
-export function createFormVariableSuggestions(variables: VariableCompletionItem[]) {
+export function createFormVariableSuggestions(variables: VariableItem[]) {
     return autocompletion({
         override: [formVariableCompletions(variables)],
         activateOnTyping: true,

@@ -8,8 +8,7 @@ import CpsFormItem from "src/view/shared/CpsFormItem";
 import CodeEditor from "./code-editor/CodeEditor";
 import { timeTemplatePreviewExtension } from "./code-editor/FormTimeVariableWidget";
 import { createFormVariableSuggestions } from "./code-editor/FormVariableSuggest";
-import { formVariableExtension } from "./code-editor/FormVariableWidget";
-import { internalFieldNames } from "./variable-quoter/InternalVariablePopover";
+import { createFormVariableWidgetExtension } from "./code-editor/FormVariableWidget";
 
 export default function (props: {
 	actionId: string;
@@ -22,13 +21,6 @@ export default function (props: {
 	const loopContext = useLoopContext();
 	const isInsideLoop = loopContext.isInsideLoop;
 
-	const internalVariableNames = internalFieldNames.map((f) => {
-		return {
-			label: f.name,
-			detail: f.description,
-		};
-	});
-
 	// 根据是否在循环内选择合适的hook
 	const fieldNames = isInsideLoop
 		? useVariablesWithLoop(actionId, formConfig, isInsideLoop)
@@ -38,13 +30,17 @@ export default function (props: {
 		return fieldNames.map((f) => f.label).join("|");
 	}, [fieldNames]);
 
+	const variableWidgetExtension = useMemo(() => {
+		return createFormVariableWidgetExtension(fieldNames);
+	}, [extensionKey]);
+
 	const editorExtensions = useMemo(() => {
 		return [
-			formVariableExtension,
+			...variableWidgetExtension,
 			createFormVariableSuggestions(fieldNames),
 			timeTemplatePreviewExtension,
 		];
-	}, [fieldNames]);
+	}, [fieldNames, variableWidgetExtension]);
 
 	return (
 		<CpsFormItem

@@ -457,4 +457,32 @@ export interface Local {
 	ai_select_model_prompt: string;
 	ai_select_template_prompt: string;
 	ai_template_folder_empty: string;
+	// Variable management
+	variable_management: string;
+	form_field_variable: string;
+	loop_variable: string;
+	ai_output_variable: string;
+	suggest_field_variable: string;
+	internal_variable: string;
+	system_reserved_variable: string;
+	has_conflicts: string;
+	no_conflicts: string;
+	refresh: string;
+	export_variables: string;
+	search_variables: string;
+	total_variables: string;
+	forms_count: string;
+	variable_name: string;
+	variable_type: string;
+	variable_source: string;
+	variable_file: string;
+	conflict_status: string;
+	loading: string;
+	no_variables_found: string;
+	// Field name conflicts
+	field_name_duplicate: string;
+	system_reserved_conflict: string;
+	loop_variable_conflict: string;
+	variable_name_conflict: string;
+	apply_suggestion: string;
 }

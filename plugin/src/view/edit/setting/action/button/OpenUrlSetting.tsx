@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useMemo } from "react";
 import { ButtonFormAction } from "src/model/action/ButtonFormAction";
 import { localInstance } from "src/i18n/locals";
 import CpsFormItem from "src/view/shared/CpsFormItem";
@@ -9,7 +9,7 @@ import { useLoopContext } from "src/contexts/LoopContext";
 import CodeEditor from "../common/code-editor/CodeEditor";
 import { timeTemplatePreviewExtension } from "../common/code-editor/FormTimeVariableWidget";
 import { createFormVariableSuggestions } from "../common/code-editor/FormVariableSuggest";
-import { formVariableExtension } from "../common/code-editor/FormVariableWidget";
+import { createFormVariableWidgetExtension } from "../common/code-editor/FormVariableWidget";
 
 export function OpenUrlSetting(props: {
 	value: ButtonFormAction;
@@ -29,13 +29,17 @@ export function OpenUrlSetting(props: {
 		return fieldNames.map((f) => f.label).join("|");
 	}, [fieldNames]);
 
+	const variableWidgetExtension = useMemo(() => {
+		return createFormVariableWidgetExtension(fieldNames);
+	}, [extensionKey]);
+
 	const editorExtensions = useMemo(() => {
 		return [
-			formVariableExtension,
+			...variableWidgetExtension,
 			createFormVariableSuggestions(fieldNames),
 			timeTemplatePreviewExtension,
 		];
-	}, [fieldNames]);
+	}, [fieldNames, variableWidgetExtension]);
 
 	const handleUrlChange = (url: string) => {
 		const newAction: ButtonFormAction = {

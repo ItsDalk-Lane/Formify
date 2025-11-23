@@ -90,3 +90,58 @@ button.form--CpsFormFieldSettingPopoverClose {
 	display: flex;
 	flex: 1;
 }
+
+.form--FieldNameWrapper {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.form--CpsFormFieldSettingLabelInlineInput[data-conflict="true"] {
+	border-color: var(--color-orange);
+	background: rgba(255, 149, 0, 0.08);
+	box-shadow: 0 0 0 1px rgba(255, 149, 0, 0.3);
+}
+
+.form--FieldNameConflictWarning {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	padding: 6px 8px;
+	border-radius: var(--radius-s);
+	background-color: rgba(255, 149, 0, 0.12);
+	color: var(--text-normal);
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+.form--FieldNameConflictWarningContent {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.form--FieldNameConflictWarningContent ul {
+	margin: 0;
+	padding-left: 16px;
+}
+
+.form--FieldNameConflictWarningTitle {
+	font-weight: 600;
+	color: var(--color-orange);
+}
+
+.form--FieldNameConflictSuggestion {
+	align-self: flex-start;
+	border: none;
+	background: transparent;
+	color: var(--color-orange);
+	cursor: pointer;
+	font-size: 12px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 0;
+	text-decoration: underline;
+}

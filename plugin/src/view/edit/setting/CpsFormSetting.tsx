@@ -14,6 +14,7 @@ import { CpsFormSettingGroup } from "./CpsFormSettingGroup";
 import CpsFormFields from "./field/CpsFormFields";
 import { AsCommandToggle } from "./field/common/AsCommandToggle";
 import { useState, useEffect } from "react";
+import { FormConfigContext } from "src/hooks/useFormConfig";
 
 export default function (props: {
 	filePath: string;
@@ -208,6 +209,7 @@ export default function (props: {
 	};
 
 	return (
+		<FormConfigContext.Provider value={formConfig}>
 		<Tab
 			items={[
 				{
@@ -382,5 +384,6 @@ export default function (props: {
 				},
 			]}
 		/>
+		</FormConfigContext.Provider>
 	);
 }

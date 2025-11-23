@@ -1,17 +1,23 @@
 import { useMemo } from "react";
 import { GenerateFormAction } from "../model/action/OpenFormAction";
 import { SuggestModalFormAction } from "../model/action/SuggestModalFormAction";
+import { AIFormAction } from "../model/action/AIFormAction";
 import { FormActionType } from "../model/enums/FormActionType";
 import { FormConfig } from "../model/FormConfig";
+import { VariableSource } from "../types/variable";
+import type { VariableItem } from "./useVariablesWithLoop";
+import { localInstance } from "src/i18n/locals";
 
 export function useVariables(actionId: string, formConfig: FormConfig) {
 	return useMemo(() => {
 		const actions = formConfig.actions || [];
-		const fields = (formConfig.fields || []).map((f) => {
+		const fields: VariableItem[] = (formConfig.fields || []).map((f) => {
 			return {
 				label: f.label,
 				info: f.description,
 				type: "variable",
+				source: VariableSource.FORM_FIELD,
+				priority: 2,
 			};
 		});
 		const currentIndex = actions.findIndex((a) => a.id === actionId);
@@ -26,6 +32,8 @@ export function useVariables(actionId: string, formConfig: FormConfig) {
 					label: a.fieldName,
 					info: "",
 					type: "variable",
+					source: VariableSource.SUGGEST_MODAL,
+					priority: 3,
 				});
 			}
 
@@ -38,12 +46,28 @@ export function useVariables(actionId: string, formConfig: FormConfig) {
 							label: f.label,
 							info: f.description,
 							type: "variable",
+							source: VariableSource.FORM_FIELD,
+							priority: 3,
 						});
 					}
 				});
+			}
+
+			if (action.type === FormActionType.AI) {
+				const aiAction = action as AIFormAction;
+				if (aiAction.outputVariableName && !fields.find((f) => f.label === aiAction.outputVariableName)) {
+					fields.push({
+						label: aiAction.outputVariableName,
+						info: localInstance.ai_output_variable,
+						type: "variable",
+						source: VariableSource.AI_OUTPUT,
+						priority: 4,
+					});
+				}
 			}
 		}
 
 		return fields;
 	}, [formConfig]);
 }
+

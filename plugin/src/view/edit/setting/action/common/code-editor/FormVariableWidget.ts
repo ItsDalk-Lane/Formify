@@ -1,81 +1,105 @@
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view"
 import { RangeSetBuilder } from "@codemirror/state"
+import type { VariableItem } from "src/hooks/useVariablesWithLoop";
 
 /**
- * 表单变量插件，为变量添加特殊样式而不替换它们
+ * 根据变量元数据创建 CodeMirror 装饰扩展
  */
-const cformVariable = ViewPlugin.fromClass(class {
-    decorations: DecorationSet;
+export function createFormVariableWidgetExtension(variables: VariableItem[]) {
+    const variableMap = new Map<string, VariableItem>();
+    variables.forEach((variable) => {
+        if (variable.label) {
+            variableMap.set(variable.label.toLowerCase(), variable);
+        }
+    });
 
-    constructor(view: EditorView) {
-        this.decorations = this.buildDecorations(view);
-    }
+    const cformVariable = ViewPlugin.fromClass(class {
+        decorations: DecorationSet;
 
-    buildDecorations(view: EditorView) {
-        const builder = new RangeSetBuilder<Decoration>();
-
-        // 使用正则表达式查找所有变量
-        const content = view.state.doc.toString();
-        const pattern = /\{\{@([^}]+)\}\}/g;
-        let match;
-
-        while ((match = pattern.exec(content)) !== null) {
-            const start = match.index;
-            const end = start + match[0].length;
-            const prefixLength = 2; // '{{' 的长度
-            const suffixLength = 2; // '}}' 的长度
-            const variableStart = start + prefixLength;
-            const variableEnd = end - suffixLength;
-
-            // 为整个变量添加背景色和边框
-            builder.add(start, end, Decoration.mark({
-                class: "form--CpsFormVariableBlock",
-            }));
-
-            // 为前缀添加样式
-            builder.add(start, variableStart, Decoration.mark({
-                class: "form--CpsFormVariableBlockPrefix"
-            }));
-
-            // 为变量名添加特殊样式
-            builder.add(variableStart, variableEnd, Decoration.mark({
-                class: "form--CpsFormVariableBlockName"
-            }));
-
-            // 为后缀添加样式
-            builder.add(variableEnd, end, Decoration.mark({
-                class: "form--CpsFormVariableBlockSuffix"
-            }));
+        constructor(view: EditorView) {
+            this.decorations = this.buildDecorations(view);
         }
 
-        return builder.finish();
-    }
+        buildDecorations(view: EditorView) {
+            const builder = new RangeSetBuilder<Decoration>();
+            const content = view.state.doc.toString();
+            const pattern = /\{\{(@?)([^}]+)\}\}/g;
+            let match;
 
-    update(update: ViewUpdate) {
-        if (update.docChanged || update.viewportChanged) {
-            this.decorations = this.buildDecorations(update.view);
+            while ((match = pattern.exec(content)) !== null) {
+                const start = match.index;
+                const end = start + match[0].length;
+                const hasAt = match[1] === "@";
+                const variableName = match[2].trim();
+                const variableStart = start + 2 + (hasAt ? 1 : 0);
+                const variableEnd = end - 2;
+
+                const metadata = variableMap.get(variableName.toLowerCase());
+                const blockClass = metadata
+                    ? `form--CpsFormVariableBlock form--CpsFormVariableBlock--${metadata.type}`
+                    : "form--CpsFormVariableBlock";
+
+                builder.add(start, end, Decoration.mark({
+                    class: blockClass,
+                    attributes: metadata?.info ? { title: metadata.info } : undefined
+                }));
+
+                builder.add(start, start + 2 + (hasAt ? 1 : 0), Decoration.mark({
+                    class: "form--CpsFormVariableBlockPrefix"
+                }));
+
+                builder.add(variableStart, variableEnd, Decoration.mark({
+                    class: "form--CpsFormVariableBlockName"
+                }));
+
+                builder.add(variableEnd, end, Decoration.mark({
+                    class: "form--CpsFormVariableBlockSuffix"
+                }));
+            }
+
+            return builder.finish();
         }
-    }
-}, {
-    decorations: instance => instance.decorations
-});
 
+        update(update: ViewUpdate) {
+            if (update.docChanged || update.viewportChanged) {
+                this.decorations = this.buildDecorations(update.view);
+            }
+        }
+    }, {
+        decorations: instance => instance.decorations
+    });
 
-const formVariableStyle = EditorView.baseTheme({
-    ".form--CpsFormVariableBlock": {
-        backgroundColor: "hsl(var(--interactive-accent-hsl), 0.1)",
-        color: "hsl(var(--interactive-accent-hsl), 1)",
-        fontSize: "var(--font-ui-smaller)",
-        border: "1px dashed hsl(var(--interactive-accent-hsl), 0.5)",
-        borderRadius: "var(--radius-m)",
-        fontStyle: "italic",
-        display: "inline-block",
-        padding: "0 4px",
-    },
-    ".form--CpsFormVariableBlockPrefix, .form--CpsFormVariableBlockSuffix": {
-    },
-    ".form--CpsFormVariableBlockName": {
-    },
-});
+    const formVariableStyle = EditorView.baseTheme({
+        ".form--CpsFormVariableBlock": {
+            backgroundColor: "rgba(var(--color-blue-rgb, 58,109,249), 0.08)",
+            color: "var(--text-normal)",
+            border: "1px solid rgba(var(--color-blue-rgb, 58,109,249), 0.3)",
+            borderRadius: "var(--radius-s)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "4px",
+            padding: "0 4px",
+            fontSize: "var(--font-ui-smaller)",
+        },
+        ".form--CpsFormVariableBlock--loop": {
+            backgroundColor: "rgba(46, 204, 113, 0.12)",
+            borderColor: "rgba(46, 204, 113, 0.4)"
+        },
+        ".form--CpsFormVariableBlock--variable": {
+            backgroundColor: "rgba(58, 109, 249, 0.12)",
+            borderColor: "rgba(58, 109, 249, 0.4)"
+        },
+        ".form--CpsFormVariableBlock--internal": {
+            backgroundColor: "rgba(241, 196, 15, 0.15)",
+            borderColor: "rgba(241, 196, 15, 0.5)"
+        },
+        ".form--CpsFormVariableBlockPrefix, .form--CpsFormVariableBlockSuffix": {
+            opacity: 0.6
+        },
+        ".form--CpsFormVariableBlockName": {
+            fontWeight: 600
+        },
+    });
 
-export const formVariableExtension = [cformVariable, formVariableStyle];
+    return [cformVariable, formVariableStyle];
+}

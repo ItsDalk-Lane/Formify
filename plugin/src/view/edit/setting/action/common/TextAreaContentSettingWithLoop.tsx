@@ -6,8 +6,7 @@ import CpsFormItem from "src/view/shared/CpsFormItem";
 import CodeEditor from "./code-editor/CodeEditor";
 import { timeTemplatePreviewExtension } from "./code-editor/FormTimeVariableWidget";
 import { createFormVariableSuggestions } from "./code-editor/FormVariableSuggest";
-import { formVariableExtension } from "./code-editor/FormVariableWidget";
-import { internalFieldNames } from "./variable-quoter/InternalVariablePopover";
+import { createFormVariableWidgetExtension } from "./code-editor/FormVariableWidget";
 
 export default function (props: {
 	actionId: string;
@@ -18,25 +17,22 @@ export default function (props: {
 }) {
 	const { actionId, content, onChange, isInsideLoop = false } = props;
 	const formConfig = useFormConfig();
-	const internalVariableNames = internalFieldNames.map((f) => {
-		return {
-			label: f.name,
-			detail: f.description,
-		};
-	});
-
 	const fieldNames = useVariablesWithLoop(actionId, formConfig, isInsideLoop);
 	const extensionKey = useMemo(() => {
 		return fieldNames.map((f) => f.label).join("|");
 	}, [fieldNames]);
 
+	const variableWidgetExtension = useMemo(() => {
+		return createFormVariableWidgetExtension(fieldNames);
+	}, [extensionKey]);
+
 	const editorExtensions = useMemo(() => {
 		return [
-			formVariableExtension,
+			...variableWidgetExtension,
 			createFormVariableSuggestions(fieldNames),
 			timeTemplatePreviewExtension,
 		];
-	}, [fieldNames]);
+	}, [fieldNames, variableWidgetExtension]);
 
 	return (
 		<CpsFormItem

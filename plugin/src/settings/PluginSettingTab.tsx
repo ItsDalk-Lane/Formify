@@ -7,6 +7,7 @@ import { localInstance } from "src/i18n/locals";
 import FormPlugin from "src/main";
 import { GeneralSettingTabItem } from "./GeneralSettingTabItem";
 import { TarsSettingTabItem } from "./TarsSettingTabItem";
+import { VariableManagementTabItem } from "./VariableManagementTabItem";
 
 export class PluginSettingTab extends ObPluginSettingTab {
 	plugin: FormPlugin;
@@ -39,6 +40,11 @@ export class PluginSettingTab extends ObPluginSettingTab {
 								title: localInstance.tars_setting,
 								content: <TarsSettingTabItem plugin={this.plugin} />,
 							},
+							{
+								id: "variable_management",
+								title: localInstance.variable_management,
+								content: <VariableManagementTabItem plugin={this.plugin} />,
+							}
 						]}
 					></Tab>
 				</ObsidianAppContext.Provider>

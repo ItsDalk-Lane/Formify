@@ -1,0 +1,229 @@
+.form--VariableManagement {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 12px 0;
+}
+
+.form--VariableToolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.form--VariableToolbarActions {
+	display: flex;
+	gap: 8px;
+}
+
+.form--VariableToolbarActions button {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	border-radius: 6px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	cursor: pointer;
+	font-size: 13px;
+}
+
+.form--VariableToolbarActions button:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.form--VariableSearch {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-primary);
+	flex: 1;
+	max-width: 320px;
+}
+
+.form--VariableSearch input {
+	border: none;
+	outline: none;
+	width: 100%;
+	background: transparent;
+}
+
+.form--VariableSummary {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+	gap: 12px;
+}
+
+.form--VariableSummaryCard {
+	padding: 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	background: var(--background-secondary);
+}
+
+.form--VariableSummaryCard[data-conflict="true"] {
+	border-color: rgba(255, 149, 0, 0.6);
+	background: rgba(255, 149, 0, 0.08);
+}
+
+.form--VariableSummaryCard span {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.form--VariableSummaryCard strong {
+	font-size: 20px;
+}
+
+.form--VariableFilters {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.form--VariableFilterGroup {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.form--VariableFilterButton {
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	border-radius: 20px;
+	padding: 4px 12px;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.form--VariableFilterButton[data-active="true"] {
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	color: var(--text-on-accent, #fff);
+}
+
+.form--VariableError {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	border-radius: 6px;
+	background: rgba(255, 149, 0, 0.15);
+	color: var(--text-normal);
+}
+
+.form--VariableTableWrapper {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	overflow: hidden;
+}
+
+.form--VariableTable {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+
+.form--VariableTable thead {
+	background: var(--background-secondary);
+}
+
+.form--VariableTable th {
+	text-align: left;
+	padding: 10px;
+	font-weight: 500;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.form--VariableTable td {
+	padding: 10px;
+	border-top: 1px solid var(--background-modifier-border);
+	vertical-align: top;
+}
+
+.form--VariableTable tr[data-conflict="true"] {
+	background: rgba(255, 149, 0, 0.05);
+}
+
+.form--VariableNameCell {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.form--VariableNameCell span {
+	color: var(--text-muted);
+	font-size: 12px;
+}
+
+.form--VariableFileCell {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.form--VariableFileCell code {
+	font-size: 11px;
+	padding: 2px 4px;
+	background: var(--background-secondary);
+	border-radius: 4px;
+}
+
+.form--VariableStatusBadge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 12px;
+}
+
+.form--VariableStatusBadge[data-type="conflict"] {
+	background: rgba(255, 149, 0, 0.15);
+	color: var(--color-orange);
+}
+
+.form--VariableStatusBadge[data-type="normal"] {
+	background: rgba(46, 204, 113, 0.18);
+	color: var(--color-green, #2ecc71);
+}
+
+.form--VariableEmpty {
+	text-align: center;
+	padding: 24px;
+	color: var(--text-muted);
+}
+
+@media screen and (max-width: 768px) {
+	.form--VariableToolbar {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.form--VariableToolbarActions {
+		width: 100%;
+		justify-content: space-between;
+	}
+
+	.form--VariableSearch {
+		width: 100%;
+		max-width: none;
+	}
+
+	.form--VariableTable th,
+	.form--VariableTable td {
+		font-size: 12px;
+	}
+}
+

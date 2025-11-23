@@ -141,3 +141,4 @@ function eventualProgressLabel(enabled?: boolean) {
 	return enabled ? localInstance.checked : localInstance.unchecked;
 }
 
+

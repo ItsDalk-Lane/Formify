@@ -1,15 +1,21 @@
 import { useMemo } from "react";
 import { GenerateFormAction } from "../model/action/OpenFormAction";
 import { SuggestModalFormAction } from "../model/action/SuggestModalFormAction";
+import { AIFormAction } from "../model/action/AIFormAction";
 import { FormActionType } from "../model/enums/FormActionType";
 import { FormConfig } from "../model/FormConfig";
 import { LoopVariableScope, LoopVariableMeta } from "../utils/LoopVariableScope";
+import { VariableSource } from "../types/variable";
+import { localInstance } from "src/i18n/locals";
 
 // 定义变量项的类型
 export interface VariableItem {
     label: string;
     info?: string;
+    detail?: string;
     type: "variable" | "loop";
+    source: VariableSource;
+    priority: number;
 }
 
 export function useVariablesWithLoop(
@@ -24,6 +30,8 @@ export function useVariablesWithLoop(
                 label: f.label,
                 info: f.description,
                 type: "variable",
+                source: VariableSource.FORM_FIELD,
+                priority: 2
             };
         });
 
@@ -40,6 +48,8 @@ export function useVariablesWithLoop(
                     label: a.fieldName,
                     info: "",
                     type: "variable",
+                    source: VariableSource.SUGGEST_MODAL,
+                    priority: 3
                 });
             }
 
@@ -52,9 +62,24 @@ export function useVariablesWithLoop(
                             label: f.label,
                             info: f.description,
                             type: "variable",
+                            source: VariableSource.FORM_FIELD,
+                            priority: 3
                         });
                     }
                 });
+            }
+
+            if (action.type === FormActionType.AI) {
+                const aiAction = action as AIFormAction;
+                if (aiAction.outputVariableName && !fields.find((f) => f.label === aiAction.outputVariableName)) {
+                    fields.push({
+                        label: aiAction.outputVariableName,
+                        info: localInstance.ai_output_variable,
+                        type: "variable",
+                        source: VariableSource.AI_OUTPUT,
+                        priority: 4
+                    });
+                }
             }
         }
 
@@ -78,8 +103,10 @@ export function useVariablesWithLoop(
             // 将循环变量添加到字段列表中
             const loopVariables: VariableItem[] = loopVars.map((meta: LoopVariableMeta) => ({
                 label: meta.name,
-                info: meta.description || '循环变量',
+                info: meta.description || localInstance.loop_variable,
                 type: "loop" as const,
+                source: VariableSource.LOOP_VAR,
+                priority: 0
             }));
 
             fields.push(...loopVariables);

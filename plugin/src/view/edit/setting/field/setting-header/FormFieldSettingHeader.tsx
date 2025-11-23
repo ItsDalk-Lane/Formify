@@ -1,13 +1,18 @@
 import { Copy, MoreHorizontal, Trash2, X } from "lucide-react";
 import { Popover } from "radix-ui";
+import { useCallback, useEffect, useState } from "react";
 import { ConfirmPopover } from "src/component/confirm/ConfirmPopover";
 import { DragHandler } from "src/component/drag-handler/DragHandler";
+import useFormConfig from "src/hooks/useFormConfig";
 import { localInstance } from "src/i18n/locals";
 import { FormFieldType } from "src/model/enums/FormFieldType";
 import { IFormField } from "src/model/field/IFormField";
+import { VariableConflictDetector } from "src/service/variable/VariableConflictDetector";
+import { ConflictInfo } from "src/types/variable";
 import { FormTypeSelect } from "src/view/shared/select/FormTypeSelect";
 import { fieldTypeOptions } from "../common/FieldTypeSelect";
 import { CpsFormFieldDetailEditing } from "../CpsFormFieldDetailEditing";
+import { FieldNameConflictWarning } from "../FieldNameConflictWarning";
 import "./FormFieldSettingHeader.css";
 
 export function FormFieldSettingHeader(props: {
@@ -19,10 +24,36 @@ export function FormFieldSettingHeader(props: {
 	setDragHandleRef: (ref: HTMLDivElement | null) => void;
 }) {
 	const { field, setDragHandleRef, onChange, onDuplicate } = props;
+	const formConfig = useFormConfig();
+	const [conflict, setConflict] = useState<ConflictInfo | null>(null);
+
+	useEffect(() => {
+		setConflict(null);
+	}, [field.id, field.label]);
+
+	const handleBlur = useCallback(() => {
+		const result = VariableConflictDetector.checkFieldNameConflict(
+			field.label,
+			field.id,
+			formConfig
+		);
+		setConflict(result);
+	}, [field.id, field.label, formConfig]);
+
+	const handleApplySuggestion = useCallback((suggestion: string) => {
+		const newField = {
+			...field,
+			label: suggestion,
+		};
+		onChange(newField);
+		setConflict(null);
+	}, [field, onChange]);
+
 	return (
 		<div
 			className="form--CpsFormFieldSettingHeader"
 			data-required={field.required}
+			data-conflict={!!conflict}
 		>
 			<DragHandler
 				ref={setDragHandleRef}
@@ -34,19 +65,27 @@ export function FormFieldSettingHeader(props: {
 					*
 				</span>
 			)}
-			<input
-				type="text"
-				className="form--CpsFormFieldSettingLabelInlineInput"
-				value={field.label}
-				placeholder={localInstance.please_input_name}
-				onChange={(e) => {
-					const newField = {
-						...field,
-						label: e.target.value,
-					};
-					props.onChange(newField);
-				}}
-			/>
+			<div className="form--FieldNameWrapper">
+				<input
+					type="text"
+					className="form--CpsFormFieldSettingLabelInlineInput"
+					value={field.label}
+					placeholder={localInstance.please_input_name}
+					data-conflict={!!conflict}
+					onChange={(e) => {
+						const newField = {
+							...field,
+							label: e.target.value,
+						};
+						props.onChange(newField);
+					}}
+					onBlur={handleBlur}
+				/>
+				<FieldNameConflictWarning
+					conflict={conflict}
+					onApplySuggestion={handleApplySuggestion}
+				/>
+			</div>
 
 			<div className="form--CpsFormFieldSettingHeaderControl">
 				<FormTypeSelect
