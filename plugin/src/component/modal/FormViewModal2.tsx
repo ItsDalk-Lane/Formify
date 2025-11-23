@@ -14,6 +14,9 @@ export default class FormViewModal2 {
 	private source: {
 		formFilePath?: string;
 		formConfig?: FormConfig;
+		options?: {
+			showOnlyFieldsNeedingInput?: boolean;
+		};
 	};
 
 	constructor(
@@ -21,6 +24,9 @@ export default class FormViewModal2 {
 		source: {
 			formFilePath?: string;
 			formConfig?: FormConfig;
+			options?: {
+				showOnlyFieldsNeedingInput?: boolean;
+			};
 		}
 	) {
 		this.source = source;
@@ -77,6 +83,9 @@ function FormModalContent({
 	source: {
 		formFilePath?: string;
 		formConfig?: FormConfig;
+		options?: {
+			showOnlyFieldsNeedingInput?: boolean;
+		};
 	};
 	onClose: () => void;
 }) {
@@ -141,6 +150,7 @@ function FormModalContent({
 									hideHeader: true,
 									showFilePath: true,
 									afterSubmit: () => close(),
+									showOnlyFieldsNeedingInput: source.options?.showOnlyFieldsNeedingInput,
 								}}
 							/>
 						</>
@@ -150,6 +160,7 @@ function FormModalContent({
 							formConfig={formConfig}
 							options={{
 								afterSubmit: () => close(),
+								showOnlyFieldsNeedingInput: source.options?.showOnlyFieldsNeedingInput,
 							}}
 						/>
 					) : null}

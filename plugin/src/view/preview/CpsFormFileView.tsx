@@ -15,6 +15,7 @@ type Props = {
 		hideHeader?: boolean;
 		showFilePath?: boolean;
 		afterSubmit?: (state: Record<string, any>) => void;
+		showOnlyFieldsNeedingInput?: boolean;
 	};
 } & React.HTMLAttributes<HTMLDivElement>;
 

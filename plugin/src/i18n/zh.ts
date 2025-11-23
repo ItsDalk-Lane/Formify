@@ -14,8 +14,6 @@ export class Zh implements Local {
 	add_list_item = "添加列表项";
 	all = "全部";
 	at_cursor = "当前光标处";
-	auto_submit = "自动提交";
-	auto_submit_description = "通过命令打开表单时自动提交，不显示表单界面";
 	show_submit_success_toast = "显示提交成功提示";
 	show_submit_success_toast_description = "提交表单成功后显示提示消息";
 	enable_second_precision = "启用秒级精度";

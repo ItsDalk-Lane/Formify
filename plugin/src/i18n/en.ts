@@ -14,8 +14,6 @@ export class En implements Local {
 	add_list_item = "Add list item";
 	all = "All";
 	at_cursor = "At cursor";
-	auto_submit = "Auto submit";
-	auto_submit_description = "Automatically submit the form without showing the UI when opened via command";
 	show_submit_success_toast = "Show success toast";
 	show_submit_success_toast_description = "Display a success message after form submission";
 	enable_second_precision = "Enable second precision";

@@ -7,6 +7,7 @@ type Props = {
 	formConfig: FormConfig;
 	options?: {
 		afterSubmit?: (state: Record<string, any>) => void;
+		showOnlyFieldsNeedingInput?: boolean;
 	};
 } & React.HTMLAttributes<HTMLDivElement>;
 

@@ -15,6 +15,7 @@ import { FormFieldType } from "src/model/enums/FormFieldType";
 import { IFileListField } from "src/model/field/IFileListField";
 import { FormFieldValueProcessor } from "./engine/FormFieldValueProcessor";
 import { FormExecutionManager } from "./FormExecutionManager";
+import { FormDisplayRules } from "../utils/FormDisplayRules";
 
 export interface FormSubmitOptions {
     app: App;
@@ -104,26 +105,39 @@ export class FormService {
 
     async open(file: TFile, app: App) {
         const form = await app.vault.readJson(file.path) as FormConfig;
-        if (form.autoSubmit === true) {
-            const formService = new FormService();
-            await formService.submitDirectly(form, app);
-        } else {
+
+        // 检查是否需要显示表单界面
+        if (FormDisplayRules.shouldShowForm(form)) {
+            // 需要用户输入，显示表单界面，并且只显示需要输入的字段
             const m = new FormViewModal2(app, {
                 formFilePath: file.path,
+                options: {
+                    showOnlyFieldsNeedingInput: true
+                }
             });
             m.open();
+        } else {
+            // 不需要用户输入，直接提交
+            const formService = new FormService();
+            await formService.submitDirectly(form, app);
         }
     }
 
     async openForm(formConfig: FormConfig, app: App) {
-        if (formConfig.autoSubmit === true) {
-            const formService = new FormService();
-            await formService.submitDirectly(formConfig, app);
-        } else {
+        // 检查是否需要显示表单界面
+        if (FormDisplayRules.shouldShowForm(formConfig)) {
+            // 需要用户输入，显示表单界面，并且只显示需要输入的字段
             const m = new FormViewModal2(app, {
                 formConfig: formConfig,
+                options: {
+                    showOnlyFieldsNeedingInput: true
+                }
             });
             m.open();
+        } else {
+            // 不需要用户输入，直接提交
+            const formService = new FormService();
+            await formService.submitDirectly(formConfig, app);
         }
     }
 }

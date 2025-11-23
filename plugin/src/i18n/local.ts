@@ -12,8 +12,6 @@ export interface Local {
 	add: string;
 	all: string;
 	at_cursor: string;
-	auto_submit_description: string;
-	auto_submit: string;
 	show_submit_success_toast: string;
 	show_submit_success_toast_description: string;
 	enable_second_precision: string;

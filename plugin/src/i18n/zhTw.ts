@@ -14,8 +14,6 @@ export class ZhTw implements Local {
 	add_list_item = "添加列表項";
 	all = "全部";
 	at_cursor = "當前游標處";
-	auto_submit = "自動提交";
-	auto_submit_description = "通過命令打開表單時自動提交，不顯示表單界面";
 	show_submit_success_toast = "顯示提交成功提示";
 	show_submit_success_toast_description = "提交表單成功後顯示提示消息";
 	enable_second_precision = "啟用秒級精度";
