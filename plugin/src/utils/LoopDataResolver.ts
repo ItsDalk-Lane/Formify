@@ -3,6 +3,7 @@ import { LoopType } from "src/model/enums/LoopType";
 import { ActionContext } from "src/service/action/IActionService";
 import { FormTemplateProcessEngine } from "src/service/engine/FormTemplateProcessEngine";
 import { DebugLogger } from "./DebugLogger";
+import { LoopVariableScope } from "./LoopVariableScope";
 
 export class LoopDataResolver {
     /**
@@ -124,13 +125,24 @@ export class LoopDataResolver {
         }
 
         try {
+            // 获取所有循环变量
+            const loopVariables: Record<string, any> = {};
+            const availableVars = LoopVariableScope.getAvailableVariables();
+            for (const varMeta of availableVars) {
+                const value = LoopVariableScope.getValue(varMeta.name);
+                if (value !== undefined) {
+                    loopVariables[varMeta.name] = value;
+                }
+            }
+
             const evaluator = new Function(
                 "context",
                 "state",
                 "values",
+                "loopVars",
                 `return Boolean(${trimmed});`
             );
-            return evaluator(context, context.state, context.state?.values ?? {});
+            return evaluator(context, context.state, context.state?.values ?? {}, loopVariables);
         } catch (error) {
             DebugLogger.warn("[LoopDataResolver] 条件表达式解析失败:", trimmed, error);
             return false;
@@ -186,6 +198,12 @@ export class LoopDataResolver {
             return undefined;
         }
 
+        // 优先从循环变量作用域获取变量值
+        const loopValue = this.getValueFromLoopScope(trimmed);
+        if (loopValue !== undefined) {
+            return loopValue;
+        }
+
         const directValue =
             context.state?.values?.[trimmed] ?? context.state?.idValues?.[trimmed];
         if (directValue !== undefined) {
@@ -207,6 +225,38 @@ export class LoopDataResolver {
         }
 
         return this.getValueBySegments(context as any, segments);
+    }
+
+    /**
+     * 从循环变量作用域获取变量值
+     */
+    private static getValueFromLoopScope(path: string): any {
+        if (!path.includes(".")) {
+            // 简单变量名，直接从循环作用域获取
+            return LoopVariableScope.getValue(path);
+        }
+
+        // 处理嵌套路径，如 "item.name" 或 "user.profile.age"
+        const segments = path.split(".").filter((segment) => segment.length > 0);
+        if (segments.length === 0) {
+            return undefined;
+        }
+
+        // 获取第一级变量名
+        const firstSegment = segments[0];
+        const rootValue = LoopVariableScope.getValue(firstSegment);
+
+        if (rootValue === undefined || rootValue === null) {
+            return undefined;
+        }
+
+        // 如果是简单路径，直接返回根变量值
+        if (segments.length === 1) {
+            return rootValue;
+        }
+
+        // 处理嵌套属性访问
+        return this.getValueBySegments(rootValue, segments.slice(1));
     }
 
     private static getValueBySegments(target: any, segments: string[]): any {

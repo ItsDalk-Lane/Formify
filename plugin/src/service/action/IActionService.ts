@@ -18,6 +18,7 @@ import AIActionService from "./ai/AIActionService";
 import LoopActionService from "./loop/LoopActionService";
 import { BreakActionService } from "./loop/BreakActionService";
 import { ContinueActionService } from "./loop/ContinueActionService";
+import { LoopVariableScope } from "../../utils/LoopVariableScope";
 
 export interface IActionService {
 
@@ -101,8 +102,33 @@ export class ActionChain {
         if (action.condition) {
             const result = FilterService.match(
                 action.condition,
-                (property) => property ? context.state.idValues[property] : undefined,
-                (value) => value
+                (property) => {
+                    if (!property) {
+                        return undefined;
+                    }
+
+                    // 优先从循环变量作用域获取变量值
+                    const loopValue = LoopVariableScope.getValue(property);
+                    if (loopValue !== undefined) {
+                        return loopValue;
+                    }
+
+                    // 然后从表单状态获取变量值
+                    return context.state.idValues[property];
+                },
+                (value) => {
+                    // 如果value是字符串，尝试从循环变量中获取
+                    if (typeof value === 'string' && value.trim()) {
+                        const loopValue = LoopVariableScope.getValue(value.trim());
+                        if (loopValue !== undefined) {
+                            return loopValue;
+                        }
+                        // 如果不是循环变量，尝试从表单状态获取
+                        return context.state.idValues[value.trim()];
+                    }
+                    // 否则直接返回原始值
+                    return value;
+                }
             );
             if (!result) {
                 // 条件不匹配，直接跳到下一个

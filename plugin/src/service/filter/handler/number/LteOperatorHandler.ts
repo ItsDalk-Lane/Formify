@@ -13,7 +13,7 @@ export class LteOperatorHandler implements OperatorHandler {
         if (Objects.isNullOrUndefined(fieldValue) || Objects.isNullOrUndefined(value)) {
             return false;
         }
-        return fieldValue < value;
+        return fieldValue <= value;
     }
 
 }
