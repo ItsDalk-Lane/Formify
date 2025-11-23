@@ -45,13 +45,29 @@ describe('循环变量解析测试', () => {
         LoopVariableScope.push({
             item: 'currentLoopItem',
             index: 2,
-            total: 5
+            total: 5,
+            iteration: 3  // iteration = index + 1
         });
 
-        const template = '当前项: {{item}}, 索引: {{index}}, 总数: {{total}}';
+        const template = '当前项: {{item}}, 索引: {{index}}, 总数: {{total}}, 迭代: {{iteration}}';
         const result = await engine.process(template, mockState, mockApp);
 
-        expect(result).toBe('当前项: currentLoopItem, 索引: 2, 总数: 5');
+        expect(result).toBe('当前项: currentLoopItem, 索引: 2, 总数: 5, 迭代: 3');
+    });
+
+    test('{{iteration}} 变量应该从1开始而不是从0开始', async () => {
+        // 设置循环变量，index从0开始，iteration应该从1开始
+        LoopVariableScope.push({
+            item: 'firstItem',
+            index: 0,
+            total: 3,
+            iteration: 1  // iteration = index + 1
+        });
+
+        const template = '第{{iteration}}项: {{item}} (索引: {{index}})';
+        const result = await engine.process(template, mockState, mockApp);
+
+        expect(result).toBe('第1项: firstItem (索引: 0)');
     });
 
     test('应该优先使用循环变量而非同名的表单字段', async () => {

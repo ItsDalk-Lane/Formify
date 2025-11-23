@@ -6,7 +6,7 @@ import { LoopFormAction } from "src/model/action/LoopFormAction";
 
 export class VariableConflictDetector {
     static detectConflictsFromConfig(formConfig: FormConfig): ConflictInfo[] {
-        const variables = VariableRegistry.collectAllVariables(formConfig);
+        const variables = VariableRegistry.collectAllVariables(formConfig, { includeSystemReserved: false });
         return this.detectConflicts(variables);
     }
 
@@ -55,7 +55,7 @@ export class VariableConflictDetector {
             return null;
         }
 
-        const allVariables = VariableRegistry.collectAllVariables(formConfig);
+        const allVariables = VariableRegistry.collectAllVariables(formConfig, { includeSystemReserved: false });
         const conflicts = allVariables.filter((variable) => {
             if (variable.source === VariableSource.FORM_FIELD && variable.sourceId === currentFieldId) {
                 return false;
@@ -120,12 +120,9 @@ export class VariableConflictDetector {
             };
         }
 
-        const allVariables = VariableRegistry.collectAllVariables(formConfig);
+        const allVariables = VariableRegistry.collectAllVariables(formConfig, { includeSystemReserved: false });
         const conflicts = allVariables.filter((variable) => {
             if (variable.source === VariableSource.LOOP_VAR && variable.sourceId === loopAction.id) {
-                return false;
-            }
-            if (variable.source === VariableSource.SYSTEM_RESERVED) {
                 return false;
             }
             return this.normalize(variable.name) === normalized;

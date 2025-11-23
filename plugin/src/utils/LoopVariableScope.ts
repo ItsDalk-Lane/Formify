@@ -101,13 +101,13 @@ export class LoopVariableScope {
      */
     static getVariableDescription(varName: string): string {
         const standardDescriptions: Record<string, string> = {
-            'item': '当前循环元素',
-            'index': '当前循环索引（从0开始）',
-            'total': '循环总次数',
-            'iteration': '当前迭代次数（从1开始）',
-            'currentPage': '当前页码（分页循环）',
-            'pageSize': '每页大小（分页循环）',
-            'totalPage': '总页数（分页循环）'
+            'item': '当前循环元素（用户自定义变量名）',
+            'index': '当前循环索引（用户自定义变量名，从0开始）',
+            'total': '循环总次数（用户自定义变量名）',
+            'iteration': '当前迭代次数（系统内置，从1开始）',
+            'currentPage': '当前页码（分页循环，系统内置）',
+            'pageSize': '每页大小（分页循环，系统内置）',
+            'totalPage': '总页数（分页循环，系统内置）'
         };
 
         return standardDescriptions[varName] || '循环变量';

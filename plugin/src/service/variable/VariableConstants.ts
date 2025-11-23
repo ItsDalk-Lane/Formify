@@ -11,9 +11,6 @@ export const INTERNAL_VARIABLE_NAMES = [
 ];
 
 export const SYSTEM_RESERVED_LOOP_VARIABLES = [
-    "item",
-    "index",
-    "total",
     "iteration",
     "currentPage",
     "pageSize",

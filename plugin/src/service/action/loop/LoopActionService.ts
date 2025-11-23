@@ -374,7 +374,7 @@ export default class LoopActionService implements IActionService {
             item: payload.value,
             index: payload.index,
             total: payload.total,
-            iteration: payload.index,
+            iteration: payload.index + 1,
         };
 
         variables[itemKey] = payload.value;
