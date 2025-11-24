@@ -564,6 +564,11 @@
 	cursor: pointer;
 }
 
+/* 消息元数据行样式 - 增加与内容的间距 */
+.chat-message__meta {
+	margin-top: 0.75rem;
+}
+
 /* 所有消息内容的基础样式 */
 .chat-message__content {
 	line-height: 1.3;

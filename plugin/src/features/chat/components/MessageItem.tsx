@@ -10,9 +10,10 @@ import { renderMarkdownContent } from '../utils/markdown';
 interface MessageItemProps {
 	message: ChatMessage;
 	service?: ChatService;
+	isGenerating?: boolean;
 }
 
-export const MessageItem = ({ message, service }: MessageItemProps) => {
+export const MessageItem = ({ message, service, isGenerating }: MessageItemProps) => {
 	const app = useObsidianApp();
 	const helper = useMemo(() => new MessageService(), []);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -75,50 +76,52 @@ export const MessageItem = ({ message, service }: MessageItemProps) => {
 					<div ref={containerRef}></div>
 				)}
 			</div>
-			<div className="chat-message__meta tw-flex tw-items-center tw-justify-between">
-				<span className="tw-text-xs tw-text-faint">{timestamp}</span>
-				<div className="chat-message__actions tw-flex tw-items-center tw-gap-2 tw-opacity-100 hover:tw-opacity-100 tw-transition-opacity">
-					{/* User message buttons */}
-					{message.role === 'user' && (
-						<>
-							<span onClick={handleCopy} aria-label="复制消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
-								{copied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
-							</span>
-							{!editing && (
-								<span onClick={() => setEditing(true)} aria-label="编辑消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
-									<PenSquare className="tw-size-4" />
+			{/* 只在AI消息非生成状态或非AI消息时显示元数据 */}
+			{(message.role !== 'assistant' || !isGenerating) && (
+				<div className="chat-message__meta tw-flex tw-items-center tw-justify-between">
+					<span className="tw-text-xs tw-text-faint">{timestamp}</span>
+					<div className="chat-message__actions tw-flex tw-items-center tw-gap-2 tw-opacity-100 hover:tw-opacity-100 tw-transition-opacity">
+						{/* User message buttons */}
+						{message.role === 'user' && (
+							<>
+								<span onClick={handleCopy} aria-label="复制消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+									{copied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
 								</span>
-							)}
-							{editing && (
-								<span onClick={handleSaveEdit} aria-label="保存编辑" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
-									<Check className="tw-size-4" />
+								{!editing && (
+									<span onClick={() => setEditing(true)} aria-label="编辑消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+										<PenSquare className="tw-size-4" />
+									</span>
+								)}
+								{editing && (
+									<span onClick={handleSaveEdit} aria-label="保存编辑" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+										<Check className="tw-size-4" />
+									</span>
+								)}
+								<span onClick={handleDelete} aria-label="删除消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+									<Trash2 className="tw-size-4" />
 								</span>
-							)}
-							<span onClick={handleDelete} aria-label="删除消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
-								<Trash2 className="tw-size-4" />
-							</span>
-						</>
-					)}
-					{/* AI message buttons */}
-					{message.role === 'assistant' && (
-						<>
-							<span onClick={handleInsert} aria-label="插入到编辑器" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
-								<TextCursorInput className="tw-size-4" />
-							</span>
-							<span onClick={handleCopy} aria-label="复制消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
-								{copied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
-							</span>
-							<span onClick={handleRegenerate} aria-label="重新生成" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
-								<RotateCw className="tw-size-4" />
-							</span>
-							<span onClick={handleDelete} aria-label="删除消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
-								<Trash2 className="tw-size-4" />
-							</span>
-						</>
-					)}
+							</>
+						)}
+						{/* AI message buttons */}
+						{message.role === 'assistant' && (
+							<>
+								<span onClick={handleInsert} aria-label="插入到编辑器" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+									<TextCursorInput className="tw-size-4" />
+								</span>
+								<span onClick={handleCopy} aria-label="复制消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+									{copied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
+								</span>
+								<span onClick={handleRegenerate} aria-label="重新生成" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+									<RotateCw className="tw-size-4" />
+								</span>
+								<span onClick={handleDelete} aria-label="删除消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+									<Trash2 className="tw-size-4" />
+								</span>
+							</>
+						)}
+					</div>
 				</div>
-			</div>
+			)}
 		</div>
 	);
 };
-
