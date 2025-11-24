@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { X, RotateCcw } from 'lucide-react';
 import { ChatHistoryEntry } from '../services/HistoryService';
 
 interface ChatHistoryPanelProps {
@@ -15,12 +15,12 @@ export const ChatHistoryPanel = ({ items, onSelect, onClose, onRefresh, onDelete
 			<header className="chat-history-panel__header">
 				<h3>聊天历史</h3>
 				<div className="chat-history-panel__header-actions">
-					<button className="chat-btn" onClick={onRefresh}>
-						刷新
-					</button>
-					<button className="chat-icon-btn" onClick={onClose}>
+					<span onClick={onRefresh} aria-label="刷新历史记录" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+						<RotateCcw className="tw-size-4" />
+					</span>
+					<span onClick={onClose} aria-label="关闭历史记录" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 						<X className="tw-size-4" />
-					</button>
+					</span>
 				</div>
 			</header>
 			<div className="chat-history-panel__content">
