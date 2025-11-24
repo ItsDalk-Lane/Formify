@@ -21,11 +21,14 @@ export interface ChatSession {
 	selectedImages?: string[];
 }
 
+export type ChatOpenMode = 'sidebar' | 'tab' | 'window';
+
 export interface ChatSettings {
 	chatFolder: string;
 	defaultModel: string;
 	autosaveChat: boolean;
 	showSidebarByDefault: boolean;
+	openMode: ChatOpenMode;
 }
 
 export interface ChatState {
@@ -43,5 +46,6 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	defaultModel: '',
 	autosaveChat: true,
 	showSidebarByDefault: true,
+	openMode: 'sidebar',
 };
 

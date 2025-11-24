@@ -43,8 +43,7 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 	return (
 		<div className={containerClasses}>
 			<RelevantNotes notes={contextNotes} />
-			<SuggestedPrompts />
-			<div
+				<div
 				ref={scrollRef}
 				className="tw-flex tw-flex-1 tw-flex-col tw-overflow-y-auto tw-scroll-smooth tw-select-text tw-break-words tw-gap-2"
 			>
@@ -75,16 +74,4 @@ const RelevantNotes = ({ notes }: { notes: string[] }) => {
 	);
 };
 
-const SuggestedPrompts = () => (
-	<section className="chat-panel tw-mx-2 tw-mb-2 tw-rounded-md tw-border tw-border-dashed tw-border-border tw-bg-background tw-p-2">
-		<header className="tw-mb-1 tw-text-xs tw-text-muted-foreground">Suggested Prompts</header>
-		<div className="tw-flex tw-flex-wrap tw-gap-1">
-			{['总结当前笔记', '帮助整理待办事项', '解释当前段落'].map((prompt) => (
-				<span key={prompt} className="tw-cursor-pointer tw-rounded-full tw-border tw-border-border tw-px-2 tw-py-1">
-					{prompt}
-				</span>
-			))}
-		</div>
-	</section>
-);
 

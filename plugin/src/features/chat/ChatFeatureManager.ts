@@ -2,7 +2,7 @@ import { WorkspaceLeaf } from 'obsidian';
 import FormPlugin from 'src/main';
 import { ChatService } from './services/ChatService';
 import { ChatView, VIEW_TYPE_CHAT_SIDEBAR, VIEW_TYPE_CHAT_TAB } from './views/ChatView';
-import type { ChatSettings } from './types/chat';
+import type { ChatSettings, ChatOpenMode } from './types/chat';
 import type { TarsSettings } from '../tars/settings';
 
 export class ChatFeatureManager {
@@ -19,12 +19,13 @@ export class ChatFeatureManager {
 		this.registerCommands();
 		this.createRibbon();
 
-		// 延迟自动打开侧边栏，确保工作区完全准备好
+		// 延迟自动打开聊天界面，确保工作区完全准备好
 		const shouldAutoOpen = initialSettings?.showSidebarByDefault ?? this.plugin.settings.chat.showSidebarByDefault;
 		if (shouldAutoOpen) {
 			// 使用 setTimeout 确保在下一个事件循环中执行
+			const openMode = initialSettings?.openMode ?? this.plugin.settings.chat.openMode;
 			setTimeout(() => {
-				void this.activateChatView('sidebar');
+				void this.activateChatView(openMode);
 			}, 300);
 		}
 	}
@@ -41,9 +42,12 @@ export class ChatFeatureManager {
 		return this.service;
 	}
 
-	async activateChatView(mode: 'sidebar' | 'tab') {
+	async activateChatView(mode: ChatOpenMode) {
 		try {
-			if (mode === 'sidebar') {
+			if (mode === 'window') {
+				// 在新窗口中打开 - Obsidian 不直接支持新窗口，使用弹出窗口方式
+				await this.openInWindow();
+			} else if (mode === 'sidebar') {
 				// 添加延迟确保工作区完全加载
 				await this.waitForWorkspaceReady();
 
@@ -59,6 +63,7 @@ export class ChatFeatureManager {
 				}
 				await this.openLeaf(leaf, VIEW_TYPE_CHAT_SIDEBAR, true);
 			} else {
+				// tab mode
 				const leaf = this.plugin.app.workspace.getLeaf(true);
 				await this.openLeaf(leaf, VIEW_TYPE_CHAT_TAB, true);
 			}
@@ -81,42 +86,54 @@ export class ChatFeatureManager {
 
 	private registerCommands() {
 		this.plugin.addCommand({
+			id: 'form-chat-open-default',
+			name: '打开 AI Chat',
+			callback: () => {
+				const openMode = this.plugin.settings.chat.openMode;
+				this.activateChatView(openMode);
+			}
+		});
+		this.plugin.addCommand({
 			id: 'form-chat-open-sidebar',
-			name: '打开 AI Chat 侧边栏',
-			callback: () => this.activateChatView('sidebar'),
-			hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'c' }]
+			name: '在侧边栏打开 AI Chat',
+			callback: () => this.activateChatView('sidebar')
 		});
 		this.plugin.addCommand({
 			id: 'form-chat-open-tab',
 			name: '在新标签中打开 AI Chat',
-			callback: () => this.activateChatView('tab'),
-			hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 't' }]
+			callback: () => this.activateChatView('tab')
+		});
+		this.plugin.addCommand({
+			id: 'form-chat-open-window',
+			name: '在新窗口打开 AI Chat',
+			callback: () => this.activateChatView('window')
 		});
 		this.plugin.addCommand({
 			id: 'form-chat-new-conversation',
 			name: 'AI Chat 新建聊天',
-			callback: () => this.service.createNewSession(),
-			hotkeys: [{ modifiers: ['Mod'], key: 'n' }]
+			callback: () => this.service.createNewSession()
 		});
 		this.plugin.addCommand({
 			id: 'form-chat-save-conversation',
 			name: 'AI Chat 保存当前聊天',
-			callback: () => this.service.saveActiveSession(),
-			hotkeys: [{ modifiers: ['Mod'], key: 's' }]
+			callback: () => this.service.saveActiveSession()
 		});
 		this.plugin.addCommand({
 			id: 'form-chat-open-history',
 			name: 'AI Chat 打开历史记录面板',
-			callback: () => this.activateChatView('sidebar').then(() => {
-				// 历史面板在视图内部通过UI控制，此处只负责唤起视图
-			}),
-			hotkeys: [{ modifiers: ['Mod'], key: 'h' }]
+			callback: () => {
+				const openMode = this.plugin.settings.chat.openMode;
+				this.activateChatView(openMode).then(() => {
+					// 历史面板在视图内部通过UI控制，此处只负责唤起视图
+				});
+			}
 		});
 	}
 
 	private createRibbon() {
 		this.ribbonEl = this.plugin.addRibbonIcon('message-circle', 'AI Chat', () => {
-			this.activateChatView('sidebar');
+			const openMode = this.plugin.settings.chat.openMode;
+			this.activateChatView(openMode);
 		});
 		this.ribbonEl?.addClass('chat-ribbon-icon');
 	}
@@ -137,6 +154,19 @@ export class ChatFeatureManager {
 
 		// 如果最大重试次数仍失败，记录警告但继续执行
 		console.warn('FormFlow Chat: 工作区准备检查超时，将尝试继续执行');
+	}
+
+	private async openInWindow() {
+		try {
+			// 使用悬浮窗口模拟新窗口效果
+			const leaf = this.plugin.app.workspace.getLeaf('window');
+			await this.openLeaf(leaf, VIEW_TYPE_CHAT_TAB, true);
+		} catch (error) {
+			console.error('FormFlow Chat: 在新窗口中打开失败，回退到标签页模式:', error);
+			// 如果新窗口失败，回退到标签页模式
+			const leaf = this.plugin.app.workspace.getLeaf(true);
+			await this.openLeaf(leaf, VIEW_TYPE_CHAT_TAB, true);
+		}
 	}
 
 	private async openLeaf(leaf: WorkspaceLeaf, viewType: string, reveal: boolean) {

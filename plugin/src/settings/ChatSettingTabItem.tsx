@@ -72,9 +72,40 @@ export const ChatSettingTabItem = ({ plugin }: { plugin: FormPlugin }) => {
 				});
 			});
 
-		new Setting(el)
-			.setName("自动打开侧边栏视图")
-			.setDesc("插件加载后自动显示AI聊天侧边栏")
+		// 动态获取打开方式的描述
+		const getOpenModeDescription = (mode: string) => {
+			switch (mode) {
+				case 'sidebar':
+					return '插件加载后自动在右侧边栏显示AI聊天界面';
+				case 'tab':
+					return '插件加载后自动在编辑区标签页显示AI聊天界面';
+				case 'window':
+					return '插件加载后自动在新窗口显示AI聊天界面';
+				default:
+					return '插件加载后自动显示AI聊天界面';
+			}
+		};
+
+		// 创建打开方式设置项
+		const openModeSetting = new Setting(el)
+			.setName("AI Chat 打开方式")
+			.setDesc("选择AI Chat界面的默认打开位置")
+			.addDropdown((dropdown) => {
+				dropdown.addOption('sidebar', '右侧边栏');
+				dropdown.addOption('tab', '编辑区标签页');
+				dropdown.addOption('window', '新窗口');
+				dropdown.setValue(plugin.settings.chat.openMode);
+				dropdown.onChange(async (value) => {
+					await updateSettings({ openMode: value as 'sidebar' | 'tab' | 'window' });
+					// 更新自动打开设置的描述文本
+					autoOpenSetting.setDesc(getOpenModeDescription(value));
+				});
+			});
+
+		// 创建自动打开设置项，使用动态描述
+		const autoOpenSetting = new Setting(el)
+			.setName("自动打开AI Chat界面")
+			.setDesc(getOpenModeDescription(plugin.settings.chat.openMode))
 			.addToggle((toggle) => {
 				toggle.setValue(plugin.settings.chat.showSidebarByDefault);
 				toggle.onChange(async (value) => {

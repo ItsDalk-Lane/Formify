@@ -25,7 +25,7 @@ export const ChatInput = ({ service, state }: ChatInputProps) => {
 
 	useEffect(() => {
 		const handler = (event: KeyboardEvent) => {
-			if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+			if (event.key === 'Enter' && !event.shiftKey) {
 				event.preventDefault();
 				handleSubmit();
 			}
@@ -55,7 +55,7 @@ export const ChatInput = ({ service, state }: ChatInputProps) => {
 						setValue(event.target.value);
 						service.setInputValue(event.target.value);
 					}}
-					placeholder="输入消息，按 Ctrl/Cmd + Enter 发送"
+					placeholder="输入消息，按 Enter 发送，Shift+Enter 换行"
 					disabled={state.isGenerating}
 				/>
 			</div>
