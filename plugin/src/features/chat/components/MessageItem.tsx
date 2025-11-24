@@ -1,5 +1,5 @@
 import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2 } from 'lucide-react';
-import { Component } from 'obsidian';
+import { Component, Platform } from 'obsidian';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
 import type { ChatMessage } from '../types/chat';
@@ -62,8 +62,8 @@ export const MessageItem = ({ message, service }: MessageItemProps) => {
 				: 'chat-message--system';
 
 	return (
-		<div className={`chat-message tw-mx-2 tw-my-1 tw-rounded-md tw-p-2 ${roleClass} ${message.isError ? 'chat-message--error' : ''}`}>
-			<div className="chat-message__content tw-whitespace-pre-wrap tw-break-words">
+		<div className={`group tw-mx-2 tw-my-1 tw-rounded-md tw-p-2 ${roleClass} ${message.isError ? 'chat-message--error' : ''}`}>
+			<div className="chat-message__content tw-break-words">
 				{editing ? (
 					<textarea
 						value={draft}
@@ -77,31 +77,43 @@ export const MessageItem = ({ message, service }: MessageItemProps) => {
 			</div>
 			<div className="chat-message__meta tw-flex tw-items-center tw-justify-between">
 				<span className="tw-text-xs tw-text-faint">{timestamp}</span>
-				<div className="chat-message__actions tw-flex tw-items-center tw-gap-1">
-					<button className="chat-icon-btn" onClick={handleCopy} aria-label="复制消息">
-						{copied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
-					</button>
-					{message.role === 'user' && !editing && (
-						<button className="chat-icon-btn" onClick={() => setEditing(true)} aria-label="编辑消息">
-							<PenSquare className="tw-size-4" />
-						</button>
+				<div className="chat-message__actions tw-flex tw-items-center tw-gap-2 tw-opacity-100 hover:tw-opacity-100 tw-transition-opacity">
+					{/* User message buttons */}
+					{message.role === 'user' && (
+						<>
+							<span onClick={handleCopy} aria-label="复制消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+								{copied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
+							</span>
+							{!editing && (
+								<span onClick={() => setEditing(true)} aria-label="编辑消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+									<PenSquare className="tw-size-4" />
+								</span>
+							)}
+							{editing && (
+								<span onClick={handleSaveEdit} aria-label="保存编辑" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+									<Check className="tw-size-4" />
+								</span>
+							)}
+							<span onClick={handleDelete} aria-label="删除消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+								<Trash2 className="tw-size-4" />
+							</span>
+						</>
 					)}
-					{message.role === 'user' && editing && (
-						<button className="chat-icon-btn" onClick={handleSaveEdit} aria-label="保存编辑">
-							<Check className="tw-size-4" />
-						</button>
-					)}
-					<button className="chat-icon-btn" onClick={handleDelete} aria-label="删除消息">
-						<Trash2 className="tw-size-4" />
-					</button>
+					{/* AI message buttons */}
 					{message.role === 'assistant' && (
 						<>
-							<button className="chat-icon-btn" onClick={handleInsert} aria-label="插入到编辑器">
+							<span onClick={handleInsert} aria-label="插入到编辑器" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 								<TextCursorInput className="tw-size-4" />
-							</button>
-							<button className="chat-icon-btn" onClick={handleRegenerate} aria-label="重新生成">
+							</span>
+							<span onClick={handleCopy} aria-label="复制消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+								{copied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
+							</span>
+							<span onClick={handleRegenerate} aria-label="重新生成" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 								<RotateCw className="tw-size-4" />
-							</button>
+							</span>
+							<span onClick={handleDelete} aria-label="删除消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+								<Trash2 className="tw-size-4" />
+							</span>
 						</>
 					)}
 				</div>
