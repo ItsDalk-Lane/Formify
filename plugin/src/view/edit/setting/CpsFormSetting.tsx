@@ -1,4 +1,4 @@
-import { ClipboardIcon, Wrench, Zap } from "lucide-react";
+import { ClipboardIcon, Wrench, Zap, Download, Search, Filter } from "lucide-react";
 import { Tab } from "src/component/tab/Tab";
 import { useObsidianApp } from "src/context/obsidianAppContext";
 import { localInstance } from "src/i18n/locals";
@@ -15,6 +15,7 @@ import CpsFormFields from "./field/CpsFormFields";
 import { AsCommandToggle } from "./field/common/AsCommandToggle";
 import { useState, useEffect } from "react";
 import { FormConfigContext } from "src/hooks/useFormConfig";
+import { FormImportDialog } from "./import/FormImportDialog";
 
 export default function (props: {
 	filePath: string;
@@ -32,6 +33,9 @@ export default function (props: {
 	// 动作批量操作状态
 	const [actionSelectMode, setActionSelectMode] = useState(false);
 	const [actionSelectedIds, setActionSelectedIds] = useState<string[]>([]);
+
+	// 导入功能状态
+	const [showImportDialog, setShowImportDialog] = useState(false);
 
 	// 异步获取快捷键
 	useEffect(() => {
@@ -208,8 +212,44 @@ export default function (props: {
 		});
 	};
 
+	// 处理导入完成
+	const handleImportComplete = (importedConfig: FormConfig) => {
+		// 合并导入的配置到当前表单
+		const mergedConfig = new FormConfig(formConfig.id);
+		Object.assign(mergedConfig, {
+			...formConfig,
+			// 合并字段
+			fields: [...formConfig.fields, ...importedConfig.fields],
+			// 合并动作
+			actions: [...formConfig.actions, ...importedConfig.actions],
+			// 合并其他设置（如果导入的设置存在）
+			...(importedConfig.showSubmitSuccessToast !== undefined && {
+				showSubmitSuccessToast: importedConfig.showSubmitSuccessToast
+			}),
+			...(importedConfig.enableExecutionTimeout !== undefined && {
+				enableExecutionTimeout: importedConfig.enableExecutionTimeout
+			}),
+			...(importedConfig.executionTimeoutThreshold !== undefined && {
+				executionTimeoutThreshold: importedConfig.executionTimeoutThreshold
+			}),
+		});
+
+		onChange(mergedConfig);
+		setShowImportDialog(false);
+	};
+
 	return (
 		<FormConfigContext.Provider value={formConfig}>
+			{/* 导入对话框 */}
+			{showImportDialog && (
+				<FormImportDialog
+					app={app}
+					currentConfig={formConfig}
+					onClose={() => setShowImportDialog(false)}
+					onComplete={handleImportComplete}
+				/>
+			)}
+
 		<Tab
 			items={[
 				{
