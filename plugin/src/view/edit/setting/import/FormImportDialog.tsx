@@ -635,6 +635,7 @@ export function FormImportDialog({
                                     onChange={(e) => {
                                         const newValue = e.target.checked;
                                         updatePartialImportConfig('importFields', newValue);
+                                        // 当选中时，立即选择所有字段
                                         if (newValue && selectedFormData?.fields) {
                                             updatePartialImportConfig('fieldIds', selectedFormData.fields.map(f => f.id));
                                         } else {
@@ -667,7 +668,7 @@ export function FormImportDialog({
                             </span>
                         </div>
 
-                        {expandedSections.fields && importOptions.partialImport.importFields && selectedFormData?.fields && (
+                        {expandedSections.fields && selectedFormData?.fields && (
                             <div style={{
                                 padding: '12px',
                                 background: 'var(--background-primary)',
@@ -789,7 +790,7 @@ export function FormImportDialog({
                             </span>
                         </div>
 
-                        {expandedSections.actions && importOptions.partialImport.importActions && selectedFormData?.actions && (
+                        {expandedSections.actions && selectedFormData?.actions && (
                             <div style={{
                                 padding: '12px',
                                 background: 'var(--background-primary)',
@@ -917,7 +918,7 @@ export function FormImportDialog({
                             </span>
                         </div>
 
-                        {expandedSections.otherSettings && importOptions.partialImport.importOtherSettings && (
+                        {expandedSections.otherSettings && (
                             <div style={{
                                 padding: '12px',
                                 background: 'var(--background-primary)',
