@@ -47,7 +47,7 @@ export const getMimeTypeFromFilename = (filename: string) => {
 	return mimeTypes[extension] || 'application/octet-stream'
 }
 
-export const CALLOUT_BLOCK_START = ' \n\n> [!quote]-  \n> '
+export const CALLOUT_BLOCK_START = ' \n\n> [!quote]+  \n> '
 export const CALLOUT_BLOCK_END = '\n\n'
 
 export const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
