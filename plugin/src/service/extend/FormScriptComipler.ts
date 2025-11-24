@@ -23,7 +23,12 @@ export class FormScriptComipler {
                 id: id
             };
         } catch (err) {
-            console.error("compile extension error " + id, err);
+            if (err instanceof SyntaxError) {
+                console.error(`FormFlow: Syntax error in script file "${id}":`, err.message);
+                console.error(`FormFlow: This usually means you're using 'await' in a non-async function. Please make sure the function is marked as 'async'.`);
+            } else {
+                console.error(`FormFlow: Compile extension error "${id}":`, err);
+            }
             return null;
         }
     }

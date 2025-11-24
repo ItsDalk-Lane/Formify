@@ -6,31 +6,43 @@ import { applicationCommandService } from './service/command/ApplicationCommandS
 import { applicationFileViewService } from './service/file-view/ApplicationFileViewService';
 import { PluginSettingTab } from './settings/PluginSettingTab';
 import './style/base.css'
+import './style/chat.css'
 import { FormFlowApi } from './api/FormFlowApi';
 import { TarsFeatureManager, cloneTarsSettings } from './features/tars';
 import { encryptApiKey, decryptApiKey } from './features/tars/utils/cryptoUtils';
 import { DebugLogger } from './utils/DebugLogger';
+import { ChatFeatureManager } from './features/chat';
 
 export default class FormPlugin extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
 
 	private tarsFeatureManager: TarsFeatureManager | null = null;
+	private chatFeatureManager: ChatFeatureManager | null = null;
 
 	api: FormFlowApi = new FormFlowApi(this.app);
 
 	async onload() {
 		await this.loadSettings();
-		
+
 		// 初始化调试日志系统
 		DebugLogger.setDebugMode(this.settings.tars?.settings?.debugMode ?? false);
 		DebugLogger.setDebugLevel(this.settings.tars?.settings?.debugLevel ?? 'error');
-		
+
 		this.addSettingTab(new PluginSettingTab(this));
 		await applicationCommandService.initialize(this);
 		await applicationFileViewService.initialize(this);
 		await formIntegrationService.initialize(this);
 		this.refreshTarsFeature();
+
+		// 在工作区准备就绪后再初始化聊天功能
 		this.app.workspace.onLayoutReady(async () => {
+			// 添加短暂延迟确保所有组件都已完全加载
+			await new Promise(resolve => setTimeout(resolve, 200));
+
+			// 现在安全地初始化聊天功能
+			this.initializeChatFeature();
+
+			// 然后初始化脚本服务
 			formScriptService.initialize(this.app, this.settings.scriptFolder);
 		});
 	}
@@ -42,6 +54,8 @@ export default class FormPlugin extends Plugin {
 		formIntegrationService.cleanup();
 		this.tarsFeatureManager?.dispose();
 		this.tarsFeatureManager = null;
+		this.chatFeatureManager?.dispose();
+		this.chatFeatureManager = null;
 	}
 
 	async loadSettings() {
@@ -74,6 +88,10 @@ export default class FormPlugin extends Plugin {
 			...persisted,
 			tars: {
 				settings: cloneTarsSettings(decryptedTarsSettings),
+			},
+			chat: {
+				...defaultSettings.chat,
+				...(persisted.chat ?? {})
 			}
 		};
 	}
@@ -128,6 +146,8 @@ export default class FormPlugin extends Plugin {
 		formScriptService.refresh(this.settings.scriptFolder)
 		formIntegrationService.initialize(this, true);
 		this.refreshTarsFeature();
+		this.chatFeatureManager?.updateChatSettings(this.settings.chat);
+		this.chatFeatureManager?.updateProviderSettings(this.settings.tars.settings);
 	}
 
 	private refreshTarsFeature() {
@@ -140,9 +160,20 @@ export default class FormPlugin extends Plugin {
 				tars.settings
 			);
 			this.tarsFeatureManager.initialize();
+			this.chatFeatureManager?.updateProviderSettings(tars.settings);
 			return;
 		}
 
 		this.tarsFeatureManager.updateSettings(tars.settings);
+		this.chatFeatureManager?.updateProviderSettings(tars.settings);
+	}
+
+	private initializeChatFeature() {
+		if (!this.chatFeatureManager) {
+			this.chatFeatureManager = new ChatFeatureManager(this);
+			this.chatFeatureManager.initialize(this.settings.chat);
+			return;
+		}
+		this.chatFeatureManager.updateChatSettings(this.settings.chat);
 	}
 }
