@@ -569,11 +569,13 @@ export function FormImportDialog({
                             ...importOptions,
                             importType: 'partial',
                             partialImport: {
-                                importFields: true,
-                                importActions: true,
+                                importFields: false,
+                                importActions: false,
                                 importStyles: true,
                                 importValidationRules: true,
-                                importOtherSettings: false
+                                importOtherSettings: false,
+                                fieldIds: [],
+                                actionIds: []
                             }
                         })}
                         style={{
@@ -707,8 +709,7 @@ export function FormImportDialog({
                                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                                 <div style={{ fontWeight: '500' }}>{field.label || field.name}</div>
                                                 <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                                                    <span>类型: {getFieldTypeDisplayName(field.type)}</span>
-                                                    <span>({field.type})</span>
+                                                    <span>{getFieldTypeDisplayName(field.type)}</span>
                                                     {(field.defaultValue !== undefined && field.defaultValue !== '') && (
                                                         <span style={{ color: 'var(--text-accent)' }}>包含默认值</span>
                                                     )}
@@ -829,10 +830,11 @@ export function FormImportDialog({
                                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                                 <div style={{ fontWeight: '500' }}>{action.name || action.label}</div>
                                                 <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                                                    <span>类型: {getActionTypeDisplayName(action.type)}</span>
-                                                    <span>({action.type})</span>
-                                                    {action.target && <span>目标: {action.target}</span>}
-                                                    {action.confirmation && <span style={{ color: 'var(--text-warning)' }}>需确认</span>}
+                                                    <span>{getActionTypeDisplayName(action.type)}</span>
+                                                    {(action as any).target && <span>目标: {(action as any).target}</span>}
+                                                    {(action as any).confirmation && <span style={{ color: 'var(--text-warning)' }}>需确认</span>}
+                                                    {(action as any).description && <span style={{ color: 'var(--text-accent)' }}>{(action as any).description}</span>}
+                                                    {(action as any).delay && <span style={{ color: 'var(--text-info)' }}>延迟: {(action as any).delay}ms</span>}
                                                 </div>
                                             </div>
                                         </label>
