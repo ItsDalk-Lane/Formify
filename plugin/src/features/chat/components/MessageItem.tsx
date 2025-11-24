@@ -1,4 +1,4 @@
-import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2 } from 'lucide-react';
+import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X } from 'lucide-react';
 import { Component, Platform } from 'obsidian';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
@@ -46,8 +46,17 @@ export const MessageItem = ({ message, service, isGenerating }: MessageItemProps
 		service?.deleteMessage(message.id);
 	};
 
-	const handleSaveEdit = () => {
-		service?.editMessage(message.id, draft);
+	const handleSaveEdit = async () => {
+		// 立即退出编辑模式
+		setEditing(false);
+
+		if (service) {
+			await service.editAndRegenerate(message.id, draft);
+		}
+	};
+
+	const handleCancelEdit = () => {
+		setDraft(message.content); // 恢复原始内容
 		setEditing(false);
 	};
 
@@ -93,9 +102,14 @@ export const MessageItem = ({ message, service, isGenerating }: MessageItemProps
 									</span>
 								)}
 								{editing && (
-									<span onClick={handleSaveEdit} aria-label="保存编辑" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
-										<Check className="tw-size-4" />
-									</span>
+									<>
+										<span onClick={handleCancelEdit} aria-label="取消编辑" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+											<X className="tw-size-4" />
+										</span>
+										<span onClick={handleSaveEdit} aria-label="保存编辑" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+											<Check className="tw-size-4" />
+										</span>
+									</>
 								)}
 								<span onClick={handleDelete} aria-label="删除消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 									<Trash2 className="tw-size-4" />

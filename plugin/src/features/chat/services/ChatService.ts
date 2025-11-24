@@ -195,6 +195,30 @@ export class ChatService {
 		this.emitState();
 	}
 
+	async editAndRegenerate(messageId: string, content: string) {
+		const session = this.state.activeSession;
+		if (!session || this.state.isGenerating) return;
+
+		// 找到要编辑的消息
+		const messageIndex = session.messages.findIndex((msg) => msg.id === messageId);
+		if (messageIndex === -1) return;
+
+		const message = session.messages[messageIndex];
+		if (!message || message.role !== 'user') return;
+
+		// 更新消息内容
+		message.content = content.trim();
+		message.timestamp = Date.now();
+
+		// 删除这条消息之后的所有消息（包括AI回复）
+		session.messages = session.messages.slice(0, messageIndex + 1);
+		session.updatedAt = Date.now();
+		this.emitState();
+
+		// 重新生成AI回复
+		await this.generateAssistantResponse(session);
+	}
+
 	deleteMessage(messageId: string) {
 		const session = this.state.activeSession;
 		if (!session) return;
@@ -210,15 +234,45 @@ export class ChatService {
 		if (!session) return;
 		const message = session.messages.find((msg) => msg.id === messageId);
 		if (!message) return;
-		const markdownView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
-		if (!markdownView?.editor) {
-			new Notice('当前没有可写入的编辑器');
+
+		// 获取所有打开的markdown叶子
+		const markdownLeaves = this.plugin.app.workspace.getLeavesOfType('markdown');
+
+		// 优先尝试获取当前活动的markdown视图
+		const activeMarkdownView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+
+		// 如果有活动的markdown视图，直接插入到当前文件
+		if (activeMarkdownView?.editor) {
+			const editor = activeMarkdownView.editor;
+			editor.replaceSelection(message.content);
+			new Notice('内容已插入当前编辑器');
 			return;
 		}
-		const editor = markdownView.editor;
-		editor.replaceSelection(message.content);
-		markdownView.editor.focus();
-		new Notice('内容已插入当前编辑器');
+
+		// 如果没有活动的markdown视图，但存在打开的markdown叶子
+		if (markdownLeaves.length > 0) {
+			// 尝试获取最近使用的markdown叶子
+			let targetLeaf = markdownLeaves.find(leaf => leaf === this.plugin.app.workspace.activeLeaf);
+
+			// 如果当前活动叶子不是markdown，取第一个markdown叶子
+			if (!targetLeaf) {
+				targetLeaf = markdownLeaves[0];
+			}
+
+			if (targetLeaf) {
+				const targetView = targetLeaf.view as MarkdownView;
+				if (targetView.editor) {
+					const editor = targetView.editor;
+					editor.replaceSelection(message.content);
+					const fileName = targetView.file?.basename || '未知文件';
+					new Notice(`内容已插入到文件: ${fileName}`);
+					return;
+				}
+			}
+		}
+
+		// 如果没有任何打开的markdown文件，提示用户需要先打开一个markdown文件
+		new Notice('当前没有打开的markdown文件，请先打开一个markdown文件后再尝试插入内容');
 	}
 
 	async regenerateFromMessage(messageId: string) {
