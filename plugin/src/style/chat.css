@@ -175,9 +175,9 @@
 	min-width: 0;
 	padding: 4px 8px;
 	border-radius: var(--radius-s);
-	border: 1px solid var(--background-modifier-border);
 	background: var(--background-primary);
 	color: var(--text-normal);
+	border: none;
 }
 
 .chat-input__editor {
@@ -473,6 +473,14 @@
 
 .tw-focus\:ring-offset-2:focus {
 	--tw-ring-offset-width: 2px;
+}
+
+/* Ring color variables */
+:root {
+	--tw-ring-color: var(--interactive-accent);
+	--tw-ring-inset: inset;
+	--tw-ring-offset-color: #fff;
+	--tw-ring-offset-width: 0px;
 }
 
 .tw-inline-flex {
