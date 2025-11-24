@@ -605,17 +605,25 @@ export function FormImportDialog({
                             cursor: 'pointer'
                         }}
                         onClick={(e) => {
-                            // 只有点击非复选框和非标题文本区域时才触发折叠/展开
-                            if (e.target !== e.currentTarget &&
-                                !e.target.closest('input[type="checkbox"]') &&
-                                !e.target.closest('.field-title')) {
-                                const newValue = !importOptions.partialImport.importFields;
-                                updatePartialImportConfig('importFields', newValue);
-                                if (newValue && selectedFormData?.fields) {
-                                    updatePartialImportConfig('fieldIds', selectedFormData.fields.map(f => f.id));
-                                } else {
-                                    updatePartialImportConfig('fieldIds', []);
-                                }
+                            // 只有点击空白区域时才触发折叠/展开
+                            const target = e.target;
+                            const isCheckbox = target.tagName === 'INPUT' && target.type === 'checkbox';
+                            const isTitle = target.classList.contains('field-title');
+                            const isCheckboxParent = target.closest('div')?.querySelector('input[type="checkbox"]');
+                            const isTitleParent = target.closest('.field-title');
+
+                            // 如果点击的是复选框、标题文本或它们的直接容器，不触发折叠
+                            if (isCheckbox || isTitle || isCheckboxParent || isTitleParent) {
+                                return;
+                            }
+
+                            // 否则触发折叠/展开
+                            const newValue = !importOptions.partialImport.importFields;
+                            updatePartialImportConfig('importFields', newValue);
+                            if (newValue && selectedFormData?.fields) {
+                                updatePartialImportConfig('fieldIds', selectedFormData.fields.map(f => f.id));
+                            } else {
+                                updatePartialImportConfig('fieldIds', []);
                             }
                         }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -633,7 +641,20 @@ export function FormImportDialog({
                                     }}
                                     onClick={(e) => e.stopPropagation()}
                                 />
-                                <span className="field-title">
+                                <span
+                                    className="field-title"
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        const newValue = !importOptions.partialImport.importFields;
+                                        updatePartialImportConfig('importFields', newValue);
+                                        if (newValue && selectedFormData?.fields) {
+                                            updatePartialImportConfig('fieldIds', selectedFormData.fields.map(f => f.id));
+                                        } else {
+                                            updatePartialImportConfig('fieldIds', []);
+                                        }
+                                    }}
+                                >
                                     表单字段
                                 </span>
                             </div>
@@ -709,17 +730,25 @@ export function FormImportDialog({
                             cursor: 'pointer'
                         }}
                         onClick={(e) => {
-                            // 只有点击非复选框和非标题文本区域时才触发折叠/展开
-                            if (e.target !== e.currentTarget &&
-                                !e.target.closest('input[type="checkbox"]') &&
-                                !e.target.closest('.action-title')) {
-                                const newValue = !importOptions.partialImport.importActions;
-                                updatePartialImportConfig('importActions', newValue);
-                                if (newValue && selectedFormData?.actions) {
-                                    updatePartialImportConfig('actionIds', selectedFormData.actions.map(a => a.id));
-                                } else {
-                                    updatePartialImportConfig('actionIds', []);
-                                }
+                            // 只有点击空白区域时才触发折叠/展开
+                            const target = e.target;
+                            const isCheckbox = target.tagName === 'INPUT' && target.type === 'checkbox';
+                            const isTitle = target.classList.contains('action-title');
+                            const isCheckboxParent = target.closest('div')?.querySelector('input[type="checkbox"]');
+                            const isTitleParent = target.closest('.action-title');
+
+                            // 如果点击的是复选框、标题文本或它们的直接容器，不触发折叠
+                            if (isCheckbox || isTitle || isCheckboxParent || isTitleParent) {
+                                return;
+                            }
+
+                            // 否则触发折叠/展开
+                            const newValue = !importOptions.partialImport.importActions;
+                            updatePartialImportConfig('importActions', newValue);
+                            if (newValue && selectedFormData?.actions) {
+                                updatePartialImportConfig('actionIds', selectedFormData.actions.map(a => a.id));
+                            } else {
+                                updatePartialImportConfig('actionIds', []);
                             }
                         }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -737,7 +766,20 @@ export function FormImportDialog({
                                     }}
                                     onClick={(e) => e.stopPropagation()}
                                 />
-                                <span className="action-title">
+                                <span
+                                    className="action-title"
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        const newValue = !importOptions.partialImport.importActions;
+                                        updatePartialImportConfig('importActions', newValue);
+                                        if (newValue && selectedFormData?.actions) {
+                                            updatePartialImportConfig('actionIds', selectedFormData.actions.map(a => a.id));
+                                        } else {
+                                            updatePartialImportConfig('actionIds', []);
+                                        }
+                                    }}
+                                >
                                     表单动作
                                 </span>
                             </div>
@@ -811,21 +853,29 @@ export function FormImportDialog({
                             cursor: 'pointer'
                         }}
                         onClick={(e) => {
-                            // 只有点击非复选框和非标题文本区域时才触发折叠/展开
-                            if (e.target !== e.currentTarget &&
-                                !e.target.closest('input[type="checkbox"]') &&
-                                !e.target.closest('.other-title')) {
-                                const newValue = !importOptions.partialImport.importOtherSettings;
-                                updatePartialImportConfig('importOtherSettings', newValue);
-                                // 当启用其他设置时，默认启用所有子项
-                                if (newValue) {
-                                    updateOtherSetting('showSubmitSuccessToast', true);
-                                    updateOtherSetting('enableExecutionTimeout', true);
-                                    updateOtherSetting('executionTimeoutThreshold', 30);
-                                } else {
-                                    updateOtherSetting('showSubmitSuccessToast', false);
-                                    updateOtherSetting('enableExecutionTimeout', false);
-                                }
+                            // 只有点击空白区域时才触发折叠/展开
+                            const target = e.target;
+                            const isCheckbox = target.tagName === 'INPUT' && target.type === 'checkbox';
+                            const isTitle = target.classList.contains('other-title');
+                            const isCheckboxParent = target.closest('div')?.querySelector('input[type="checkbox"]');
+                            const isTitleParent = target.closest('.other-title');
+
+                            // 如果点击的是复选框、标题文本或它们的直接容器，不触发折叠
+                            if (isCheckbox || isTitle || isCheckboxParent || isTitleParent) {
+                                return;
+                            }
+
+                            // 否则触发折叠/展开
+                            const newValue = !importOptions.partialImport.importOtherSettings;
+                            updatePartialImportConfig('importOtherSettings', newValue);
+                            // 当启用其他设置时，默认启用所有子项
+                            if (newValue) {
+                                updateOtherSetting('showSubmitSuccessToast', true);
+                                updateOtherSetting('enableExecutionTimeout', true);
+                                updateOtherSetting('executionTimeoutThreshold', 30);
+                            } else {
+                                updateOtherSetting('showSubmitSuccessToast', false);
+                                updateOtherSetting('enableExecutionTimeout', false);
                             }
                         }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -847,7 +897,24 @@ export function FormImportDialog({
                                     }}
                                     onClick={(e) => e.stopPropagation()}
                                 />
-                                <span className="other-title">
+                                <span
+                                    className="other-title"
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        const newValue = !importOptions.partialImport.importOtherSettings;
+                                        updatePartialImportConfig('importOtherSettings', newValue);
+                                        // 当启用其他设置时，默认启用所有子项
+                                        if (newValue) {
+                                            updateOtherSetting('showSubmitSuccessToast', true);
+                                            updateOtherSetting('enableExecutionTimeout', true);
+                                            updateOtherSetting('executionTimeoutThreshold', 30);
+                                        } else {
+                                            updateOtherSetting('showSubmitSuccessToast', false);
+                                            updateOtherSetting('enableExecutionTimeout', false);
+                                        }
+                                    }}
+                                >
                                     其他设置
                                 </span>
                             </div>
