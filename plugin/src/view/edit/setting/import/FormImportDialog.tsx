@@ -57,6 +57,13 @@ export function FormImportDialog({
     // 分类列表
     const [categories, setCategories] = useState<string[]>([]);
 
+    // 部分导入分类展开状态
+    const [expandedSections, setExpandedSections] = useState({
+        fields: true,
+        actions: true,
+        otherSettings: true
+    });
+
     // 字段类型映射为用户友好名称
     const getFieldTypeDisplayName = (type: FormFieldType): string => {
         switch (type) {
@@ -609,22 +616,17 @@ export function FormImportDialog({
                             const target = e.target;
                             const isCheckbox = target.tagName === 'INPUT' && target.type === 'checkbox';
                             const isTitle = target.classList.contains('field-title');
-                            const isCheckboxParent = target.closest('div')?.querySelector('input[type="checkbox"]');
-                            const isTitleParent = target.closest('.field-title');
 
-                            // 如果点击的是复选框、标题文本或它们的直接容器，不触发折叠
-                            if (isCheckbox || isTitle || isCheckboxParent || isTitleParent) {
+                            // 如果点击的是复选框、标题文本，不触发折叠
+                            if (isCheckbox || isTitle) {
                                 return;
                             }
 
                             // 否则触发折叠/展开
-                            const newValue = !importOptions.partialImport.importFields;
-                            updatePartialImportConfig('importFields', newValue);
-                            if (newValue && selectedFormData?.fields) {
-                                updatePartialImportConfig('fieldIds', selectedFormData.fields.map(f => f.id));
-                            } else {
-                                updatePartialImportConfig('fieldIds', []);
-                            }
+                            setExpandedSections(prev => ({
+                                ...prev,
+                                fields: !prev.fields
+                            }));
                         }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <input
@@ -663,7 +665,7 @@ export function FormImportDialog({
                             </span>
                         </div>
 
-                        {importOptions.partialImport.importFields && selectedFormData?.fields && (
+                        {expandedSections.fields && importOptions.partialImport.importFields && selectedFormData?.fields && (
                             <div style={{
                                 padding: '12px',
                                 background: 'var(--background-primary)',
@@ -734,22 +736,17 @@ export function FormImportDialog({
                             const target = e.target;
                             const isCheckbox = target.tagName === 'INPUT' && target.type === 'checkbox';
                             const isTitle = target.classList.contains('action-title');
-                            const isCheckboxParent = target.closest('div')?.querySelector('input[type="checkbox"]');
-                            const isTitleParent = target.closest('.action-title');
 
-                            // 如果点击的是复选框、标题文本或它们的直接容器，不触发折叠
-                            if (isCheckbox || isTitle || isCheckboxParent || isTitleParent) {
+                            // 如果点击的是复选框、标题文本，不触发折叠
+                            if (isCheckbox || isTitle) {
                                 return;
                             }
 
                             // 否则触发折叠/展开
-                            const newValue = !importOptions.partialImport.importActions;
-                            updatePartialImportConfig('importActions', newValue);
-                            if (newValue && selectedFormData?.actions) {
-                                updatePartialImportConfig('actionIds', selectedFormData.actions.map(a => a.id));
-                            } else {
-                                updatePartialImportConfig('actionIds', []);
-                            }
+                            setExpandedSections(prev => ({
+                                ...prev,
+                                actions: !prev.actions
+                            }));
                         }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <input
@@ -788,7 +785,7 @@ export function FormImportDialog({
                             </span>
                         </div>
 
-                        {importOptions.partialImport.importActions && selectedFormData?.actions && (
+                        {expandedSections.actions && importOptions.partialImport.importActions && selectedFormData?.actions && (
                             <div style={{
                                 padding: '12px',
                                 background: 'var(--background-primary)',
@@ -857,26 +854,17 @@ export function FormImportDialog({
                             const target = e.target;
                             const isCheckbox = target.tagName === 'INPUT' && target.type === 'checkbox';
                             const isTitle = target.classList.contains('other-title');
-                            const isCheckboxParent = target.closest('div')?.querySelector('input[type="checkbox"]');
-                            const isTitleParent = target.closest('.other-title');
 
-                            // 如果点击的是复选框、标题文本或它们的直接容器，不触发折叠
-                            if (isCheckbox || isTitle || isCheckboxParent || isTitleParent) {
+                            // 如果点击的是复选框、标题文本，不触发折叠
+                            if (isCheckbox || isTitle) {
                                 return;
                             }
 
                             // 否则触发折叠/展开
-                            const newValue = !importOptions.partialImport.importOtherSettings;
-                            updatePartialImportConfig('importOtherSettings', newValue);
-                            // 当启用其他设置时，默认启用所有子项
-                            if (newValue) {
-                                updateOtherSetting('showSubmitSuccessToast', true);
-                                updateOtherSetting('enableExecutionTimeout', true);
-                                updateOtherSetting('executionTimeoutThreshold', 30);
-                            } else {
-                                updateOtherSetting('showSubmitSuccessToast', false);
-                                updateOtherSetting('enableExecutionTimeout', false);
-                            }
+                            setExpandedSections(prev => ({
+                                ...prev,
+                                otherSettings: !prev.otherSettings
+                            }));
                         }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <input
@@ -923,7 +911,7 @@ export function FormImportDialog({
                             </span>
                         </div>
 
-                        {importOptions.partialImport.importOtherSettings && (
+                        {expandedSections.otherSettings && importOptions.partialImport.importOtherSettings && (
                             <div style={{
                                 padding: '12px',
                                 background: 'var(--background-primary)',
