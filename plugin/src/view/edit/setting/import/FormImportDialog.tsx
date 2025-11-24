@@ -652,6 +652,8 @@ export function FormImportDialog({
                                         updatePartialImportConfig('importFields', newValue);
                                         if (newValue && selectedFormData?.fields) {
                                             updatePartialImportConfig('fieldIds', selectedFormData.fields.map(f => f.id));
+                                            // 如果选择了字段，确保展开状态为true
+                                            setExpandedSections(prev => ({ ...prev, fields: true }));
                                         } else {
                                             updatePartialImportConfig('fieldIds', []);
                                         }
@@ -772,6 +774,8 @@ export function FormImportDialog({
                                         updatePartialImportConfig('importActions', newValue);
                                         if (newValue && selectedFormData?.actions) {
                                             updatePartialImportConfig('actionIds', selectedFormData.actions.map(a => a.id));
+                                            // 如果选择了动作，确保展开状态为true
+                                            setExpandedSections(prev => ({ ...prev, actions: true }));
                                         } else {
                                             updatePartialImportConfig('actionIds', []);
                                         }
@@ -897,6 +901,8 @@ export function FormImportDialog({
                                             updateOtherSetting('showSubmitSuccessToast', true);
                                             updateOtherSetting('enableExecutionTimeout', true);
                                             updateOtherSetting('executionTimeoutThreshold', 30);
+                                            // 如果选择了其他设置，确保展开状态为true
+                                            setExpandedSections(prev => ({ ...prev, otherSettings: true }));
                                         } else {
                                             updateOtherSetting('showSubmitSuccessToast', false);
                                             updateOtherSetting('enableExecutionTimeout', false);
