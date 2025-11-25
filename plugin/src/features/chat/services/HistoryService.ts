@@ -23,6 +23,111 @@ export class HistoryService {
 		this.messageService = new MessageService();
 	}
 
+	/**
+	 * 格式化时间戳为YYYY-MM-DD HH:mm:ss格式
+	 */
+	private formatTimestamp(timestamp: number): string {
+		const date = new Date(timestamp);
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const day = String(date.getDate()).padStart(2, '0');
+		const hours = String(date.getHours()).padStart(2, '0');
+		const minutes = String(date.getMinutes()).padStart(2, '0');
+		const seconds = String(date.getSeconds()).padStart(2, '0');
+		
+		return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+	}
+
+	/**
+	 * 格式化时间戳为YYYYMMDDHHmmss格式（用于文件名后缀）
+	 */
+	private formatTimestampForFilename(timestamp: number): string {
+		const date = new Date(timestamp);
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const day = String(date.getDate()).padStart(2, '0');
+		const hours = String(date.getHours()).padStart(2, '0');
+		const minutes = String(date.getMinutes()).padStart(2, '0');
+		const seconds = String(date.getSeconds()).padStart(2, '0');
+		
+		return `${year}${month}${day}${hours}${minutes}${seconds}`;
+	}
+
+	/**
+	 * 清理文本，使其适合作为文件名
+	 * - 替换空格为下划线
+	 * - 替换无效字符为下划线
+	 * - 确保符合系统文件名要求
+	 */
+	private sanitizeTitle(text: string): string {
+		return text
+			// 替换空格为下划线
+			.replace(/\s+/g, '_')
+			// 替换控制字符和无效文件名字符为下划线
+			.replace(/[<>:"/\\|?*\x00-\x1f\x7f-\x9f]/g, '_')
+			// 移除连续的下划线
+			.replace(/_+/g, '_')
+			// 移除开头和结尾的下划线
+			.replace(/^_|_$/g, '');
+	}
+
+	/**
+	 * 生成历史记录文件名
+	 * 格式：{title}-{日期时间}
+	 * title: 第一条用户消息内容，限制在100字节以内
+	 * 日期时间: YYYYMMDDHHmmss格式
+	 */
+	private generateHistoryFileName(firstMessage: ChatMessage): string {
+		// 获取第一条消息内容作为标题
+		let title = firstMessage.content.trim();
+		
+		// 清理标题中的无效字符
+		title = this.sanitizeTitle(title);
+		
+		// 计算标题的字节长度（UTF-8编码）
+		const encoder = new TextEncoder();
+		const titleBytes = encoder.encode(title);
+		
+		// 如果标题超过100字节，进行截断
+		if (titleBytes.length > 100) {
+			// 找到最接近100字节的字符位置
+			let truncatedLength = title.length;
+			for (let i = 0; i < title.length; i++) {
+				const testTitle = title.substring(0, i + 1);
+				const testBytes = encoder.encode(testTitle);
+				if (testBytes.length > 100) {
+					truncatedLength = i;
+					break;
+				}
+			}
+			
+			// 截断标题并添加省略号
+			title = title.substring(0, truncatedLength);
+			
+			// 确保截断后的标题加上省略号不超过100字节
+			const ellipsis = '...';
+			const titleWithEllipsis = title + ellipsis;
+			const titleWithEllipsisBytes = encoder.encode(titleWithEllipsis);
+			
+			// 如果加上省略号后超过100字节，进一步缩短标题
+			if (titleWithEllipsisBytes.length > 100) {
+				// 逐步缩短标题直到加上省略号不超过100字节
+				while (title.length > 0 && encoder.encode(title + ellipsis).length > 100) {
+					title = title.substring(0, title.length - 1);
+				}
+				title = title + ellipsis;
+			} else {
+				title = titleWithEllipsis;
+			}
+		}
+		
+		// 生成日期时间后缀
+		const timestamp = this.formatTimestampForFilename(firstMessage.timestamp);
+		
+		// 组合最终文件名
+		return `${title}-${timestamp}`;
+	}
+
 	getFolder(): string {
 		return this.folderPath;
 	}
@@ -66,7 +171,9 @@ export class HistoryService {
 				await this.updateFileFrontmatter(file, {
 					title: session.title,
 					model: session.modelId,
-					updated: session.updatedAt,
+					created: this.formatTimestamp(session.createdAt),
+					updated: this.formatTimestamp(session.updatedAt),
+					messageCount: session.messages.length,
 					contextNotes: session.contextNotes ?? []
 				});
 				return session.filePath;
@@ -75,14 +182,24 @@ export class HistoryService {
 		
 		// 如果没有文件路径或文件不存在，创建新文件
 		const folder = await this.ensureFolder();
-		const fileName = `${sanitizeFileName(session.title || session.id)}.md`;
+		
+		// 如果有消息，使用第一条消息生成文件名
+		let fileName: string;
+		if (session.messages.length > 0) {
+			fileName = this.generateHistoryFileName(session.messages[0]) + '.md';
+		} else {
+			// 如果没有消息，使用会话标题生成文件名
+			const sanitizedTitle = this.sanitizeTitle(session.title || session.id);
+			fileName = `${sanitizedTitle}.md`;
+		}
+		
 		const filePath = joinPath(folder.path, fileName);
 		
 		// 如果文件已存在，添加时间戳确保唯一性
 		let finalFilePath = filePath;
 		if (await this.app.vault.adapter.exists(filePath)) {
 			const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-			const uniqueFileName = `${sanitizeFileName(session.title || session.id)}-${timestamp}.md`;
+			const uniqueFileName = fileName.replace('.md', `-${timestamp}.md`);
 			finalFilePath = joinPath(folder.path, uniqueFileName);
 		}
 		
@@ -90,8 +207,9 @@ export class HistoryService {
 			id: session.id,
 			title: session.title,
 			model: session.modelId,
-			created: session.createdAt,
-			updated: session.updatedAt,
+			created: this.formatTimestamp(session.createdAt),
+			updated: this.formatTimestamp(session.updatedAt),
+			messageCount: session.messages.length,
 			contextNotes: session.contextNotes ?? []
 		});
 
@@ -199,23 +317,67 @@ export class HistoryService {
 
 	async createNewSessionFileWithFirstMessage(session: ChatSession, firstMessage: ChatMessage): Promise<string> {
 		const folder = await this.ensureFolder();
-		const fileName = `${sanitizeFileName(session.title || session.id)}.md`;
+		
+		// 使用新的文件名生成规则
+		const fileName = this.generateHistoryFileName(firstMessage) + '.md';
 		const filePath = joinPath(folder.path, fileName);
 		
-		// 如果文件已存在，添加时间戳确保唯一性
+		// 如果文件已存在，添加额外时间戳确保唯一性
 		let finalFilePath = filePath;
 		if (await this.app.vault.adapter.exists(filePath)) {
-			const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-			const uniqueFileName = `${sanitizeFileName(session.title || session.id)}-${timestamp}.md`;
+			const extraTimestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+			const uniqueFileName = this.generateHistoryFileName(firstMessage) + `-${extraTimestamp}.md`;
 			finalFilePath = joinPath(folder.path, uniqueFileName);
+		}
+		
+		// 从第一条消息内容中提取标题（不包含日期时间后缀）
+		let title = firstMessage.content.trim();
+		title = this.sanitizeTitle(title);
+		
+		// 计算标题的字节长度（UTF-8编码）
+		const encoder = new TextEncoder();
+		const titleBytes = encoder.encode(title);
+		
+		// 如果标题超过100字节，进行截断
+		if (titleBytes.length > 100) {
+			// 找到最接近100字节的字符位置
+			let truncatedLength = title.length;
+			for (let i = 0; i < title.length; i++) {
+				const testTitle = title.substring(0, i + 1);
+				const testBytes = encoder.encode(testTitle);
+				if (testBytes.length > 100) {
+					truncatedLength = i;
+					break;
+				}
+			}
+			
+			// 截断标题并添加省略号
+			title = title.substring(0, truncatedLength);
+			
+			// 确保截断后的标题加上省略号不超过100字节
+			const ellipsis = '...';
+			const titleWithEllipsis = title + ellipsis;
+			const titleWithEllipsisBytes = encoder.encode(titleWithEllipsis);
+			
+			// 如果加上省略号后超过100字节，进一步缩短标题
+			if (titleWithEllipsisBytes.length > 100) {
+				// 逐步缩短标题直到加上省略号不超过100字节
+				while (title.length > 0 && encoder.encode(title + ellipsis).length > 100) {
+					title = title.substring(0, title.length - 1);
+				}
+				title = title + ellipsis;
+			} else {
+				title = titleWithEllipsis;
+			}
 		}
 		
 		const frontmatter = stringifyYaml({
 			id: session.id,
-			title: session.title,
+			title: title, // 使用清理后的标题
 			model: session.modelId,
-			created: session.createdAt,
-			updated: session.updatedAt,
+			created: this.formatTimestamp(session.createdAt),
+			updated: this.formatTimestamp(session.updatedAt),
+			messageCount: 1, // 第一条消息
 			contextNotes: session.contextNotes ?? []
 		});
 
@@ -240,6 +402,12 @@ export class HistoryService {
 		
 		// 合并更新
 		const updatedFrontmatter = { ...frontmatter, ...updates };
+		
+		// 如果更新中包含消息，重新计算消息数量
+		if (updates.hasOwnProperty('messages') || body !== undefined) {
+			const messages = this.parseMessages(body);
+			updatedFrontmatter.messageCount = messages.length;
+		}
 		
 		// 重新构建文件内容
 		const newFrontmatter = stringifyYaml(updatedFrontmatter);
@@ -267,8 +435,9 @@ export class HistoryService {
 			throw new Error('文件没有frontmatter，无法重写消息');
 		}
 		
-		// 更新frontmatter中的时间戳
-		frontmatter.updated = Date.now();
+		// 更新frontmatter中的时间戳和消息数量
+		frontmatter.updated = this.formatTimestamp(Date.now());
+		frontmatter.messageCount = messages.length;
 		
 		// 重新构建文件内容
 		const newFrontmatter = stringifyYaml(frontmatter);
@@ -280,7 +449,7 @@ export class HistoryService {
 	}
 
 	private async updateFileTimestamp(file: TFile, timestamp: number): Promise<void> {
-		await this.updateFileFrontmatter(file, { updated: timestamp });
+		await this.updateFileFrontmatter(file, { updated: this.formatTimestamp(timestamp) });
 	}
 
 	private async ensureFolder(): Promise<TFolder> {
