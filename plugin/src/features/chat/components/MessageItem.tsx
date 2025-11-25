@@ -73,6 +73,20 @@ export const MessageItem = ({ message, service, isGenerating }: MessageItemProps
 
 	return (
 		<div className={`group tw-mx-2 tw-my-1 tw-rounded-md tw-p-2 ${roleClass} ${message.isError ? 'chat-message--error' : ''}`}>
+			{/* 显示图片 */}
+			{message.images && message.images.length > 0 && (
+				<div className="message-images tw-mb-2 tw-flex tw-flex-wrap tw-gap-2">
+					{message.images.map((image, index) => (
+						<img 
+							key={index}
+							src={image} 
+							alt={`message-image-${index}`} 
+							className="message-image tw-max-w-xs tw-rounded-md tw-border tw-border-gray-300" 
+							style={{ maxHeight: '200px' }}
+						/>
+					))}
+				</div>
+			)}
 			<div className="chat-message__content tw-break-words">
 				{editing ? (
 					<textarea

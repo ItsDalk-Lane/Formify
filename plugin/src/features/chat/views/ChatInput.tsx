@@ -1,4 +1,4 @@
-import { CornerDownLeft, StopCircle, ImageUp } from 'lucide-react';
+import { CornerDownLeft, StopCircle, ImageUp, X } from 'lucide-react';
 import { FormEvent, useEffect, useState, useRef } from 'react';
 import { ChatService } from '../services/ChatService';
 import type { ChatState } from '../types/chat';
@@ -49,6 +49,28 @@ export const ChatInput = ({ service, state }: ChatInputProps) => {
 		await service.sendMessage(value);
 	};
 
+	const handleImageUpload = () => {
+		const input = document.createElement('input');
+		input.type = 'file';
+		input.accept = 'image/*';
+		input.multiple = true;
+		input.onchange = (e) => {
+			const target = e.target as HTMLInputElement;
+			const files = Array.from(target.files || []);
+			if (files.length > 0) {
+				// 将新选择的图片添加到现有图片列表中，而不是替换
+				const newImageUrls = files.map(f => URL.createObjectURL(f));
+				const updatedImages = [...state.selectedImages, ...newImageUrls];
+				service.setSelectedImages(updatedImages);
+			}
+		};
+		input.click();
+	};
+
+	const handleRemoveImage = (image: string) => {
+		service.removeSelectedImage(image);
+	};
+
 	useEffect(() => {
 		const handler = (event: KeyboardEvent) => {
 			if (event.key === 'Enter' && !event.shiftKey) {
@@ -89,6 +111,27 @@ export const ChatInput = ({ service, state }: ChatInputProps) => {
 						}}
 						placeholder="输入消息，按 Enter 发送，Shift+Enter 换行"
 					/>
+					{/* 图片预览区域 */}
+					{state.selectedImages.length > 0 && (
+						<div className="selected-images tw-flex tw-flex-wrap tw-gap-2 tw-mb-2">
+							{state.selectedImages.map((image, index) => (
+								<div key={image} className="image-preview-container tw-relative">
+									<img 
+										src={image} 
+										alt={`selected-${index}`} 
+										className="selected-image-preview tw-w-16 tw-h-16 tw-object-cover tw-rounded tw-border tw-border-gray-300" 
+									/>
+									<button 
+										type="button" 
+										className="remove-image-button tw-absolute tw-top-0 tw-right-0 tw-bg-red-500 tw-text-white tw-rounded-full tw-w-4 tw-h-4 tw-flex tw-items-center tw-justify-center tw-text-xs tw-cursor-pointer hover:tw-bg-red-600" 
+										onClick={() => handleRemoveImage(image)}
+									>
+										<X className="tw-size-3" />
+									</button>
+								</div>
+							))}
+						</div>
+					)}
 					<div className="tw-flex tw-items-center tw-justify-between tw-mt-0">
 						<ModelSelector
 							providers={service.getProviders()}
@@ -97,21 +140,7 @@ export const ChatInput = ({ service, state }: ChatInputProps) => {
 						/>
 						<div className="tw-flex tw-items-center tw-gap-2">
 							<span
-								onClick={() => {
-									// 触发图片上传
-									const input = document.createElement('input');
-									input.type = 'file';
-									input.accept = 'image/*';
-									input.multiple = true;
-									input.onchange = (e) => {
-										const target = e.target as HTMLInputElement;
-										const files = Array.from(target.files || []);
-										if (files.length > 0) {
-											service.setSelectedImages(files.map(f => URL.createObjectURL(f)));
-										}
-									};
-									input.click();
-								}}
+								onClick={handleImageUpload}
 								className="tw-cursor-pointer tw-text-muted hover:tw-text-accent"
 								aria-label="Add image"
 							>
@@ -164,20 +193,7 @@ export const ChatInput = ({ service, state }: ChatInputProps) => {
 						/>
 						<div className="tw-flex tw-items-center tw-gap-2">
 							<span
-								onClick={() => {
-									const input = document.createElement('input');
-									input.type = 'file';
-									input.accept = 'image/*';
-									input.multiple = true;
-									input.onchange = (e) => {
-										const target = e.target as HTMLInputElement;
-										const files = Array.from(target.files || []);
-										if (files.length > 0) {
-											service.setSelectedImages(files.map(f => URL.createObjectURL(f)));
-										}
-									};
-									input.click();
-								}}
+								onClick={handleImageUpload}
 								className="tw-cursor-pointer tw-text-muted hover:tw-text-accent"
 								aria-label="Add image"
 							>
