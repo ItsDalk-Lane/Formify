@@ -157,7 +157,11 @@ export const ChatInput = ({ service, state }: ChatInputProps) => {
 						/>
 						<div className="tw-flex tw-items-center tw-gap-2">
 							<span
-								onClick={handleImageUpload}
+								onClick={(e) => {
+									e.preventDefault();
+									e.stopPropagation();
+									handleImageUpload();
+								}}
 								className="tw-cursor-pointer tw-text-muted hover:tw-text-accent"
 								aria-label="Add image"
 							>
@@ -210,7 +214,11 @@ export const ChatInput = ({ service, state }: ChatInputProps) => {
 						/>
 						<div className="tw-flex tw-items-center tw-gap-2">
 							<span
-								onClick={handleImageUpload}
+								onClick={(e) => {
+									e.preventDefault();
+									e.stopPropagation();
+									handleImageUpload();
+								}}
 								className="tw-cursor-pointer tw-text-muted hover:tw-text-accent"
 								aria-label="Add image"
 							>

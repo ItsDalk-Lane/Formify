@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useCallback } from 'react';
 import type { ChatState } from '../types/chat';
 import { ChatService } from '../services/ChatService';
 import { MessageItem } from '../components/MessageItem';
@@ -11,15 +11,44 @@ interface ChatMessagesProps {
 export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const latestMessageId = state.activeSession?.messages.last()?.id;
+	const latestMessageContent = state.activeSession?.messages.last()?.content;
+	const isGenerating = state.isGenerating;
 
-	useEffect(() => {
+	// 自动滚动到底部的函数
+	const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
 		const container = scrollRef.current;
 		if (!container) return;
 		container.scrollTo({
 			top: container.scrollHeight,
-			behavior: 'smooth'
+			behavior
 		});
-	}, [latestMessageId]);
+	}, []);
+
+	// 当新消息创建时滚动
+	useEffect(() => {
+		if (latestMessageId) {
+			// 使用即时滚动确保新消息立即可见
+			scrollToBottom('smooth');
+		}
+	}, [latestMessageId, scrollToBottom]);
+
+	// 当消息内容增长时滚动（用于流式生成）
+	useEffect(() => {
+		if (isGenerating && latestMessageContent) {
+			// 在生成过程中使用即时滚动，确保用户始终看到最新内容
+			scrollToBottom('smooth');
+		}
+	}, [latestMessageContent, isGenerating, scrollToBottom]);
+
+	// 当生成状态从true变为false时，确保最终滚动到底部
+	useEffect(() => {
+		if (!isGenerating && latestMessageId) {
+			// 生成结束时滚动一次，确保看到完整内容
+			setTimeout(() => {
+				scrollToBottom('smooth');
+			}, 100);
+		}
+	}, [isGenerating, latestMessageId, scrollToBottom]);
 
 	const messages = state.activeSession?.messages ?? [];
 	const contextNotes = useMemo(() => {

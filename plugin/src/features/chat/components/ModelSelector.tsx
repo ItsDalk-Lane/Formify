@@ -68,7 +68,12 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 	return (
 		<div className="relative" ref={dropdownRef} style={{position: 'relative'}}>
 			<button
-				onClick={() => setIsOpen(!isOpen)}
+				type="button"
+				onClick={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					setIsOpen(!isOpen);
+				}}
 				style={{
 					display: 'flex',
 					alignItems: 'center',
