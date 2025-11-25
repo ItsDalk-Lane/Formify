@@ -99,7 +99,7 @@ export class SelectVendorModal extends FuzzySuggestModal<Vendor> {
  * 用于显示和编辑 AI 服务商的完整配置
  */
 export class ProviderSettingModal extends Modal {
-	private configContainer: HTMLElement
+	public configContainer: HTMLElement
 	private renderCallback: (container: HTMLElement) => void
 	private title: string
 

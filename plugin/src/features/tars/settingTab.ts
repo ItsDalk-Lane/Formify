@@ -769,7 +769,7 @@ export class TarsSettingTab {
 		const modelConfig = MODEL_FETCH_CONFIGS[vendor.name as keyof typeof MODEL_FETCH_CONFIGS]
 		if (modelConfig) {
 			// 按钮选择模式（支持API获取模型列表 + 自定义输入）
-			this.addModelButtonSection(container, settings.options, modelConfig, capabilities, vendor.name)
+			this.addModelButtonSection(container, settings.options, modelConfig, capabilities, vendor.name, index, settings, vendor, modal)
 		} else if (vendor.models.length > 0) {
 			// 下拉选择模式（预设模型列表 + 自定义输入）
 			this.addModelDropDownSection(container, settings.options, vendor.models, capabilities)
@@ -1109,7 +1109,11 @@ export class TarsSettingTab {
 		options: BaseOptions,
 		modelConfig: { url: string; requiresApiKey: boolean },
 		desc: string,
-		vendorName?: string
+		vendorName?: string,
+		index?: number,
+		settings?: ProviderSettings,
+		vendor?: Vendor,
+		modal?: ProviderSettingModal
 	) => {
 		const setting = new Setting(details).setName(t('Model')).setDesc(desc)
 
@@ -1140,12 +1144,12 @@ export class TarsSettingTab {
 							await this.saveSettings()
 							btn.setButtonText(selectedModel)
 							// OpenRouter: 模型改变时更新功能显示和配置界面
-							if (vendorName === openRouterVendor.name) {
+							if (vendorName === openRouterVendor.name && index !== undefined && settings) {
 								// 更新Provider卡片中的功能显示
 								this.updateProviderCapabilities(index, settings)
 
 								// 如果当前配置Modal是打开的，重新渲染Modal内容以更新配置项
-								if (this.currentOpenProviderIndex === index && modal) {
+								if (this.currentOpenProviderIndex === index && modal && vendor) {
 									// 清空Modal容器并重新渲染配置内容
 									modal.configContainer.empty()
 									this.renderProviderConfig(modal.configContainer, index, settings, vendor, modal)
@@ -1183,12 +1187,12 @@ export class TarsSettingTab {
 						buttonComponent.textContent = value.trim() || t('Select the model to use')
 					}
 					// OpenRouter: 模型改变时更新功能显示和配置界面
-					if (vendorName === openRouterVendor.name) {
+					if (vendorName === openRouterVendor.name && index !== undefined && settings) {
 						// 更新Provider卡片中的功能显示
 						this.updateProviderCapabilities(index, settings)
 
 						// 如果当前配置Modal是打开的，重新渲染Modal内容以更新配置项
-						if (this.currentOpenProviderIndex === index && modal) {
+						if (this.currentOpenProviderIndex === index && modal && vendor) {
 							// 清空Modal容器并重新渲染配置内容
 							modal.configContainer.empty()
 							this.renderProviderConfig(modal.configContainer, index, settings, vendor, modal)
