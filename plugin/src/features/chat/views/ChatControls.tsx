@@ -47,13 +47,6 @@ export const ChatControls = ({ service, state }: ChatControlsProps) => {
 				<span onClick={handleNewChat} aria-label="新建聊天" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 					<MessageCirclePlus className="tw-size-4" />
 				</span>
-				<span
-					onClick={() => service.saveActiveSession()}
-					aria-label="保存聊天"
-					className={!state.activeSession ? "tw-cursor-pointer tw-text-muted hover:tw-text-accent tw-opacity-50" : "tw-cursor-pointer tw-text-muted hover:tw-text-accent"}
-				>
-					<Save className="tw-size-4" />
-				</span>
 				<span onClick={() => setHistoryOpen((prev) => !prev)} aria-label="历史记录" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 					<History className="tw-size-4" />
 				</span>

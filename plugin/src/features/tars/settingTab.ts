@@ -24,7 +24,7 @@ import { qianFanVendor } from './providers/qianFan'
 import { qwenVendor, QwenOptions } from './providers/qwen'
 import { siliconFlowVendor } from './providers/siliconflow'
 import { zhipuVendor, ZhipuOptions, ZHIPU_THINKING_TYPE_OPTIONS, DEFAULT_ZHIPU_THINKING_TYPE, isReasoningModel } from './providers/zhipu'
-import { getCapabilityEmoji } from './providers/utils'
+import { getCapabilityEmoji, getCapabilityDisplayText } from './providers/utils'
 import { availableVendors, DEFAULT_TARS_SETTINGS } from './settings'
 import type { TarsSettings } from './settings'
 
@@ -35,24 +35,25 @@ export interface TarsSettingsContext {
 
 export class TarsSettingTab {
 	private containerEl!: HTMLElement
-	private readonly doubaoRenderers = new WeakMap<BaseOptions, () => void>()
-	private currentOpenProviderIndex: number = -1 // 记录当前展开的 provider 索引
-	private autoSaveEnabled: boolean = true // 控制是否自动保存
-	private providersContainerEl: HTMLElement | null = null // 服务商卡片容器
-	private isProvidersCollapsed: boolean = true // 服务商列表是否折叠，默认折叠
-	private isMessageCollapsed: boolean = true // 消息区域是否折叠，默认折叠
-	private isAdvancedCollapsed: boolean = true // 高级区域是否折叠，默认折叠
-	private providerTitleEls: Map<number, HTMLElement> = new Map() // 记录各 provider 卡片标题元素，便于实时更新
+	private providersContainerEl!: HTMLElement
+	private providerTitleEls = new Map<number, HTMLElement>()
+	private providerCapabilityEls = new Map<number, HTMLElement>()
+	private currentOpenProviderIndex = -1
+	private autoSaveEnabled = true
+	private isProvidersCollapsed = true // 默认折叠列表
+	private isMessageCollapsed = true // 默认折叠消息设置
+	private isAdvancedCollapsed = true // 默认折叠高级设置
+	private doubaoRenderers = new Map<any, () => void>()
 
-	constructor(private readonly app: App, private readonly context: TarsSettingsContext) {}
+	constructor(private readonly app: App, private readonly settingsContext: TarsSettingsContext) {}
 
 	private get settings() {
-		return this.context.getSettings()
+		return this.settingsContext.getSettings()
 	}
 
 	private async saveSettings() {
 		if (this.autoSaveEnabled) {
-			await this.context.saveSettings()
+			await this.settingsContext.saveSettings()
 		}
 	}
 
@@ -596,6 +597,19 @@ export class TarsSettingTab {
 			)
 	}
 
+	/**
+	 * 更新提供商卡片中的功能显示
+	 */
+	private updateProviderCapabilities(index: number, settings: ProviderSettings) {
+		const vendor = availableVendors.find((v) => v.name === settings.vendor)
+		if (!vendor) return
+		
+		const capabilitiesEl = this.providerCapabilityEls.get(index)
+		if (capabilitiesEl) {
+			capabilitiesEl.textContent = getCapabilityDisplayText(vendor, settings.options)
+		}
+	}
+
     createProviderSetting = (index: number, settings: ProviderSettings, isOpen: boolean = false) => {
 		const vendor = availableVendors.find((v) => v.name === settings.vendor)
 		if (!vendor) throw new Error('No vendor found ' + settings.vendor)
@@ -642,7 +656,10 @@ export class TarsSettingTab {
 			font-size: var(--font-ui-smaller);
 			color: var(--text-muted);
 		`
-		capabilitiesEl.textContent = vendor.capabilities.map((cap) => `${getCapabilityEmoji(cap)} ${t(cap)}`).join('  ')
+		// 使用动态计算的功能而非vendor的capabilities
+		capabilitiesEl.textContent = getCapabilityDisplayText(vendor, settings.options)
+		// 记录功能元素，便于在配置中实时更新
+		this.providerCapabilityEls.set(index, capabilitiesEl)
 
 		// 右侧按钮 - 只保留删除按钮
 		const rightSection = card.createEl('div', { cls: 'ai-provider-actions' })
@@ -715,7 +732,7 @@ export class TarsSettingTab {
         deleteBtn.addEventListener('click', async (e) => {
             e.stopPropagation()
             this.settings.providers.splice(index, 1)
-            await this.context.saveSettings()
+            await this.settingsContext.saveSettings()
             this.render(this.containerEl)
         })
 
@@ -742,7 +759,7 @@ export class TarsSettingTab {
 		const capabilities =
 			t('Supported features') +
 			' : ' +
-			vendor.capabilities.map((cap) => `${getCapabilityEmoji(cap)} ${t(cap)}`).join('    ')
+			getCapabilityDisplayText(vendor, settings.options)
 
 		container.createEl('p', { text: capabilities, cls: 'setting-item-description' })
 
@@ -788,6 +805,8 @@ export class TarsSettingTab {
 						toggle.setValue(settings.options.enableWebSearch ?? false).onChange(async (value) => {
 							settings.options.enableWebSearch = value
 							await this.saveSettings()
+							// 更新功能显示
+							this.updateProviderCapabilities(index, settings)
 						})
 					)
 
@@ -808,6 +827,8 @@ export class TarsSettingTab {
 						toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
 							options.enableReasoning = value
 							await this.saveSettings()
+							// 更新功能显示
+							this.updateProviderCapabilities(index, settings)
 						})
 					)
 
@@ -826,6 +847,8 @@ export class TarsSettingTab {
 						toggle.setValue(settings.options.enableWebSearch ?? false).onChange(async (value) => {
 							settings.options.enableWebSearch = value
 							await this.saveSettings()
+							// 更新功能显示
+							this.updateProviderCapabilities(index, settings)
 						})
 					)
 
@@ -860,15 +883,15 @@ export class TarsSettingTab {
 
 		// 添加Kimi、DeepSeek和Grok的推理功能开关
 		if (vendor.name === kimiVendor.name) {
-			this.addKimiSections(container, settings.options as KimiOptions)
+			this.addKimiSections(container, settings.options as KimiOptions, index, settings)
 		}
 
 		if (vendor.name === deepSeekVendor.name) {
-			this.addDeepSeekSections(container, settings.options as DeepSeekOptions)
+			this.addDeepSeekSections(container, settings.options as DeepSeekOptions, index, settings)
 		}
 
 		if (vendor.name === grokVendor.name) {
-			this.addGrokSections(container, settings.options as GrokOptions)
+			this.addGrokSections(container, settings.options as GrokOptions, index, settings)
 		}
 
 		this.addBaseURLSection(container, settings.options, vendor.defaultOptions.baseURL)
@@ -923,7 +946,7 @@ export class TarsSettingTab {
 
 					// 临时启用自动保存来真正保存设置
 					this.autoSaveEnabled = true
-					await this.context.saveSettings()
+					await this.settingsContext.saveSettings()
 					this.autoSaveEnabled = previousAutoSaveState
 					new Notice('✅ 设置已保存')
 
@@ -2171,7 +2194,7 @@ export class TarsSettingTab {
 			.setDisabled(true)
 	}
 
-	addKimiSections = (details: HTMLElement, options: KimiOptions) => {
+	addKimiSections = (details: HTMLElement, options: KimiOptions, index: number, settings: ProviderSettings) => {
 		new Setting(details)
 			.setName('启用推理功能')
 			.setDesc('启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示')
@@ -2179,11 +2202,13 @@ export class TarsSettingTab {
 				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
 					options.enableReasoning = value
 					await this.saveSettings()
+					// 更新功能显示
+					this.updateProviderCapabilities(index, settings)
 				})
 			)
 	}
 
-	addDeepSeekSections = (details: HTMLElement, options: DeepSeekOptions) => {
+	addDeepSeekSections = (details: HTMLElement, options: DeepSeekOptions, index: number, settings: ProviderSettings) => {
 		new Setting(details)
 			.setName('启用推理功能')
 			.setDesc('启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示')
@@ -2191,11 +2216,13 @@ export class TarsSettingTab {
 				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
 					options.enableReasoning = value
 					await this.saveSettings()
+					// 更新功能显示
+					this.updateProviderCapabilities(index, settings)
 				})
 			)
 	}
 
-	addGrokSections = (details: HTMLElement, options: GrokOptions) => {
+	addGrokSections = (details: HTMLElement, options: GrokOptions, index: number, settings: ProviderSettings) => {
 		new Setting(details)
 			.setName('启用推理功能')
 			.setDesc('启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示')
@@ -2203,6 +2230,8 @@ export class TarsSettingTab {
 				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
 					options.enableReasoning = value
 					await this.saveSettings()
+					// 更新功能显示
+					this.updateProviderCapabilities(index, settings)
 				})
 			)
 	}

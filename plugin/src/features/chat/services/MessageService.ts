@@ -64,8 +64,27 @@ export class MessageService {
 	serializeMessage(message: ChatMessage): string {
 		const timestamp = this.formatTimestamp(message.timestamp);
 		const roleLabel = this.mapRoleToLabel(message.role);
+		
+		// 处理图片引用
 		const images = (message.images ?? []).map((image, index) => `![Image ${index + 1}](${image})`).join('\n');
-		return `# ${roleLabel} (${timestamp})\n${message.content}${images ? `\n\n${images}` : ''}`;
+		
+		// 确保消息内容完整，不进行任何截断或压缩
+		let content = message.content;
+		
+		// 如果有错误标记，在内容前添加错误标识
+		if (message.isError) {
+			content = `[错误] ${content}`;
+		}
+		
+		// 构建完整消息，确保内容不被截断
+		let fullMessage = `# ${roleLabel} (${timestamp})\n${content}`;
+		
+		// 如果有图片，添加到消息末尾
+		if (images) {
+			fullMessage += `\n\n${images}`;
+		}
+		
+		return fullMessage;
 	}
 
 	private mapRoleToLabel(role: ChatRole): string {

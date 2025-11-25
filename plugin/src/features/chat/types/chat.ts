@@ -19,6 +19,7 @@ export interface ChatSession {
 	updatedAt: number;
 	contextNotes?: string[];
 	selectedImages?: string[];
+	filePath?: string; // 添加文件路径字段，用于跟踪会话文件
 }
 
 export type ChatOpenMode = 'sidebar' | 'tab' | 'window';

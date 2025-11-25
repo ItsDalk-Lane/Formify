@@ -71,6 +71,8 @@ export class ChatService {
 		this.state.selectedImages = [];
 		this.state.inputValue = '';
 		this.emitState();
+		
+		// 不再立即保存新会话，等待用户发送第一条消息时再创建文件
 		return session;
 	}
 
@@ -138,6 +140,24 @@ export class ChatService {
 		this.state.selectedImages = [];
 		this.emitState();
 
+		// 如果这是第一条消息，创建历史文件并包含第一条用户消息
+		if (session.messages.length === 1) {
+			try {
+				session.filePath = await this.historyService.createNewSessionFileWithFirstMessage(session, userMessage);
+			} catch (error) {
+				console.error('[ChatService] 创建会话文件失败:', error);
+				new Notice('创建会话文件失败，但消息已发送');
+			}
+		} else {
+			// 如果不是第一条消息，追加到现有文件
+			try {
+				await this.historyService.appendMessageToFile(session.filePath, userMessage);
+			} catch (error) {
+				console.error('[ChatService] 追加用户消息失败:', error);
+				// 不显示错误通知，避免干扰用户
+			}
+		}
+
 		await this.generateAssistantResponse(session);
 	}
 
@@ -157,6 +177,8 @@ export class ChatService {
 	async loadHistory(filePath: string) {
 		const session = await this.historyService.loadSession(filePath);
 		if (session) {
+			// 设置文件路径，以便后续追加消息
+			session.filePath = filePath;
 			this.state.activeSession = session;
 			this.state.contextNotes = session.contextNotes ?? [];
 			this.state.selectedImages = session.selectedImages ?? [];
@@ -184,7 +206,7 @@ export class ChatService {
 		this.emitState();
 	}
 
-	editMessage(messageId: string, content: string) {
+	async editMessage(messageId: string, content: string) {
 		const session = this.state.activeSession;
 		if (!session) return;
 		const message = session.messages.find((msg) => msg.id === messageId);
@@ -193,6 +215,16 @@ export class ChatService {
 		message.timestamp = Date.now();
 		session.updatedAt = Date.now();
 		this.emitState();
+		
+		// 使用rewriteMessagesOnly更新文件，而不是重写整个文件
+		if (session.filePath) {
+			try {
+				await this.historyService.rewriteMessagesOnly(session.filePath, session.messages);
+			} catch (error) {
+				console.error('[ChatService] 更新消息编辑失败:', error);
+				new Notice('更新文件失败，但消息已从界面更新');
+			}
+		}
 	}
 
 	async editAndRegenerate(messageId: string, content: string) {
@@ -215,18 +247,42 @@ export class ChatService {
 		session.updatedAt = Date.now();
 		this.emitState();
 
+		// 使用rewriteMessagesOnly更新文件，而不是重写整个文件
+		if (session.filePath) {
+			try {
+				await this.historyService.rewriteMessagesOnly(session.filePath, session.messages);
+			} catch (error) {
+				console.error('[ChatService] 更新消息编辑失败:', error);
+				// 不显示通知，避免干扰用户重新生成流程
+			}
+		}
+
 		// 重新生成AI回复
 		await this.generateAssistantResponse(session);
 	}
 
-	deleteMessage(messageId: string) {
+	async deleteMessage(messageId: string) {
 		const session = this.state.activeSession;
 		if (!session) return;
 		const index = session.messages.findIndex((msg) => msg.id === messageId);
 		if (index === -1) return;
+		
+		// 从内存中删除消息
+		const deletedMessage = session.messages[index];
 		session.messages.splice(index, 1);
 		session.updatedAt = Date.now();
 		this.emitState();
+		
+		// 对于删除操作，我们需要重写整个文件，因为无法简单地"追加删除"
+		// 但我们可以优化为只重写消息部分，保留frontmatter
+		if (session.filePath) {
+			try {
+				await this.historyService.rewriteMessagesOnly(session.filePath, session.messages);
+			} catch (error) {
+				console.error('[ChatService] 更新消息删除失败:', error);
+				new Notice('更新文件失败，但消息已从界面删除');
+			}
+		}
 	}
 
 	insertMessageToEditor(messageId: string) {
@@ -288,6 +344,17 @@ export class ChatService {
 		session.messages.splice(index, 1);
 		session.updatedAt = Date.now();
 		this.emitState();
+		
+		// 使用rewriteMessagesOnly更新文件，而不是重写整个文件
+		if (session.filePath) {
+			try {
+				await this.historyService.rewriteMessagesOnly(session.filePath, session.messages);
+			} catch (error) {
+				console.error('[ChatService] 更新消息删除失败:', error);
+				// 不显示通知，避免干扰用户重新生成流程
+			}
+		}
+		
 		await this.generateAssistantResponse(session);
 	}
 
@@ -337,8 +404,12 @@ export class ChatService {
 			this.controller = new AbortController();
 			const resolveEmbed: ResolveEmbedAsBinary = async () => new ArrayBuffer(0);
 
+			// 创建一个临时消息对象用于流式更新
+			let accumulatedContent = '';
+			
 			for await (const chunk of sendRequest(messages, this.controller, resolveEmbed)) {
 				assistantMessage.content += chunk;
+				accumulatedContent += chunk;
 				session.updatedAt = Date.now();
 				this.emitState();
 			}
@@ -348,8 +419,22 @@ export class ChatService {
 			session.updatedAt = Date.now();
 			this.emitState();
 
-			if (this.settings.autosaveChat) {
-				await this.saveActiveSession();
+			// 追加AI回复到文件，而不是重写整个文件
+			if (session.filePath) {
+				try {
+					await this.historyService.appendMessageToFile(session.filePath, assistantMessage);
+				} catch (error) {
+					console.error('[ChatService] 追加AI回复失败:', error);
+					// 不显示错误通知，避免干扰用户
+				}
+			} else {
+				// 如果没有文件路径（不应该发生），回退到完整保存
+				console.warn('[ChatService] 会话没有文件路径，回退到完整保存');
+				try {
+					await this.saveActiveSession();
+				} catch (error) {
+					console.error('[ChatService] 保存AI回复失败:', error);
+				}
 			}
 		} catch (error) {
 			console.error('[Chat][ChatService] generateAssistantResponse error', error);

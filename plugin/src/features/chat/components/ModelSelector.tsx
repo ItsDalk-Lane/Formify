@@ -1,4 +1,6 @@
-import type { ProviderSettings } from 'src/features/tars/providers';
+import type { ProviderSettings, Vendor } from 'src/features/tars/providers';
+import { getCapabilityDisplayText } from 'src/features/tars/providers/utils';
+import { availableVendors } from 'src/features/tars/settings';
 import { ChevronDown } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -59,20 +61,36 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 	}
 
 	const currentProvider = providers.find(p => p.tag === value);
+	const vendor = currentProvider ? availableVendors.find(v => v.name === currentProvider.vendor) : null;
+	const capabilityIcons = currentProvider && vendor ? getCapabilityDisplayText(vendor, currentProvider.options) : '';
 	const displayText = currentProvider ? `${currentProvider.tag} · ${currentProvider.options.model}` : 'Select model';
 
 	return (
 		<div className="relative" ref={dropdownRef} style={{position: 'relative'}}>
 			<button
-				type="button"
 				onClick={() => setIsOpen(!isOpen)}
-				className="tw-inline-flex tw-items-center tw-whitespace-nowrap tw-rounded-md tw-font-medium tw-transition-colors focus-visible:tw-ring-ring disabled:tw-pointer-events-none disabled:tw-opacity-50 clickable-icon tw-bg-transparent tw-outline-none hover:tw-bg-transparent hover:tw-bg-opacity-100 hover:tw-text-normal focus-visible:tw-text-normal focus-visible:tw-outline-none focus-visible:tw-ring-0 tw-gap-1 tw-px-1 tw-text-xs tw-min-w-0 tw-justify-start tw-text-muted tw-max-w-full tw-truncate"
+				style={{
+					display: 'flex',
+					alignItems: 'center',
+					gap: '0.5rem',
+					padding: '6px 10px',
+					borderRadius: 'var(--radius-s)',
+					backgroundColor: 'transparent',
+					border: 'none',
+					cursor: 'pointer',
+					fontSize: 'var(--font-ui-small)',
+					minWidth: '200px',
+					justifyContent: 'space-between'
+				}}
 			>
-				<div className="tw-min-w-0 tw-flex-1 tw-truncate">
-					<div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
-						<span className="tw-truncate tw-text-xs hover:tw-text-normal">{displayText}</span>
-					</div>
-				</div>
+				<span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+					{displayText}
+				</span>
+				{capabilityIcons && (
+					<span style={{ fontSize: 'var(--font-ui-smaller)', opacity: 0.8 }}>
+						{capabilityIcons}
+					</span>
+				)}
 				<ChevronDown className="tw-mt-0.5 tw-size-4 tw-shrink-0" />
 			</button>
 
@@ -106,47 +124,57 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 						}}
 						tabIndex={-1}
 					>
-						{providers.map((provider) => (
-							<div
-								key={provider.tag}
-								role="menuitem"
-								style={{
-									position: 'relative',
-									display: 'flex',
-									cursor: 'pointer',
-									userSelect: 'none',
-									alignItems: 'center',
-									gap: '0.5rem',
-									borderRadius: 'var(--radius-s)',
-									padding: '8px 12px',
-									fontSize: 'var(--font-ui-small)',
-									outline: 'none',
-									transition: 'color 0.15s ease-in-out, background-color 0.15s ease-in-out',
-									marginBottom: '2px'
-								}}
-								tabIndex={-1}
-								onMouseDown={(e) => {
-									e.preventDefault();
-									e.stopPropagation();
-									onChange(provider.tag);
-									setIsOpen(false);
-								}}
-								onMouseEnter={(e) => {
-									e.currentTarget.style.backgroundColor = 'var(--background-modifier-hover)';
-									e.currentTarget.style.color = 'var(--text-normal)';
-								}}
-								onMouseLeave={(e) => {
-									e.currentTarget.style.backgroundColor = 'transparent';
-									e.currentTarget.style.color = 'var(--text-normal)';
-								}}
-							>
-								<div style={{display: 'flex', minWidth: 0, alignItems: 'center', gap: '0.25rem'}}>
-									<span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 'var(--font-ui-small)'}} className="hover:tw-text-normal">
-										{provider.tag} · {provider.options.model}
-									</span>
+						{providers.map((provider) => {
+							const vendor = availableVendors.find(v => v.name === provider.vendor);
+							const capabilityIcons = vendor ? getCapabilityDisplayText(vendor, provider.options) : '';
+							
+							return (
+								<div
+									key={provider.tag}
+									role="menuitem"
+									style={{
+										position: 'relative',
+										display: 'flex',
+										cursor: 'pointer',
+										userSelect: 'none',
+										alignItems: 'center',
+										gap: '0.5rem',
+										borderRadius: 'var(--radius-s)',
+										padding: '8px 12px',
+										fontSize: 'var(--font-ui-small)',
+										outline: 'none',
+										transition: 'color 0.15s ease-in-out, background-color 0.15s ease-in-out',
+										marginBottom: '2px'
+									}}
+									tabIndex={-1}
+									onMouseDown={(e) => {
+										e.preventDefault();
+										e.stopPropagation();
+										onChange(provider.tag);
+										setIsOpen(false);
+									}}
+									onMouseEnter={(e) => {
+										e.currentTarget.style.backgroundColor = 'var(--background-modifier-hover)';
+										e.currentTarget.style.color = 'var(--text-normal)';
+									}}
+									onMouseLeave={(e) => {
+										e.currentTarget.style.backgroundColor = 'transparent';
+										e.currentTarget.style.color = 'var(--text-normal)';
+									}}
+								>
+									<div style={{display: 'flex', minWidth: 0, alignItems: 'center', gap: '0.25rem', flex: 1}}>
+										<span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 'var(--font-ui-small)'}} className="hover:tw-text-normal">
+											{provider.tag} · {provider.options.model}
+										</span>
+									</div>
+									{capabilityIcons && (
+										<span style={{ fontSize: 'var(--font-ui-smaller)', opacity: 0.7 }}>
+											{capabilityIcons}
+										</span>
+									)}
 								</div>
-							</div>
-						))}
+							);
+						})}
 					</div>
 				</div>,
 				document.body

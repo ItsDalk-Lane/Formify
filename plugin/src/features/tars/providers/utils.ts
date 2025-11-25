@@ -1,6 +1,6 @@
 import { EmbedCache } from 'obsidian'
 import { t } from 'tars/lang/helper'
-import { Capability, ResolveEmbedAsBinary } from '.'
+import { BaseOptions, Capability, ProviderSettings, ResolveEmbedAsBinary, Vendor } from '.'
 
 export const getMimeTypeFromFilename = (filename: string) => {
 	const extension = filename.split('.').pop()?.toLowerCase() || ''
@@ -94,5 +94,59 @@ export const getCapabilityEmoji = (capability: Capability): string => {
 		case 'Reasoning':
 			return '🧠'
 	}
+}
+
+/**
+ * 根据模型实例配置动态计算实际启用的功能
+ * @param vendor 服务商定义
+ * @param options 模型实例配置选项
+ * @returns 实际启用的功能列表
+ */
+export const getEnabledCapabilities = (vendor: Vendor, options: BaseOptions): Capability[] => {
+	// 获取服务商支持的所有功能
+	const vendorCapabilities = [...vendor.capabilities]
+	
+	// 检查并过滤掉未启用的功能
+	const enabledCapabilities: Capability[] = []
+	
+	for (const capability of vendorCapabilities) {
+		switch (capability) {
+			case 'Web Search':
+				// 只有当enableWebSearch为true时才启用网络搜索
+				if (options.enableWebSearch === true) {
+					enabledCapabilities.push(capability)
+				}
+				break
+				
+			case 'Reasoning':
+				// 只有当enableReasoning为true时才启用推理功能
+				if ((options as any).enableReasoning === true) {
+					enabledCapabilities.push(capability)
+				}
+				break
+				
+			// 以下功能目前没有开关控制，只要服务商支持就启用
+			case 'Text Generation':
+			case 'Image Vision':
+			case 'PDF Vision':
+			case 'Image Generation':
+			case 'Image Editing':
+				enabledCapabilities.push(capability)
+				break
+		}
+	}
+	
+	return enabledCapabilities
+}
+
+/**
+ * 获取模型实例的功能显示文本
+ * @param vendor 服务商定义
+ * @param options 模型实例配置选项
+ * @returns 功能显示文本（仅包含图标）
+ */
+export const getCapabilityDisplayText = (vendor: Vendor, options: BaseOptions): string => {
+	const enabledCapabilities = getEnabledCapabilities(vendor, options)
+	return enabledCapabilities.map((cap) => getCapabilityEmoji(cap)).join('  ')
 }
 

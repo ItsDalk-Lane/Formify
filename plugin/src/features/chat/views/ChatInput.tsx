@@ -104,9 +104,10 @@ export const ChatInput = ({ service, state }: ChatInputProps) => {
 									input.accept = 'image/*';
 									input.multiple = true;
 									input.onchange = (e) => {
-										const files = Array.from(e.target.files || []);
+										const target = e.target as HTMLInputElement;
+										const files = Array.from(target.files || []);
 										if (files.length > 0) {
-											service.addSelectedImages(files);
+											service.setSelectedImages(files.map(f => URL.createObjectURL(f)));
 										}
 									};
 									input.click();
@@ -169,9 +170,10 @@ export const ChatInput = ({ service, state }: ChatInputProps) => {
 									input.accept = 'image/*';
 									input.multiple = true;
 									input.onchange = (e) => {
-										const files = Array.from(e.target.files || []);
+										const target = e.target as HTMLInputElement;
+										const files = Array.from(target.files || []);
 										if (files.length > 0) {
-											service.addSelectedImages(files);
+											service.setSelectedImages(files.map(f => URL.createObjectURL(f)));
 										}
 									};
 									input.click();
