@@ -3,6 +3,12 @@ import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { CALLOUT_BLOCK_END, CALLOUT_BLOCK_START, convertEmbedToImageUrl } from './utils'
 
+// Kimi选项接口，扩展基础选项以支持推理功能
+export interface KimiOptions extends BaseOptions {
+	// 推理功能配置
+	enableReasoning?: boolean // 是否启用推理功能
+}
+
 const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary) {
 		const { parameters, ...optionsExcludingParams } = settings
@@ -33,6 +39,9 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 
 		let reading = true
 		let startReasoning = false
+		const kimiOptions = settings as KimiOptions
+		const isReasoningEnabled = kimiOptions.enableReasoning ?? false
+		
 		while (reading) {
 			const { done, value } = await reader.read()
 			if (done) {
@@ -55,7 +64,8 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 						const delta = data.choices[0].delta
 						const reasonContent = delta.reasoning_content
 
-						if (reasonContent) {
+						// 只有在启用推理功能时才显示推理内容
+						if (reasonContent && isReasoningEnabled) {
 							const prefix = !startReasoning ? ((startReasoning = true), CALLOUT_BLOCK_START) : ''
 							yield prefix + reasonContent.replace(/\n/g, '\n> ') // Each line of the callout needs to have '>' at the beginning
 						} else {
@@ -109,7 +119,8 @@ export const kimiVendor: Vendor = {
 		apiKey: '',
 		baseURL: 'https://api.moonshot.cn/v1/chat/completions',
 		model: '',
-		parameters: {}
+		parameters: {},
+		enableReasoning: false // 默认关闭推理功能
 	},
 	sendRequestFunc,
 	models: [],

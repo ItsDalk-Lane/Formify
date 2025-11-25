@@ -4,6 +4,12 @@ import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from 
 import { CALLOUT_BLOCK_END, CALLOUT_BLOCK_START } from './utils'
 import { DebugLogger } from '../../../utils/DebugLogger'
 
+// DeepSeek选项接口，扩展基础选项以支持推理功能
+export interface DeepSeekOptions extends BaseOptions {
+	// 推理功能配置
+	enableReasoning?: boolean // 是否启用推理功能
+}
+
 type DeepSeekDelta = OpenAI.ChatCompletionChunk.Choice.Delta & {
 	reasoning_content?: string
 } // hack, deepseek-reasoner added a reasoning_content field
@@ -32,6 +38,9 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		)
 
 		let startReasoning = false
+		const deepSeekOptions = settings as DeepSeekOptions
+		const isReasoningEnabled = deepSeekOptions.enableReasoning ?? false
+		
 		for await (const part of stream) {
 			if (part.usage && part.usage.prompt_tokens && part.usage.completion_tokens)
 				DebugLogger.debug(`Prompt tokens: ${part.usage.prompt_tokens}, completion tokens: ${part.usage.completion_tokens}`)
@@ -39,7 +48,8 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			const delta = part.choices[0]?.delta as DeepSeekDelta
 			const reasonContent = delta?.reasoning_content
 
-			if (reasonContent) {
+			// 只有在启用推理功能时才显示推理内容
+			if (reasonContent && isReasoningEnabled) {
 				const prefix = !startReasoning ? ((startReasoning = true), CALLOUT_BLOCK_START) : ''
 				yield prefix + reasonContent.replace(/\n/g, '\n> ') // Each line of the callout needs to have '>' at the beginning
 			} else {
@@ -57,7 +67,8 @@ export const deepSeekVendor: Vendor = {
 		apiKey: '',
 		baseURL: 'https://api.deepseek.com',
 		model: models[0],
-		parameters: {}
+		parameters: {},
+		enableReasoning: false // 默认关闭推理功能
 	},
 	sendRequestFunc,
 	models,

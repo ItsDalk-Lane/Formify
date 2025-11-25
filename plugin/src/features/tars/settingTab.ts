@@ -15,8 +15,9 @@ import {
 } from './providers/doubao'
 import { DoubaoImageOptions, doubaoImageVendor, DOUBAO_IMAGE_SIZE_PRESETS } from './providers/doubaoImage'
 import { GptImageOptions, gptImageVendor } from './providers/gptImage'
-import { grokVendor } from './providers/grok'
-import { kimiVendor } from './providers/kimi'
+import { grokVendor, GrokOptions } from './providers/grok'
+import { kimiVendor, KimiOptions } from './providers/kimi'
+import { deepSeekVendor, DeepSeekOptions } from './providers/deepSeek'
 import { ollamaVendor } from './providers/ollama'
 import { OpenRouterOptions, openRouterVendor, isImageGenerationModel } from './providers/openRouter'
 import { qianFanVendor } from './providers/qianFan'
@@ -855,6 +856,19 @@ export class TarsSettingTab {
 
 		if (vendor.name === doubaoImageVendor.name) {
 			this.addDoubaoImageSections(container, settings.options as DoubaoImageOptions)
+		}
+
+		// 添加Kimi、DeepSeek和Grok的推理功能开关
+		if (vendor.name === kimiVendor.name) {
+			this.addKimiSections(container, settings.options as KimiOptions)
+		}
+
+		if (vendor.name === deepSeekVendor.name) {
+			this.addDeepSeekSections(container, settings.options as DeepSeekOptions)
+		}
+
+		if (vendor.name === grokVendor.name) {
+			this.addGrokSections(container, settings.options as GrokOptions)
 		}
 
 		this.addBaseURLSection(container, settings.options, vendor.defaultOptions.baseURL)
@@ -2155,6 +2169,42 @@ export class TarsSettingTab {
 			.setName('思考模式说明')
 			.setDesc(`已确认支持思考模式的模型：${knownThinkingModels.join(', ')}。其他模型也可能支持，API会自动处理。`)
 			.setDisabled(true)
+	}
+
+	addKimiSections = (details: HTMLElement, options: KimiOptions) => {
+		new Setting(details)
+			.setName('启用推理功能')
+			.setDesc('启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示')
+			.addToggle((toggle) =>
+				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
+					options.enableReasoning = value
+					await this.saveSettings()
+				})
+			)
+	}
+
+	addDeepSeekSections = (details: HTMLElement, options: DeepSeekOptions) => {
+		new Setting(details)
+			.setName('启用推理功能')
+			.setDesc('启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示')
+			.addToggle((toggle) =>
+				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
+					options.enableReasoning = value
+					await this.saveSettings()
+				})
+			)
+	}
+
+	addGrokSections = (details: HTMLElement, options: GrokOptions) => {
+		new Setting(details)
+			.setName('启用推理功能')
+			.setDesc('启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示')
+			.addToggle((toggle) =>
+				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
+					options.enableReasoning = value
+					await this.saveSettings()
+				})
+			)
 	}
 }
 
