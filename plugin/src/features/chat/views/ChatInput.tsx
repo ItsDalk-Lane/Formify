@@ -54,18 +54,35 @@ export const ChatInput = ({ service, state }: ChatInputProps) => {
 		input.type = 'file';
 		input.accept = 'image/*';
 		input.multiple = true;
-		input.onchange = (e) => {
+		input.onchange = async (e) => {
 			const target = e.target as HTMLInputElement;
 			const files = Array.from(target.files || []);
 			if (files.length > 0) {
-				// 将新选择的图片添加到现有图片列表中，而不是替换
-				const newImageUrls = files.map(f => URL.createObjectURL(f));
-				const updatedImages = [...state.selectedImages, ...newImageUrls];
+				// 将图片转换为base64格式，而不是Blob URL
+				const newImageBase64Array: string[] = [];
+				for (const file of files) {
+					try {
+						const base64 = await fileToBase64(file);
+						newImageBase64Array.push(base64);
+					} catch (error) {
+						console.error('Failed to convert image to base64:', error);
+					}
+				}
+				const updatedImages = [...state.selectedImages, ...newImageBase64Array];
 				service.setSelectedImages(updatedImages);
 			}
 		};
 		input.click();
 	};
+
+	// 辅助函数：将File转换为base64字符串
+	const fileToBase64 = (file: File): Promise<string> =>
+		new Promise((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onload = () => resolve(reader.result as string);
+			reader.onerror = () => reject(reader.error);
+			reader.readAsDataURL(file);
+		});
 
 	const handleRemoveImage = (image: string) => {
 		service.removeSelectedImage(image);

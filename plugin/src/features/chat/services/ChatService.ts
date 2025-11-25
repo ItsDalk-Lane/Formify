@@ -382,6 +382,26 @@ export class ChatService {
 		return this.plugin.settings.tars.settings.providers[0]?.tag ?? null;
 	}
 
+	/**
+	 * 将base64字符串转换为ArrayBuffer
+	 * @param base64Data base64字符串（包含或不包含data URL前缀）
+	 * @returns ArrayBuffer
+	 */
+	private base64ToArrayBuffer(base64Data: string): ArrayBuffer {
+		// 移除data URL前缀，如果存在
+		const base64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+
+		// 解码base64字符串
+		const binaryString = window.atob(base64);
+		const bytes = new Uint8Array(binaryString.length);
+
+		for (let i = 0; i < binaryString.length; i++) {
+			bytes[i] = binaryString.charCodeAt(i);
+		}
+
+		return bytes.buffer;
+	}
+
 	private async generateAssistantResponse(session: ChatSession) {
 		try {
 			const provider = this.resolveProvider();
@@ -402,7 +422,15 @@ export class ChatService {
 			this.emitState();
 
 			this.controller = new AbortController();
-			const resolveEmbed: ResolveEmbedAsBinary = async () => new ArrayBuffer(0);
+			const resolveEmbed: ResolveEmbedAsBinary = async (embed) => {
+				// 检查是否是我们的虚拟EmbedCache对象
+				if (embed && (embed as any)[Symbol.for('originalBase64')]) {
+					const base64Data = (embed as any)[Symbol.for('originalBase64')] as string;
+					return this.base64ToArrayBuffer(base64Data);
+				}
+				// 对于其他情况，返回空缓冲区
+				return new ArrayBuffer(0);
+			};
 
 			// 创建一个临时消息对象用于流式更新
 			let accumulatedContent = '';

@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { Message as ProviderMessage } from 'src/features/tars/providers';
+import type { Message as ProviderMessage, EmbedCache } from 'src/features/tars/providers';
 import type { ChatMessage, ChatRole } from '../types/chat';
 
 export class MessageService {
@@ -48,14 +48,12 @@ export class MessageService {
 		}
 
 		messages.forEach((message) => {
-			let content = message.content;
-			if (message.images?.length) {
-				const imageSection = message.images
-					.map((imagePath, index) => `![Image ${index + 1}](${imagePath})`)
-					.join('\n');
-				content = `${message.content}\n\n${imageSection}`;
-			}
-			providerMessages.push({ role: message.role, content });
+			const embeds = this.createEmbedsFromImages(message.images ?? []);
+			providerMessages.push({
+				role: message.role,
+				content: message.content,
+				embeds: embeds.length > 0 ? embeds : undefined
+			});
 		});
 
 		return providerMessages;
@@ -96,6 +94,57 @@ export class MessageService {
 			default:
 				return '用户';
 		}
+	}
+
+	/**
+	 * 从base64图片字符串数组创建EmbedCache对象数组
+	 * @param imageBase64Array base64图片字符串数组
+	 * @returns EmbedCache对象数组
+	 */
+	private createEmbedsFromImages(imageBase64Array: string[]): EmbedCache[] {
+		return imageBase64Array.map((imageBase64, index) => {
+			// 从base64字符串中提取MIME类型
+			let mimeType = 'image/png'; // 默认值
+			let filename = `image-${index + 1}`;
+
+			if (imageBase64.startsWith('data:')) {
+				const mimeMatch = imageBase64.match(/data:([^;]+);/);
+				if (mimeMatch) {
+					mimeType = mimeMatch[1];
+					const extension = this.getExtensionFromMimeType(mimeType);
+					filename = `image-${index + 1}.${extension}`;
+				}
+			}
+
+			// 创建虚拟的EmbedCache对象
+			return {
+				link: filename,
+				path: filename,
+				// 为了避免使用Obsidian的内部缓存，我们创建一个简单的对象
+				// 实际的图片数据将在resolveEmbedAsBinary时从base64字符串中获取
+				[Symbol.for('originalBase64')]: imageBase64,
+				[Symbol.for('mimeType')]: mimeType
+			} as EmbedCache;
+		});
+	}
+
+	/**
+	 * 从MIME类型获取文件扩展名
+	 * @param mimeType MIME类型
+	 * @returns 文件扩展名
+	 */
+	private getExtensionFromMimeType(mimeType: string): string {
+		const mimeToExt: Record<string, string> = {
+			'image/png': 'png',
+			'image/jpeg': 'jpg',
+			'image/jpg': 'jpg',
+			'image/gif': 'gif',
+			'image/webp': 'webp',
+			'image/svg+xml': 'svg',
+			'image/bmp': 'bmp',
+			'image/x-icon': 'ico'
+		};
+		return mimeToExt[mimeType] || 'png';
 	}
 }
 
