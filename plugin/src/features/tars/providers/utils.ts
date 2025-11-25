@@ -105,10 +105,10 @@ export const getCapabilityEmoji = (capability: Capability): string => {
 export const getEnabledCapabilities = (vendor: Vendor, options: BaseOptions): Capability[] => {
 	// 获取服务商支持的所有功能
 	const vendorCapabilities = [...vendor.capabilities]
-	
+
 	// 检查并过滤掉未启用的功能
 	const enabledCapabilities: Capability[] = []
-	
+
 	for (const capability of vendorCapabilities) {
 		switch (capability) {
 			case 'Web Search':
@@ -117,26 +117,65 @@ export const getEnabledCapabilities = (vendor: Vendor, options: BaseOptions): Ca
 					enabledCapabilities.push(capability)
 				}
 				break
-				
+
 			case 'Reasoning':
 				// 只有当enableReasoning为true时才启用推理功能
 				if ((options as any).enableReasoning === true) {
 					enabledCapabilities.push(capability)
 				}
 				break
-				
+
+			case 'Image Generation':
+				// OpenRouter特殊处理：只有当模型支持图像生成时才显示此功能
+				if (vendor.name === 'OpenRouter') {
+					// 动态检查模型是否支持图像生成
+					if (isImageGenerationModel(options.model)) {
+						enabledCapabilities.push(capability)
+					}
+				} else {
+					// 其他服务商：只要支持就启用
+					enabledCapabilities.push(capability)
+				}
+				break
+
 			// 以下功能目前没有开关控制，只要服务商支持就启用
 			case 'Text Generation':
 			case 'Image Vision':
 			case 'PDF Vision':
-			case 'Image Generation':
 			case 'Image Editing':
 				enabledCapabilities.push(capability)
 				break
 		}
 	}
-	
+
 	return enabledCapabilities
+}
+
+/**
+ * 检查OpenRouter模型是否支持图像生成
+ * @param model 模型名称
+ * @returns 是否支持图像生成
+ */
+const isImageGenerationModel = (model: string): boolean => {
+	if (!model) return false
+
+	// 检查模型是否在已知的图像生成模型列表中
+	const knownImageGenerationModels = [
+		'openai/gpt-5-image-mini',
+		'openai/gpt-5-image',
+		'google/gemini-2.5-flash-image',
+		'google/gemini-2.5-flash-image-preview'
+	]
+
+	// 严格匹配已知的图像生成模型
+	if (knownImageGenerationModels.includes(model)) {
+		return true
+	}
+
+	// 对于其他模型，检查名称中是否包含 "image" 关键字
+	// 这符合 OpenRouter 的命名规范，图像生成模型都会在名称中包含 "image" 关键字
+	const modelName = model.toLowerCase()
+	return modelName.includes('image')
 }
 
 /**

@@ -1139,9 +1139,17 @@ export class TarsSettingTab {
 							options.model = selectedModel
 							await this.saveSettings()
 							btn.setButtonText(selectedModel)
-							// OpenRouter: 模型改变时重新渲染以切换网络搜索/图像生成配置
+							// OpenRouter: 模型改变时更新功能显示和配置界面
 							if (vendorName === openRouterVendor.name) {
-								this.render(this.containerEl, false, this.currentOpenProviderIndex)
+								// 更新Provider卡片中的功能显示
+								this.updateProviderCapabilities(index, settings)
+
+								// 如果当前配置Modal是打开的，重新渲染Modal内容以更新配置项
+								if (this.currentOpenProviderIndex === index && modal) {
+									// 清空Modal容器并重新渲染配置内容
+									modal.configContainer.empty()
+									this.renderProviderConfig(modal.configContainer, index, settings, vendor, modal)
+								}
 							}
 						}
 						new SelectModelModal(this.app, models, onChoose).open()
@@ -1174,9 +1182,17 @@ export class TarsSettingTab {
 					if (buttonComponent) {
 						buttonComponent.textContent = value.trim() || t('Select the model to use')
 					}
-					// OpenRouter: 模型改变时重新渲染以显示/隐藏相关设置
+					// OpenRouter: 模型改变时更新功能显示和配置界面
 					if (vendorName === openRouterVendor.name) {
-						this.render(this.containerEl, false, this.currentOpenProviderIndex)
+						// 更新Provider卡片中的功能显示
+						this.updateProviderCapabilities(index, settings)
+
+						// 如果当前配置Modal是打开的，重新渲染Modal内容以更新配置项
+						if (this.currentOpenProviderIndex === index && modal) {
+							// 清空Modal容器并重新渲染配置内容
+							modal.configContainer.empty()
+							this.renderProviderConfig(modal.configContainer, index, settings, vendor, modal)
+						}
 					}
 				})
 
