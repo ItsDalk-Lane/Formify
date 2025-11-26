@@ -71,7 +71,8 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 
 	return (
 		<div className={containerClasses}>
-			<RelevantNotes notes={contextNotes} />
+			{/* 注释掉RelevantNotes组件，不再显示"Relevant Notes"区域 */}
+			{/* <RelevantNotes notes={contextNotes} /> */}
 				<div
 				ref={scrollRef}
 				className="tw-flex tw-flex-1 tw-flex-col tw-overflow-y-auto tw-scroll-smooth tw-select-text tw-break-words tw-gap-2"

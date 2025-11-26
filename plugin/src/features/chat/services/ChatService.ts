@@ -206,10 +206,10 @@ export class ChatService {
 			const fileTags = [];
 			const folderTags = [];
 			
-			// 处理文件标签
+			// 处理文件标签 - 只包含文件名，不包含路径
 			if (this.state.selectedFiles.length > 0) {
 				for (const file of this.state.selectedFiles) {
-					fileTags.push(`[[${file.path}]]`);
+					fileTags.push(`[[${file.name}]]`); // 只使用文件名，不使用路径
 				}
 			}
 			
@@ -220,10 +220,10 @@ export class ChatService {
 				}
 			}
 			
-			// 添加文件和文件夹标签到消息内容中
+			// 添加文件和文件夹标签到消息内容中，不添加"附件:"标题
 			if (fileTags.length > 0 || folderTags.length > 0) {
 				const allTags = [...fileTags, ...folderTags].join(' ');
-				messageContent += `\n\n**附件:** ${allTags}`;
+				messageContent += `\n\n${allTags}`;
 			}
 		}
 

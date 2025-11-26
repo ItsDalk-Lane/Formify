@@ -307,8 +307,8 @@ export class HistoryService {
 		// 读取当前文件内容
 		const currentContent = await this.app.vault.read(file);
 		
-		// 序列化新消息，包含文件和文件夹信息
-		const serializedMessage = this.messageService.serializeMessage(message, selectedFiles, selectedFolders);
+		// 序列化新消息，但不重复添加文件和文件夹信息（因为已经在消息内容中了）
+		const serializedMessage = this.messageService.serializeMessage(message);
 		
 		// 追加新消息到文件末尾
 		const newContent = currentContent.trimEnd() + '\n\n' + serializedMessage + '\n';
@@ -382,7 +382,7 @@ export class HistoryService {
 		}
 		
 		// 创建文件和文件夹标签数组
-		const fileTags = selectedFiles ? selectedFiles.map(file => `[[${file.path}]]`) : [];
+		const fileTags = selectedFiles ? selectedFiles.map(file => `[[${file.name}]]`) : []; // 只使用文件名，不使用路径
 		const folderTags = selectedFolders ? selectedFolders.map(folder => folder.path) : []; // 不添加#符号
 		const allTags = [...fileTags, ...folderTags];
 		
@@ -399,8 +399,8 @@ export class HistoryService {
 			contextNotes: updatedContextNotes
 		});
 
-		// 序列化第一条消息，包含文件和文件夹信息
-		const serializedMessage = this.messageService.serializeMessage(firstMessage, selectedFiles, selectedFolders);
+		// 序列化第一条消息，但不重复添加文件和文件夹信息（因为已经在消息内容中了）
+		const serializedMessage = this.messageService.serializeMessage(firstMessage);
 		
 		// 创建文件，包含frontmatter和第一条消息
 		const content = `${FRONTMATTER_DELIMITER}\n${frontmatter}${FRONTMATTER_DELIMITER}\n\n${serializedMessage}\n`;
@@ -473,7 +473,7 @@ export class HistoryService {
 		selectedFolders?: SelectedFolder[]
 	): Promise<void> {
 		// 创建文件和文件夹标签数组
-		const fileTags = selectedFiles ? selectedFiles.map(file => `[[${file.path}]]`) : [];
+		const fileTags = selectedFiles ? selectedFiles.map(file => `[[${file.name}]]`) : []; // 只使用文件名，不使用路径
 		const folderTags = selectedFolders ? selectedFolders.map(folder => folder.path) : []; // 不添加#符号
 		const allTags = [...fileTags, ...folderTags];
 		

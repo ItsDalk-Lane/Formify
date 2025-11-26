@@ -57,12 +57,13 @@ export class MessageService {
 			await this.processFileAndFolderContent(selectedFiles, selectedFolders, providerMessages, fileContentOptions);
 		}
 
-		if (contextNotes.length > 0) {
-			providerMessages.push({
-				role: 'system',
-				content: `Relevant context provided by the user:\n${contextNotes.map((note, index) => `${index + 1}. ${note}`).join('\n')}`
-			});
-		}
+		// 不再显示contextNotes作为Relevant context，因为文件和文件夹信息已经在processFileAndFolderContent中处理
+		// if (contextNotes.length > 0) {
+		// 	providerMessages.push({
+		// 		role: 'system',
+		// 		content: `Relevant context provided by the user:\n${contextNotes.map((note, index) => `${index + 1}. ${note}`).join('\n')}`
+		// 	});
+		// }
 
 		messages.forEach((message) => {
 			const embeds = this.createEmbedsFromImages(message.images ?? []);
