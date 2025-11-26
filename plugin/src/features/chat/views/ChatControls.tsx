@@ -34,6 +34,7 @@ export const ChatControls = ({ service, state }: ChatControlsProps) => {
 		setHistoryOpen(false);
 	};
 
+	
 	return (
 		<div className="chat-controls tw-flex tw-items-center tw-justify-between tw-px-2 tw-py-1.5" style={{
 			background: 'transparent',

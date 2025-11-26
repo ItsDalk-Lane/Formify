@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { ItemView, WorkspaceLeaf, App } from 'obsidian';
 import { StrictMode, useEffect, useMemo, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import FormPlugin from 'src/main';
@@ -55,7 +55,7 @@ export class ChatView extends ItemView {
 		this.root.render(
 			<StrictMode>
 				<ObsidianAppContext.Provider value={this.app}>
-					<ChatApp service={this.service} mode={this.mode} />
+					<ChatApp service={this.service} mode={this.mode} app={this.app} />
 				</ObsidianAppContext.Provider>
 			</StrictMode>
 		);
@@ -65,9 +65,10 @@ export class ChatView extends ItemView {
 interface ChatAppProps {
 	service: ChatService;
 	mode: ChatViewMode;
+	app: App;
 }
 
-const ChatApp = ({ service, mode }: ChatAppProps) => {
+const ChatApp = ({ service, mode, app }: ChatAppProps) => {
 	const [state, setState] = useState<ChatState>(service.getState());
 
 	useEffect(() => {
@@ -98,7 +99,7 @@ const ChatApp = ({ service, mode }: ChatAppProps) => {
 				<>
 					<ChatMessages service={service} state={state} />
 					<ChatControls service={service} state={state} />
-					<ChatInput service={service} state={state} />
+					<ChatInput service={service} state={state} app={app} />
 				</>
 			) : (
 				<div className="tw-flex tw-h-full tw-items-center tw-justify-center tw-text-muted">
