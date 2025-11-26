@@ -1,8 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Message as ProviderMessage, EmbedCache } from 'src/features/tars/providers';
-import type { ChatMessage, ChatRole } from '../types/chat';
+import type { ChatMessage, ChatRole, SelectedFile, SelectedFolder } from '../types/chat';
+import { FileContentService, FileContentOptions } from './FileContentService';
 
 export class MessageService {
+	constructor(private readonly app: any, private readonly fileContentService?: FileContentService) {}
+
 	createMessage(role: ChatRole, content: string, extras?: Partial<ChatMessage>): ChatMessage {
 		const now = Date.now();
 		return {
@@ -29,15 +32,29 @@ export class MessageService {
 		return formatter.format(new Date(timestamp)).replace(/\//g, '/');
 	}
 
-	toProviderMessages(messages: ChatMessage[], options?: { contextNotes?: string[]; systemPrompt?: string }): ProviderMessage[] {
+	async toProviderMessages(
+		messages: ChatMessage[], 
+		options?: { 
+			contextNotes?: string[]; 
+			systemPrompt?: string;
+			selectedFiles?: SelectedFile[];
+			selectedFolders?: SelectedFolder[];
+			fileContentOptions?: FileContentOptions;
+		}
+	): Promise<ProviderMessage[]> {
 		const providerMessages: ProviderMessage[] = [];
-		const { contextNotes = [], systemPrompt } = options ?? {};
+		const { contextNotes = [], systemPrompt, selectedFiles = [], selectedFolders = [], fileContentOptions } = options ?? {};
 
 		if (systemPrompt) {
 			providerMessages.push({
 				role: 'system',
 				content: systemPrompt
 			});
+		}
+
+		// 处理文件和文件夹内容
+		if (selectedFiles.length > 0 || selectedFolders.length > 0) {
+			await this.processFileAndFolderContent(selectedFiles, selectedFolders, providerMessages, fileContentOptions);
 		}
 
 		if (contextNotes.length > 0) {
@@ -93,6 +110,55 @@ export class MessageService {
 				return '系统';
 			default:
 				return '用户';
+		}
+	}
+
+	/**
+	 * 处理文件和文件夹内容，将其添加到提供者消息中
+	 * @param selectedFiles 选中的文件列表
+	 * @param selectedFolders 选中的文件夹列表
+	 * @param providerMessages 提供者消息数组
+	 * @param options 文件内容读取选项
+	 */
+	private async processFileAndFolderContent(
+		selectedFiles: SelectedFile[],
+		selectedFolders: SelectedFolder[],
+		providerMessages: ProviderMessage[],
+		options?: FileContentOptions
+	): Promise<void> {
+		if (!this.fileContentService) {
+			console.warn('[MessageService] FileContentService未初始化，无法处理文件内容');
+			return;
+		}
+
+		try {
+			let fileContentText = '用户提供了以下文件和文件夹作为上下文:\n\n';
+
+			// 处理文件内容
+			if (selectedFiles.length > 0) {
+				const fileContents = await this.fileContentService.readFilesContent(selectedFiles, options);
+				
+				for (const fileContent of fileContents) {
+					fileContentText += this.fileContentService.formatFileContentForAI(fileContent) + '\n\n';
+				}
+			}
+
+			// 处理文件夹内容
+			if (selectedFolders.length > 0) {
+				const folderContents = await this.fileContentService.readFoldersContent(selectedFolders, options);
+				
+				for (const folderContent of folderContents) {
+					fileContentText += this.fileContentService.formatFolderContentForAI(folderContent) + '\n\n';
+				}
+			}
+
+			// 添加文件内容作为系统消息
+			providerMessages.push({
+				role: 'system',
+				content: fileContentText
+			});
+		} catch (error) {
+			console.error('[MessageService] 处理文件和文件夹内容失败:', error);
 		}
 	}
 

@@ -4,6 +4,7 @@ import type { ProviderSettings } from 'src/features/tars/providers';
 import { availableVendors, TarsSettings } from 'src/features/tars/settings';
 import { MessageService } from './MessageService';
 import { HistoryService, ChatHistoryEntry } from './HistoryService';
+import { FileContentService } from './FileContentService';
 import type { ChatMessage, ChatSession, ChatSettings, ChatState, SelectedFile, SelectedFolder } from '../types/chat';
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
 import type { Message as ProviderMessage, ResolveEmbedAsBinary } from 'src/features/tars/providers';
@@ -15,6 +16,7 @@ export class ChatService {
 	private settings: ChatSettings = DEFAULT_CHAT_SETTINGS;
 	private readonly messageService: MessageService;
 	private readonly historyService: HistoryService;
+	private readonly fileContentService: FileContentService;
 	private state: ChatState = {
 		activeSession: null,
 		isGenerating: false,
@@ -29,7 +31,8 @@ export class ChatService {
 	private controller: AbortController | null = null;
 
 	constructor(private readonly plugin: FormPlugin) {
-		this.messageService = new MessageService();
+		this.fileContentService = new FileContentService(plugin.app);
+		this.messageService = new MessageService(plugin.app, this.fileContentService);
 		this.historyService = new HistoryService(plugin.app, DEFAULT_CHAT_SETTINGS.chatFolder);
 	}
 
@@ -485,7 +488,7 @@ export class ChatService {
 				throw new Error(`无法找到供应商 ${provider.vendor}`);
 			}
 			const sendRequest = vendor.sendRequestFunc(provider.options);
-			const messages = this.buildProviderMessages(session);
+			const messages = await this.buildProviderMessages(session);
 			const assistantMessage = this.messageService.createMessage('assistant', '');
 			session.messages.push(assistantMessage);
 			session.updatedAt = Date.now();
@@ -561,10 +564,30 @@ export class ChatService {
 		return providers.find((provider) => provider.tag === this.state.selectedModelId) ?? providers[0];
 	}
 
-	private buildProviderMessages(session: ChatSession): ProviderMessage[] {
+	private async buildProviderMessages(session: ChatSession): Promise<ProviderMessage[]> {
 		const contextNotes = [...(session.contextNotes ?? []), ...this.state.contextNotes];
-		return this.messageService.toProviderMessages(session.messages, {
-			contextNotes
+		const selectedFiles = session.selectedFiles ?? [];
+		const selectedFolders = session.selectedFolders ?? [];
+		
+		// 文件内容读取选项
+		const fileContentOptions = {
+			maxFileSize: 1024 * 1024, // 1MB
+			maxContentLength: 10000, // 10000个字符
+			includeExtensions: [], // 包含所有文件
+			excludeExtensions: ['exe', 'dll', 'bin', 'zip', 'rar', 'tar', 'gz'], // 排除二进制文件
+			excludePatterns: [
+				/node_modules/,
+				/\.git/,
+				/\.DS_Store/,
+				/Thumbs\.db/
+			]
+		};
+		
+		return await this.messageService.toProviderMessages(session.messages, {
+			contextNotes,
+			selectedFiles,
+			selectedFolders,
+			fileContentOptions
 		});
 	}
 
