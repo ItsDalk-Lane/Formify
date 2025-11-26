@@ -1,9 +1,10 @@
-import { CornerDownLeft, StopCircle, ImageUp, X, Paperclip, FileText, Folder, Palette } from 'lucide-react';
+import { CornerDownLeft, StopCircle, ImageUp, X, Paperclip, FileText, Folder, Palette, Zap } from 'lucide-react';
 import { FormEvent, useEffect, useState, useRef, Fragment } from 'react';
 import { ChatService } from '../services/ChatService';
 import type { ChatState, SelectedFile, SelectedFolder } from '../types/chat';
 import { ModelSelector } from '../components/ModelSelector';
 import { FileMenuPopup } from '../components/FileMenuPopup';
+import { TemplateSelector } from '../components/TemplateSelector';
 import { App, TFile, TFolder } from 'obsidian';
 
 interface ChatInputProps {
@@ -153,6 +154,25 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 		service.removeSelectedFolder(folderId);
 	};
 
+	// 模板选择相关处理函数
+	const handleTemplateSelect = async (templatePath: string) => {
+		await service.selectPromptTemplate(templatePath);
+		// 选择模板后，将焦点返回到输入框
+		textareaRef.current?.focus();
+	};
+
+	const handleTemplateSelectorClose = () => {
+		service.setTemplateSelectorVisibility(false);
+	};
+
+	const handleClearTemplate = () => {
+		service.clearSelectedPromptTemplate();
+	};
+
+	const handleTemplateButtonClick = () => {
+		service.setTemplateSelectorVisibility(true);
+	};
+
 	useEffect(() => {
 		const handler = (event: KeyboardEvent) => {
 			if (event.key === 'Enter' && !event.shiftKey) {
@@ -170,6 +190,27 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 				border: '1px solid var(--background-modifier-border)',
 				borderRadius: 'var(--radius-m)'
 			}} onSubmit={handleSubmit}>
+				{/* 显示当前选中的模板标签 */}
+				{state.selectedPromptTemplate && (
+					<div className="selected-template tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-purple-100 tw-text-purple-700 tw-rounded tw-text-xs tw-mb-2">
+						<Zap className="tw-size-3 tw-flex-shrink-0" />
+						<span className="tw-max-w-40 tw-truncate" title={state.selectedPromptTemplate.name}>
+							模板: {state.selectedPromptTemplate.name}
+						</span>
+						<button
+							type="button"
+							className="tw-ml-1 tw-p-0 tw-text-purple-700 hover:tw-text-purple-900 tw-cursor-pointer"
+							onClick={(e) => {
+								e.stopPropagation();
+								handleClearTemplate();
+							}}
+							title="清除模板"
+						>
+							<X className="tw-size-4" />
+						</button>
+					</div>
+				)}
+				
 				{!state.isGenerating ? (
 					<>
 								<textarea
@@ -313,6 +354,27 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 					</>
 				) : (
 					<>
+						{/* 显示当前选中的模板标签 */}
+						{state.selectedPromptTemplate && (
+							<div className="selected-template tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-purple-100 tw-text-purple-700 tw-rounded tw-text-xs tw-mb-2">
+								<Zap className="tw-size-3 tw-flex-shrink-0" />
+								<span className="tw-max-w-40 tw-truncate" title={state.selectedPromptTemplate.name}>
+									模板: {state.selectedPromptTemplate.name}
+								</span>
+								<button
+									type="button"
+									className="tw-ml-1 tw-p-0 tw-text-purple-700 hover:tw-text-purple-900 tw-cursor-pointer"
+									onClick={(e) => {
+										e.stopPropagation();
+										handleClearTemplate();
+									}}
+									title="清除模板"
+								>
+									<X className="tw-size-4" />
+								</button>
+							</div>
+						)}
+						
 								<textarea
 							ref={textareaRef}
 							className="tw-w-full tw-resize-none tw-p-3 tw-text-sm"
@@ -469,6 +531,14 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 				onSelectFolder={handleFolderSelect}
 				app={app}
 				buttonRef={fileMenuButtonRef}
+			/>
+			
+			{/* 模板选择器 */}
+			<TemplateSelector
+				visible={state.showTemplateSelector}
+				onSelect={handleTemplateSelect}
+				onClose={handleTemplateSelectorClose}
+				inputValue={value}
 			/>
 					</Fragment>
 	);

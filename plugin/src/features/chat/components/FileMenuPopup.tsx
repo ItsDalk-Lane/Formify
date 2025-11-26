@@ -185,7 +185,12 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 				return file.name.toLowerCase().includes(query) ||
 					   file.path.toLowerCase().includes(query);
 			})
-			.sort((a, b) => a.path.localeCompare(b.path));
+			.sort((a, b) => {
+				// 按照最近修改时间排序，最近修改的在前
+				const timeA = a.stat?.mtime || 0;
+				const timeB = b.stat?.mtime || 0;
+				return timeB - timeA;
+			});
 		return allFiles;
 	};
 

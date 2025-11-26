@@ -34,7 +34,8 @@ export class ChatService {
 		contextNotes: [],
 		selectedImages: [],
 		selectedFiles: [],
-		selectedFolders: []
+		selectedFolders: [],
+		showTemplateSelector: false
 	};
 	private subscribers: Set<ChatSubscriber> = new Set();
 	private controller: AbortController | null = null;
@@ -86,6 +87,8 @@ export class ChatService {
 		this.state.selectedFiles = [];
 		this.state.selectedFolders = [];
 		this.state.inputValue = '';
+		this.state.selectedPromptTemplate = undefined;
+		this.state.showTemplateSelector = false;
 		this.emitState();
 		
 		// 不再立即保存新会话，等待用户发送第一条消息时再创建文件
@@ -183,6 +186,58 @@ export class ChatService {
 		this.emitState();
 	}
 
+	// 模板选择相关方法
+	setTemplateSelectorVisibility(visible: boolean) {
+		this.state.showTemplateSelector = visible;
+		this.emitState();
+	}
+
+	async selectPromptTemplate(templatePath: string) {
+		try {
+			// 读取模板文件内容
+			const templateFile = this.plugin.app.vault.getAbstractFileByPath(templatePath);
+			if (!templateFile || !(templateFile instanceof TFile)) {
+				throw new Error(`模板文件不存在: ${templatePath}`);
+			}
+
+			const templateContent = await this.plugin.app.vault.read(templateFile);
+			const templateName = templateFile.basename;
+
+			// 设置选中的模板
+			this.state.selectedPromptTemplate = {
+				path: templatePath,
+				name: templateName,
+				content: templateContent
+			};
+
+			// 隐藏模板选择器
+			this.state.showTemplateSelector = false;
+
+			// 不修改输入框内容，保持用户当前的输入
+			// 模板内容将作为系统提示词在发送消息时使用
+
+			this.emitState();
+		} catch (error) {
+			console.error('[ChatService] 选择提示词模板失败:', error);
+			new Notice(`选择提示词模板失败: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
+	clearSelectedPromptTemplate() {
+		this.state.selectedPromptTemplate = undefined;
+		this.emitState();
+	}
+
+	getPromptTemplateContent(): string | undefined {
+		return this.state.selectedPromptTemplate?.content;
+	}
+
+	hasPromptTemplateVariables(): boolean {
+		if (!this.state.selectedPromptTemplate?.content) return false;
+		const variableRegex = /\{\{([^}]+)\}\}/g;
+		return variableRegex.test(this.state.selectedPromptTemplate.content);
+	}
+
 	setModel(tag: string) {
 		this.state.selectedModelId = tag;
 		if (this.state.activeSession) {
@@ -221,8 +276,35 @@ export class ChatService {
 		session.selectedFiles = [...this.state.selectedFiles];
 		session.selectedFolders = [...this.state.selectedFolders];
 
+		// 处理提示词模板
+		let finalUserMessage = trimmed;
+		
+		if (this.state.selectedPromptTemplate) {
+			const templateContent = this.state.selectedPromptTemplate.content;
+			const variableRegex = /\{\{([^}]+)\}\}/g;
+			const hasVariables = variableRegex.test(templateContent);
+			
+			if (hasVariables) {
+				// 如果模板有变量，用用户输入替换所有变量
+				finalUserMessage = templateContent.replace(variableRegex, trimmed);
+			} else {
+				// 如果模板没有变量，将用户输入追加到模板内容后面
+				finalUserMessage = templateContent + '\n\n' + trimmed;
+			}
+		}
+
+		// 获取系统提示词
+		let systemPrompt: string | undefined;
+		if (this.settings.enableSystemPrompt) {
+			// 检查AI助手的系统提示词设置
+			const tarsSettings = this.plugin.settings.tars.settings;
+			if (tarsSettings.enableDefaultSystemMsg && tarsSettings.defaultSystemMsg) {
+				systemPrompt = tarsSettings.defaultSystemMsg;
+			}
+		}
+
 		// 创建用户消息，包含文件和文件夹信息
-		let messageContent = trimmed;
+		let messageContent = finalUserMessage;
 		if (this.state.selectedFiles.length > 0 || this.state.selectedFolders.length > 0) {
 			const fileTags = [];
 			const folderTags = [];
@@ -251,6 +333,13 @@ export class ChatService {
 		const userMessage = this.messageService.createMessage('user', messageContent, {
 			images: this.state.selectedImages
 		});
+		
+		// 如果有系统提示词，添加到消息列表开头
+		if (systemPrompt) {
+			const systemMessage = this.messageService.createMessage('system', systemPrompt);
+			session.messages.unshift(systemMessage);
+		}
+		
 		session.messages.push(userMessage);
 		session.updatedAt = Date.now();
 
@@ -261,10 +350,11 @@ export class ChatService {
 		this.state.selectedImages = [];
 		this.state.selectedFiles = [];
 		this.state.selectedFolders = [];
+		this.state.selectedPromptTemplate = undefined; // 清除选中的模板
 		this.emitState();
 
 		// 如果这是第一条消息，创建历史文件并包含第一条用户消息
-		if (session.messages.length === 1) {
+		if (session.messages.length === 1 || (systemPrompt && session.messages.length === 2)) {
 			try {
 				session.filePath = await this.historyService.createNewSessionFileWithFirstMessage(
 					session, 
@@ -325,6 +415,9 @@ export class ChatService {
 			this.state.selectedFiles = session.selectedFiles ?? [];
 			this.state.selectedFolders = session.selectedFolders ?? [];
 			this.state.selectedModelId = session.modelId || this.getDefaultProviderTag();
+			// 重置模板选择状态
+			this.state.selectedPromptTemplate = undefined;
+			this.state.showTemplateSelector = false;
 			this.emitState();
 		}
 	}
@@ -817,6 +910,8 @@ export class ChatService {
 		
 		// 获取系统提示词
 		let systemPrompt: string | undefined;
+		
+		// 只使用默认的系统提示词设置，不使用模板内容作为系统提示词
 		if (this.settings.enableSystemPrompt) {
 			// 检查AI助手的系统提示词设置
 			const tarsSettings = this.plugin.settings.tars.settings;

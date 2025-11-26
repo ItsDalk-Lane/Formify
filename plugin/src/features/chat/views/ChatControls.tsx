@@ -1,4 +1,4 @@
-import { History, MessageCirclePlus, Save } from 'lucide-react';
+import { History, MessageCirclePlus, Save, Zap } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ChatService } from '../services/ChatService';
 import type { ChatState } from '../types/chat';
@@ -34,12 +34,22 @@ export const ChatControls = ({ service, state }: ChatControlsProps) => {
 		setHistoryOpen(false);
 	};
 
+	const handleTemplateButtonClick = () => {
+		service.setTemplateSelectorVisibility(true);
+	};
+
 	
 	return (
 		<div className="chat-controls tw-flex tw-items-center tw-justify-between tw-px-2 tw-py-1.5" style={{
 			background: 'transparent',
 			border: 'none'
 		}}>
+			<div className="tw-flex tw-items-center tw-gap-2">
+				<span onClick={handleTemplateButtonClick} aria-label="选择模板" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-purple-100 tw-text-purple-700 tw-rounded tw-text-xs hover:tw-bg-purple-200 tw-border-none">
+					<Zap className="tw-size-3" />
+					<span>选择模板</span>
+				</span>
+			</div>
 			<div className="tw-flex-1"></div>
 			<div className="tw-flex tw-items-center tw-gap-2">
 				<span className="tw-text-xs tw-text-muted-foreground">

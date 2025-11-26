@@ -64,6 +64,13 @@ export interface ChatState {
 	selectedFiles: SelectedFile[];
 	selectedFolders: SelectedFolder[];
 	error?: string;
+	// 添加模板选择相关状态
+	selectedPromptTemplate?: {
+		path: string;
+		name: string;
+		content: string;
+	};
+	showTemplateSelector: boolean;
 }
 
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
