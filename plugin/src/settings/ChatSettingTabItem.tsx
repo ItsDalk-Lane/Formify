@@ -113,6 +113,17 @@ export const ChatSettingTabItem = ({ plugin }: { plugin: FormPlugin }) => {
 				});
 			});
 
+		// 添加系统提示词设置项
+		new Setting(el)
+			.setName("启用系统提示词")
+			.setDesc("使用AI助手功能中配置的系统提示词，为AI聊天提供一致的角色定义和行为指导")
+			.addToggle((toggle) => {
+				toggle.setValue(plugin.settings.chat.enableSystemPrompt ?? true);
+				toggle.onChange(async (value) => {
+					await updateSettings({ enableSystemPrompt: value });
+				});
+			});
+
 		return () => {
 			el.empty();
 		};

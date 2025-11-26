@@ -815,8 +815,19 @@ export class ChatService {
 			]
 		};
 		
+		// 获取系统提示词
+		let systemPrompt: string | undefined;
+		if (this.settings.enableSystemPrompt) {
+			// 检查AI助手的系统提示词设置
+			const tarsSettings = this.plugin.settings.tars.settings;
+			if (tarsSettings.enableDefaultSystemMsg && tarsSettings.defaultSystemMsg) {
+				systemPrompt = tarsSettings.defaultSystemMsg;
+			}
+		}
+		
 		return await this.messageService.toProviderMessages(session.messages, {
 			contextNotes,
+			systemPrompt,
 			selectedFiles,
 			selectedFolders,
 			fileContentOptions

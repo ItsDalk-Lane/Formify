@@ -51,6 +51,7 @@ export interface ChatSettings {
 	autosaveChat: boolean;
 	showSidebarByDefault: boolean;
 	openMode: ChatOpenMode;
+	enableSystemPrompt: boolean; // 是否启用系统提示词功能
 }
 
 export interface ChatState {
@@ -71,5 +72,6 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	autosaveChat: true,
 	showSidebarByDefault: true,
 	openMode: 'sidebar',
+	enableSystemPrompt: true, // 默认启用系统提示词功能
 };
 
