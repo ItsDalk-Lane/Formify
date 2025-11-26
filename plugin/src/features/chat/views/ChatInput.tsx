@@ -1,4 +1,4 @@
-import { CornerDownLeft, StopCircle, ImageUp, X, Paperclip, FileText, Folder } from 'lucide-react';
+import { CornerDownLeft, StopCircle, ImageUp, X, Paperclip, FileText, Folder, Palette } from 'lucide-react';
 import { FormEvent, useEffect, useState, useRef, Fragment } from 'react';
 import { ChatService } from '../services/ChatService';
 import type { ChatState, SelectedFile, SelectedFolder } from '../types/chat';
@@ -18,6 +18,44 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 	const [maxHeight, setMaxHeight] = useState(80); // Default minimum height
 	const [showFileMenu, setShowFileMenu] = useState(false);
 	const fileMenuButtonRef = useRef<HTMLSpanElement>(null);
+	
+	// 检测当前输入是否包含图片生成意图
+	const [isImageGenerationIntent, setIsImageGenerationIntent] = useState(false);
+	
+	// 检测图片生成意图的函数
+	const detectImageGenerationIntent = (text: string): boolean => {
+		if (!text) return false;
+		
+		const lowerContent = text.toLowerCase();
+		
+		// 图片生成关键词列表
+		const imageGenerationKeywords = [
+			// 中文关键词
+			'生成图片', '生成图像', '画一个', '画一张', '创建图片', '创建图像',
+			'绘制', '画一幅', '画一幅画', '生成一幅画', '画个', '画张',
+			'图片生成', '图像生成', '画图', '作画', '绘画',
+			'设计一个', '设计一张', '创作一个', '创作一张',
+			'制作图片', '制作图像', '制作一张图',
+			// 英文关键词
+			'generate image', 'generate an image', 'create image', 'create an image',
+			'draw a', 'draw an', 'draw me a', 'draw me an',
+			'paint a', 'paint an', 'paint me a', 'paint me an',
+			'make a picture', 'make an image', 'create a picture',
+			'generate a picture', 'generate picture', 'create picture',
+			'design a', 'design an', 'design me a', 'design me an',
+			'make a', 'make an', 'make me a', 'make me an',
+			'visualize', 'visualize a', 'visualize an',
+			'show me a', 'show me an', 'display a', 'display an'
+		];
+		
+		// 检查是否包含任何图片生成关键词
+		return imageGenerationKeywords.some(keyword => lowerContent.includes(keyword));
+	};
+	
+	// 监听输入变化，检测图片生成意图
+	useEffect(() => {
+		setIsImageGenerationIntent(detectImageGenerationIntent(value));
+	}, [value]);
 
 	// Calculate maximum height (1/4 of viewport height)
 	useEffect(() => {
@@ -409,6 +447,14 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 									<StopCircle className="tw-size-4" />
 									<span className="tw-ml-1 tw-text-xs">Stop</span>
 								</span>
+								
+								{/* 图片生成状态提示 */}
+								{isImageGenerationIntent && (
+									<div className="tw-flex tw-items-center tw-gap-1 tw-ml-2 tw-px-2 tw-py-1 tw-bg-purple-100 tw-text-purple-700 tw-rounded tw-text-xs">
+										<Palette className="tw-size-3" />
+										<span>图片生成模式</span>
+									</div>
+								)}
 							</div>
 						</div>
 					</>

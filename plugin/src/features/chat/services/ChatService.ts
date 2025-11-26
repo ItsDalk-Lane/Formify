@@ -1,6 +1,6 @@
 import { MarkdownView, Notice, TFile, TFolder } from 'obsidian';
 import FormPlugin from 'src/main';
-import type { ProviderSettings } from 'src/features/tars/providers';
+import type { ProviderSettings, SaveAttachment } from 'src/features/tars/providers';
 import { availableVendors, TarsSettings } from 'src/features/tars/settings';
 import { MessageService } from './MessageService';
 import { HistoryService, ChatHistoryEntry } from './HistoryService';
@@ -9,6 +9,15 @@ import type { ChatMessage, ChatSession, ChatSettings, ChatState, SelectedFile, S
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
 import type { Message as ProviderMessage, ResolveEmbedAsBinary } from 'src/features/tars/providers';
 import { v4 as uuidv4 } from 'uuid';
+import { App, Notice, TFile } from 'obsidian';
+import type { ProviderSettings, SaveAttachment } from '../../tars/providers';
+import { availableVendors } from '../../tars/settings';
+import { ChatHistoryEntry } from './HistoryService';
+import { MessageService } from './MessageService';
+import type { ChatMessage, ChatSession, ChatSettings, ChatState, ChatSubscriber } from '../types/chat';
+import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
+import { FormPlugin } from '../../../main';
+import { isImageGenerationModel } from '../../tars/providers/openRouter';
 
 type ChatSubscriber = (state: ChatState) => void;
 
@@ -194,6 +203,18 @@ export class ChatService {
 			return;
 		}
 
+		// 检测图片生成意图
+		const isImageGenerationIntent = this.detectImageGenerationIntent(trimmed);
+		const isModelSupportImageGeneration = this.isCurrentModelSupportImageGeneration();
+		
+		// 如果用户意图生成图片但当前模型不支持，提示用户
+		if (isImageGenerationIntent && !isModelSupportImageGeneration) {
+			const provider = this.resolveProvider();
+			const modelName = provider?.options.model || '当前模型';
+			new Notice(`⚠️ 当前模型 (${modelName}) 不支持图像生成功能。\n\n请选择支持图像生成的模型，如：\n• google/gemini-2.5-flash-image-preview\n• openai/gpt-5-image-mini\n• 其他包含 "image" 的模型`, 10000);
+			return;
+		}
+
 		const session = this.state.activeSession ?? this.createNewSession();
 
 		// 保存文件和文件夹到会话中
@@ -268,6 +289,13 @@ export class ChatService {
 				console.error('[ChatService] 追加用户消息失败:', error);
 				// 不显示错误通知，避免干扰用户
 			}
+		}
+
+		// 如果检测到图片生成意图，显示提示信息
+		if (isImageGenerationIntent && isModelSupportImageGeneration) {
+			const provider = this.resolveProvider();
+			const modelName = provider?.options.model || '当前模型';
+			new Notice(`🎨 正在使用模型 ${modelName} 生成图片，请稍候...`);
 		}
 
 		await this.generateAssistantResponse(session);
@@ -516,6 +544,63 @@ export class ChatService {
 		return bytes.buffer;
 	}
 
+	/**
+	 * 检测用户输入是否包含图片生成意图
+	 * @param content 用户输入内容
+	 * @returns 是否包含图片生成意图
+	 */
+	private detectImageGenerationIntent(content: string): boolean {
+		if (!content) return false;
+		
+		const lowerContent = content.toLowerCase();
+		
+		// 图片生成关键词列表
+		const imageGenerationKeywords = [
+			// 中文关键词
+			'生成图片', '生成图像', '画一个', '画一张', '创建图片', '创建图像',
+			'绘制', '画一幅', '画一幅画', '生成一幅画', '画个', '画张',
+			'图片生成', '图像生成', '画图', '作画', '绘画',
+			'设计一个', '设计一张', '创作一个', '创作一张',
+			'制作图片', '制作图像', '制作一张图',
+			// 英文关键词
+			'generate image', 'generate an image', 'create image', 'create an image',
+			'draw a', 'draw an', 'draw me a', 'draw me an',
+			'paint a', 'paint an', 'paint me a', 'paint me an',
+			'make a picture', 'make an image', 'create a picture',
+			'generate a picture', 'generate picture', 'create picture',
+			'design a', 'design an', 'design me a', 'design me an',
+			'make a', 'make an', 'make me a', 'make me an',
+			'visualize', 'visualize a', 'visualize an',
+			'show me a', 'show me an', 'display a', 'display an'
+		];
+		
+		// 检查是否包含任何图片生成关键词
+		return imageGenerationKeywords.some(keyword => lowerContent.includes(keyword));
+	}
+
+	/**
+	 * 检查当前选择的模型是否支持图像生成
+	 * @returns 是否支持图像生成
+	 */
+	private isCurrentModelSupportImageGeneration(): boolean {
+		const provider = this.resolveProvider();
+		if (!provider) return false;
+		
+		const vendor = availableVendors.find((item) => item.name === provider.vendor);
+		if (!vendor) return false;
+		
+		// 检查供应商是否支持图像生成功能
+		if (!vendor.capabilities.includes('Image Generation')) return false;
+		
+		// 对于OpenRouter，需要进一步检查具体模型
+		if (provider.vendor === 'OpenRouter') {
+			return isImageGenerationModel(provider.options.model);
+		}
+		
+		// 其他供应商，只要支持图像生成功能就返回true
+		return true;
+	}
+
 	private async generateAssistantResponse(session: ChatSession) {
 		try {
 			const provider = this.resolveProvider();
@@ -546,14 +631,109 @@ export class ChatService {
 				return new ArrayBuffer(0);
 			};
 
+			// 创建saveAttachment函数，用于保存生成的图片
+			const saveAttachment: SaveAttachment = async (filename: string, data: ArrayBuffer) => {
+				try {
+					// 获取当前附件文件夹路径
+					const attachmentFolderPath = this.plugin.app.vault.getConfig('attachmentFolderPath');
+					
+					// 确定保存路径
+					let savePath = filename;
+					if (attachmentFolderPath) {
+						// 如果配置了附件文件夹路径，使用该路径
+						// 处理相对路径和绝对路径
+						if (attachmentFolderPath === '/') {
+							// 根目录，直接使用文件名
+							savePath = filename;
+						} else if (attachmentFolderPath.startsWith('/')) {
+							// 绝对路径
+							savePath = attachmentFolderPath.slice(1) + '/' + filename;
+						} else {
+							// 相对于当前文件夹的路径
+							const activeFile = this.plugin.app.workspace.getActiveFile();
+							if (activeFile) {
+								const currentDir = activeFile.parent?.path || '';
+								savePath = currentDir ? `${currentDir}/${attachmentFolderPath}/${filename}` : `${attachmentFolderPath}/${filename}`;
+							} else {
+								savePath = `${attachmentFolderPath}/${filename}`;
+							}
+						}
+					} else {
+						// 没有配置附件文件夹，使用默认行为（保存在当前文件同一目录）
+						const activeFile = this.plugin.app.workspace.getActiveFile();
+						if (activeFile && activeFile.parent) {
+							savePath = `${activeFile.parent.path}/${filename}`;
+						}
+					}
+					
+					// 创建文件
+					const tFile = await this.plugin.app.vault.createBinary(savePath, data);
+					return tFile.path;
+				} catch (error) {
+					console.error('[ChatService] 保存图片附件失败:', error);
+					throw new Error(`保存图片附件失败: ${error instanceof Error ? error.message : String(error)}`);
+				}
+			};
+
 			// 创建一个临时消息对象用于流式更新
 			let accumulatedContent = '';
 			
-			for await (const chunk of sendRequest(messages, this.controller, resolveEmbed)) {
-				assistantMessage.content += chunk;
-				accumulatedContent += chunk;
-				session.updatedAt = Date.now();
-				this.emitState();
+			// 检测是否是图片生成请求
+			const isImageGenerationRequest = this.detectImageGenerationIntent(
+				session.messages[session.messages.length - 2]?.content || ''
+			);
+			
+			// 检查当前模型是否支持图像生成
+			const isModelSupportImageGeneration = this.isCurrentModelSupportImageGeneration();
+			
+			// 如果模型支持图像生成，总是传递saveAttachment函数
+			if (isModelSupportImageGeneration) {
+				try {
+					for await (const chunk of sendRequest(messages, this.controller, resolveEmbed, saveAttachment)) {
+						assistantMessage.content += chunk;
+						accumulatedContent += chunk;
+						session.updatedAt = Date.now();
+						this.emitState();
+					}
+				} catch (error) {
+					// 针对图片生成错误的特殊处理
+					if (error instanceof Error) {
+						const errorMessage = error.message.toLowerCase();
+						
+						// 检查是否是模型不支持图像生成的错误
+						if (errorMessage.includes('not support') || errorMessage.includes('modalities') || errorMessage.includes('output_modalities')) {
+							throw new Error(`当前模型不支持图像生成功能。\n\n解决方法：\n1. 选择支持图像生成的模型，如 google/gemini-2.5-flash-image-preview\n2. 在模型设置中确认已启用图像生成功能\n3. 检查API密钥是否有图像生成权限`);
+						}
+						
+						// 检查是否是内容策略错误
+						if (errorMessage.includes('content policy') || errorMessage.includes('safety') || errorMessage.includes('inappropriate')) {
+							throw new Error(`图像生成请求被内容策略阻止。\n\n解决方法：\n1. 修改您的描述，避免敏感内容\n2. 使用更中性、通用的描述\n3. 尝试不同的描述角度`);
+						}
+						
+						// 检查是否是配额或余额不足错误
+						if (errorMessage.includes('quota') || errorMessage.includes('balance') || errorMessage.includes('insufficient')) {
+							throw new Error(`账户配额或余额不足。\n\n解决方法：\n1. 检查API账户余额\n2. 升级到更高的配额计划\n3. 等待配额重置（如果是按天计算）`);
+						}
+						
+						// 检查是否是图片保存错误
+						if (errorMessage.includes('保存图片附件失败')) {
+							throw new Error(`图片生成成功，但保存到本地失败。\n\n解决方法：\n1. 检查Obsidian附件文件夹权限\n2. 确保有足够的磁盘空间\n3. 尝试在设置中更改图片保存位置`);
+						}
+						
+						// 其他错误，直接抛出
+						throw error;
+					} else {
+						throw new Error(`图像生成过程中发生未知错误: ${String(error)}`);
+					}
+				}
+			} else {
+				// 不支持图像生成的模型，不传递saveAttachment函数
+				for await (const chunk of sendRequest(messages, this.controller, resolveEmbed)) {
+					assistantMessage.content += chunk;
+					accumulatedContent += chunk;
+					session.updatedAt = Date.now();
+					this.emitState();
+				}
 			}
 
 			this.state.isGenerating = false;
@@ -582,15 +762,28 @@ export class ChatService {
 			console.error('[Chat][ChatService] generateAssistantResponse error', error);
 			this.state.isGenerating = false;
 			this.controller = null;
-			this.state.error = error instanceof Error ? error.message : String(error);
+			
+			// 处理错误消息
+			let errorMessage = '生成失败，请稍后再试。';
+			if (error instanceof Error) {
+				errorMessage = error.message;
+			} else {
+				errorMessage = `生成过程中发生未知错误: ${String(error)}`;
+			}
+			
+			this.state.error = errorMessage;
 			if (session.messages.length > 0) {
 				const last = session.messages[session.messages.length - 1];
 				if (last.role === 'assistant') {
 					last.isError = true;
+					// 在消息中显示错误信息，而不是仅显示在状态中
+					if (!last.content) {
+						last.content = errorMessage;
+					}
 				}
 			}
 			this.emitState();
-			new Notice(this.state.error ?? '生成失败，请稍后再试。');
+			new Notice(errorMessage, 10000); // 显示10秒，让用户有足够时间阅读
 		}
 	}
 
