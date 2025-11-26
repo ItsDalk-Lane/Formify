@@ -264,18 +264,14 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 
 	const handleFileSelect = () => {
 		const files = getFilteredFiles().filter(file => selectedFiles.has(file.path));
-		if (files.length > 0) {
-			onSelectFile(files[0]); // 目前只支持单文件选择
-		}
+		files.forEach(file => onSelectFile(file)); // 支持多文件选择
 		onClose();
 	};
 
 	const handleFolderSelect = () => {
 		const allFolders = app.vault.getAllLoadedFiles().filter(item => item instanceof TFolder) as TFolder[];
 		const folders = allFolders.filter(folder => selectedFolders.has(folder.path));
-		if (folders.length > 0) {
-			onSelectFolder(folders[0]); // 目前只支持单文件夹选择
-		}
+		folders.forEach(folder => onSelectFolder(folder)); // 支持多文件夹选择
 		onClose();
 	};
 

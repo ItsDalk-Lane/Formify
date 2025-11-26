@@ -1,10 +1,10 @@
-import { MarkdownView, Notice } from 'obsidian';
+import { MarkdownView, Notice, TFile, TFolder } from 'obsidian';
 import FormPlugin from 'src/main';
 import type { ProviderSettings } from 'src/features/tars/providers';
 import { availableVendors, TarsSettings } from 'src/features/tars/settings';
 import { MessageService } from './MessageService';
 import { HistoryService, ChatHistoryEntry } from './HistoryService';
-import type { ChatMessage, ChatSession, ChatSettings, ChatState } from '../types/chat';
+import type { ChatMessage, ChatSession, ChatSettings, ChatState, SelectedFile, SelectedFolder } from '../types/chat';
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
 import type { Message as ProviderMessage, ResolveEmbedAsBinary } from 'src/features/tars/providers';
 import { v4 as uuidv4 } from 'uuid';
@@ -21,7 +21,9 @@ export class ChatService {
 		inputValue: '',
 		selectedModelId: null,
 		contextNotes: [],
-		selectedImages: []
+		selectedImages: [],
+		selectedFiles: [],
+		selectedFolders: []
 	};
 	private subscribers: Set<ChatSubscriber> = new Set();
 	private controller: AbortController | null = null;
@@ -69,6 +71,8 @@ export class ChatService {
 		this.state.activeSession = session;
 		this.state.contextNotes = [];
 		this.state.selectedImages = [];
+		this.state.selectedFiles = [];
+		this.state.selectedFolders = [];
 		this.state.inputValue = '';
 		this.emitState();
 		
@@ -111,6 +115,62 @@ export class ChatService {
 		this.emitState();
 	}
 
+	// 文件和文件夹管理方法
+	addSelectedFile(file: TFile) {
+		const selectedFile: SelectedFile = {
+			id: file.path,
+			name: file.name,
+			path: file.path,
+			extension: file.extension || '',
+			type: 'file'
+		};
+
+		// 避免重复添加
+		const existingIndex = this.state.selectedFiles.findIndex(f => f.id === selectedFile.id);
+		if (existingIndex === -1) {
+			this.state.selectedFiles = [...this.state.selectedFiles, selectedFile];
+		}
+
+		this.emitState();
+	}
+
+	addSelectedFolder(folder: TFolder) {
+		const selectedFolder: SelectedFolder = {
+			id: folder.path,
+			name: folder.name,
+			path: folder.path,
+			type: 'folder'
+		};
+
+		// 避免重复添加
+		const existingIndex = this.state.selectedFolders.findIndex(f => f.id === selectedFolder.id);
+		if (existingIndex === -1) {
+			this.state.selectedFolders = [...this.state.selectedFolders, selectedFolder];
+		}
+
+		this.emitState();
+	}
+
+	removeSelectedFile(fileId: string) {
+		this.state.selectedFiles = this.state.selectedFiles.filter((file) => file.id !== fileId);
+		this.emitState();
+	}
+
+	removeSelectedFolder(folderId: string) {
+		this.state.selectedFolders = this.state.selectedFolders.filter((folder) => folder.id !== folderId);
+		this.emitState();
+	}
+
+	setSelectedFiles(files: SelectedFile[]) {
+		this.state.selectedFiles = files;
+		this.emitState();
+	}
+
+	setSelectedFolders(folders: SelectedFolder[]) {
+		this.state.selectedFolders = folders;
+		this.emitState();
+	}
+
 	setModel(tag: string) {
 		this.state.selectedModelId = tag;
 		if (this.state.activeSession) {
@@ -126,18 +186,28 @@ export class ChatService {
 		}
 
 		const trimmed = (content ?? this.state.inputValue).trim();
-		if (!trimmed && this.state.selectedImages.length === 0) {
+		if (!trimmed && this.state.selectedImages.length === 0 &&
+			this.state.selectedFiles.length === 0 && this.state.selectedFolders.length === 0) {
 			return;
 		}
 
 		const session = this.state.activeSession ?? this.createNewSession();
+
+		// 保存文件和文件夹到会话中
+		session.selectedFiles = [...this.state.selectedFiles];
+		session.selectedFolders = [...this.state.selectedFolders];
+
 		const userMessage = this.messageService.createMessage('user', trimmed, {
 			images: this.state.selectedImages
 		});
 		session.messages.push(userMessage);
 		session.updatedAt = Date.now();
+
+		// 清空选中状态
 		this.state.inputValue = '';
 		this.state.selectedImages = [];
+		this.state.selectedFiles = [];
+		this.state.selectedFolders = [];
 		this.emitState();
 
 		// 如果这是第一条消息，创建历史文件并包含第一条用户消息
@@ -182,6 +252,8 @@ export class ChatService {
 			this.state.activeSession = session;
 			this.state.contextNotes = session.contextNotes ?? [];
 			this.state.selectedImages = session.selectedImages ?? [];
+			this.state.selectedFiles = session.selectedFiles ?? [];
+			this.state.selectedFolders = session.selectedFolders ?? [];
 			this.state.selectedModelId = session.modelId || this.getDefaultProviderTag();
 			this.emitState();
 		}

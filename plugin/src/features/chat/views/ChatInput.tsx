@@ -1,7 +1,7 @@
-import { CornerDownLeft, StopCircle, ImageUp, X, Paperclip } from 'lucide-react';
+import { CornerDownLeft, StopCircle, ImageUp, X, Paperclip, FileText, Folder } from 'lucide-react';
 import { FormEvent, useEffect, useState, useRef, Fragment } from 'react';
 import { ChatService } from '../services/ChatService';
-import type { ChatState } from '../types/chat';
+import type { ChatState, SelectedFile, SelectedFolder } from '../types/chat';
 import { ModelSelector } from '../components/ModelSelector';
 import { FileMenuPopup } from '../components/FileMenuPopup';
 import { App, TFile, TFolder } from 'obsidian';
@@ -85,15 +85,11 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 	};
 
 	const handleFileSelect = (file: TFile) => {
-		console.log('选择了文件:', file.path);
-		// 这里可以实现文件处理逻辑
-		// 例如读取文件内容并添加到聊天中
+		service.addSelectedFile(file);
 	};
 
 	const handleFolderSelect = (folder: TFolder) => {
-		console.log('选择了文件夹:', folder.path);
-		// 这里可以实现文件夹处理逻辑
-		// 例如处理文件夹中的所有文件
+		service.addSelectedFolder(folder);
 	};
 
 	
@@ -109,6 +105,14 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 
 	const handleRemoveImage = (image: string) => {
 		service.removeSelectedImage(image);
+	};
+
+	const handleRemoveFile = (fileId: string) => {
+		service.removeSelectedFile(fileId);
+	};
+
+	const handleRemoveFolder = (folderId: string) => {
+		service.removeSelectedFolder(folderId);
 	};
 
 	useEffect(() => {
@@ -168,6 +172,56 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 											onClick={() => handleRemoveImage(image)}
 										>
 											<X className="tw-size-3" />
+										</button>
+									</div>
+								))}
+							</div>
+						)}
+
+						{/* 文件标签区域 */}
+						{(state.selectedFiles.length > 0 || state.selectedFolders.length > 0) && (
+							<div className="selected-files tw-flex tw-flex-wrap tw-gap-2 tw-mb-2">
+								{state.selectedFiles.map((file) => (
+									<div key={file.id} className="file-tag tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-gray-100 tw-text-gray-700 tw-rounded tw-text-xs tw-relative group">
+										<FileText className="tw-size-3 tw-flex-shrink-0" />
+										<span className="tw-max-w-40 tw-truncate" title={file.path}>
+											{file.name}
+											{file.extension === 'pdf' && (
+												<span className="ml-1 tw-px-1 tw-bg-blue-500 tw-text-white tw-rounded tw-text-[10px]">pdf</span>
+											)}
+											{file.extension === 'canvas' && (
+												<span className="ml-1 tw-px-1 tw-bg-green-500 tw-text-white tw-rounded tw-text-[10px]">canvas</span>
+											)}
+										</span>
+										<button
+											type="button"
+											className="tw-ml-1 tw-p-0 tw-text-muted hover:tw-text-foreground tw-cursor-pointer"
+											onClick={(e) => {
+												e.stopPropagation();
+												handleRemoveFile(file.id);
+											}}
+											title="删除文件"
+										>
+											<X className="tw-size-4" />
+										</button>
+									</div>
+								))}
+								{state.selectedFolders.map((folder) => (
+									<div key={folder.id} className="folder-tag tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-blue-100 tw-text-blue-700 tw-rounded tw-text-xs tw-relative group">
+										<Folder className="tw-size-3 tw-flex-shrink-0" />
+										<span className="tw-max-w-40 tw-truncate" title={folder.path}>
+											{folder.name || folder.path}
+										</span>
+										<button
+											type="button"
+											className="tw-ml-1 tw-p-0 tw-text-muted hover:tw-text-foreground tw-cursor-pointer"
+											onClick={(e) => {
+												e.stopPropagation();
+												handleRemoveFolder(folder.id);
+											}}
+											title="删除文件夹"
+										>
+											<X className="tw-size-4" />
 										</button>
 									</div>
 								))}
@@ -244,6 +298,77 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 							placeholder="输入消息，按 Enter 发送，Shift+Enter 换行"
 							disabled={state.isGenerating}
 						/>
+						{/* 图片预览区域 */}
+						{state.selectedImages.length > 0 && (
+							<div className="selected-images tw-flex tw-flex-wrap tw-gap-2 tw-mb-2">
+								{state.selectedImages.map((image, index) => (
+									<div key={image} className="image-preview-container tw-relative">
+										<img
+											src={image}
+											alt={`selected-${index}`}
+											className="selected-image-preview tw-w-16 tw-h-16 tw-object-cover tw-rounded tw-border tw-border-gray-300"
+										/>
+										<button
+											type="button"
+											className="remove-image-button tw-absolute tw-top-0 tw-right-0 tw-bg-red-500 tw-text-white tw-rounded-full tw-w-4 tw-h-4 tw-flex tw-items-center tw-justify-center tw-text-xs tw-cursor-pointer hover:tw-bg-red-600"
+											onClick={() => handleRemoveImage(image)}
+										>
+											<X className="tw-size-3" />
+										</button>
+									</div>
+								))}
+							</div>
+						)}
+
+						{/* 文件标签区域 */}
+						{(state.selectedFiles.length > 0 || state.selectedFolders.length > 0) && (
+							<div className="selected-files tw-flex tw-flex-wrap tw-gap-2 tw-mb-2">
+								{state.selectedFiles.map((file) => (
+									<div key={file.id} className="file-tag tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-gray-100 tw-text-gray-700 tw-rounded tw-text-xs tw-relative group">
+										<FileText className="tw-size-3 tw-flex-shrink-0" />
+										<span className="tw-max-w-40 tw-truncate" title={file.path}>
+											{file.name}
+											{file.extension === 'pdf' && (
+												<span className="ml-1 tw-px-1 tw-bg-blue-500 tw-text-white tw-rounded tw-text-[10px]">pdf</span>
+											)}
+											{file.extension === 'canvas' && (
+												<span className="ml-1 tw-px-1 tw-bg-green-500 tw-text-white tw-rounded tw-text-[10px]">canvas</span>
+											)}
+										</span>
+										<button
+											type="button"
+											className="tw-ml-1 tw-p-0 tw-text-muted hover:tw-text-foreground tw-cursor-pointer"
+											onClick={(e) => {
+												e.stopPropagation();
+												handleRemoveFile(file.id);
+											}}
+											title="删除文件"
+										>
+											<X className="tw-size-4" />
+										</button>
+									</div>
+								))}
+								{state.selectedFolders.map((folder) => (
+									<div key={folder.id} className="folder-tag tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-blue-100 tw-text-blue-700 tw-rounded tw-text-xs tw-relative group">
+										<Folder className="tw-size-3 tw-flex-shrink-0" />
+										<span className="tw-max-w-40 tw-truncate" title={folder.path}>
+											{folder.name || folder.path}
+										</span>
+										<button
+											type="button"
+											className="tw-ml-1 tw-p-0 tw-text-muted hover:tw-text-foreground tw-cursor-pointer"
+											onClick={(e) => {
+												e.stopPropagation();
+												handleRemoveFolder(folder.id);
+											}}
+											title="删除文件夹"
+										>
+											<X className="tw-size-4" />
+										</button>
+									</div>
+								))}
+							</div>
+						)}
 						<div className="tw-flex tw-items-center tw-justify-between tw-mt-0">
 							<div className="tw-flex tw-items-center tw-gap-2">
 								<ModelSelector

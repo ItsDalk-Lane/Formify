@@ -1,4 +1,23 @@
+import { App, TFile, TFolder } from 'obsidian';
+
 export type ChatRole = 'user' | 'assistant' | 'system';
+
+export interface SelectedFile {
+	id: string;
+	name: string;
+	path: string;
+	extension: string;
+	type: 'file';
+}
+
+export interface SelectedFolder {
+	id: string;
+	name: string;
+	path: string;
+	type: 'folder';
+}
+
+export type SelectedItem = SelectedFile | SelectedFolder;
 
 export interface ChatMessage {
 	id: string;
@@ -19,6 +38,8 @@ export interface ChatSession {
 	updatedAt: number;
 	contextNotes?: string[];
 	selectedImages?: string[];
+	selectedFiles?: SelectedFile[];
+	selectedFolders?: SelectedFolder[];
 	filePath?: string; // 添加文件路径字段，用于跟踪会话文件
 }
 
@@ -39,6 +60,8 @@ export interface ChatState {
 	selectedModelId: string | null;
 	contextNotes: string[];
 	selectedImages: string[];
+	selectedFiles: SelectedFile[];
+	selectedFolders: SelectedFolder[];
 	error?: string;
 }
 
