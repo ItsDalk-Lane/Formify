@@ -200,13 +200,42 @@ export class ChatService {
 		session.selectedFiles = [...this.state.selectedFiles];
 		session.selectedFolders = [...this.state.selectedFolders];
 
-		const userMessage = this.messageService.createMessage('user', trimmed, {
+		// 创建用户消息，包含文件和文件夹信息
+		let messageContent = trimmed;
+		if (this.state.selectedFiles.length > 0 || this.state.selectedFolders.length > 0) {
+			const fileTags = [];
+			const folderTags = [];
+			
+			// 处理文件标签
+			if (this.state.selectedFiles.length > 0) {
+				for (const file of this.state.selectedFiles) {
+					fileTags.push(`[[${file.path}]]`);
+				}
+			}
+			
+			// 处理文件夹标签
+			if (this.state.selectedFolders.length > 0) {
+				for (const folder of this.state.selectedFolders) {
+					folderTags.push(`#${folder.path}`);
+				}
+			}
+			
+			// 添加文件和文件夹标签到消息内容中
+			if (fileTags.length > 0 || folderTags.length > 0) {
+				const allTags = [...fileTags, ...folderTags].join(' ');
+				messageContent += `\n\n**附件:** ${allTags}`;
+			}
+		}
+
+		const userMessage = this.messageService.createMessage('user', messageContent, {
 			images: this.state.selectedImages
 		});
 		session.messages.push(userMessage);
 		session.updatedAt = Date.now();
 
 		// 清空选中状态
+		const currentSelectedFiles = [...this.state.selectedFiles];
+		const currentSelectedFolders = [...this.state.selectedFolders];
 		this.state.inputValue = '';
 		this.state.selectedImages = [];
 		this.state.selectedFiles = [];
@@ -216,7 +245,12 @@ export class ChatService {
 		// 如果这是第一条消息，创建历史文件并包含第一条用户消息
 		if (session.messages.length === 1) {
 			try {
-				session.filePath = await this.historyService.createNewSessionFileWithFirstMessage(session, userMessage);
+				session.filePath = await this.historyService.createNewSessionFileWithFirstMessage(
+					session, 
+					userMessage, 
+					currentSelectedFiles, 
+					currentSelectedFolders
+				);
 			} catch (error) {
 				console.error('[ChatService] 创建会话文件失败:', error);
 				new Notice('创建会话文件失败，但消息已发送');
@@ -224,7 +258,12 @@ export class ChatService {
 		} else {
 			// 如果不是第一条消息，追加到现有文件
 			try {
-				await this.historyService.appendMessageToFile(session.filePath, userMessage);
+				await this.historyService.appendMessageToFile(
+					session.filePath, 
+					userMessage, 
+					currentSelectedFiles, 
+					currentSelectedFolders
+				);
 			} catch (error) {
 				console.error('[ChatService] 追加用户消息失败:', error);
 				// 不显示错误通知，避免干扰用户

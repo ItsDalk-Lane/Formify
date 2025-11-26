@@ -1,5 +1,5 @@
 import { App, TFile, TFolder, parseYaml, stringifyYaml } from 'obsidian';
-import type { ChatMessage, ChatSession } from '../types/chat';
+import type { ChatMessage, ChatSession, SelectedFile, SelectedFolder } from '../types/chat';
 import { ensureFolderExists, joinPath, sanitizeFileName } from '../utils/storage';
 import { MessageService } from './MessageService';
 
@@ -289,7 +289,12 @@ export class HistoryService {
 		return finalFilePath;
 	}
 
-	async appendMessageToFile(filePath: string, message: ChatMessage): Promise<void> {
+	async appendMessageToFile(
+		filePath: string, 
+		message: ChatMessage, 
+		selectedFiles?: SelectedFile[], 
+		selectedFolders?: SelectedFolder[]
+	): Promise<void> {
 		if (!filePath) {
 			throw new Error('文件路径为空，无法追加消息');
 		}
@@ -302,8 +307,8 @@ export class HistoryService {
 		// 读取当前文件内容
 		const currentContent = await this.app.vault.read(file);
 		
-		// 序列化新消息
-		const serializedMessage = this.messageService.serializeMessage(message);
+		// 序列化新消息，包含文件和文件夹信息
+		const serializedMessage = this.messageService.serializeMessage(message, selectedFiles, selectedFolders);
 		
 		// 追加新消息到文件末尾
 		const newContent = currentContent.trimEnd() + '\n\n' + serializedMessage + '\n';
@@ -311,11 +316,16 @@ export class HistoryService {
 		// 更新文件内容
 		await this.app.vault.modify(file, newContent);
 		
-		// 更新frontmatter中的updated时间
-		await this.updateFileTimestamp(file, Date.now());
+		// 更新frontmatter中的updated时间和文件/文件夹信息
+		await this.updateFileTimestamp(file, Date.now(), selectedFiles, selectedFolders);
 	}
 
-	async createNewSessionFileWithFirstMessage(session: ChatSession, firstMessage: ChatMessage): Promise<string> {
+	async createNewSessionFileWithFirstMessage(
+		session: ChatSession, 
+		firstMessage: ChatMessage, 
+		selectedFiles?: SelectedFile[], 
+		selectedFolders?: SelectedFolder[]
+	): Promise<string> {
 		const folder = await this.ensureFolder();
 		
 		// 使用新的文件名生成规则
@@ -371,6 +381,14 @@ export class HistoryService {
 			}
 		}
 		
+		// 创建文件和文件夹标签数组
+		const fileTags = selectedFiles ? selectedFiles.map(file => `[[${file.path}]]`) : [];
+		const folderTags = selectedFolders ? selectedFolders.map(folder => folder.path) : []; // 不添加#符号
+		const allTags = [...fileTags, ...folderTags];
+		
+		// 更新contextNotes，添加文件和文件夹标签
+		const updatedContextNotes = [...(session.contextNotes || []), ...allTags];
+		
 		const frontmatter = stringifyYaml({
 			id: session.id,
 			title: title, // 使用清理后的标题
@@ -378,11 +396,11 @@ export class HistoryService {
 			created: this.formatTimestamp(session.createdAt),
 			updated: this.formatTimestamp(session.updatedAt),
 			messageCount: 1, // 第一条消息
-			contextNotes: session.contextNotes ?? []
+			contextNotes: updatedContextNotes
 		});
 
-		// 序列化第一条消息
-		const serializedMessage = this.messageService.serializeMessage(firstMessage);
+		// 序列化第一条消息，包含文件和文件夹信息
+		const serializedMessage = this.messageService.serializeMessage(firstMessage, selectedFiles, selectedFolders);
 		
 		// 创建文件，包含frontmatter和第一条消息
 		const content = `${FRONTMATTER_DELIMITER}\n${frontmatter}${FRONTMATTER_DELIMITER}\n\n${serializedMessage}\n`;
@@ -448,8 +466,38 @@ export class HistoryService {
 		await this.app.vault.modify(file, newContent);
 	}
 
-	private async updateFileTimestamp(file: TFile, timestamp: number): Promise<void> {
-		await this.updateFileFrontmatter(file, { updated: this.formatTimestamp(timestamp) });
+	private async updateFileTimestamp(
+		file: TFile, 
+		timestamp: number, 
+		selectedFiles?: SelectedFile[], 
+		selectedFolders?: SelectedFolder[]
+	): Promise<void> {
+		// 创建文件和文件夹标签数组
+		const fileTags = selectedFiles ? selectedFiles.map(file => `[[${file.path}]]`) : [];
+		const folderTags = selectedFolders ? selectedFolders.map(folder => folder.path) : []; // 不添加#符号
+		const allTags = [...fileTags, ...folderTags];
+		
+		// 准备更新对象
+		const updates: Record<string, unknown> = {
+			updated: this.formatTimestamp(timestamp)
+		};
+		
+		// 如果有文件或文件夹标签，更新contextNotes
+		if (allTags.length > 0) {
+			// 读取当前frontmatter
+			const content = await this.app.vault.read(file);
+			const { frontmatter } = this.extractFrontmatter(content);
+			
+			if (frontmatter) {
+				// 获取现有的contextNotes
+				const existingContextNotes = (frontmatter.contextNotes as string[]) || [];
+				// 添加新的标签
+				const updatedContextNotes = [...existingContextNotes, ...allTags];
+				updates.contextNotes = updatedContextNotes;
+			}
+		}
+		
+		await this.updateFileFrontmatter(file, updates);
 	}
 
 	private async ensureFolder(): Promise<TFolder> {

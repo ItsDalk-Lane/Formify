@@ -76,7 +76,7 @@ export class MessageService {
 		return providerMessages;
 	}
 
-	serializeMessage(message: ChatMessage): string {
+	serializeMessage(message: ChatMessage, selectedFiles?: SelectedFile[], selectedFolders?: SelectedFolder[]): string {
 		const timestamp = this.formatTimestamp(message.timestamp);
 		const roleLabel = this.mapRoleToLabel(message.role);
 		
@@ -93,6 +93,32 @@ export class MessageService {
 		
 		// 构建完整消息，确保内容不被截断
 		let fullMessage = `# ${roleLabel} (${timestamp})\n${content}`;
+		
+		// 如果是用户消息且有选中的文件或文件夹，添加文件和文件夹信息
+		if (message.role === 'user' && (selectedFiles || selectedFolders)) {
+			const fileTags = [];
+			const folderTags = [];
+			
+			// 处理文件标签
+			if (selectedFiles && selectedFiles.length > 0) {
+				for (const file of selectedFiles) {
+					fileTags.push(`[[${file.path}]]`);
+				}
+			}
+			
+			// 处理文件夹标签
+			if (selectedFolders && selectedFolders.length > 0) {
+				for (const folder of selectedFolders) {
+					folderTags.push(`#${folder.path}`);
+				}
+			}
+			
+			// 添加文件和文件夹标签到消息中
+			if (fileTags.length > 0 || folderTags.length > 0) {
+				const allTags = [...fileTags, ...folderTags].join(' ');
+				fullMessage += `\n\n**附件:** ${allTags}`;
+			}
+		}
 		
 		// 如果有图片，添加到消息末尾
 		if (images) {
