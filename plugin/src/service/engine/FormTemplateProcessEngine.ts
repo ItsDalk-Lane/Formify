@@ -1,7 +1,7 @@
 import { FormState } from "../FormState";
 import { App } from "obsidian";
 import TemplateParser from "./TemplateParser";
-import { getEditorSelection } from "src/utils/getEditorSelection";
+import { getEditorSelection, getCurrentFileContent } from "src/utils/getEditorSelection";
 import { processObTemplate } from "src/utils/templates";
 import { convertVariableToString, logTypeConversion, validateFormValues, TypeConversionError } from "src/utils/typeSafety";
 import { LoopVariableScope } from "src/utils/LoopVariableScope";
@@ -85,6 +85,34 @@ export class FormTemplateProcessEngine {
         if (res.includes(clipboardVariable)) {
             const clipboardText = await navigator.clipboard.readText();
             res = res.replace(clipboardVariable, clipboardText);
+        }
+
+        // handle {{currentFile}} - 获取当前活动Markdown文件的内容
+        const currentFileVariable = "{{currentFile}}";
+        if (res.includes(currentFileVariable)) {
+            const fileContent = await getCurrentFileContent(app);
+            res = res.replace(currentFileVariable, fileContent);
+        }
+
+        // handle {{currentFile:metadata}} - 获取包含元数据的当前文件内容
+        const currentFileWithMetadataVariable = "{{currentFile:metadata}}";
+        if (res.includes(currentFileWithMetadataVariable)) {
+            const fileContent = await getCurrentFileContent(app, { includeMetadata: true });
+            res = res.replace(currentFileWithMetadataVariable, fileContent);
+        }
+
+        // handle {{currentFile:plain}} - 获取当前文件的纯文本内容（无格式）
+        const currentFilePlainVariable = "{{currentFile:plain}}";
+        if (res.includes(currentFilePlainVariable)) {
+            const fileContent = await getCurrentFileContent(app, { plainText: true });
+            res = res.replace(currentFilePlainVariable, fileContent);
+        }
+
+        // handle {{currentFile:metadata:plain}} - 获取包含元数据的纯文本内容
+        const currentFileMetadataPlainVariable = "{{currentFile:metadata:plain}}";
+        if (res.includes(currentFileMetadataPlainVariable)) {
+            const fileContent = await getCurrentFileContent(app, { includeMetadata: true, plainText: true });
+            res = res.replace(currentFileMetadataPlainVariable, fileContent);
         }
 
         // 最后处理 Obsidian 格式模板

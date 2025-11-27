@@ -44,6 +44,22 @@ export const internalFieldNames = [
 		name: "{{clipboard}}",
 		description: localInstance.clipboard_variable_description,
 	},
+	{
+		name: "{{currentFile}}",
+		description: "当前活动Markdown文件的内容（不含元数据）",
+	},
+	{
+		name: "{{currentFile:metadata}}",
+		description: "当前活动Markdown文件的内容（含元数据）",
+	},
+	{
+		name: "{{currentFile:plain}}",
+		description: "当前活动Markdown文件的纯文本内容（不含元数据）",
+	},
+	{
+		name: "{{currentFile:metadata:plain}}",
+		description: "当前活动Markdown文件的纯文本内容（含元数据）",
+	},
 ];
 
 export default function (props: { onSelect: (value: string) => void }) {
