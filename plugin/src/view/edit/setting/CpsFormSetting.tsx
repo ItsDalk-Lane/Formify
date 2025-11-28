@@ -12,7 +12,7 @@ import { CpsFormActions } from "./action/CpsFormActions";
 import "./CpsFormSetting.css";
 import { CpsFormSettingGroup } from "./CpsFormSettingGroup";
 import CpsFormFields from "./field/CpsFormFields";
-import { AsCommandToggle } from "./field/common/AsCommandToggle";
+import { AsCommandToggle, ContextMenuToggle } from "./field/common/AsCommandToggle";
 import { useState, useEffect } from "react";
 import { FormConfigContext } from "src/hooks/useFormConfig";
 import { FormImportDialog } from "./import/FormImportDialog";
@@ -333,6 +333,16 @@ export default function (props: {
 										</span>
 									)}
 									<AsCommandToggle
+										filePath={props.filePath}
+									/>
+								</CpsFormItem>
+								<CpsFormItem
+									label={localInstance.enable_context_menu}
+								>
+									<span className="form--FormFieldLabelDescription">
+										{localInstance.enable_context_menu_description}
+									</span>
+									<ContextMenuToggle
 										filePath={props.filePath}
 									/>
 								</CpsFormItem>

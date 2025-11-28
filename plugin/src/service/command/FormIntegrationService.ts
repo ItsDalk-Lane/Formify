@@ -2,12 +2,16 @@ import { App, TFile, EventRef, TAbstractFile } from "obsidian";
 import { FormService } from "../FormService";
 import { FormConfig } from "src/model/FormConfig";
 import FormPlugin from "src/main";
+import { contextMenuService } from "./ContextMenuService";
 
 export class FormIntegrationService {
 
     private plugin: FormPlugin;
     private fileEventRefs: EventRef[] = [];
     private isInitialized: boolean = false;
+
+    constructor() {
+    }
 
     /**
      * 获取命令ID - 从表单配置中读取
@@ -240,6 +244,8 @@ export class FormIntegrationService {
         const createEventRef = vault.on('create', async (file) => {
             if (this.isValidFormFile(file)) {
                 await this.registerFormCommand(file);
+                // 刷新右键菜单
+                contextMenuService.refreshContextMenuItems();
             }
         });
         this.fileEventRefs.push(createEventRef);
@@ -256,6 +262,8 @@ export class FormIntegrationService {
                 } catch (error) {
                     console.warn(`Failed to clean up command for deleted file ${file.path}:`, error);
                 }
+                // 刷新右键菜单
+                contextMenuService.refreshContextMenuItems();
             }
         });
         this.fileEventRefs.push(deleteEventRef);
@@ -264,6 +272,8 @@ export class FormIntegrationService {
         const renameEventRef = vault.on('rename', async (file, oldPath) => {
             if (this.isValidFormFile(file)) {
                 await this.handleFileRenameOrCopy(file, oldPath);
+                // 刷新右键菜单
+                contextMenuService.refreshContextMenuItems();
             }
         });
         this.fileEventRefs.push(renameEventRef);
@@ -369,6 +379,8 @@ export class FormIntegrationService {
 
             // 保存配置（包括可能的commandId）
             await this.saveFormConfig(filePath, config);
+            // 刷新右键菜单
+            contextMenuService.refreshContextMenuItems();
         } catch (error) {
             console.error(`Failed to enable command for ${filePath}:`, error);
             throw error;
@@ -397,10 +409,20 @@ export class FormIntegrationService {
 
             // 保存配置
             await this.saveFormConfig(filePath, config);
+            // 刷新右键菜单
+            contextMenuService.refreshContextMenuItems();
         } catch (error) {
             console.error(`Failed to disable command for ${filePath}:`, error);
             throw error;
         }
+    }
+
+    /**
+     * 手动注销表单命令（兼容性方法）
+     * @param filePath 文件路径
+     */
+    async unregister(filePath: string): Promise<void> {
+        await this.disableCommand(filePath);
     }
 
     /**
@@ -428,14 +450,8 @@ export class FormIntegrationService {
     async register(filePath: string): Promise<void> {
         await this.enableCommand(filePath);
     }
-
-    /**
-     * 手动注销表单命令（兼容性方法）
-     * @param filePath 文件路径
-     */
-    async unregister(filePath: string): Promise<void> {
-        await this.disableCommand(filePath);
-    }
 }
 
-export const formIntegrationService = new FormIntegrationService();
+// 创建并导出单例实例
+const formIntegrationServiceInstance = new FormIntegrationService();
+export const formIntegrationService = formIntegrationServiceInstance;

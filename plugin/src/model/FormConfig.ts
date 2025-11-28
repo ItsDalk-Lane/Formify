@@ -18,6 +18,7 @@ export class FormConfig {
     executionTimeoutThreshold?: number; // 超时阈值（秒），默认为30秒，最小值为5秒
     commandId?: string;        // 命令ID，一旦生成永不改变
     commandEnabled?: boolean;  // 命令启用状态
+    contextMenuEnabled?: boolean;  // 右键菜单启用状态
 
     constructor(id: string) {
         this.id = id;
@@ -28,6 +29,7 @@ export class FormConfig {
         this.enableExecutionTimeout = false; // 默认不启用超时控制
         this.executionTimeoutThreshold = 30; // 默认30秒
         this.commandEnabled = true;  // 默认启用命令
+        this.contextMenuEnabled = false;  // 默认不启用右键菜单
     }
 
     /**
@@ -78,5 +80,19 @@ export class FormConfig {
      */
     setCommandEnabled(enabled: boolean): void {
         this.commandEnabled = enabled;
+    }
+
+    /**
+     * 检查右键菜单是否启用
+     */
+    isContextMenuEnabled(): boolean {
+        return this.contextMenuEnabled === true;  // 默认为false
+    }
+
+    /**
+     * 设置右键菜单启用状态
+     */
+    setContextMenuEnabled(enabled: boolean): void {
+        this.contextMenuEnabled = enabled;
     }
 }

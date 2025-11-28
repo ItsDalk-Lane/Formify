@@ -2,6 +2,7 @@ import { Plugin } from 'obsidian';
 import { PluginSettings, DEFAULT_SETTINGS } from './settings/PluginSettings';
 import { formScriptService } from './service/extend/FormScriptService';
 import { formIntegrationService } from './service/command/FormIntegrationService';
+import { contextMenuService } from './service/command/ContextMenuService';
 import { applicationCommandService } from './service/command/ApplicationCommandService';
 import { applicationFileViewService } from './service/file-view/ApplicationFileViewService';
 import { PluginSettingTab } from './settings/PluginSettingTab';
@@ -34,6 +35,7 @@ export default class FormPlugin extends Plugin {
 		await applicationCommandService.initialize(this);
 		await applicationFileViewService.initialize(this);
 		await formIntegrationService.initialize(this);
+		await contextMenuService.initialize(this);
 		this.refreshTarsFeature();
 
 		// 在工作区准备就绪后再初始化聊天功能
@@ -57,6 +59,7 @@ export default class FormPlugin extends Plugin {
 		applicationCommandService.unload(this);
 		applicationFileViewService.unload(this);
 		formIntegrationService.cleanup();
+		contextMenuService.cleanup();
 		this.tarsFeatureManager?.dispose();
 		this.tarsFeatureManager = null;
 		this.chatFeatureManager?.dispose();
@@ -156,6 +159,7 @@ export default class FormPlugin extends Plugin {
 		
 		formScriptService.refresh(this.settings.scriptFolder)
 		formIntegrationService.initialize(this, true);
+		contextMenuService.refreshContextMenuItems();
 		this.refreshTarsFeature();
 		this.chatFeatureManager?.updateChatSettings(this.settings.chat);
 		this.chatFeatureManager?.updateProviderSettings(this.settings.tars.settings);
