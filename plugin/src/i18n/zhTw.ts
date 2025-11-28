@@ -493,4 +493,22 @@ export class ZhTw implements Local {
 	ai_select_model_prompt = "請選擇AI模型";
 	ai_select_template_prompt = "請選擇提示詞模板";
 	ai_template_folder_empty = "模板文件夾為空";
+	// AI流式輸出相關
+	ai_enable_streaming_modal = "啟用流式輸出模態框";
+	ai_enable_streaming_modal_desc = "開啟後AI執行時將顯示實時輸出模態框,可查看生成過程";
+	ai_streaming_modal_title = "AI生成中...";
+	ai_streaming_modal_title_completed = "AI生成完成";
+	ai_streaming_model_label = "模型";
+	ai_streaming_prompt_label = "提示詞";
+	ai_streaming_prompt_custom = "自定義提示詞";
+	ai_streaming_char_count = "字元數";
+	ai_streaming_btn_refresh = "刷新";
+	ai_streaming_btn_confirm = "確認";
+	ai_streaming_btn_cancel = "取消";
+	ai_streaming_generating = "生成中...";
+	ai_streaming_error_title = "生成錯誤";
+	ai_streaming_connection_error = "連接失敗,正在重試...";
+	ai_streaming_cancelled = "生成已取消";
+	ai_streaming_hover_prompt_title = "完整提示詞";
+	ai_streaming_hover_prompt_file = "提示詞檔案";
 }

@@ -12,6 +12,7 @@ import PromptTemplateFileSuggestInput from "src/component/combobox/PromptTemplat
 import { useObsidianApp } from "src/context/obsidianAppContext";
 import LoopAwareTextAreaSetting from "../common/LoopAwareTextAreaSetting";
 import LoopAwareInputSetting from "../common/LoopAwareInputSetting";
+import ToggleControl from "src/view/shared/control/ToggleControl";
 
 type AISettingProps = {
     value: IFormAction;
@@ -239,6 +240,19 @@ export function AISetting(props: AISettingProps) {
                 label={localInstance.ai_output_variable_name}
                 description={localInstance.ai_output_variable_description}
             />
+
+            {/* 启用流式输出模态框 */}
+            <CpsFormItem
+                label={localInstance.ai_enable_streaming_modal}
+                description={localInstance.ai_enable_streaming_modal_desc}
+            >
+                <ToggleControl
+                    value={action.enableStreamingModal || false}
+                    onValueChange={(value) => {
+                        handleActionChange({ enableStreamingModal: value });
+                    }}
+                />
+            </CpsFormItem>
         </>
     );
 }

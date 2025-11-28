@@ -495,6 +495,24 @@ export class Zh implements Local {
 	ai_select_model_prompt = "请选择AI模型";
 	ai_select_template_prompt = "请选择提示词模板";
 	ai_template_folder_empty = "模板文件夹为空";
+	// AI流式输出相关
+	ai_enable_streaming_modal = "启用流式输出模态框";
+	ai_enable_streaming_modal_desc = "开启后AI执行时将显示实时输出模态框,可查看生成过程";
+	ai_streaming_modal_title = "AI生成中...";
+	ai_streaming_modal_title_completed = "AI生成完成";
+	ai_streaming_model_label = "模型";
+	ai_streaming_prompt_label = "提示词";
+	ai_streaming_prompt_custom = "自定义提示词";
+	ai_streaming_char_count = "字符数";
+	ai_streaming_btn_refresh = "刷新";
+	ai_streaming_btn_confirm = "确认";
+	ai_streaming_btn_cancel = "取消";
+	ai_streaming_generating = "生成中...";
+	ai_streaming_error_title = "生成错误";
+	ai_streaming_connection_error = "连接失败,正在重试...";
+	ai_streaming_cancelled = "生成已取消";
+	ai_streaming_hover_prompt_title = "完整提示词";
+	ai_streaming_hover_prompt_file = "提示词文件";
 	// 表单导入相关
 	form_setting = "表单设置";
 	import_form = "导入表单";

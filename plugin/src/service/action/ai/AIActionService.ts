@@ -14,6 +14,8 @@ import { localInstance } from "src/i18n/locals";
 import { DebugLogger } from "src/utils/DebugLogger";
 import CommonSuggestModal from "src/component/modal/CommonSuggestModal";
 import { AIRuntimeFieldsGenerator } from "src/utils/AIRuntimeFieldsGenerator";
+import { AIStreamingModal, AIStreamingModalOptions } from "src/component/modal/AIStreamingModal";
+import "src/component/modal/AIStreamingModal.css";
 
 /**
  * AI动作服务
@@ -134,7 +136,14 @@ export default class AIActionService implements IActionService {
             DebugLogger.debug("[AIAction] 用户提示词:", userPrompt);
 
             // 3. 调用AI并获取响应
-            const response = await this.callAI(provider, messages, context, { includeReasoning: false });
+            let response: string;
+            if (effectiveAction.enableStreamingModal) {
+                // 使用流式输出模态框
+                response = await this.callAIWithModal(provider, messages, context, effectiveAction, userPrompt);
+            } else {
+                // 使用传统Notice方式
+                response = await this.callAI(provider, messages, context, { includeReasoning: false });
+            }
             DebugLogger.debug("[AIAction] AI响应:", response);
 
             // 4. 存储响应到输出变量
@@ -344,6 +353,172 @@ export default class AIActionService implements IActionService {
                 context.abortSignal.removeEventListener("abort", linkedAbortHandler);
             }
         }
+    }
+
+    /**
+     * 使用流式输出模态框调用AI
+     */
+    private async callAIWithModal(
+        provider: any,
+        messages: Message[],
+        context: ActionContext,
+        aiAction: AIFormAction,
+        userPrompt: string
+    ): Promise<string> {
+        // 查找对应的vendor
+        const vendor = availableVendors.find((v) => v.name === provider.vendor);
+        if (!vendor) {
+            throw new Error(`${localInstance.ai_vendor_not_found}: ${provider.vendor}`);
+        }
+
+        DebugLogger.debug(`[AIAction] 使用流式输出模态框调用AI模型: ${provider.options.model} (${provider.vendor})`);
+
+        // 创建请求函数
+        const sendRequest = vendor.sendRequestFunc(provider.options);
+        
+        // 创建中断控制器
+        const controller = new AbortController();
+        const linkedAbortHandler = () => {
+            controller.abort();
+        };
+
+        if (context.abortSignal) {
+            if (context.abortSignal.aborted) {
+                linkedAbortHandler();
+            } else {
+                context.abortSignal.addEventListener("abort", linkedAbortHandler);
+            }
+        }
+
+        // 获取提示词显示信息
+        const promptInfo = this.getPromptDisplayInfo(aiAction, userPrompt);
+
+        return new Promise<string>((resolve, reject) => {
+            let isResolved = false;
+            let currentModal: AIStreamingModal | null = null;
+
+            const cleanup = () => {
+                if (context.abortSignal) {
+                    context.abortSignal.removeEventListener("abort", linkedAbortHandler);
+                }
+            };
+
+            const handleConfirm = (editedContent: string) => {
+                if (isResolved) return;
+                isResolved = true;
+                cleanup();
+
+                // 移除推理内容
+                const finalContent = this.removeReasoningContent(editedContent);
+                
+                if (finalContent.length === 0) {
+                    reject(new Error(localInstance.ai_response_empty));
+                } else {
+                    new Notice(localInstance.ai_execution_success, 3000);
+                    resolve(finalContent);
+                }
+            };
+
+            const handleCancel = () => {
+                if (isResolved) return;
+                isResolved = true;
+                controller.abort();
+                cleanup();
+                reject(new Error(localInstance.ai_execution_cancelled));
+            };
+
+            const handleRefresh = () => {
+                if (currentModal) {
+                    currentModal.close();
+                }
+                // 递归调用自己来重新生成
+                this.callAIWithModal(provider, messages, context, aiAction, userPrompt)
+                    .then(resolve)
+                    .catch(reject);
+            };
+
+            // 创建模态框选项
+            const modalOptions: AIStreamingModalOptions = {
+                modelInfo: `${provider.tag} (${provider.options.model})`,
+                promptDisplayText: promptInfo.displayText,
+                fullPromptContent: promptInfo.fullContent,
+                onConfirm: handleConfirm,
+                onCancel: handleCancel,
+                onRefresh: handleRefresh
+            };
+
+            // 创建并打开模态框
+            const modal = new AIStreamingModal(context.app, modalOptions);
+            currentModal = modal;
+            modal.open();
+
+            // 开始流式接收数据
+            (async () => {
+                try {
+                    for await (const chunk of sendRequest(
+                        messages,
+                        controller,
+                        async () => new ArrayBuffer(0),
+                        undefined
+                    )) {
+                        modal.updateContent(chunk);
+                    }
+
+                    // 生成完成
+                    modal.markAsCompleted();
+                } catch (error) {
+                    if (isResolved) return; // 已经解决，不再处理错误
+
+                    if (error.name === "AbortError" || error.message?.includes("Request was aborted")) {
+                        // 用户取消，已经在handleCancel中处理
+                        return;
+                    }
+
+                    // 其他错误
+                    modal.markAsError(error.message || localInstance.unknown_error);
+                    // 不自动关闭模态框，允许用户查看错误信息并选择操作
+                }
+            })();
+        });
+    }
+
+    /**
+     * 获取提示词显示信息
+     */
+    private getPromptDisplayInfo(aiAction: AIFormAction, processedPrompt: string): {
+        displayText: string;
+        fullContent: string;
+    } {
+        if (aiAction.promptSource === PromptSourceType.TEMPLATE && aiAction.templateFile) {
+            // 从模板文件名提取显示文本
+            const fileName = this.extractFileName(aiAction.templateFile);
+            return {
+                displayText: fileName,
+                fullContent: processedPrompt
+            };
+        } else {
+            // 自定义提示词
+            return {
+                displayText: localInstance.ai_streaming_prompt_custom,
+                fullContent: processedPrompt
+            };
+        }
+    }
+
+    /**
+     * 从文件路径提取文件名
+     */
+    private extractFileName(filePath: string): string {
+        // 移除路径，只保留文件名
+        const parts = filePath.split('/');
+        let fileName = parts[parts.length - 1];
+        
+        // 移除.md扩展名
+        if (fileName.endsWith('.md')) {
+            fileName = fileName.slice(0, -3);
+        }
+        
+        return fileName;
     }
 
     /**

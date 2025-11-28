@@ -21,6 +21,9 @@ export class AIFormAction extends BaseFormAction {
     // 输出变量名
     outputVariableName?: string;
 
+    // 启用流式输出模态框
+    enableStreamingModal?: boolean;
+
     constructor(partial?: Partial<AIFormAction>) {
         super(partial);
         this.type = FormActionType.AI;

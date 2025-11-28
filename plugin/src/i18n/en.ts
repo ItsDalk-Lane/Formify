@@ -495,6 +495,24 @@ export class En implements Local {
 	ai_select_model_prompt = "Please select an AI model";
 	ai_select_template_prompt = "Please select a prompt template";
 	ai_template_folder_empty = "Template folder is empty";
+	// AI streaming output related
+	ai_enable_streaming_modal = "Enable Streaming Output Modal";
+	ai_enable_streaming_modal_desc = "When enabled, AI execution will show a real-time output modal";
+	ai_streaming_modal_title = "AI Generating...";
+	ai_streaming_modal_title_completed = "AI Generation Completed";
+	ai_streaming_model_label = "Model";
+	ai_streaming_prompt_label = "Prompt";
+	ai_streaming_prompt_custom = "Custom Prompt";
+	ai_streaming_char_count = "Characters";
+	ai_streaming_btn_refresh = "Refresh";
+	ai_streaming_btn_confirm = "Confirm";
+	ai_streaming_btn_cancel = "Cancel";
+	ai_streaming_generating = "Generating...";
+	ai_streaming_error_title = "Generation Error";
+	ai_streaming_connection_error = "Connection failed, retrying...";
+	ai_streaming_cancelled = "Generation cancelled";
+	ai_streaming_hover_prompt_title = "Full Prompt";
+	ai_streaming_hover_prompt_file = "Prompt File";
 	// Form import related
 	form_setting = "Form Settings";
 	import_form = "Import Form";

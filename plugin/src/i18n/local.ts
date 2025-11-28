@@ -455,6 +455,24 @@ export interface Local {
 	ai_select_model_prompt: string;
 	ai_select_template_prompt: string;
 	ai_template_folder_empty: string;
+	// AI streaming modal
+	ai_enable_streaming_modal: string;
+	ai_enable_streaming_modal_desc: string;
+	ai_streaming_modal_title: string;
+	ai_streaming_modal_title_completed: string;
+	ai_streaming_model_label: string;
+	ai_streaming_prompt_label: string;
+	ai_streaming_prompt_custom: string;
+	ai_streaming_char_count: string;
+	ai_streaming_btn_refresh: string;
+	ai_streaming_btn_confirm: string;
+	ai_streaming_btn_cancel: string;
+	ai_streaming_generating: string;
+	ai_streaming_error_title: string;
+	ai_streaming_connection_error: string;
+	ai_streaming_cancelled: string;
+	ai_streaming_hover_prompt_title: string;
+	ai_streaming_hover_prompt_file: string;
 	// Variable management
 	variable_management: string;
 	form_field_variable: string;
