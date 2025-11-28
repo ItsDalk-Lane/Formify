@@ -9,7 +9,6 @@ import { GeneralSettingTabItem } from "./GeneralSettingTabItem";
 import { TarsSettingTabItem } from "./TarsSettingTabItem";
 import { VariableManagementTabItem } from "./VariableManagementTabItem";
 import { ChatSettingTabItem } from "./ChatSettingTabItem";
-import { AutoCompletionSettingTab } from "src/features/auto-completion/AutoCompletionSettingTab";
 
 export class PluginSettingTab extends ObPluginSettingTab {
 	plugin: FormPlugin;
@@ -46,11 +45,6 @@ export class PluginSettingTab extends ObPluginSettingTab {
 								id: "chat_setting",
 								title: "AI Chat",
 								content: <ChatSettingTabItem plugin={this.plugin} />,
-							},
-							{
-								id: "autocompletion_setting",
-								title: "AI自动补全",
-								content: <AutoCompletionSettingTab plugin={this.plugin} />,
 							},
 							{
 								id: "variable_management",

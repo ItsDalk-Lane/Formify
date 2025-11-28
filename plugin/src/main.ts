@@ -13,14 +13,12 @@ import { TarsFeatureManager, cloneTarsSettings } from './features/tars';
 import { encryptApiKey, decryptApiKey } from './features/tars/utils/cryptoUtils';
 import { DebugLogger } from './utils/DebugLogger';
 import { ChatFeatureManager } from './features/chat';
-import { AutoCompletionFeatureManager } from './features/auto-completion';
 
 export default class FormPlugin extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
 
 	private tarsFeatureManager: TarsFeatureManager | null = null;
 	private chatFeatureManager: ChatFeatureManager | null = null;
-	private autoCompletionFeatureManager: AutoCompletionFeatureManager | null = null;
 
 	api: FormFlowApi = new FormFlowApi(this.app);
 
@@ -46,9 +44,6 @@ export default class FormPlugin extends Plugin {
 			// 现在安全地初始化聊天功能
 			this.initializeChatFeature();
 
-			// 初始化自动补全功能
-			this.initializeAutoCompletionFeature();
-
 			// 然后初始化脚本服务
 			formScriptService.initialize(this.app, this.settings.scriptFolder);
 		});
@@ -64,8 +59,6 @@ export default class FormPlugin extends Plugin {
 		this.tarsFeatureManager = null;
 		this.chatFeatureManager?.dispose();
 		this.chatFeatureManager = null;
-		this.autoCompletionFeatureManager?.dispose();
-		this.autoCompletionFeatureManager = null;
 	}
 
 	async loadSettings() {
@@ -102,10 +95,6 @@ export default class FormPlugin extends Plugin {
 			chat: {
 				...defaultSettings.chat,
 				...(persisted.chat ?? {})
-			},
-			autoCompletion: {
-				...defaultSettings.autoCompletion,
-				...(persisted.autoCompletion ?? {})
 			}
 		};
 	}
@@ -163,10 +152,6 @@ export default class FormPlugin extends Plugin {
 		this.refreshTarsFeature();
 		this.chatFeatureManager?.updateChatSettings(this.settings.chat);
 		this.chatFeatureManager?.updateProviderSettings(this.settings.tars.settings);
-		this.autoCompletionFeatureManager?.updateSettings(
-			this.settings.autoCompletion,
-			this.settings.tars.settings
-		);
 	}
 
 	private refreshTarsFeature() {
@@ -194,21 +179,5 @@ export default class FormPlugin extends Plugin {
 			return;
 		}
 		this.chatFeatureManager.updateChatSettings(this.settings.chat);
-	}
-
-	private initializeAutoCompletionFeature() {
-		if (!this.autoCompletionFeatureManager) {
-			this.autoCompletionFeatureManager = new AutoCompletionFeatureManager(
-				this, 
-				this.settings.autoCompletion,
-				this.settings.tars.settings
-			);
-			this.autoCompletionFeatureManager.initialize();
-			return;
-		}
-		this.autoCompletionFeatureManager.updateSettings(
-			this.settings.autoCompletion,
-			this.settings.tars.settings
-		);
 	}
 }

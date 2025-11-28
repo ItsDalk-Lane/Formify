@@ -2,8 +2,6 @@ import { cloneTarsSettings } from "src/features/tars";
 import type { TarsSettings } from "src/features/tars";
 import type { ChatSettings } from "src/features/chat";
 import { DEFAULT_CHAT_SETTINGS } from "src/features/chat";
-import type { AutoCompletionSettings } from "src/features/auto-completion";
-import { DEFAULT_AUTOCOMPLETION_SETTINGS } from "src/features/auto-completion";
 
 export interface TarsFeatureConfig {
     settings: TarsSettings;
@@ -20,8 +18,6 @@ export interface PluginSettings {
     tars: TarsFeatureConfig;
 
 	chat: ChatSettings;
-
-	autoCompletion: AutoCompletionSettings;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -32,5 +28,4 @@ export const DEFAULT_SETTINGS: PluginSettings = {
         settings: cloneTarsSettings(),
     },
 	chat: DEFAULT_CHAT_SETTINGS,
-	autoCompletion: DEFAULT_AUTOCOMPLETION_SETTINGS,
 };
