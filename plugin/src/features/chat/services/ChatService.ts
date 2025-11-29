@@ -70,6 +70,11 @@ export class ChatService {
 	}
 
 	createNewSession(initialTitle = '新的聊天'): ChatSession {
+		// 如果正在生成内容，先停止生成
+		if (this.state.isGenerating) {
+			this.stopGeneration();
+		}
+		
 		const now = Date.now();
 		const session: ChatSession = {
 			id: `chat-${uuidv4()}`,
@@ -90,8 +95,6 @@ export class ChatService {
 		this.state.selectedPromptTemplate = undefined;
 		this.state.showTemplateSelector = false;
 		this.emitState();
-		
-		// 不再立即保存新会话，等待用户发送第一条消息时再创建文件
 		return session;
 	}
 
@@ -278,24 +281,37 @@ export class ChatService {
 
 		// 处理提示词模板
 		let finalUserMessage = trimmed;
+		let templateSystemPrompt: string | undefined;
+		let templateTag: string | undefined;
 		
 		if (this.state.selectedPromptTemplate) {
 			const templateContent = this.state.selectedPromptTemplate.content;
+			const templateName = this.state.selectedPromptTemplate.name;
 			const variableRegex = /\{\{([^}]+)\}\}/g;
 			const hasVariables = variableRegex.test(templateContent);
 			
+			// 创建提示词模板标签
+			templateTag = `[[${templateName}]]`;
+			
 			if (hasVariables) {
-				// 如果模板有变量，用用户输入替换所有变量
-				finalUserMessage = templateContent.replace(variableRegex, trimmed);
+				// 如果模板有变量，用用户输入替换所有变量，并将结果作为系统提示词
+				templateSystemPrompt = templateContent.replace(variableRegex, trimmed);
+				// 用户输入已经替换到模板中，但用户消息仍显示用户输入和模板标签
+				finalUserMessage = `${trimmed}\n\n${templateTag}`;
 			} else {
-				// 如果模板没有变量，将用户输入追加到模板内容后面
-				finalUserMessage = templateContent + '\n\n' + trimmed;
+				// 如果模板没有变量，将模板内容作为系统提示词，用户输入作为用户消息
+				templateSystemPrompt = templateContent;
+				// 用户消息显示用户输入和模板标签
+				finalUserMessage = `${trimmed}\n\n${templateTag}`;
 			}
 		}
 
-		// 获取系统提示词
+		// 获取系统提示词（仅在没有使用模板时）
 		let systemPrompt: string | undefined;
-		if (this.settings.enableSystemPrompt) {
+		// 如果有模板系统提示词，使用模板系统提示词，忽略原有的系统提示词
+		if (templateSystemPrompt) {
+			systemPrompt = templateSystemPrompt;
+		} else if (this.settings.enableSystemPrompt) {
 			// 检查AI助手的系统提示词设置
 			const tarsSettings = this.plugin.settings.tars.settings;
 			if (tarsSettings.enableDefaultSystemMsg && tarsSettings.defaultSystemMsg) {
@@ -334,14 +350,17 @@ export class ChatService {
 			images: this.state.selectedImages
 		});
 		
-		// 如果有系统提示词，添加到消息列表开头
-		if (systemPrompt) {
-			const systemMessage = this.messageService.createMessage('system', systemPrompt);
-			session.messages.unshift(systemMessage);
-		}
+		// 不再将系统提示词作为消息添加到会话中，而是作为内部参数传递
+		// 这样系统提示不会显示在聊天界面和历史消息中
 		
-		session.messages.push(userMessage);
+		// 只有当用户消息有内容或者有图片时，才添加用户消息
+		if (messageContent.trim() || this.state.selectedImages.length > 0) {
+			session.messages.push(userMessage);
+		}
 		session.updatedAt = Date.now();
+		
+		// 将系统提示词作为会话的内部属性存储
+		session.systemPrompt = systemPrompt;
 
 		// 清空选中状态
 		const currentSelectedFiles = [...this.state.selectedFiles];
@@ -356,9 +375,11 @@ export class ChatService {
 		// 如果这是第一条消息，创建历史文件并包含第一条用户消息
 		if (session.messages.length === 1 || (systemPrompt && session.messages.length === 2)) {
 			try {
+				// 获取第一条消息（可能是系统消息或用户消息）
+				const firstMessage = session.messages[0];
 				session.filePath = await this.historyService.createNewSessionFileWithFirstMessage(
 					session, 
-					userMessage, 
+					firstMessage, 
 					currentSelectedFiles, 
 					currentSelectedFolders
 				);
@@ -369,12 +390,16 @@ export class ChatService {
 		} else {
 			// 如果不是第一条消息，追加到现有文件
 			try {
-				await this.historyService.appendMessageToFile(
-					session.filePath, 
-					userMessage, 
-					currentSelectedFiles, 
-					currentSelectedFolders
-				);
+				// 获取最后一条消息（可能是用户消息或系统消息）
+				const lastMessage = session.messages.last();
+				if (lastMessage) {
+					await this.historyService.appendMessageToFile(
+						session.filePath, 
+						lastMessage, 
+						currentSelectedFiles, 
+						currentSelectedFolders
+					);
+				}
 			} catch (error) {
 				console.error('[ChatService] 追加用户消息失败:', error);
 				// 不显示错误通知，避免干扰用户
@@ -908,17 +933,8 @@ export class ChatService {
 			]
 		};
 		
-		// 获取系统提示词
-		let systemPrompt: string | undefined;
-		
-		// 只使用默认的系统提示词设置，不使用模板内容作为系统提示词
-		if (this.settings.enableSystemPrompt) {
-			// 检查AI助手的系统提示词设置
-			const tarsSettings = this.plugin.settings.tars.settings;
-			if (tarsSettings.enableDefaultSystemMsg && tarsSettings.defaultSystemMsg) {
-				systemPrompt = tarsSettings.defaultSystemMsg;
-			}
-		}
+		// 使用会话中存储的系统提示词，而不是重新计算
+		let systemPrompt: string | undefined = session.systemPrompt;
 		
 		return await this.messageService.toProviderMessages(session.messages, {
 			contextNotes,

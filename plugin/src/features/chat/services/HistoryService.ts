@@ -344,6 +344,11 @@ export class HistoryService {
 		let title = firstMessage.content.trim();
 		title = this.sanitizeTitle(title);
 		
+		// 如果第一条消息是系统消息且内容为空，使用默认标题
+		if (firstMessage.role === 'system' && !title) {
+			title = '新对话';
+		}
+		
 		// 计算标题的字节长度（UTF-8编码）
 		const encoder = new TextEncoder();
 		const titleBytes = encoder.encode(title);

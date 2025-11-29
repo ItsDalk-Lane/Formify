@@ -41,6 +41,7 @@ export interface ChatSession {
 	selectedFiles?: SelectedFile[];
 	selectedFolders?: SelectedFolder[];
 	filePath?: string; // 添加文件路径字段，用于跟踪会话文件
+	systemPrompt?: string; // 添加系统提示词字段，用于内部存储
 }
 
 export type ChatOpenMode = 'sidebar' | 'tab' | 'window';
