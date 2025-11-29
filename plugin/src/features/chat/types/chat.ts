@@ -53,6 +53,11 @@ export interface ChatSettings {
 	showSidebarByDefault: boolean;
 	openMode: ChatOpenMode;
 	enableSystemPrompt: boolean; // 是否启用系统提示词功能
+	// 内链解析配置
+	enableInternalLinkParsing: boolean; // 是否启用内链解析功能
+	parseLinksInTemplates: boolean; // 是否解析提示词模板中的内链
+	maxLinkParseDepth: number; // 内链嵌套解析的最大深度
+	linkParseTimeout: number; // 单个链接解析超时时间(毫秒)
 }
 
 export interface ChatState {
@@ -81,5 +86,10 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	showSidebarByDefault: true,
 	openMode: 'sidebar',
 	enableSystemPrompt: true, // 默认启用系统提示词功能
+	// 内链解析默认配置
+	enableInternalLinkParsing: true, // 默认启用内链解析
+	parseLinksInTemplates: true, // 默认解析模板中的内链
+	maxLinkParseDepth: 5, // 默认最大深度5层
+	linkParseTimeout: 5000, // 默认超时5秒
 };
 

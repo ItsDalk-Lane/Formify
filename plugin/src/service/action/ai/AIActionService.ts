@@ -16,6 +16,7 @@ import CommonSuggestModal from "src/component/modal/CommonSuggestModal";
 import { AIRuntimeFieldsGenerator } from "src/utils/AIRuntimeFieldsGenerator";
 import { AIStreamingModal, AIStreamingModalOptions } from "src/component/modal/AIStreamingModal";
 import "src/component/modal/AIStreamingModal.css";
+import { InternalLinkParserService } from "src/services/InternalLinkParserService";
 
 /**
  * AI动作服务
@@ -187,6 +188,8 @@ export default class AIActionService implements IActionService {
     private async buildSystemPrompt(aiAction: AIFormAction, context: ActionContext): Promise<string | null> {
         const mode = aiAction.systemPromptMode || SystemPromptMode.DEFAULT;
 
+        let systemPrompt: string | null = null;
+
         switch (mode) {
             case SystemPromptMode.NONE:
                 // 不使用系统提示词
@@ -198,7 +201,8 @@ export default class AIActionService implements IActionService {
                     DebugLogger.warn("[AIAction] 自定义系统提示词模式但内容为空");
                     return null;
                 }
-                return await this.processTemplate(aiAction.customSystemPrompt, context);
+                systemPrompt = await this.processTemplate(aiAction.customSystemPrompt, context);
+                break;
 
             case SystemPromptMode.DEFAULT:
             default:
@@ -206,10 +210,29 @@ export default class AIActionService implements IActionService {
                 const plugin = (context.app as any).plugins?.plugins?.["formify"];
                 const defaultSystemMsg = plugin?.settings?.tars?.settings?.defaultSystemMsg;
                 if (defaultSystemMsg) {
-                    return await this.processTemplate(defaultSystemMsg, context);
+                    systemPrompt = await this.processTemplate(defaultSystemMsg, context);
+                } else {
+                    return null;
                 }
-                return null;
+                break;
         }
+
+        // 内链解析
+        if (systemPrompt && (aiAction.enableInternalLinkParsing ?? true)) {
+            const activeFile = context.app.workspace.getActiveFile();
+            const sourcePath = activeFile?.path ?? '';
+            
+            const parser = new InternalLinkParserService(context.app);
+            systemPrompt = await parser.parseLinks(systemPrompt, sourcePath, {
+                enableParsing: true,
+                maxDepth: 5,
+                timeout: 5000,
+                preserveOriginalOnError: true,
+                enableCache: true
+            });
+        }
+
+        return systemPrompt;
     }
 
     /**
@@ -218,15 +241,34 @@ export default class AIActionService implements IActionService {
     private async buildUserPrompt(aiAction: AIFormAction, context: ActionContext): Promise<string> {
         const promptSource = aiAction.promptSource || PromptSourceType.CUSTOM;
 
+        let userPrompt: string;
+
         if (promptSource === PromptSourceType.TEMPLATE && aiAction.templateFile) {
             // 从模板文件加载
-            return await this.loadTemplateFile(aiAction.templateFile, context);
+            userPrompt = await this.loadTemplateFile(aiAction.templateFile, context);
         } else if (promptSource === PromptSourceType.CUSTOM && aiAction.customPrompt) {
             // 使用自定义内容
-            return await this.processTemplate(aiAction.customPrompt, context);
+            userPrompt = await this.processTemplate(aiAction.customPrompt, context);
+        } else {
+            throw new Error(localInstance.ai_prompt_source_invalid);
         }
 
-        throw new Error(localInstance.ai_prompt_source_invalid);
+        // 内链解析
+        if (aiAction.enableInternalLinkParsing ?? true) {
+            const activeFile = context.app.workspace.getActiveFile();
+            const sourcePath = activeFile?.path ?? '';
+            
+            const parser = new InternalLinkParserService(context.app);
+            userPrompt = await parser.parseLinks(userPrompt, sourcePath, {
+                enableParsing: true,
+                maxDepth: 5,
+                timeout: 5000,
+                preserveOriginalOnError: true,
+                enableCache: true
+            });
+        }
+
+        return userPrompt;
     }
 
     /**

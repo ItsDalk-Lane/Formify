@@ -124,6 +124,53 @@ export const ChatSettingTabItem = ({ plugin }: { plugin: FormPlugin }) => {
 				});
 			});
 
+		// 内链解析设置区域
+		new Setting(el)
+			.setName("启用内链解析")
+			.setDesc("自动解析用户消息中的内部链接（[[文件名]]），将链接指向的笔记内容提供给AI")
+			.addToggle((toggle) => {
+				toggle.setValue(plugin.settings.chat.enableInternalLinkParsing ?? true);
+				toggle.onChange(async (value) => {
+					await updateSettings({ enableInternalLinkParsing: value });
+				});
+			});
+
+		new Setting(el)
+			.setName("解析模板中的内链")
+			.setDesc("启用后，提示词模板中的内部链接也会被解析")
+			.addToggle((toggle) => {
+				toggle.setValue(plugin.settings.chat.parseLinksInTemplates ?? true);
+				toggle.onChange(async (value) => {
+					await updateSettings({ parseLinksInTemplates: value });
+				});
+			});
+
+		new Setting(el)
+			.setName("内链解析最大深度")
+			.setDesc("嵌套内链的最大解析层数，防止循环引用（默认：5层）")
+			.addSlider((slider) => {
+				slider
+					.setLimits(1, 10, 1)
+					.setValue(plugin.settings.chat.maxLinkParseDepth ?? 5)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						await updateSettings({ maxLinkParseDepth: value });
+					});
+			});
+
+		new Setting(el)
+			.setName("链接解析超时时间")
+			.setDesc("单个链接解析的最大等待时间（毫秒），超时后保留原始文本（默认：5000ms）")
+			.addSlider((slider) => {
+				slider
+					.setLimits(1000, 30000, 1000)
+					.setValue(plugin.settings.chat.linkParseTimeout ?? 5000)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						await updateSettings({ linkParseTimeout: value });
+					});
+			});
+
 		return () => {
 			el.empty();
 		};

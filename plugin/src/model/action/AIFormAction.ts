@@ -24,6 +24,9 @@ export class AIFormAction extends BaseFormAction {
     // 启用流式输出模态框
     enableStreamingModal?: boolean;
 
+    // 内链解析配置
+    enableInternalLinkParsing?: boolean;
+
     constructor(partial?: Partial<AIFormAction>) {
         super(partial);
         this.type = FormActionType.AI;

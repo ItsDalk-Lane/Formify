@@ -9,7 +9,7 @@ import type { ChatMessage, ChatSession, ChatSettings, ChatState, SelectedFile, S
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
 import type { Message as ProviderMessage, ResolveEmbedAsBinary } from 'src/features/tars/providers';
 import { v4 as uuidv4 } from 'uuid';
-import { App, Notice, TFile } from 'obsidian';
+import { App, TFile } from 'obsidian';
 import type { ProviderSettings, SaveAttachment } from '../../tars/providers';
 import { availableVendors } from '../../tars/settings';
 import { ChatHistoryEntry } from './HistoryService';
@@ -18,6 +18,7 @@ import type { ChatMessage, ChatSession, ChatSettings, ChatState, ChatSubscriber 
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
 import { FormPlugin } from '../../../main';
 import { isImageGenerationModel } from '../../tars/providers/openRouter';
+import { InternalLinkParserService } from '../../../services/InternalLinkParserService';
 
 type ChatSubscriber = (state: ChatState) => void;
 
@@ -44,6 +45,10 @@ export class ChatService {
 		this.fileContentService = new FileContentService(plugin.app);
 		this.messageService = new MessageService(plugin.app, this.fileContentService);
 		this.historyService = new HistoryService(plugin.app, DEFAULT_CHAT_SETTINGS.chatFolder);
+	}
+
+	private get app() {
+		return this.plugin.app;
 	}
 
 	initialize(initialSettings?: Partial<ChatSettings>) {
@@ -255,10 +260,23 @@ export class ChatService {
 			return;
 		}
 
-		const trimmed = (content ?? this.state.inputValue).trim();
+		let trimmed = (content ?? this.state.inputValue).trim();
 		if (!trimmed && this.state.selectedImages.length === 0 &&
 			this.state.selectedFiles.length === 0 && this.state.selectedFolders.length === 0) {
 			return;
+		}
+
+		// 内链解析：处理用户输入中的内链
+		if (this.settings.enableInternalLinkParsing && trimmed) {
+			const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
+			const parser = new InternalLinkParserService(this.app);
+			trimmed = await parser.parseLinks(trimmed, sourcePath, {
+				enableParsing: true,
+				maxDepth: this.settings.maxLinkParseDepth,
+				timeout: this.settings.linkParseTimeout,
+				preserveOriginalOnError: true,
+				enableCache: true
+			});
 		}
 
 		// 检测图片生成意图
@@ -269,7 +287,12 @@ export class ChatService {
 		if (isImageGenerationIntent && !isModelSupportImageGeneration) {
 			const provider = this.resolveProvider();
 			const modelName = provider?.options.model || '当前模型';
-			new Notice(`⚠️ 当前模型 (${modelName}) 不支持图像生成功能。\n\n请选择支持图像生成的模型，如：\n• google/gemini-2.5-flash-image-preview\n• openai/gpt-5-image-mini\n• 其他包含 "image" 的模型`, 10000);
+			new Notice(`⚠️ 当前模型 (${modelName}) 不支持图像生成功能。
+
+请选择支持图像生成的模型，如：
+• google/gemini-2.5-flash-image-preview
+• openai/gpt-5-image-mini
+• 其他包含 "image" 的模型`, 10000);
 			return;
 		}
 
@@ -285,8 +308,22 @@ export class ChatService {
 		let templateTag: string | undefined;
 		
 		if (this.state.selectedPromptTemplate) {
-			const templateContent = this.state.selectedPromptTemplate.content;
+			let templateContent = this.state.selectedPromptTemplate.content;
 			const templateName = this.state.selectedPromptTemplate.name;
+			
+			// 内链解析：如果启用了解析模板中的内链，则解析模板内容
+			if (this.settings.enableInternalLinkParsing && this.settings.parseLinksInTemplates) {
+				const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
+				const parser = new InternalLinkParserService(this.app);
+				templateContent = await parser.parseLinks(templateContent, sourcePath, {
+					enableParsing: true,
+					maxDepth: this.settings.maxLinkParseDepth,
+					timeout: this.settings.linkParseTimeout,
+					preserveOriginalOnError: true,
+					enableCache: true
+				});
+			}
+			
 			const variableRegex = /\{\{([^}]+)\}\}/g;
 			const hasVariables = variableRegex.test(templateContent);
 			
@@ -820,22 +857,42 @@ export class ChatService {
 						
 						// 检查是否是模型不支持图像生成的错误
 						if (errorMessage.includes('not support') || errorMessage.includes('modalities') || errorMessage.includes('output_modalities')) {
-							throw new Error(`当前模型不支持图像生成功能。\n\n解决方法：\n1. 选择支持图像生成的模型，如 google/gemini-2.5-flash-image-preview\n2. 在模型设置中确认已启用图像生成功能\n3. 检查API密钥是否有图像生成权限`);
+							throw new Error(`当前模型不支持图像生成功能。
+
+解决方法：
+1. 选择支持图像生成的模型，如 google/gemini-2.5-flash-image-preview
+2. 在模型设置中确认已启用图像生成功能
+3. 检查API密钥是否有图像生成权限`);
 						}
 						
 						// 检查是否是内容策略错误
 						if (errorMessage.includes('content policy') || errorMessage.includes('safety') || errorMessage.includes('inappropriate')) {
-							throw new Error(`图像生成请求被内容策略阻止。\n\n解决方法：\n1. 修改您的描述，避免敏感内容\n2. 使用更中性、通用的描述\n3. 尝试不同的描述角度`);
+							throw new Error(`图像生成请求被内容策略阻止。
+
+解决方法：
+1. 修改您的描述，避免敏感内容
+2. 使用更中性、通用的描述
+3. 尝试不同的描述角度`);
 						}
 						
 						// 检查是否是配额或余额不足错误
 						if (errorMessage.includes('quota') || errorMessage.includes('balance') || errorMessage.includes('insufficient')) {
-							throw new Error(`账户配额或余额不足。\n\n解决方法：\n1. 检查API账户余额\n2. 升级到更高的配额计划\n3. 等待配额重置（如果是按天计算）`);
+							throw new Error(`账户配额或余额不足。
+
+解决方法：
+1. 检查API账户余额
+2. 升级到更高的配额计划
+3. 等待配额重置（如果是按天计算）`);
 						}
 						
 						// 检查是否是图片保存错误
 						if (errorMessage.includes('保存图片附件失败')) {
-							throw new Error(`图片生成成功，但保存到本地失败。\n\n解决方法：\n1. 检查Obsidian附件文件夹权限\n2. 确保有足够的磁盘空间\n3. 尝试在设置中更改图片保存位置`);
+							throw new Error(`图片生成成功，但保存到本地失败。
+
+解决方法：
+1. 检查Obsidian附件文件夹权限
+2. 确保有足够的磁盘空间
+3. 尝试在设置中更改图片保存位置`);
 						}
 						
 						// 其他错误，直接抛出
