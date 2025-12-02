@@ -52,7 +52,7 @@ export const ChatSettingTabItem = ({ plugin }: { plugin: FormPlugin }) => {
 					providers.forEach((provider) => {
 						dropdown.addOption(
 							provider.tag,
-							`${provider.tag} · ${provider.options.model}`
+							provider.tag
 						);
 					});
 					dropdown.setValue(defaultValue);

@@ -63,7 +63,7 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 	const currentProvider = providers.find(p => p.tag === value);
 	const vendor = currentProvider ? availableVendors.find(v => v.name === currentProvider.vendor) : null;
 	const capabilityIcons = currentProvider && vendor ? getCapabilityDisplayText(vendor, currentProvider.options) : '';
-	const displayText = currentProvider ? `${currentProvider.tag} · ${currentProvider.options.model}` : 'Select model';
+	const displayText = currentProvider ? currentProvider.tag : 'Select model';
 
 	return (
 		<div className="relative" ref={dropdownRef} style={{position: 'relative'}}>
@@ -169,7 +169,7 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 								>
 									<div style={{display: 'flex', minWidth: 0, alignItems: 'center', gap: '0.25rem', flex: 1}}>
 										<span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 'var(--font-ui-small)'}} className="hover:tw-text-normal">
-											{provider.tag} · {provider.options.model}
+											{provider.tag}
 										</span>
 									</div>
 									{capabilityIcons && (

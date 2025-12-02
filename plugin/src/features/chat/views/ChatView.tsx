@@ -98,12 +98,12 @@ const ChatApp = ({ service, mode, app }: ChatAppProps) => {
 			{session ? (
 				<>
 					<ChatMessages service={service} state={state} />
-					<ChatControls service={service} state={state} />
+					<ChatControls service={service} state={state} app={app} />
 					<ChatInput service={service} state={state} app={app} />
 				</>
 			) : (
 				<div className="tw-flex tw-h-full tw-items-center tw-justify-center tw-text-muted">
-					暂无聊天会话，点击“New Chat”开始新的对话。
+					暂无聊天会话，点击"New Chat"开始新的对话。
 				</div>
 			)}
 		</div>
