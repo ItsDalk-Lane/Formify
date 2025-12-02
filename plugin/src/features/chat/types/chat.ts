@@ -8,6 +8,7 @@ export interface SelectedFile {
 	path: string;
 	extension: string;
 	type: 'file';
+	isAutoAdded?: boolean; // 标记是否为自动添加的活跃文件
 }
 
 export interface SelectedFolder {
@@ -58,6 +59,8 @@ export interface ChatSettings {
 	parseLinksInTemplates: boolean; // 是否解析提示词模板中的内链
 	maxLinkParseDepth: number; // 内链嵌套解析的最大深度
 	linkParseTimeout: number; // 单个链接解析超时时间(毫秒)
+	// 自动添加活跃文件配置
+	autoAddActiveFile: boolean; // 是否自动将当前活跃的Markdown文件添加为上下文
 }
 
 export interface ChatState {
@@ -91,5 +94,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	parseLinksInTemplates: true, // 默认解析模板中的内链
 	maxLinkParseDepth: 5, // 默认最大深度5层
 	linkParseTimeout: 5000, // 默认超时5秒
+	// 自动添加活跃文件默认配置
+	autoAddActiveFile: true, // 默认启用自动添加活跃文件
 };
 

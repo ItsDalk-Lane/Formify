@@ -95,3 +95,4 @@ describe('getCurrentFileContent', () => {
 		expect(result).toBe('');
 	});
 });
+

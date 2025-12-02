@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, App } from 'obsidian';
+import { ItemView, WorkspaceLeaf, App, TFile } from 'obsidian';
 import { StrictMode, useEffect, useMemo, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import FormPlugin from 'src/main';
@@ -43,6 +43,40 @@ export class ChatView extends ItemView {
 		this.contentEl.empty();
 		this.root = createRoot(this.contentEl);
 		this.renderReact();
+		
+		// 监听文件切换事件（包括文件关闭）
+		this.registerEvent(
+			this.app.workspace.on('active-leaf-change', () => {
+				const file = this.app.workspace.getActiveFile();
+				// 如果文件为null，说明没有活动文件，移除所有自动添加的文件并重置标记
+				if (!file) {
+					this.service.removeAllAutoAddedFiles();
+					this.service.onNoActiveFile();
+				} else {
+					// 添加新的活动文件（会自动移除之前的自动添加文件）
+					this.service.addActiveFile(file);
+				}
+			})
+		);
+		
+		// 监听文件打开事件
+		this.registerEvent(
+			this.app.workspace.on('file-open', (file) => {
+				if (!file) {
+					// 文件被关闭，移除自动添加的文件并重置标记
+					this.service.removeAllAutoAddedFiles();
+					this.service.onNoActiveFile();
+				} else {
+					this.service.addActiveFile(file);
+				}
+			})
+		);
+		
+		// 初始化时添加当前活跃文件
+		const activeFile = this.app.workspace.getActiveFile();
+		if (activeFile) {
+			this.service.addActiveFile(activeFile);
+		}
 	}
 
 	async onClose() {

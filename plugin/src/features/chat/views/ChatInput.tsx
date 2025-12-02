@@ -209,10 +209,20 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 						{(state.selectedFiles.length > 0 || state.selectedFolders.length > 0) && (
 							<div className="selected-files tw-flex tw-flex-wrap tw-gap-2 tw-mb-2">
 								{state.selectedFiles.map((file) => (
-									<div key={file.id} className="file-tag tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-gray-100 tw-text-gray-700 tw-rounded tw-text-xs tw-relative group">
+									<div 
+										key={file.id} 
+										className={`file-tag tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-rounded tw-text-xs tw-relative group ${
+											file.isAutoAdded 
+												? 'tw-bg-green-100 tw-text-green-700' 
+												: 'tw-bg-gray-100 tw-text-gray-700'
+										}`}
+									>
 										<FileText className="tw-size-3 tw-flex-shrink-0" />
 										<span className="tw-max-w-40 tw-truncate" title={file.path}>
 											{file.name}
+											{file.isAutoAdded && (
+												<span className="ml-1 tw-px-1 tw-bg-green-600 tw-text-white tw-rounded tw-text-[10px]">活跃</span>
+											)}
 											{file.extension === 'pdf' && (
 												<span className="ml-1 tw-px-1 tw-bg-blue-500 tw-text-white tw-rounded tw-text-[10px]">pdf</span>
 											)}
@@ -349,10 +359,20 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 						{(state.selectedFiles.length > 0 || state.selectedFolders.length > 0) && (
 							<div className="selected-files tw-flex tw-flex-wrap tw-gap-2 tw-mb-2">
 								{state.selectedFiles.map((file) => (
-									<div key={file.id} className="file-tag tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-gray-100 tw-text-gray-700 tw-rounded tw-text-xs tw-relative group">
+									<div 
+										key={file.id} 
+										className={`file-tag tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-rounded tw-text-xs tw-relative group ${
+											file.isAutoAdded 
+												? 'tw-bg-green-100 tw-text-green-700' 
+												: 'tw-bg-gray-100 tw-text-gray-700'
+										}`}
+									>
 										<FileText className="tw-size-3 tw-flex-shrink-0" />
 										<span className="tw-max-w-40 tw-truncate" title={file.path}>
 											{file.name}
+											{file.isAutoAdded && (
+												<span className="ml-1 tw-px-1 tw-bg-green-600 tw-text-white tw-rounded tw-text-[10px]">活跃</span>
+											)}
 											{file.extension === 'pdf' && (
 												<span className="ml-1 tw-px-1 tw-bg-blue-500 tw-text-white tw-rounded tw-text-[10px]">pdf</span>
 											)}

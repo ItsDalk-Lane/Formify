@@ -1,23 +1,15 @@
 import { MarkdownView, Notice, TFile, TFolder } from 'obsidian';
 import FormPlugin from 'src/main';
 import type { ProviderSettings, SaveAttachment } from 'src/features/tars/providers';
+import type { Message as ProviderMessage, ResolveEmbedAsBinary } from 'src/features/tars/providers';
 import { availableVendors, TarsSettings } from 'src/features/tars/settings';
+import { isImageGenerationModel } from 'src/features/tars/providers/openRouter';
 import { MessageService } from './MessageService';
 import { HistoryService, ChatHistoryEntry } from './HistoryService';
 import { FileContentService } from './FileContentService';
 import type { ChatMessage, ChatSession, ChatSettings, ChatState, SelectedFile, SelectedFolder } from '../types/chat';
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
-import type { Message as ProviderMessage, ResolveEmbedAsBinary } from 'src/features/tars/providers';
 import { v4 as uuidv4 } from 'uuid';
-import { App, TFile } from 'obsidian';
-import type { ProviderSettings, SaveAttachment } from '../../tars/providers';
-import { availableVendors } from '../../tars/settings';
-import { ChatHistoryEntry } from './HistoryService';
-import { MessageService } from './MessageService';
-import type { ChatMessage, ChatSession, ChatSettings, ChatState, ChatSubscriber } from '../types/chat';
-import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
-import { FormPlugin } from '../../../main';
-import { isImageGenerationModel } from '../../tars/providers/openRouter';
 import { InternalLinkParserService } from '../../../services/InternalLinkParserService';
 
 type ChatSubscriber = (state: ChatState) => void;
@@ -40,6 +32,10 @@ export class ChatService {
 	};
 	private subscribers: Set<ChatSubscriber> = new Set();
 	private controller: AbortController | null = null;
+	// 跟踪当前活动文件的路径
+	private currentActiveFilePath: string | null = null;
+	// 跟踪在当前活动文件会话期间，用户手动移除的文件路径（仅在当前文件活跃期间有效）
+	private manuallyRemovedInCurrentSession: string | null = null;
 
 	constructor(private readonly plugin: FormPlugin) {
 		this.fileContentService = new FileContentService(plugin.app);
@@ -99,6 +95,7 @@ export class ChatService {
 		this.state.inputValue = '';
 		this.state.selectedPromptTemplate = undefined;
 		this.state.showTemplateSelector = false;
+		// 注意：不清空手动移除记录，这是插件级别的持久化数据
 		this.emitState();
 		return session;
 	}
@@ -157,6 +154,74 @@ export class ChatService {
 		this.emitState();
 	}
 
+	// 添加活跃文件（自动添加）
+	addActiveFile(file: TFile | null) {
+		if (!file || !this.settings.autoAddActiveFile) {
+			return;
+		}
+
+		// 只自动添加Markdown文件
+		if (file.extension !== 'md') {
+			return;
+		}
+
+		// 检测到活动文件发生变化
+		if (this.currentActiveFilePath !== file.path) {
+			// 清除之前的手动移除标记（因为已经切换到新文件了）
+			this.manuallyRemovedInCurrentSession = null;
+			// 更新当前活动文件路径
+			this.currentActiveFilePath = file.path;
+		}
+
+		// 如果用户在当前活动文件会话期间手动移除过这个文件，不再自动添加
+		if (this.manuallyRemovedInCurrentSession === file.path) {
+			return;
+		}
+
+		// 检查是否已经存在（避免重复添加）
+		const existingIndex = this.state.selectedFiles.findIndex(f => f.id === file.path);
+		if (existingIndex !== -1) {
+			return;
+		}
+
+		// 先移除所有之前自动添加的活跃文件（单例模式）
+		this.state.selectedFiles = this.state.selectedFiles.filter(f => !f.isAutoAdded);
+
+		// 添加新的活跃文件
+		const selectedFile: SelectedFile = {
+			id: file.path,
+			name: file.name,
+			path: file.path,
+			extension: file.extension || '',
+			type: 'file',
+			isAutoAdded: true
+		};
+
+		this.state.selectedFiles = [...this.state.selectedFiles, selectedFile];
+		this.emitState();
+	}
+
+	// 移除自动添加的活跃文件
+	removeAutoAddedFile(filePath: string) {
+		const fileToRemove = this.state.selectedFiles.find(f => f.id === filePath && f.isAutoAdded);
+		if (fileToRemove) {
+			this.state.selectedFiles = this.state.selectedFiles.filter((file) => file.id !== filePath);
+			this.emitState();
+		}
+	}
+
+	// 移除所有自动添加的文件
+	removeAllAutoAddedFiles() {
+		this.state.selectedFiles = this.state.selectedFiles.filter(file => !file.isAutoAdded);
+		this.emitState();
+	}
+
+	// 编辑区无活动文件时重置会话标记
+	onNoActiveFile() {
+		this.currentActiveFilePath = null;
+		this.manuallyRemovedInCurrentSession = null;
+	}
+
 	addSelectedFolder(folder: TFolder) {
 		const selectedFolder: SelectedFolder = {
 			id: folder.path,
@@ -174,7 +239,17 @@ export class ChatService {
 		this.emitState();
 	}
 
-	removeSelectedFile(fileId: string) {
+	removeSelectedFile(fileId: string, isManualRemoval: boolean = true) {
+		// 只有当是用户手动移除时，才记录标记
+		if (isManualRemoval) {
+			const removedFile = this.state.selectedFiles.find(f => f.id === fileId);
+			if (removedFile?.isAutoAdded) {
+				// 记录用户在当前活动文件会话期间手动移除了这个文件
+				// 只要当前活动文件还是这个文件，就不再自动添加
+				this.manuallyRemovedInCurrentSession = fileId;
+			}
+		}
+		
 		this.state.selectedFiles = this.state.selectedFiles.filter((file) => file.id !== fileId);
 		this.emitState();
 	}
@@ -431,7 +506,7 @@ export class ChatService {
 				const lastMessage = session.messages.last();
 				if (lastMessage) {
 					await this.historyService.appendMessageToFile(
-						session.filePath, 
+						session.filePath ?? '', 
 						lastMessage, 
 						currentSelectedFiles, 
 						currentSelectedFolders
@@ -787,7 +862,7 @@ export class ChatService {
 			};
 
 			// 创建saveAttachment函数，用于保存生成的图片
-			const saveAttachment: SaveAttachment = async (filename: string, data: ArrayBuffer) => {
+			const saveAttachment: SaveAttachment = async (filename: string, data: ArrayBuffer): Promise<void> => {
 				try {
 					// 获取当前附件文件夹路径
 					const attachmentFolderPath = this.plugin.app.vault.getConfig('attachmentFolderPath');
@@ -800,7 +875,7 @@ export class ChatService {
 						if (attachmentFolderPath === '/') {
 							// 根目录，直接使用文件名
 							savePath = filename;
-						} else if (attachmentFolderPath.startsWith('/')) {
+						} else if (typeof attachmentFolderPath === 'string' && attachmentFolderPath.startsWith('/')) {
 							// 绝对路径
 							savePath = attachmentFolderPath.slice(1) + '/' + filename;
 						} else {
@@ -822,8 +897,7 @@ export class ChatService {
 					}
 					
 					// 创建文件
-					const tFile = await this.plugin.app.vault.createBinary(savePath, data);
-					return tFile.path;
+					await this.plugin.app.vault.createBinary(savePath, data);
 				} catch (error) {
 					console.error('[ChatService] 保存图片附件失败:', error);
 					throw new Error(`保存图片附件失败: ${error instanceof Error ? error.message : String(error)}`);

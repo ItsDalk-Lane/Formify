@@ -171,6 +171,17 @@ export const ChatSettingTabItem = ({ plugin }: { plugin: FormPlugin }) => {
 					});
 			});
 
+		// 自动添加活跃文件设置
+		new Setting(el)
+			.setName("自动添加活跃文件")
+			.setDesc("自动将当前活跃的Markdown文件添加至AI聊天上下文中，并在文件关闭时自动移除。可以手动删除已添加的活跃文件。")
+			.addToggle((toggle) => {
+				toggle.setValue(plugin.settings.chat.autoAddActiveFile ?? true);
+				toggle.onChange(async (value) => {
+					await updateSettings({ autoAddActiveFile: value });
+				});
+			});
+
 		return () => {
 			el.empty();
 		};
