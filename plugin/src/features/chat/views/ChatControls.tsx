@@ -173,7 +173,7 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 				</span>
 			</div>
 			{historyOpen && (
-				<div ref={historyPanelRef}>
+				<div>
 					<ChatHistoryPanel
 						items={historyItems}
 						onSelect={handleSelectHistory}
@@ -185,6 +185,7 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 							setHistoryItems(await service.listHistory());
 						}}
 						anchorRef={historyButtonRef}
+						panelRef={historyPanelRef}
 					/>
 				</div>
 			)}

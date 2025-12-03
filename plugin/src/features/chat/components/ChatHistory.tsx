@@ -1,6 +1,6 @@
 import { X, RotateCcw, ExternalLink, Trash2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ChatHistoryEntry } from '../services/HistoryService';
 
 interface ChatHistoryPanelProps {
@@ -11,10 +11,19 @@ interface ChatHistoryPanelProps {
 	onRefresh: () => Promise<void> | void;
 	onDelete?: (item: ChatHistoryEntry) => void;
 	anchorRef?: React.RefObject<HTMLElement>;
+	panelRef?: React.RefObject<HTMLDivElement>;
 }
 
-export const ChatHistoryPanel = ({ items, onSelect, onOpenFile, onClose, onRefresh, onDelete, anchorRef }: ChatHistoryPanelProps) => {
+export const ChatHistoryPanel = ({ items, onSelect, onOpenFile, onClose, onRefresh, onDelete, anchorRef, panelRef }: ChatHistoryPanelProps) => {
 	const [position, setPosition] = useState({ right: 24, bottom: 80 });
+	const internalPanelRef = useRef<HTMLDivElement>(null);
+
+	// 将内部 ref 同步到外部 ref
+	useEffect(() => {
+		if (panelRef && internalPanelRef.current) {
+			(panelRef as React.MutableRefObject<HTMLDivElement | null>).current = internalPanelRef.current;
+		}
+	}, [panelRef]);
 
 	// 根据按钮位置动态计算面板位置
 	useEffect(() => {
@@ -35,7 +44,7 @@ export const ChatHistoryPanel = ({ items, onSelect, onOpenFile, onClose, onRefre
 	}, [anchorRef]);
 
 	const panelContent = (
-		<div className="chat-history-panel" style={{ right: `${position.right}px`, bottom: `${position.bottom}px` }}>
+		<div ref={internalPanelRef} className="chat-history-panel" style={{ right: `${position.right}px`, bottom: `${position.bottom}px` }}>
 			<header className="chat-history-panel__header">
 				<h3>聊天历史</h3>
 				<div className="chat-history-panel__header-actions">
