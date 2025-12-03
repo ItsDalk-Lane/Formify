@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, App, TFile } from 'obsidian';
+import { ItemView, WorkspaceLeaf, App, TFile, MarkdownView } from 'obsidian';
 import { StrictMode, useEffect, useMemo, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import FormPlugin from 'src/main';
@@ -44,6 +44,40 @@ export class ChatView extends ItemView {
 		this.root = createRoot(this.contentEl);
 		this.renderReact();
 		
+		// 获取当前所有打开的Markdown文件路径
+		const getOpenMarkdownFiles = (): Set<string> => {
+			const openFiles = new Set<string>();
+			this.app.workspace.iterateAllLeaves((leaf) => {
+				if (leaf.view instanceof MarkdownView && leaf.view.file) {
+					openFiles.add(leaf.view.file.path);
+				}
+			});
+			return openFiles;
+		};
+
+		// 检查自动添加的文件是否仍然打开，如果未打开则清除
+		const checkAndCleanAutoAddedFiles = () => {
+			const openFiles = getOpenMarkdownFiles();
+			const autoAddedFiles = this.service.getAutoAddedFiles();
+			
+			for (const file of autoAddedFiles) {
+				if (!openFiles.has(file.path)) {
+					// 自动添加的文件已关闭，从上下文中移除
+					this.service.removeSelectedFile(file.id, false);
+				}
+			}
+		};
+
+		// 监听布局变化事件，检测标签页关闭
+		this.registerEvent(
+			this.app.workspace.on('layout-change', () => {
+				// 延迟执行检查，确保布局已更新
+				setTimeout(() => {
+					checkAndCleanAutoAddedFiles();
+				}, 50);
+			})
+		);
+
 		// 监听文件切换事件（包括文件关闭）
 		this.registerEvent(
 			this.app.workspace.on('active-leaf-change', () => {
@@ -55,6 +89,8 @@ export class ChatView extends ItemView {
 				} else {
 					// 添加新的活动文件（会自动移除之前的自动添加文件）
 					this.service.addActiveFile(file);
+					// 同时检查并清理已关闭的文件
+					checkAndCleanAutoAddedFiles();
 				}
 			})
 		);
@@ -63,9 +99,13 @@ export class ChatView extends ItemView {
 		this.registerEvent(
 			this.app.workspace.on('file-open', (file) => {
 				if (!file) {
-					// 文件被关闭，移除自动添加的文件并重置标记
-					this.service.removeAllAutoAddedFiles();
-					this.service.onNoActiveFile();
+					// 文件被关闭，检查自动添加的文件是否仍打开
+					checkAndCleanAutoAddedFiles();
+					// 如果没有任何打开的Markdown文件，重置标记
+					const openFiles = getOpenMarkdownFiles();
+					if (openFiles.size === 0) {
+						this.service.onNoActiveFile();
+					}
 				} else {
 					this.service.addActiveFile(file);
 				}

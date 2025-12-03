@@ -1,5 +1,5 @@
 import { App, TFile, TFolder, parseYaml, stringifyYaml } from 'obsidian';
-import type { ChatMessage, ChatSession, SelectedFile, SelectedFolder } from '../types/chat';
+import type { ChatMessage, ChatRole, ChatSession, SelectedFile, SelectedFolder } from '../types/chat';
 import { ensureFolderExists, joinPath, sanitizeFileName } from '../utils/storage';
 import { MessageService } from './MessageService';
 
@@ -20,7 +20,7 @@ export class HistoryService {
 
 	constructor(private readonly app: App, initialFolder: string) {
 		this.folderPath = initialFolder;
-		this.messageService = new MessageService();
+		this.messageService = new MessageService(app);
 	}
 
 	/**
@@ -214,7 +214,11 @@ export class HistoryService {
 		});
 
 		const body = session.messages.map((message) => this.messageService.serializeMessage(message)).join('\n\n');
-		const content = `${FRONTMATTER_DELIMITER}\n${frontmatter}${FRONTMATTER_DELIMITER}\n\n${body}\n`;
+		const content = `${FRONTMATTER_DELIMITER}
+${frontmatter}${FRONTMATTER_DELIMITER}
+
+${body}
+`;
 
 		await this.app.vault.create(finalFilePath, content);
 		return finalFilePath;
@@ -241,8 +245,8 @@ export class HistoryService {
 				modelId: (frontmatter.model as string) ?? '',
 				messages,
 				contextNotes: (frontmatter.contextNotes as string[]) ?? [],
-				createdAt: frontmatter.created ?? file.stat.ctime,
-				updatedAt: frontmatter.updated ?? file.stat.mtime,
+				createdAt: (frontmatter.created as number) ?? file.stat.ctime,
+				updatedAt: (frontmatter.updated as number) ?? file.stat.mtime,
 				selectedImages: [],
 				filePath: filePath // 设置文件路径
 			};
@@ -408,7 +412,11 @@ export class HistoryService {
 		const serializedMessage = this.messageService.serializeMessage(firstMessage);
 		
 		// 创建文件，包含frontmatter和第一条消息
-		const content = `${FRONTMATTER_DELIMITER}\n${frontmatter}${FRONTMATTER_DELIMITER}\n\n${serializedMessage}\n`;
+		const content = `${FRONTMATTER_DELIMITER}
+${frontmatter}${FRONTMATTER_DELIMITER}
+
+${serializedMessage}
+`;
 
 		await this.app.vault.create(finalFilePath, content);
 		return finalFilePath;
@@ -465,7 +473,11 @@ export class HistoryService {
 		// 重新构建文件内容
 		const newFrontmatter = stringifyYaml(frontmatter);
 		const body = messages.map((message) => this.messageService.serializeMessage(message)).join('\n\n');
-		const newContent = `${FRONTMATTER_DELIMITER}\n${newFrontmatter}${FRONTMATTER_DELIMITER}\n\n${body}\n`;
+		const newContent = `${FRONTMATTER_DELIMITER}
+${newFrontmatter}${FRONTMATTER_DELIMITER}
+
+${body}
+`;
 		
 		// 更新文件
 		await this.app.vault.modify(file, newContent);
@@ -533,65 +545,81 @@ export class HistoryService {
 		
 		const messages: ChatMessage[] = [];
 		
-		// 使用更简单但更可靠的方法解析消息
-		// 1. 按消息标题分割内容
-		const messageBlocks = body.split(/\n(?=#)/g);
+		// 使用更精确的正则匹配消息头部格式: # 用户/AI/系统 (YYYY-MM-DD HH:mm:ss) 或 # 用户/AI/系统
+		// 只在行首的消息头部处分割，避免消息内容中的Markdown标题导致截断
+		const messageHeaderRegex = /^#\s+(用户|AI|系统)\s*(?:\(([^)]+)\))?\s*$/gm;
 		
-		for (const block of messageBlocks) {
-			if (!block.trim()) continue;
+		// 找到所有消息头部的位置
+		const headerMatches: { index: number; header: string; role: ChatRole; timestampStr: string }[] = [];
+		let match;
+		
+		while ((match = messageHeaderRegex.exec(body)) !== null) {
+			const roleLabel = match[1]?.trim() ?? '';
+			const timestampStr = match[2]?.trim() ?? '';
 			
-			// 2. 提取标题和内容
-			const titleMatch = block.match(/^#\s+([^\n]+?)(?:\s*\(([^)]+)\))?\n([\s\S]*)$/);
-			if (!titleMatch) continue;
-			
-			const header = titleMatch[1]?.trim() ?? '';
-			const timestampStr = titleMatch[2]?.trim() ?? '';
-			let content = titleMatch[3]?.trim() ?? '';
-			
-			// 3. 解析角色
 			let role: ChatRole;
-			if (header.startsWith('AI')) {
+			if (roleLabel === 'AI') {
 				role = 'assistant';
-			} else if (header.startsWith('系统')) {
+			} else if (roleLabel === '系统') {
 				role = 'system';
 			} else {
 				role = 'user';
 			}
 			
-			// 4. 尝试解析时间戳
+			headerMatches.push({
+				index: match.index,
+				header: match[0],
+				role,
+				timestampStr
+			});
+		}
+		
+		// 根据头部位置提取每条消息的内容
+		for (let i = 0; i < headerMatches.length; i++) {
+			const currentHeader = headerMatches[i];
+			const nextHeader = headerMatches[i + 1];
+			
+			// 计算内容的起始位置（头部之后）
+			const contentStart = currentHeader.index + currentHeader.header.length;
+			// 计算内容的结束位置（下一个头部之前，或文本末尾）
+			const contentEnd = nextHeader ? nextHeader.index : body.length;
+			
+			// 提取内容并去除首尾空白
+			let content = body.substring(contentStart, contentEnd).trim();
+			
+			// 尝试解析时间戳
 			let timestamp = Date.now();
-			if (timestampStr) {
+			if (currentHeader.timestampStr) {
 				try {
-					// 尝试解析时间戳字符串
-					const dateMatch = timestampStr.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
+					const dateMatch = currentHeader.timestampStr.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
 					if (dateMatch) {
 						const [_, year, month, day, hour, minute, second] = dateMatch.map(Number);
 						timestamp = new Date(year, month - 1, day, hour, minute, second).getTime();
 					}
 				} catch (e) {
-					console.warn('[HistoryService] 无法解析时间戳:', timestampStr, e);
+					console.warn('[HistoryService] 无法解析时间戳:', currentHeader.timestampStr, e);
 				}
 			}
 			
-			// 5. 处理图片引用
+			// 处理图片引用
 			let images: string[] = [];
 			const imageMatches = content.matchAll(/!\[Image \d+\]\(([^)]+)\)/g);
-			for (const match of imageMatches) {
-				if (match[1]) {
-					images.push(match[1]);
+			for (const imgMatch of imageMatches) {
+				if (imgMatch[1]) {
+					images.push(imgMatch[1]);
 				}
 			}
 			
-			// 6. 从内容中移除图片引用
+			// 从内容中移除图片引用
 			content = content.replace(/!\[Image \d+\]\([^)]+\)\n?/g, '').trim();
 			
-			// 7. 创建消息对象
-			const message = this.messageService.createMessage(role, content, {
+			// 创建消息对象
+			const message = this.messageService.createMessage(currentHeader.role, content, {
 				timestamp,
 				images,
 				metadata: {
-					originalHeader: header,
-					originalTimestamp: timestampStr
+					originalHeader: currentHeader.header.trim(),
+					originalTimestamp: currentHeader.timestampStr
 				}
 			});
 			
@@ -608,7 +636,9 @@ export class HistoryService {
 			let inMessage = false;
 			
 			for (const line of lines) {
-				if (line.startsWith('# ')) {
+				// 检查是否为消息头部
+				const headerLineMatch = line.match(/^#\s+(用户|AI|系统)\s*(?:\(([^)]+)\))?\s*$/);
+				if (headerLineMatch) {
 					// 保存前一条消息
 					if (inMessage && currentMessage.trim()) {
 						messages.push(this.messageService.createMessage(currentRole, currentMessage.trim(), {
@@ -617,10 +647,10 @@ export class HistoryService {
 					}
 					
 					// 开始新消息
-					const header = line.substring(2).trim();
-					if (header.startsWith('AI')) {
+					const roleLabel = headerLineMatch[1]?.trim() ?? '';
+					if (roleLabel === 'AI') {
 						currentRole = 'assistant';
-					} else if (header.startsWith('系统')) {
+					} else if (roleLabel === '系统') {
 						currentRole = 'system';
 					} else {
 						currentRole = 'user';

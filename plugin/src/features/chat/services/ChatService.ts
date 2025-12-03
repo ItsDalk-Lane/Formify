@@ -216,6 +216,11 @@ export class ChatService {
 		this.emitState();
 	}
 
+	// 获取所有自动添加的文件
+	getAutoAddedFiles(): SelectedFile[] {
+		return this.state.selectedFiles.filter(file => file.isAutoAdded);
+	}
+
 	// 编辑区无活动文件时重置会话标记
 	onNoActiveFile() {
 		this.currentActiveFilePath = null;

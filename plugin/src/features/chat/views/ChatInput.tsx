@@ -121,16 +121,18 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 		service.setTemplateSelectorVisibility(true);
 	};
 
-	useEffect(() => {
-		const handler = (event: KeyboardEvent) => {
-			if (event.key === 'Enter' && !event.shiftKey) {
-				event.preventDefault();
-				handleSubmit();
-			}
-		};
-		window.addEventListener('keydown', handler);
-		return () => window.removeEventListener('keydown', handler);
-	}, [value]);
+	// 处理键盘事件 - 只在textarea中触发
+	const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+		// 处理中文输入法组合输入
+		if (event.nativeEvent.isComposing) {
+			return;
+		}
+		
+		if (event.key === 'Enter' && !event.shiftKey) {
+			event.preventDefault();
+			handleSubmit();
+		}
+	};
 
 	return (
 		<Fragment>
@@ -181,6 +183,7 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 								setValue(event.target.value);
 								service.setInputValue(event.target.value);
 							}}
+							onKeyDown={handleKeyDown}
 							placeholder="输入消息，按 Enter 发送，Shift+Enter 换行"
 						/>
 						{/* 图片预览区域 */}
@@ -330,6 +333,7 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 								setValue(event.target.value);
 								service.setInputValue(event.target.value);
 							}}
+							onKeyDown={handleKeyDown}
 							placeholder="输入消息，按 Enter 发送，Shift+Enter 换行"
 							disabled={state.isGenerating}
 						/>
