@@ -700,23 +700,6 @@
 	color: var(--text-muted);
 }
 
-/* Token统计显示样式 */
-.token-stats-display {
-	position: relative;
-	padding: 2px 6px;
-	border-radius: var(--radius-s);
-	transition: background-color 0.15s ease;
-}
-
-.token-stats-display:hover {
-	background-color: var(--background-modifier-hover);
-}
-
-/* 增强tooltip样式 - 使用系统原生title属性 */
-.tw-cursor-help {
-	cursor: help;
-}
-
 @media (max-width: 600px) {
 	.chat-controls {
 		flex-direction: column;
