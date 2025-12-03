@@ -92,29 +92,39 @@
 .chat-controls {
 	background: var(--background-primary);
 	position: relative;
+	overflow: visible;
 }
 
 .chat-history-panel {
-	position: absolute;
-	right: 12px;
-	bottom: 60px;
+	position: fixed;
+	/* right 和 bottom 通过内联样式动态设置 */
 	width: 320px;
-	max-height: 420px;
+	max-height: min(420px, calc(100vh - 120px));
 	background: var(--background-secondary);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m);
 	box-shadow: var(--shadow-s);
-	padding: 12px;
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
-	z-index: 50;
+	z-index: 1000;
+	overflow: hidden;
 }
 
 .chat-history-panel__header {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
+	background: var(--background-secondary);
+	padding: 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	flex: 0 0 auto;
+}
+
+.chat-history-panel__header h3 {
+	margin: 0;
+	font-size: var(--font-ui-medium);
+	font-weight: var(--font-semibold);
+	color: var(--text-normal);
 }
 
 .chat-history-panel__header-actions {
@@ -124,8 +134,11 @@
 }
 
 .chat-history-panel__content {
+	flex: 1 1 auto;
 	overflow-y: auto;
-	padding-right: 6px;
+	overflow-x: hidden;
+	padding: 8px 12px 12px 12px;
+	min-height: 0;
 }
 
 .chat-history-list {
@@ -152,8 +165,17 @@
 	background: var(--background-primary);
 }
 
+.chat-history-item__info {
+	flex: 1;
+	min-width: 0;
+	cursor: pointer;
+}
+
 .chat-history-item__title {
 	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .chat-history-item__meta {
@@ -163,7 +185,37 @@
 
 .chat-history-item__actions {
 	display: flex;
-	gap: 6px;
+	gap: 4px;
+	opacity: 0;
+	transition: opacity 0.15s ease;
+}
+
+.chat-history-item:hover .chat-history-item__actions {
+	opacity: 1;
+}
+
+/* 图标按钮样式 */
+.chat-history-icon-btn {
+	padding: 4px;
+	border: none;
+	border-radius: var(--radius-s);
+	background: transparent;
+	cursor: pointer;
+	color: var(--text-muted);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: all 0.15s ease;
+}
+
+.chat-history-icon-btn:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.chat-history-icon-btn--danger:hover {
+	background: var(--background-modifier-error);
+	color: var(--text-error);
 }
 
 .chat-model-selector {
@@ -656,9 +708,9 @@
 	}
 
 	.chat-history-panel {
-		width: calc(100% - 24px);
-		left: 12px;
-		right: 12px;
+		width: calc(100vw - 48px);
+		left: 24px;
+		right: 24px;
 	}
 
 	.chat-input {

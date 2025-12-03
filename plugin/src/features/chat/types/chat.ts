@@ -45,7 +45,7 @@ export interface ChatSession {
 	systemPrompt?: string; // 添加系统提示词字段，用于内部存储
 }
 
-export type ChatOpenMode = 'sidebar' | 'tab' | 'window';
+export type ChatOpenMode = 'sidebar' | 'left-sidebar' | 'tab' | 'window';
 
 export interface ChatSettings {
 	chatFolder: string;

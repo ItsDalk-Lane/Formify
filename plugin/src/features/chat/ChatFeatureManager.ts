@@ -62,6 +62,21 @@ export class ChatFeatureManager {
 					return;
 				}
 				await this.openLeaf(leaf, VIEW_TYPE_CHAT_SIDEBAR, true);
+			} else if (mode === 'left-sidebar') {
+				// 添加延迟确保工作区完全加载
+				await this.waitForWorkspaceReady();
+
+				const leaf = this.plugin.app.workspace.getLeftLeaf(false);
+				if (!leaf) {
+					console.warn('FormFlow Chat: 无法获取左侧边栏，可能工作区还未完全初始化');
+					// 尝试使用右侧边栏作为备选方案
+					const rightLeaf = this.plugin.app.workspace.getRightLeaf(false);
+					if (rightLeaf) {
+						await this.openLeaf(rightLeaf, VIEW_TYPE_CHAT_SIDEBAR, true);
+					}
+					return;
+				}
+				await this.openLeaf(leaf, VIEW_TYPE_CHAT_SIDEBAR, true);
 			} else {
 				// tab mode
 				const leaf = this.plugin.app.workspace.getLeaf(true);
@@ -97,6 +112,11 @@ export class ChatFeatureManager {
 			id: 'form-chat-open-sidebar',
 			name: '在侧边栏打开 AI Chat',
 			callback: () => this.activateChatView('sidebar')
+		});
+		this.plugin.addCommand({
+			id: 'form-chat-open-left-sidebar',
+			name: '在左侧边栏打开 AI Chat',
+			callback: () => this.activateChatView('left-sidebar')
 		});
 		this.plugin.addCommand({
 			id: 'form-chat-open-tab',

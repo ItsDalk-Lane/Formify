@@ -77,6 +77,8 @@ export const ChatSettingTabItem = ({ plugin }: { plugin: FormPlugin }) => {
 			switch (mode) {
 				case 'sidebar':
 					return '插件加载后自动在右侧边栏显示AI聊天界面';
+				case 'left-sidebar':
+					return '插件加载后自动在左侧边栏显示AI聊天界面';
 				case 'tab':
 					return '插件加载后自动在编辑区标签页显示AI聊天界面';
 				case 'window':
@@ -92,11 +94,12 @@ export const ChatSettingTabItem = ({ plugin }: { plugin: FormPlugin }) => {
 			.setDesc("选择AI Chat界面的默认打开位置")
 			.addDropdown((dropdown) => {
 				dropdown.addOption('sidebar', '右侧边栏');
+				dropdown.addOption('left-sidebar', '左侧边栏');
 				dropdown.addOption('tab', '编辑区标签页');
 				dropdown.addOption('window', '新窗口');
 				dropdown.setValue(plugin.settings.chat.openMode);
 				dropdown.onChange(async (value) => {
-					await updateSettings({ openMode: value as 'sidebar' | 'tab' | 'window' });
+					await updateSettings({ openMode: value as 'sidebar' | 'left-sidebar' | 'tab' | 'window' });
 					// 更新自动打开设置的描述文本
 					autoOpenSetting.setDesc(getOpenModeDescription(value));
 				});

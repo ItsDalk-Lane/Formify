@@ -18,12 +18,35 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 	const [historyItems, setHistoryItems] = useState<ChatHistoryEntry[]>([]);
 	const [showFileMenu, setShowFileMenu] = useState(false);
 	const fileMenuButtonRef = useRef<HTMLSpanElement>(null);
+	const historyPanelRef = useRef<HTMLDivElement>(null);
+	const historyButtonRef = useRef<HTMLSpanElement>(null);
 
 	useEffect(() => {
 		if (historyOpen) {
 			service.listHistory().then(setHistoryItems);
 		}
 	}, [historyOpen, service]);
+
+	// 监听点击事件，实现点击外部关闭
+	useEffect(() => {
+		if (!historyOpen) return;
+
+		const handleClickOutside = (event: MouseEvent) => {
+			// 检查点击是否在历史面板外部
+			if (historyPanelRef.current && !historyPanelRef.current.contains(event.target as Node)) {
+				setHistoryOpen(false);
+			}
+		};
+
+		// 延迟添加事件监听，避免立即触发
+		setTimeout(() => {
+			document.addEventListener('mousedown', handleClickOutside);
+		}, 100);
+
+		return () => {
+			document.removeEventListener('mousedown', handleClickOutside);
+		};
+	}, [historyOpen]);
 
 	const tokenCount = useMemo(() => {
 		const messages = state.activeSession?.messages ?? [];
@@ -37,6 +60,16 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 	const handleSelectHistory = async (item: ChatHistoryEntry) => {
 		await service.loadHistory(item.filePath);
 		setHistoryOpen(false);
+	};
+
+	const handleOpenHistoryFile = async (item: ChatHistoryEntry) => {
+		// 在新标签页中打开历史记录文件
+		const file = app.vault.getAbstractFileByPath(item.filePath);
+		if (file instanceof TFile) {
+			const leaf = app.workspace.getLeaf(true);
+			await leaf.openFile(file);
+			setHistoryOpen(false);
+		}
 	};
 
 	const handleTemplateButtonClick = () => {
@@ -135,21 +168,25 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 				<span onClick={handleNewChat} aria-label="新建聊天" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 					<MessageCirclePlus className="tw-size-4" />
 				</span>
-				<span onClick={() => setHistoryOpen((prev) => !prev)} aria-label="历史记录" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+				<span ref={historyButtonRef} onClick={() => setHistoryOpen((prev) => !prev)} aria-label="历史记录" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 					<History className="tw-size-4" />
 				</span>
 			</div>
 			{historyOpen && (
-				<ChatHistoryPanel
-					items={historyItems}
-					onSelect={handleSelectHistory}
-					onClose={() => setHistoryOpen(false)}
-					onRefresh={async () => setHistoryItems(await service.listHistory())}
-					onDelete={async (item) => {
-						await service.deleteHistory(item.filePath);
-						setHistoryItems(await service.listHistory());
-					}}
-				/>
+				<div ref={historyPanelRef}>
+					<ChatHistoryPanel
+						items={historyItems}
+						onSelect={handleSelectHistory}
+						onOpenFile={handleOpenHistoryFile}
+						onClose={() => setHistoryOpen(false)}
+						onRefresh={async () => setHistoryItems(await service.listHistory())}
+						onDelete={async (item) => {
+							await service.deleteHistory(item.filePath);
+							setHistoryItems(await service.listHistory());
+						}}
+						anchorRef={historyButtonRef}
+					/>
+				</div>
 			)}
 			{/* 文件菜单弹出窗口 */}
 			<FileMenuPopup

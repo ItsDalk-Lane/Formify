@@ -1,17 +1,41 @@
-import { X, RotateCcw } from 'lucide-react';
+import { X, RotateCcw, ExternalLink, Trash2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { useState, useEffect } from 'react';
 import { ChatHistoryEntry } from '../services/HistoryService';
 
 interface ChatHistoryPanelProps {
 	items: ChatHistoryEntry[];
 	onSelect: (item: ChatHistoryEntry) => void;
+	onOpenFile: (item: ChatHistoryEntry) => void;
 	onClose: () => void;
 	onRefresh: () => Promise<void> | void;
 	onDelete?: (item: ChatHistoryEntry) => void;
+	anchorRef?: React.RefObject<HTMLElement>;
 }
 
-export const ChatHistoryPanel = ({ items, onSelect, onClose, onRefresh, onDelete }: ChatHistoryPanelProps) => {
-	return (
-		<div className="chat-history-panel">
+export const ChatHistoryPanel = ({ items, onSelect, onOpenFile, onClose, onRefresh, onDelete, anchorRef }: ChatHistoryPanelProps) => {
+	const [position, setPosition] = useState({ right: 24, bottom: 80 });
+
+	// 根据按钮位置动态计算面板位置
+	useEffect(() => {
+		if (anchorRef?.current) {
+			const buttonRect = anchorRef.current.getBoundingClientRect();
+			const panelWidth = 320;
+			const panelHeight = 420;
+			const gap = 8;
+
+			// 计算水平位置：尽量靠右对齐按钮右侧
+			const right = Math.max(12, window.innerWidth - buttonRect.right);
+			
+			// 计算垂直位置：显示在按钮上方
+			const bottom = Math.max(12, window.innerHeight - buttonRect.top + gap);
+
+			setPosition({ right, bottom });
+		}
+	}, [anchorRef]);
+
+	const panelContent = (
+		<div className="chat-history-panel" style={{ right: `${position.right}px`, bottom: `${position.bottom}px` }}>
 			<header className="chat-history-panel__header">
 				<h3>聊天历史</h3>
 				<div className="chat-history-panel__header-actions">
@@ -30,20 +54,36 @@ export const ChatHistoryPanel = ({ items, onSelect, onClose, onRefresh, onDelete
 					<ul className="chat-history-list">
 						{items.map((item) => (
 							<li key={item.id} className="chat-history-item">
-								<div>
+								<div 
+									className="chat-history-item__info" 
+									onClick={() => onSelect(item)}
+								>
 									<div className="chat-history-item__title">{item.title}</div>
 									<div className="chat-history-item__meta">
-										{new Date(item.updatedAt).toLocaleString()}
-										{item.modelId ? ` · ${item.modelId}` : ''}
+										{new Date(item.createdAt).toLocaleString()}
 									</div>
 								</div>
 								<div className="chat-history-item__actions">
-									<button className="chat-btn" onClick={() => onSelect(item)}>
-										打开
+									<button 
+										className="chat-history-icon-btn" 
+										onClick={(e) => {
+											e.stopPropagation();
+											onOpenFile(item);
+										}}
+										aria-label="打开文件"
+									>
+										<ExternalLink className="tw-size-3.5" />
 									</button>
 									{onDelete && (
-										<button className="chat-btn chat-btn--danger" onClick={() => onDelete(item)}>
-											删除
+										<button 
+											className="chat-history-icon-btn chat-history-icon-btn--danger" 
+											onClick={(e) => {
+												e.stopPropagation();
+												onDelete(item);
+											}}
+											aria-label="删除记录"
+										>
+											<Trash2 className="tw-size-3.5" />
 										</button>
 									)}
 								</div>
@@ -54,5 +94,8 @@ export const ChatHistoryPanel = ({ items, onSelect, onClose, onRefresh, onDelete
 			</div>
 		</div>
 	);
+
+	// 使用 Portal 将历史面板渲染到 document.body，避免被父容器截断
+	return createPortal(panelContent, document.body);
 };
 

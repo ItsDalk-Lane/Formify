@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
 import { Notice } from 'obsidian';
 import './TemplateSelector.css';
@@ -111,7 +112,7 @@ export const TemplateSelector = ({ visible, onSelect, onClose, inputValue }: Tem
 
 	if (!visible) return null;
 
-	return (
+	const selectorContent = (
 		<div className="template-selector-overlay" onClick={onClose}>
 			<div className="template-selector" onClick={(e) => e.stopPropagation()}>
 				<div className="template-selector-header">
@@ -150,4 +151,7 @@ export const TemplateSelector = ({ visible, onSelect, onClose, inputValue }: Tem
 			</div>
 		</div>
 	);
+
+	// 使用 Portal 将模板选择器渲染到 document.body，避免被父容器截断
+	return createPortal(selectorContent, document.body);
 };
