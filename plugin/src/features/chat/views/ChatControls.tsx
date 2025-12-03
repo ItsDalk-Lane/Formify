@@ -6,6 +6,13 @@ import type { ChatHistoryEntry } from '../services/HistoryService';
 import { ChatHistoryPanel } from '../components/ChatHistory';
 import { FileMenuPopup } from '../components/FileMenuPopup';
 import { App, TFile, TFolder } from 'obsidian';
+import { 
+	calculateTokenStats, 
+	formatTokenCount, 
+	generateTokenTooltip, 
+	inferModelType,
+	type TokenStats 
+} from '../services/TokenService';
 
 interface ChatControlsProps {
 	service: ChatService;
@@ -48,10 +55,22 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 		};
 	}, [historyOpen]);
 
-	const tokenCount = useMemo(() => {
+	// 计算真实Token统计
+	const tokenStats = useMemo<TokenStats>(() => {
 		const messages = state.activeSession?.messages ?? [];
-		return messages.reduce((acc, message) => acc + message.content.length, 0);
-	}, [state.activeSession?.messages]);
+		const modelType = inferModelType(state.selectedModelId);
+		return calculateTokenStats(messages, modelType);
+	}, [state.activeSession?.messages, state.selectedModelId]);
+
+	// 格式化显示的Token数量
+	const formattedTokenCount = useMemo(() => {
+		return formatTokenCount(tokenStats.totalTokens);
+	}, [tokenStats.totalTokens]);
+
+	// 生成tooltip文本
+	const tokenTooltipText = useMemo(() => {
+		return generateTokenTooltip(tokenStats);
+	}, [tokenStats]);
 
 	const handleNewChat = () => {
 		service.createNewSession();
@@ -162,8 +181,11 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 			</div>
 			<div className="tw-flex-1"></div>
 			<div className="tw-flex tw-items-center tw-gap-2">
-				<span className="tw-text-xs tw-text-muted-foreground">
-					Tokens <span className="tw-font-semibold">{tokenCount}</span>
+				<span 
+					className="tw-text-xs tw-text-muted-foreground tw-cursor-help token-stats-display"
+					title={tokenTooltipText}
+				>
+					Tokens <span className="tw-font-semibold">{formattedTokenCount}</span>
 				</span>
 				<span onClick={handleNewChat} aria-label="新建聊天" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 					<MessageCirclePlus className="tw-size-4" />

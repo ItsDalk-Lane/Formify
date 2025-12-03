@@ -44,6 +44,7 @@
 		"@tanstack/react-virtual": "^3.13.5",
 		"axios": "^1.8.3",
 		"dotenv": "^17.2.3",
+		"gpt-tokenizer": "^3.4.0",
 		"handlebars": "^4.7.8",
 		"jose": "^5.2.4",
 		"lucide-react": "^0.424.0",
