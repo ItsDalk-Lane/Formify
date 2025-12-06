@@ -3,13 +3,24 @@ import { Strings } from "src/utils/Strings";
 import { OperatorHandlers } from "./handler/OperatorHandlers";
 import { Filter, FilterType } from "src/model/filter/Filter";
 import { RelationType, OperatorType } from "src/model/filter/OperatorType";
+import { IFormField } from "src/model/field/IFormField";
+import { FieldValueReaderFactory } from "src/service/field-value/FieldValueReaderFactory";
 
 export class FilterService {
 
+    /**
+     * 匹配条件（带字段定义支持）
+     * @param root 条件根节点
+     * @param getFieldValue 获取字段值的函数
+     * @param getValue 获取条件值的函数
+     * @param fieldDefinitions 字段定义数组（可选）
+     * @returns 是否匹配
+     */
     static match(
         root: Filter,
         getFieldValue: (property?: string) => any,
         getValue: (value?: any) => any,
+        fieldDefinitions?: IFormField[]
     ): boolean {
 
         if (!root) {
@@ -24,11 +35,11 @@ export class FilterService {
             const relation = root.operator as RelationType;
             if (relation === OperatorType.And) {
                 return root.conditions.every((condition) => {
-                    return FilterService.match(condition, getFieldValue, getValue);
+                    return FilterService.match(condition, getFieldValue, getValue, fieldDefinitions);
                 });
             } else {
                 return root.conditions.some((condition) => {
-                    return FilterService.match(condition, getFieldValue, getValue);
+                    return FilterService.match(condition, getFieldValue, getValue, fieldDefinitions);
                 });
             }
         } else {
@@ -38,10 +49,56 @@ export class FilterService {
             if (Objects.isNullOrUndefined(root.operator)) {
                 return true;
             }
-            const fieldValue = getFieldValue(root.property);
-            const value = getValue(root.value);
 
-            return OperatorHandlers.apply(root, fieldValue, value);
+            // 获取字段定义
+            const fieldDef = fieldDefinitions?.find(f => f.id === root.property);
+            
+            console.log('[FilterService] 调试信息:', {
+                property: root.property,
+                operator: root.operator,
+                conditionValueRaw: root.value,
+                hasFieldDefinitions: !!fieldDefinitions,
+                fieldDefinitionsCount: fieldDefinitions?.length,
+                foundFieldDef: !!fieldDef,
+                fieldDefType: fieldDef?.type
+            });
+            
+            // 获取字段值和条件值
+            let fieldValue = getFieldValue(root.property);
+            let conditionValue = getValue(root.value);
+            
+            console.log('[FilterService] 获取的值:', {
+                fieldValueRaw: fieldValue,
+                conditionValueRaw: conditionValue
+            });
+
+            // 如果有字段定义，使用FieldValueReader规范化值
+            if (fieldDef) {
+                const reader = FieldValueReaderFactory.getReader(fieldDef.type);
+                fieldValue = reader.getFieldValue(fieldDef, fieldValue);
+                conditionValue = reader.getFieldValue(fieldDef, conditionValue);
+                
+                console.log('[FilterService] 规范化后的值:', {
+                    fieldValueNormalized: fieldValue,
+                    conditionValueNormalized: conditionValue,
+                    readerType: fieldDef.type
+                });
+
+                // 传递字段定义和读取器给操作符处理器
+                const result = OperatorHandlers.apply(root, fieldValue, conditionValue, {
+                    fieldDefinition: fieldDef,
+                    valueReader: reader
+                });
+                
+                console.log('[FilterService] 条件判断结果:', result);
+                return result;
+            }
+
+            // 向后兼容：如果没有字段定义，使用原始比较逻辑
+            console.log('[FilterService] 使用原始比较逻辑（无字段定义）');
+            const result = OperatorHandlers.apply(root, fieldValue, conditionValue);
+            console.log('[FilterService] 原始比较结果:', result);
+            return result;
         }
     }
 

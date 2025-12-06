@@ -100,6 +100,13 @@ export class ActionChain {
 
         // 检查条件
         if (action.condition) {
+            console.log('[IActionService] 开始检查动作条件:', {
+                actionType: action.type,
+                hasFields: !!context.config.fields,
+                fieldsCount: context.config.fields?.length,
+                condition: action.condition
+            });
+            
             const result = FilterService.match(
                 action.condition,
                 (property) => {
@@ -123,15 +130,18 @@ export class ActionChain {
                         if (loopValue !== undefined) {
                             return loopValue;
                         }
-                        // 如果不是循环变量，尝试从表单状态获取
-                        return context.state.idValues[value.trim()];
                     }
-                    // 否则直接返回原始值
+                    // 直接返回原始值（条件值本身就是要比较的目标值）
                     return value;
-                }
+                },
+                context.config.fields  // 传递字段定义数组
             );
+            
+            console.log('[IActionService] 条件判断结果:', result);
+            
             if (!result) {
                 // 条件不匹配，直接跳到下一个
+                console.log('[IActionService] 条件不匹配，跳过动作');
                 return this.next(context);
             }
         }

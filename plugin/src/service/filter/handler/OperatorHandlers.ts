@@ -1,4 +1,5 @@
 import { Filter } from "src/model/filter/Filter";
+import { OperatorHandleContext } from "./OperatorHandler";
 import { EqOperatorHandler } from "./common/EqOperatorHandler";
 import { HasValueOperatorHandler } from "./common/HasValueOperatorHandler";
 import { NotEqOperatorHandler } from "./common/NotEqOperatorHandler";
@@ -19,6 +20,8 @@ import { FileContainsOperatorHandler } from "./file/FileContainsOperatorHandler"
 import { ArrayLengthEqualsOperatorHandler } from "./array/ArrayLengthEqualsOperatorHandler";
 import { ArrayLengthGreaterOperatorHandler } from "./array/ArrayLengthGreaterOperatorHandler";
 import { ArrayLengthLessOperatorHandler } from "./array/ArrayLengthLessOperatorHandler";
+import { CheckedOperatorHandler } from "./boolean/CheckedOperatorHandler";
+import { UncheckedOperatorHandler } from "./boolean/UncheckedOperatorHandler";
 
 export class OperatorHandlers {
 
@@ -42,19 +45,23 @@ export class OperatorHandlers {
         new TimeBeforeOperatorHandler(),
         new TimeAfterOperatorHandler(),
         new TimeBeforeOrEqualOperatorHandler(),
-        new TimeAfterOrEqualOperatorHandler()
+        new TimeAfterOrEqualOperatorHandler(),
+        new CheckedOperatorHandler(),
+        new UncheckedOperatorHandler(),
         // new InOperatorHandler(),
         // new NInOperatorHandler(),
         // new LikeOperatorHandler(),
         // new NotLikeOperatorHandler(),
     ]
 
-    static apply(filter: Filter, fieldValue: any, value: any): boolean {
+    static apply(filter: Filter, fieldValue: any, value: any, partialContext?: Partial<OperatorHandleContext>): boolean {
         const handler = this.handlers.find(h => h.accept(filter));
         if (handler) {
-            return handler.apply(fieldValue, value, {
-                filter: filter
-            });
+            const context: OperatorHandleContext = {
+                filter: filter,
+                ...partialContext
+            };
+            return handler.apply(fieldValue, value, context);
         }
         return false;
     }

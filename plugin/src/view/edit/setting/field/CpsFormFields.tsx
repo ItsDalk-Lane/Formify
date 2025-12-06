@@ -193,24 +193,41 @@ function updateCondition(
 	const isSelectField = (field: IFormField) =>
 		[FormFieldType.SELECT, FormFieldType.RADIO].includes(field.type);
 	if (isSelectField(original) && isSelectField(updated)) {
-		const originalOptions = (original as IOptionsField).options || [];
-		const updatedSelectField = (updated as IOptionsField).options || [];
-		const originalOptionId = originalOptions.find(
+		const originalOptionsField = original as IOptionsField;
+		const updatedOptionsField = updated as IOptionsField;
+		const originalOptions = originalOptionsField.options || [];
+		const updatedOptions = updatedOptionsField.options || [];
+		
+		// 处理enableCustomValue配置变更
+		const originalEnableCustomValue = originalOptionsField.enableCustomValue === true;
+		const updatedEnableCustomValue = updatedOptionsField.enableCustomValue === true;
+		
+		// 查找匹配的原始选项
+		const originalOption = originalOptions.find(
 			(o) => o.value === condition.value || o.label === condition.value
-		)?.id;
-		if (!originalOptionId) {
-			// if original option is not found, return condition as is
+		);
+		
+		if (!originalOption) {
+			// 如果没有找到原始选项，直接返回
 			return condition;
 		}
-
-		const updatedOption = updatedSelectField.find(
-			(o) => o.id === originalOptionId
+		
+		// 根据option.id查找更新后的选项
+		const updatedOption = updatedOptions.find(
+			(o) => o.id === originalOption.id
 		);
+		
 		if (updatedOption) {
-			condition.value = Strings.defaultIfEmpty(
-				updatedOption.value,
-				updatedOption.label
-			);
+			// 根据新的enableCustomValue配置设置条件值
+			if (updatedEnableCustomValue) {
+				// 使用value（如果value为空，则使用label）
+				condition.value = Strings.isNotEmpty(updatedOption.value) 
+					? updatedOption.value 
+					: updatedOption.label;
+			} else {
+				// 使用label
+				condition.value = updatedOption.label;
+			}
 		}
 	}
 	return condition;

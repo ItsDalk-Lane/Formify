@@ -96,7 +96,9 @@ export function FormCondition(props: {
 
 	const hideValue =
 		filter.operator === OperatorType.HasValue ||
-		filter.operator === OperatorType.NoValue;
+		filter.operator === OperatorType.NoValue ||
+		filter.operator === OperatorType.Checked ||
+		filter.operator === OperatorType.Unchecked;
 
 	return (
 		<>

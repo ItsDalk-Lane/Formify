@@ -1,0 +1,112 @@
+{
+  "id": "1c7e8cbf-7ac7-45f1-b5ba-4c19b3f05af8",
+  "fields": [
+    {
+      "id": "76b1a8b8-84da-4a0c-bc4a-66459f22988b",
+      "label": "下拉列表",
+      "type": "select",
+      "options": [
+        {
+          "id": "3fbf3576-daef-4f8d-b1d8-83b823141d82",
+          "label": "下拉列表1",
+          "value": ""
+        },
+        {
+          "id": "c1b59954-3030-413c-ac07-5bc51e4ed588",
+          "label": "下拉列表2",
+          "value": ""
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "402fddba-8df7-4460-a0f9-a4d1778b0ff0",
+      "type": "insertText",
+      "filePath": "002.md",
+      "targetFolder": "",
+      "fileName": "",
+      "openPageIn": "none",
+      "newFileTemplate": "",
+      "targetFileType": "current_file",
+      "position": "endOfContent",
+      "heading": "",
+      "content": "选择的是：下拉列表1\n",
+      "condition": {
+        "id": "2c0239f6-340d-453f-bedf-bd36e8becf0f",
+        "type": "group",
+        "operator": "and",
+        "conditions": [
+          {
+            "id": "8294ab03-d2f4-4c66-a8c6-6bc97937302a",
+            "type": "filter",
+            "property": "76b1a8b8-84da-4a0c-bc4a-66459f22988b",
+            "operator": "equals",
+            "value": "下拉列表1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "01c70870-8f03-4145-8e94-d510bda2a3de",
+      "type": "insertText",
+      "filePath": "002.md",
+      "targetFolder": "",
+      "fileName": "",
+      "openPageIn": "none",
+      "newFileTemplate": "",
+      "targetFileType": "current_file",
+      "position": "endOfContent",
+      "heading": "",
+      "content": "选择的是：下拉列表2\n",
+      "condition": {
+        "id": "2c0239f6-340d-453f-bedf-bd36e8becf0f",
+        "type": "group",
+        "operator": "and",
+        "conditions": [
+          {
+            "id": "8294ab03-d2f4-4c66-a8c6-6bc97937302a",
+            "type": "filter",
+            "property": "76b1a8b8-84da-4a0c-bc4a-66459f22988b",
+            "operator": "equals",
+            "value": "下拉列表2"
+          }
+        ]
+      }
+    }
+  ],
+  "actionGroups": [
+    {
+      "id": "3711a5df-bb9d-444b-bdb5-edd537d6c25e",
+      "actions": []
+    },
+    {
+      "id": "b331d632-b39e-4b5b-80f1-0bd2a1e00640",
+      "actions": [
+        {
+          "id": "d1f9cf9c-6d00-462a-9229-e515e4fba896",
+          "type": "insertText",
+          "filePath": "",
+          "targetFolder": "",
+          "fileName": "",
+          "openPageIn": "current",
+          "newFileTemplate": "",
+          "targetFileType": "specified_file",
+          "position": "endOfContent",
+          "heading": "",
+          "content": ""
+        }
+      ]
+    }
+  ],
+  "showSubmitSuccessToast": false,
+  "enableExecutionTimeout": false,
+  "executionTimeoutThreshold": 30,
+  "commandEnabled": true,
+  "contextMenuEnabled": true,
+  "enableAutoSubmit": true,
+  "autoSubmitDelayMs": 500,
+  "autoSubmitShowValidationError": true,
+  "autoSubmit": true,
+  "commandId": "1762593925416-q33v9y-ih8e"
+}

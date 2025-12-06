@@ -6,6 +6,7 @@ import { Filter } from "src/model/filter/Filter";
 import { OperatorType } from "src/model/filter/OperatorType";
 import { CpsFormFieldControl } from "../control/CpsFormFieldControl";
 import SelectControl from "../control/SelectControl";
+import { FieldValueReaderFactory } from "src/service/field-value/FieldValueReaderFactory";
 
 export function ConditionValue(props: {
 	filter: Filter;
@@ -53,6 +54,24 @@ export function ConditionValue(props: {
       />
     );
   }
+	// 对于NUMBER字段，确保存储为数字类型
+	if (field.type === FormFieldType.NUMBER) {
+		const reader = FieldValueReaderFactory.getReader(field.type);
+		const normalizedValue = reader.normalizeValue(field, value);
+		return (
+			<input
+				type="number"
+				step="any"
+				value={normalizedValue !== null ? normalizedValue : ''}
+				onChange={(e) => {
+					const numValue = parseFloat(e.target.value);
+					onChange(isNaN(numValue) ? null : numValue);
+				}}
+				placeholder={localInstance.value}
+			/>
+		);
+	}
+
 	if (
 		field.type === FormFieldType.RADIO ||
 		field.type === FormFieldType.SELECT

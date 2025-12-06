@@ -32,7 +32,8 @@ export class FormVisibilies {
                             return undefined;
                         }
                         return value;
-                    }
+                    },
+                    fields  // 传递字段定义数组
                 );
             }
             if (isMatch) {
