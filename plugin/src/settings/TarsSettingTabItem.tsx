@@ -14,7 +14,15 @@ export const TarsSettingTabItem = ({ plugin }: Props) => {
 
 		const panel = new TarsSettingTab(plugin.app, {
 			getSettings: () => plugin.settings.tars.settings,
+			getChatSettings: () => plugin.settings.chat,
 			saveSettings: async () => {
+				await plugin.saveSettings();
+			},
+			updateChatSettings: async (partial) => {
+				plugin.settings.chat = {
+					...plugin.settings.chat,
+					...partial,
+				};
 				await plugin.saveSettings();
 			},
 		});

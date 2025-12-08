@@ -27,10 +27,14 @@ import { zhipuVendor, ZhipuOptions, ZHIPU_THINKING_TYPE_OPTIONS, DEFAULT_ZHIPU_T
 import { getCapabilityEmoji, getCapabilityDisplayText } from './providers/utils'
 import { availableVendors, DEFAULT_TARS_SETTINGS } from './settings'
 import type { TarsSettings } from './settings'
+import FolderSuggest from '../../component/combobox/FolderSuggest'
+import type { ChatSettings } from '../chat/types/chat'
 
 export interface TarsSettingsContext {
 	getSettings: () => TarsSettings
+	getChatSettings: () => ChatSettings
 	saveSettings: () => Promise<void>
+	updateChatSettings: (partial: Partial<ChatSettings>) => Promise<void>
 }
 
 export class TarsSettingTab {
@@ -42,6 +46,7 @@ export class TarsSettingTab {
 	private autoSaveEnabled = true
 	private isProvidersCollapsed = true // 默认折叠列表
 	private isMessageCollapsed = true // 默认折叠消息设置
+	private isChatCollapsed = true // 默认折叠AI Chat设置
 	private isAdvancedCollapsed = true // 默认折叠高级设置
 	private doubaoRenderers = new Map<any, () => void>()
 
@@ -51,10 +56,18 @@ export class TarsSettingTab {
 		return this.settingsContext.getSettings()
 	}
 
+	private get chatSettings() {
+		return this.settingsContext.getChatSettings()
+	}
+
 	private async saveSettings() {
 		if (this.autoSaveEnabled) {
 			await this.settingsContext.saveSettings()
 		}
+	}
+
+	private async updateChatSettings(partial: Partial<ChatSettings>) {
+		await this.settingsContext.updateChatSettings(partial)
 	}
 
 	render(containerEl: HTMLElement, expandLastProvider = false, keepOpenIndex: number = -1): void {
@@ -413,6 +426,234 @@ export class TarsSettingTab {
 			)
 
 		// 移除间隔行，使区域直接相邻
+
+		// AI Chat 设置区域
+		const chatHeaderSetting = new Setting(containerEl)
+			.setName('AI Chat')
+
+		// 创建一个包装器来容纳图标
+		const chatButtonWrapper = chatHeaderSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
+		chatButtonWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
+
+		// 添加Chevron图标
+		const chatChevronIcon = chatButtonWrapper.createEl('div', { cls: 'ai-provider-chevron' })
+		chatChevronIcon.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="6 9 12 15 18 9"></polyline>
+			</svg>
+		`
+		chatChevronIcon.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			color: var(--text-muted);
+			cursor: pointer;
+			transition: transform 0.2s ease;
+			transform: ${this.isChatCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};
+			width: 16px;
+			height: 16px;
+		`
+
+		// 扩大整行的点击区域
+		const chatHeaderEl = chatHeaderSetting.settingEl
+		chatHeaderEl.style.cursor = 'pointer'
+		chatHeaderEl.style.borderRadius = '0px'
+		chatHeaderEl.style.border = '1px solid var(--background-modifier-border)'
+		chatHeaderEl.style.marginBottom = '0px'
+		chatHeaderEl.style.padding = '12px 12px'
+
+		// 创建AI Chat设置容器
+		const chatSection = containerEl.createDiv({ cls: 'chat-settings-container' })
+		chatSection.style.padding = '0 8px 8px 8px'
+		chatSection.style.backgroundColor = 'var(--background-secondary)'
+		chatSection.style.borderRadius = '0px'
+		chatSection.style.border = '1px solid var(--background-modifier-border)'
+		chatSection.style.borderTop = 'none'
+		chatSection.style.display = this.isChatCollapsed ? 'none' : 'block'
+
+		// 添加AI Chat区域折叠/展开功能
+		const toggleChatSection = () => {
+			this.isChatCollapsed = !this.isChatCollapsed
+			chatChevronIcon.style.transform = this.isChatCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'
+			chatSection.style.display = this.isChatCollapsed ? 'none' : 'block'
+		}
+
+		chatHeaderEl.addEventListener('click', (e) => {
+			if ((e.target as HTMLElement).closest('.ai-provider-chevron')) {
+				return
+			}
+			toggleChatSection()
+		})
+
+		chatChevronIcon.addEventListener('click', (e) => {
+			e.stopPropagation()
+			toggleChatSection()
+		})
+
+		new Setting(chatSection)
+			.setName("聊天历史保存目录")
+			.setDesc("AI聊天记录将以Markdown格式保存在此目录中")
+			.addText((text) => {
+				text.setValue(this.chatSettings.chatFolder);
+				text.setPlaceholder("AI Chats");
+				text.onChange(async (value) => {
+					await this.updateChatSettings({ chatFolder: value });
+				});
+				const suggest = new FolderSuggest(this.app, text.inputEl);
+				suggest.onSelect(async (folder) => {
+					text.setValue(folder.path);
+					await this.updateChatSettings({ chatFolder: folder.path });
+				});
+			});
+
+		new Setting(chatSection)
+			.setName("默认AI模型")
+			.setDesc("为新建聊天会话预设的模型")
+			.addDropdown((dropdown) => {
+				const providers = this.settings.providers;
+				const defaultValue =
+					this.chatSettings.defaultModel ||
+					providers[0]?.tag ||
+					"";
+				if (!providers.length) {
+					dropdown.addOption("", "尚未配置模型");
+					dropdown.setDisabled(true);
+				} else {
+					providers.forEach((provider) => {
+						dropdown.addOption(
+							provider.tag,
+							provider.tag
+						);
+					});
+					dropdown.setValue(defaultValue);
+				}
+				dropdown.onChange(async (value) => {
+					await this.updateChatSettings({ defaultModel: value });
+				});
+			});
+
+		new Setting(chatSection)
+			.setName("自动保存聊天记录")
+			.setDesc("在每次AI回复完成后自动将会话写入历史文件")
+			.addToggle((toggle) => {
+				toggle.setValue(this.chatSettings.autosaveChat);
+				toggle.onChange(async (value) => {
+					await this.updateChatSettings({ autosaveChat: value });
+				});
+			});
+
+		// 动态获取打开方式的描述
+		const getOpenModeDescription = (mode: string) => {
+			switch (mode) {
+				case 'sidebar':
+					return '插件加载后自动在右侧边栏显示AI聊天界面';
+				case 'left-sidebar':
+					return '插件加载后自动在左侧边栏显示AI聊天界面';
+				case 'tab':
+					return '插件加载后自动在编辑区标签页显示AI聊天界面';
+				case 'window':
+					return '插件加载后自动在新窗口显示AI聊天界面';
+				default:
+					return '插件加载后自动显示AI聊天界面';
+			}
+		};
+
+		// 创建打开方式设置项
+		const openModeSetting = new Setting(chatSection)
+			.setName("AI Chat 打开方式")
+			.setDesc("选择AI Chat界面的默认打开位置")
+			.addDropdown((dropdown) => {
+				dropdown.addOption('sidebar', '右侧边栏');
+				dropdown.addOption('left-sidebar', '左侧边栏');
+				dropdown.addOption('tab', '编辑区标签页');
+				dropdown.addOption('window', '新窗口');
+				dropdown.setValue(this.chatSettings.openMode);
+				dropdown.onChange(async (value) => {
+					await this.updateChatSettings({ openMode: value as 'sidebar' | 'left-sidebar' | 'tab' | 'window' });
+					// 更新自动打开设置的描述文本
+					autoOpenSetting.setDesc(getOpenModeDescription(value));
+				});
+			});
+
+		// 创建自动打开设置项，使用动态描述
+		const autoOpenSetting = new Setting(chatSection)
+			.setName("自动打开AI Chat界面")
+			.setDesc(getOpenModeDescription(this.chatSettings.openMode))
+			.addToggle((toggle) => {
+				toggle.setValue(this.chatSettings.showSidebarByDefault);
+				toggle.onChange(async (value) => {
+					await this.updateChatSettings({ showSidebarByDefault: value });
+				});
+			});
+
+		// 添加系统提示词设置项
+		new Setting(chatSection)
+			.setName("启用系统提示词")
+			.setDesc("使用AI助手功能中配置的系统提示词，为AI聊天提供一致的角色定义和行为指导")
+			.addToggle((toggle) => {
+				toggle.setValue(this.chatSettings.enableSystemPrompt ?? true);
+				toggle.onChange(async (value) => {
+					await this.updateChatSettings({ enableSystemPrompt: value });
+				});
+			});
+
+		// 内链解析设置区域
+		new Setting(chatSection)
+			.setName("启用内链解析")
+			.setDesc("自动解析用户消息中的内部链接（[[文件名]]），将链接指向的笔记内容提供给AI")
+			.addToggle((toggle) => {
+				toggle.setValue(this.chatSettings.enableInternalLinkParsing ?? true);
+				toggle.onChange(async (value) => {
+					await this.updateChatSettings({ enableInternalLinkParsing: value });
+				});
+			});
+
+		new Setting(chatSection)
+			.setName("解析模板中的内链")
+			.setDesc("启用后，提示词模板中的内部链接也会被解析")
+			.addToggle((toggle) => {
+				toggle.setValue(this.chatSettings.parseLinksInTemplates ?? true);
+				toggle.onChange(async (value) => {
+					await this.updateChatSettings({ parseLinksInTemplates: value });
+				});
+			});
+
+		new Setting(chatSection)
+			.setName("内链解析最大深度")
+			.setDesc("嵌套内链的最大解析层数，防止循环引用（默认：5层）")
+			.addSlider((slider) => {
+				slider
+					.setLimits(1, 10, 1)
+					.setValue(this.chatSettings.maxLinkParseDepth ?? 5)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						await this.updateChatSettings({ maxLinkParseDepth: value });
+					});
+			});
+
+		new Setting(chatSection)
+			.setName("链接解析超时时间")
+			.setDesc("单个链接解析的最大等待时间（毫秒），超时后保留原始文本（默认：5000ms）")
+			.addSlider((slider) => {
+				slider
+					.setLimits(1000, 30000, 1000)
+					.setValue(this.chatSettings.linkParseTimeout ?? 5000)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						await this.updateChatSettings({ linkParseTimeout: value });
+					});
+			});
+
+		// 自动添加活跃文件设置
+		new Setting(chatSection)
+			.setName("自动添加活跃文件")
+			.setDesc("自动将当前活跃的Markdown文件添加至AI聊天上下文中，并在文件关闭时自动移除。可以手动删除已添加的活跃文件。")
+			.addToggle((toggle) => {
+				toggle.setValue(this.chatSettings.autoAddActiveFile ?? true);
+				toggle.onChange(async (value) => {
+					await this.updateChatSettings({ autoAddActiveFile: value });
+				});
+			});
 
 		// 高级设置区域（使用 Setting 组件，与上方保持一致）
 		const advancedHeaderSetting = new Setting(containerEl)

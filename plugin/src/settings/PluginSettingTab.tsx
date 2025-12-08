@@ -8,7 +8,6 @@ import FormPlugin from "src/main";
 import { GeneralSettingTabItem } from "./GeneralSettingTabItem";
 import { TarsSettingTabItem } from "./TarsSettingTabItem";
 import { VariableManagementTabItem } from "./VariableManagementTabItem";
-import { ChatSettingTabItem } from "./ChatSettingTabItem";
 
 export class PluginSettingTab extends ObPluginSettingTab {
 	plugin: FormPlugin;
@@ -40,11 +39,6 @@ export class PluginSettingTab extends ObPluginSettingTab {
 								id: "tars_setting",
 								title: localInstance.tars_setting,
 								content: <TarsSettingTabItem plugin={this.plugin} />,
-							},
-							{
-								id: "chat_setting",
-								title: "AI Chat",
-								content: <ChatSettingTabItem plugin={this.plugin} />,
 							},
 							{
 								id: "variable_management",
