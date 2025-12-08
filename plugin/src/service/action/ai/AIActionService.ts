@@ -16,7 +16,7 @@ import CommonSuggestModal from "src/component/modal/CommonSuggestModal";
 import { AIRuntimeFieldsGenerator } from "src/utils/AIRuntimeFieldsGenerator";
 import { AIStreamingModal, AIStreamingModalOptions } from "src/component/modal/AIStreamingModal";
 import "src/component/modal/AIStreamingModal.css";
-import { InternalLinkParserService } from "src/services/InternalLinkParserService";
+import { InternalLinkParserService, ParseOptions } from "src/services/InternalLinkParserService";
 
 /**
  * AI动作服务
@@ -223,13 +223,11 @@ export default class AIActionService implements IActionService {
             const sourcePath = activeFile?.path ?? '';
             
             const parser = new InternalLinkParserService(context.app);
-            systemPrompt = await parser.parseLinks(systemPrompt, sourcePath, {
-                enableParsing: true,
-                maxDepth: 5,
-                timeout: 5000,
-                preserveOriginalOnError: true,
-                enableCache: true
-            });
+            systemPrompt = await parser.parseLinks(
+                systemPrompt,
+                sourcePath,
+                this.getInternalLinkParseOptions(context)
+            );
         }
 
         return systemPrompt;
@@ -259,13 +257,11 @@ export default class AIActionService implements IActionService {
             const sourcePath = activeFile?.path ?? '';
             
             const parser = new InternalLinkParserService(context.app);
-            userPrompt = await parser.parseLinks(userPrompt, sourcePath, {
-                enableParsing: true,
-                maxDepth: 5,
-                timeout: 5000,
-                preserveOriginalOnError: true,
-                enableCache: true
-            });
+            userPrompt = await parser.parseLinks(
+                userPrompt,
+                sourcePath,
+                this.getInternalLinkParseOptions(context)
+            );
         }
 
         return userPrompt;
@@ -317,6 +313,19 @@ export default class AIActionService implements IActionService {
         });
 
         return result;
+    }
+
+    private getInternalLinkParseOptions(context: ActionContext): ParseOptions {
+        const plugin = (context.app as any).plugins?.plugins?.["formify"];
+        const tarsSettings = plugin?.settings?.tars?.settings;
+
+        return {
+            enableParsing: true,
+            maxDepth: tarsSettings?.maxLinkParseDepth ?? 5,
+            timeout: tarsSettings?.linkParseTimeout ?? 5000,
+            preserveOriginalOnError: true,
+            enableCache: true
+        };
     }
 
     /**

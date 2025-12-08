@@ -74,7 +74,8 @@ export class InternalLinkParserService {
 	async parseLinks(
 		text: string,
 		sourcePath: string,
-		options?: ParseOptions
+		options?: ParseOptions,
+		currentDepth = 0
 	): Promise<string> {
 		// 1. 处理选项默认值
 		const opts: Required<ParseOptions> = {
@@ -90,7 +91,12 @@ export class InternalLinkParserService {
 			return text;
 		}
 
-		// 3. 提取所有内链
+		// 3. 深度保护
+		if (currentDepth >= opts.maxDepth) {
+			return text;
+		}
+
+		// 4. 提取所有内链
 		const links = extractLinks(text);
 		
 		if (links.length === 0) {
@@ -99,17 +105,18 @@ export class InternalLinkParserService {
 
 		DebugLogger.debug(`[InternalLinkParser] 发现 ${links.length} 个内链`);
 
-		// 4. 去重链接列表
+		// 5. 去重链接列表
 		const uniqueLinks = this.deduplicateLinks(links);
 
-		// 5. 并行解析所有唯一链接
+		// 6. 并行解析所有唯一链接
 		const resolutionMap = await this.resolveLinksInBatches(
 			uniqueLinks,
 			sourcePath,
-			opts
+			opts,
+			currentDepth
 		);
 
-		// 6. 从后向前替换文本(避免偏移量问题)
+		// 7. 从后向前替换文本(避免偏移量问题)
 		let result = text;
 		const reversedLinks = [...links].reverse();
 
@@ -148,7 +155,8 @@ export class InternalLinkParserService {
 	private async resolveLinksInBatches(
 		linkTexts: string[],
 		sourcePath: string,
-		options: Required<ParseOptions>
+		options: Required<ParseOptions>,
+		currentDepth: number
 	): Promise<Map<string, string>> {
 		const resolutionMap = new Map<string, string>();
 
@@ -158,7 +166,7 @@ export class InternalLinkParserService {
 			
 			const batchResults = await Promise.all(
 				batch.map(linkText =>
-					this.resolveSingleLink(linkText, sourcePath, 0, options)
+					this.resolveSingleLink(linkText, sourcePath, currentDepth, options)
 				)
 			);
 
@@ -187,31 +195,31 @@ export class InternalLinkParserService {
 	): Promise<string> {
 		const originalText = `[[${linkText}]]`;
 
+		// 1. 检查递归深度
+		if (depth >= options.maxDepth) {
+			DebugLogger.warn(`[InternalLinkParser] 达到最大深度限制: ${linkText}`);
+			return originalText;
+		}
+
+		// 2. 检查循环引用
+		if (this.isCircularReference(linkText)) {
+			DebugLogger.warn(`[InternalLinkParser] 检测到循环引用: ${linkText}`);
+			return originalText;
+		}
+
+		// 3. 检查缓存
+		if (options.enableCache) {
+			const cached = this.getCachedContent(linkText, sourcePath);
+			if (cached !== null) {
+				DebugLogger.debug(`[InternalLinkParser] 缓存命中: ${linkText}`);
+				return cached;
+			}
+		}
+
+		// 4. 标记解析路径
+		this.parseStack.add(linkText);
+
 		try {
-			// 1. 检查递归深度
-			if (depth >= options.maxDepth) {
-				DebugLogger.warn(`[InternalLinkParser] 达到最大深度限制: ${linkText}`);
-				return originalText;
-			}
-
-			// 2. 检查循环引用
-			if (this.isCircularReference(linkText)) {
-				DebugLogger.warn(`[InternalLinkParser] 检测到循环引用: ${linkText}`);
-				return originalText;
-			}
-
-			// 3. 检查缓存
-			if (options.enableCache) {
-				const cached = this.getCachedContent(linkText, sourcePath);
-				if (cached !== null) {
-					DebugLogger.debug(`[InternalLinkParser] 缓存命中: ${linkText}`);
-					return cached;
-				}
-			}
-
-			// 4. 标记解析路径
-			this.parseStack.add(linkText);
-
 			// 5. 设置超时保护
 			const contentPromise = resolveLinkedContent(this.app, linkText, sourcePath);
 			const timeoutPromise = new Promise<string>((_, reject) => {
@@ -219,22 +227,19 @@ export class InternalLinkParserService {
 			});
 
 			const content = await Promise.race([contentPromise, timeoutPromise]);
+			const targetFile = this.app.metadataCache.getFirstLinkpathDest(linkText, sourcePath);
+			const nestedSourcePath = targetFile?.path ?? sourcePath;
+			const parsedContent = await this.parseLinks(content, nestedSourcePath, options, depth + 1);
 
-			// 6. 清除路径标记
-			this.parseStack.delete(linkText);
-
-			// 7. 缓存结果
+			// 6. 缓存结果
 			if (options.enableCache) {
-				this.setCachedContent(linkText, sourcePath, content);
+				this.setCachedContent(linkText, sourcePath, parsedContent);
 			}
 
-			DebugLogger.debug(`[InternalLinkParser] 成功解析: ${linkText} (${content.length} 字符)`);
-			return content;
+			DebugLogger.debug(`[InternalLinkParser] 成功解析: ${linkText} (${parsedContent.length} 字符)`);
+			return parsedContent;
 
 		} catch (error) {
-			// 清除路径标记
-			this.parseStack.delete(linkText);
-
 			if (options.preserveOriginalOnError) {
 				const errorMsg = error instanceof Error ? error.message : String(error);
 				DebugLogger.warn(`[InternalLinkParser] 解析失败,保留原文: ${linkText} - ${errorMsg}`);
@@ -242,6 +247,9 @@ export class InternalLinkParserService {
 			} else {
 				throw error;
 			}
+		} finally {
+			// 7. 清除路径标记
+			this.parseStack.delete(linkText);
 		}
 	}
 

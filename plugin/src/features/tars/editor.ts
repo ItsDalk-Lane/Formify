@@ -22,8 +22,10 @@ import { APP_FOLDER, EditorStatus, TarsSettings, availableVendors } from './sett
 import { GenerationStats, StatusBarManager } from './statusBarManager'
 import { TagRole } from './suggest'
 import { DebugLogger } from '../../utils/DebugLogger'
+import { InternalLinkParserService } from '../../services/InternalLinkParserService'
 
 export interface RunEnv {
+	readonly app: App
 	readonly appMeta: MetadataCache
 	readonly vault: Vault
 	readonly fileText: string
@@ -39,6 +41,8 @@ export interface RunEnv {
 		systemTags: string[]
 		enableInternalLink: boolean
 		enableInternalLinkForAssistantMsg: boolean
+		maxInternalLinkDepth: number
+		linkParseTimeout: number
 		enableDefaultSystemMsg: boolean
 		defaultSystemMsg: string
 		enableStreamLog: boolean
@@ -46,6 +50,7 @@ export interface RunEnv {
 	saveAttachment: SaveAttachment
 	resolveEmbed: ResolveEmbedAsBinary
 	createPlainText: CreatePlainText
+	linkParser: InternalLinkParserService
 }
 
 interface Tag extends Omit<Message, 'content'> {
@@ -112,6 +117,8 @@ export const buildRunEnv = async (app: App, settings: TarsSettings): Promise<Run
 		systemTags: settings.systemTags,
 		enableInternalLink: settings.enableInternalLink,
 		enableInternalLinkForAssistantMsg: settings.enableInternalLinkForAssistantMsg,
+		maxInternalLinkDepth: settings.maxLinkParseDepth ?? 5,
+		linkParseTimeout: settings.linkParseTimeout ?? 5000,
 		enableDefaultSystemMsg: settings.enableDefaultSystemMsg,
 		defaultSystemMsg: settings.defaultSystemMsg,
 		enableStreamLog: settings.enableStreamLog
@@ -135,6 +142,7 @@ export const buildRunEnv = async (app: App, settings: TarsSettings): Promise<Run
 	}
 
 	return {
+		app,
 		appMeta,
 		vault,
 		fileText,
@@ -146,31 +154,8 @@ export const buildRunEnv = async (app: App, settings: TarsSettings): Promise<Run
 		options,
 		saveAttachment,
 		resolveEmbed,
-		createPlainText
-	}
-}
-
-const resolveLinkedContent = async (env: RunEnv, linkText: string) => {
-	const { appMeta, vault, filePath } = env
-	const { path, subpath } = parseLinktext(linkText)
-	DebugLogger.debug('path', path, 'subpath', subpath)
-
-	const targetFile = appMeta.getFirstLinkpathDest(path, filePath)
-
-	if (targetFile === null) {
-		throw new Error('LinkText broken: ' + linkText.substring(0, 20))
-	}
-
-	const fileMeta = appMeta.getFileCache(targetFile)
-	if (fileMeta === null) throw new Error(`No metadata found: ${path} ${subpath}`)
-
-	const targetFileText = await vault.cachedRead(targetFile)
-	if (subpath) {
-		const subPathData = resolveSubpath(fileMeta, subpath)
-		if (subPathData === null) throw new Error(`no subpath data found: ${subpath}`)
-		return targetFileText.substring(subPathData.start.offset, subPathData.end ? subPathData.end.offset : undefined)
-	} else {
-		return targetFileText
+		createPlainText,
+		linkParser: new InternalLinkParserService(app)
 	}
 }
 
@@ -237,7 +222,9 @@ const resolveTextRangeWithLinks = async (
 		fileText,
 		links: links = [],
 		embeds: embeds = [],
-		options: { enableInternalLink, enableInternalLinkForAssistantMsg }
+		options: { enableInternalLink, enableInternalLinkForAssistantMsg, maxInternalLinkDepth, linkParseTimeout },
+		linkParser,
+		filePath
 	} = env
 
 	const startOffset = section.position.start.offset <= contentRange[0] ? contentRange[0] : section.position.start.offset
@@ -263,33 +250,46 @@ const resolveTextRangeWithLinks = async (
 	)
 
 	const shouldResolveLinks = role === 'assistant' ? enableInternalLinkForAssistantMsg : enableInternalLink
-	const resolvedLinkTexts = await Promise.all(
-		filteredRefers.map(async (item) => {
-			const referCache = item.ref
-			if (item.type === 'link') {
-				return {
-					referCache,
-					text: shouldResolveLinks ? await resolveLinkedContent(env, referCache.link) : referCache.original
-				}
-			}
-			return {
-				referCache,
-				text: ''
-			}
-		})
-	)
+	let textWithoutEmbeds = fileText.slice(startOffset, endOffset)
 
-	const accumulatedText = resolvedLinkTexts.reduce(
-		(acc, { referCache, text }) => ({
-			endOffset: referCache.position.end.offset,
-			text: acc.text + fileText.slice(acc.endOffset, referCache.position.start.offset) + text
-		}),
-		{ endOffset: startOffset, text: '' }
-	)
-	DebugLogger.debug('accumulatedText', accumulatedText)
-	return {
-		text: accumulatedText.text + fileText.slice(accumulatedText.endOffset, endOffset),
-		range: [startOffset, endOffset] as [number, number]
+	const embedsToStrip = filteredRefers.filter((item) => item.type === 'embed')
+	if (embedsToStrip.length) {
+		const sortedEmbeds = embedsToStrip.sort(
+			(a, b) => b.ref.position.start.offset - a.ref.position.start.offset
+		)
+		sortedEmbeds.forEach(({ ref }) => {
+			const relativeStart = ref.position.start.offset - startOffset
+			const relativeEnd = ref.position.end.offset - startOffset
+			textWithoutEmbeds =
+				textWithoutEmbeds.slice(0, relativeStart) + textWithoutEmbeds.slice(relativeEnd)
+		})
+	}
+
+	if (!shouldResolveLinks) {
+		return {
+			text: textWithoutEmbeds,
+			range: [startOffset, endOffset] as [number, number]
+		}
+	}
+
+	try {
+		const parsedText = await linkParser.parseLinks(textWithoutEmbeds, filePath, {
+			enableParsing: true,
+			maxDepth: maxInternalLinkDepth,
+			timeout: linkParseTimeout,
+			preserveOriginalOnError: true,
+			enableCache: true
+		})
+		return {
+			text: parsedText,
+			range: [startOffset, endOffset] as [number, number]
+		}
+	} catch (err) {
+		DebugLogger.warn('内链解析失败，使用原文返回', err)
+		return {
+			text: textWithoutEmbeds,
+			range: [startOffset, endOffset] as [number, number]
+		}
 	}
 }
 

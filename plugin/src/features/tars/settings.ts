@@ -36,6 +36,8 @@ export interface TarsSettings {
 	}
 	enableInternalLink: boolean // For user messages and system messages
 	enableInternalLinkForAssistantMsg: boolean
+	maxLinkParseDepth: number
+	linkParseTimeout: number
 	confirmRegenerate: boolean
 	enableTagSuggest: boolean
 	tagSuggestMaxLineLength: number
@@ -63,6 +65,8 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 	},
 	enableInternalLink: true,
 	enableInternalLinkForAssistantMsg: false,
+	maxLinkParseDepth: 5,
+	linkParseTimeout: 5000,
 	answerDelayInMilliseconds: 2000,
 	confirmRegenerate: true,
 	enableTagSuggest: true,

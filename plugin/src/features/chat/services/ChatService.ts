@@ -1077,7 +1077,14 @@ export class ChatService {
 			systemPrompt,
 			selectedFiles,
 			selectedFolders,
-			fileContentOptions
+			fileContentOptions,
+			linkParseOptions: {
+				enabled: this.settings.enableInternalLinkParsing,
+				maxDepth: this.settings.maxLinkParseDepth,
+				timeout: this.settings.linkParseTimeout,
+				preserveOriginalOnError: true,
+				enableCache: true
+			}
 		});
 	}
 

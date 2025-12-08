@@ -1,9 +1,20 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Message as ProviderMessage, EmbedCache } from 'src/features/tars/providers';
 import type { ChatMessage, ChatRole, SelectedFile, SelectedFolder } from '../types/chat';
-import { FileContentService, FileContentOptions } from './FileContentService';
+import { FileContentService, FileContentOptions, FileContent, FolderContent } from './FileContentService';
+import { InternalLinkParserService, ParseOptions } from 'src/services/InternalLinkParserService';
+
+interface LinkParseOptions {
+	enabled: boolean;
+	maxDepth: number;
+	timeout: number;
+	preserveOriginalOnError?: boolean;
+	enableCache?: boolean;
+}
 
 export class MessageService {
+	private linkParser?: InternalLinkParserService;
+
 	constructor(private readonly app: any, private readonly fileContentService?: FileContentService) {}
 
 	createMessage(role: ChatRole, content: string, extras?: Partial<ChatMessage>): ChatMessage {
@@ -40,10 +51,11 @@ export class MessageService {
 			selectedFiles?: SelectedFile[];
 			selectedFolders?: SelectedFolder[];
 			fileContentOptions?: FileContentOptions;
+			linkParseOptions?: LinkParseOptions;
 		}
 	): Promise<ProviderMessage[]> {
 		const providerMessages: ProviderMessage[] = [];
-		const { contextNotes = [], systemPrompt, selectedFiles = [], selectedFolders = [], fileContentOptions } = options ?? {};
+		const { contextNotes = [], systemPrompt, selectedFiles = [], selectedFolders = [], fileContentOptions, linkParseOptions } = options ?? {};
 
 		if (systemPrompt) {
 			providerMessages.push({
@@ -54,7 +66,13 @@ export class MessageService {
 
 		// 处理文件和文件夹内容
 		if (selectedFiles.length > 0 || selectedFolders.length > 0) {
-			await this.processFileAndFolderContent(selectedFiles, selectedFolders, providerMessages, fileContentOptions);
+			await this.processFileAndFolderContent(
+				selectedFiles,
+				selectedFolders,
+				providerMessages,
+				fileContentOptions,
+				linkParseOptions
+			);
 		}
 
 		// 不再显示contextNotes作为Relevant context，因为文件和文件夹信息已经在processFileAndFolderContent中处理
@@ -151,7 +169,8 @@ export class MessageService {
 		selectedFiles: SelectedFile[],
 		selectedFolders: SelectedFolder[],
 		providerMessages: ProviderMessage[],
-		options?: FileContentOptions
+		options?: FileContentOptions,
+		linkParseOptions?: LinkParseOptions
 	): Promise<void> {
 		if (!this.fileContentService) {
 			console.warn('[MessageService] FileContentService未初始化，无法处理文件内容');
@@ -164,8 +183,8 @@ export class MessageService {
 			// 处理文件内容
 			if (selectedFiles.length > 0) {
 				const fileContents = await this.fileContentService.readFilesContent(selectedFiles, options);
-				
-				for (const fileContent of fileContents) {
+				const parsedFiles = await this.parseFilesWithInternalLinks(fileContents, linkParseOptions);
+				for (const fileContent of parsedFiles) {
 					fileContentText += this.fileContentService.formatFileContentForAI(fileContent) + '\n\n';
 				}
 			}
@@ -173,8 +192,8 @@ export class MessageService {
 			// 处理文件夹内容
 			if (selectedFolders.length > 0) {
 				const folderContents = await this.fileContentService.readFoldersContent(selectedFolders, options);
-				
-				for (const folderContent of folderContents) {
+				const parsedFolders = await this.parseFoldersWithInternalLinks(folderContents, linkParseOptions);
+				for (const folderContent of parsedFolders) {
 					fileContentText += this.fileContentService.formatFolderContentForAI(folderContent) + '\n\n';
 				}
 			}
@@ -187,6 +206,48 @@ export class MessageService {
 		} catch (error) {
 			console.error('[MessageService] 处理文件和文件夹内容失败:', error);
 		}
+	}
+
+	private getLinkParser(): InternalLinkParserService {
+		if (!this.linkParser) {
+			this.linkParser = new InternalLinkParserService(this.app);
+		}
+		return this.linkParser;
+	}
+
+	private async parseContentIfNeeded(content: string, sourcePath: string, options?: LinkParseOptions): Promise<string> {
+		if (!options?.enabled) {
+			return content;
+		}
+
+		const parser = this.getLinkParser();
+		const parseOptions: ParseOptions = {
+			enableParsing: true,
+			maxDepth: options.maxDepth,
+			timeout: options.timeout,
+			preserveOriginalOnError: options.preserveOriginalOnError ?? true,
+			enableCache: options.enableCache ?? true
+		};
+
+		return parser.parseLinks(content, sourcePath, parseOptions);
+	}
+
+	private async parseFilesWithInternalLinks(files: FileContent[], options?: LinkParseOptions): Promise<FileContent[]> {
+		return Promise.all(
+			files.map(async (file) => ({
+				...file,
+				content: await this.parseContentIfNeeded(file.content, file.path, options)
+			}))
+		);
+	}
+
+	private async parseFoldersWithInternalLinks(folders: FolderContent[], options?: LinkParseOptions): Promise<FolderContent[]> {
+		return Promise.all(
+			folders.map(async (folder) => ({
+				...folder,
+				files: await this.parseFilesWithInternalLinks(folder.files, options)
+			}))
+		);
 	}
 
 	/**

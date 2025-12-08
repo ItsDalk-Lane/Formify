@@ -425,6 +425,34 @@ export class TarsSettingTab {
 				})
 			)
 
+		new Setting(messageSection)
+			.setName('内链解析最大深度')
+			.setDesc('限制嵌套内链的递归层数，避免循环引用（默认 5 层）')
+			.addSlider((slider) => {
+				slider
+					.setLimits(1, 10, 1)
+					.setValue(this.settings.maxLinkParseDepth ?? 5)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.settings.maxLinkParseDepth = value
+						await this.saveSettings()
+					})
+			})
+
+		new Setting(messageSection)
+			.setName('内链解析超时时间')
+			.setDesc('单个内链的解析超时（毫秒），超时后保留原始链接文本')
+			.addSlider((slider) => {
+				slider
+					.setLimits(1000, 30000, 1000)
+					.setValue(this.settings.linkParseTimeout ?? 5000)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.settings.linkParseTimeout = value
+						await this.saveSettings()
+					})
+			})
+
 		// 移除间隔行，使区域直接相邻
 
 		// AI Chat 设置区域
