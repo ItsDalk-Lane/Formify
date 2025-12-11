@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useObsidianApp } from "src/context/obsidianAppContext";
 import { FormConfig } from "src/model/FormConfig";
 import "./CpsFormEditView.css";
@@ -11,24 +11,44 @@ export default function (props: {
 	const app = useObsidianApp();
 	const { filePath, defaultConfig } = props;
 	const [formConfig, setFormConfig] = useState<FormConfig>(defaultConfig);
+	
+	// 用于跟踪是否是用户编辑触发的变更，避免与外部同步冲突
+	const isUserEdit = useRef(false);
+	// 防抖定时器
+	const writeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-	// 监听 defaultConfig 变化，当外部配置更新时同步内部状态
-	useEffect(() => {
-		setFormConfig(defaultConfig);
-	}, [defaultConfig]);
-
-	useEffect(() => {
-		if (formConfig) {
-			app.vault.writeJson(filePath, formConfig);
+	// 保存配置到文件（带防抖）
+	const saveConfig = useCallback((config: FormConfig) => {
+		if (writeTimeoutRef.current) {
+			clearTimeout(writeTimeoutRef.current);
 		}
-	}, [formConfig, filePath]);
+		writeTimeoutRef.current = setTimeout(() => {
+			app.vault.writeJson(filePath, config);
+		}, 150);
+	}, [app, filePath]);
+
+	// 处理用户编辑
+	const handleChange = useCallback((config: FormConfig) => {
+		isUserEdit.current = true;
+		setFormConfig(config);
+		saveConfig(config);
+	}, [saveConfig]);
+
+	// 清理定时器
+	useEffect(() => {
+		return () => {
+			if (writeTimeoutRef.current) {
+				clearTimeout(writeTimeoutRef.current);
+			}
+		};
+	}, []);
 
 	return (
 		<CpsFormSetting
 			filePath={filePath}
 			formConfig={formConfig}
 			onChange={(config) => {
-				setFormConfig(config as FormConfig);
+				handleChange(config as FormConfig);
 			}}
 		/>
 	);
