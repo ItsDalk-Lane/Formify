@@ -169,6 +169,8 @@ export class En implements Local {
 	property_value_suggestions = "Property value suggestions";
 	register_as_command = "Register as Command";
 	register_as_command_description = "After registering as a command, you can set up shortcuts to open the form";
+	run_on_startup = "Run on startup";
+	run_on_startup_description = "When enabled, this form will be automatically submitted when Obsidian starts";
 	enable_context_menu = "Show in Context Menu";
 	enable_context_menu_description = "When enabled, this form can be accessed directly from the editor's context menu";
 	remove_value = "Remove value";

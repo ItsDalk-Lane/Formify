@@ -168,6 +168,10 @@ export class ZhTw implements Local {
 	property_value_suggestions = "屬性值列表";
 	register_as_command = "註冊為命令";
 	register_as_command_description = "註冊為命令後可以設置快捷鍵打開表單";
+	run_on_startup = "啟動時運行";
+	run_on_startup_description = "開啟後，Obsidian 啟動時將自動提交此表單";
+	enable_context_menu = "在右鍵選單中顯示";
+	enable_context_menu_description = "啟用後可以在編輯器右鍵選單中直接訪問此表單";
 	remove_value = "刪除值";
 		custom_title = "自定義標題";
 		custom_title_description = "輸入自定義動作標題，留空則使用系統生成的標題";

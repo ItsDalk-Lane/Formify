@@ -162,6 +162,8 @@ export interface Local {
 	property: string;
 	register_as_command_description: string;
 	register_as_command: string;
+	run_on_startup: string;
+	run_on_startup_description: string;
 	remove_value: string;
 	custom_title: string;
 	custom_title_description: string;

@@ -170,6 +170,8 @@ export class Zh implements Local {
 	property_value_suggestions = "属性值列表";
 	register_as_command = "注册为命令";
 	register_as_command_description = "注册为命令后可以设置快捷键打开表单";
+	run_on_startup = "启动时运行";
+	run_on_startup_description = "开启后，Obsidian 启动时将自动提交此表单";
 	enable_context_menu = "在右键菜单中显示";
 	enable_context_menu_description = "启用后可以在编辑器右键菜单中直接访问此表单";
 	remove_value = "删除值";

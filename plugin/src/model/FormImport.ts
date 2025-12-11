@@ -37,6 +37,7 @@ export interface PartialImportConfig {
         showSubmitSuccessToast?: boolean;
         enableExecutionTimeout?: boolean;
         executionTimeoutThreshold?: number;
+        runOnStartup?: boolean;
     };
 }
 

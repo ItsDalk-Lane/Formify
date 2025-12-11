@@ -232,6 +232,9 @@ export default function (props: {
 			...(importedConfig.executionTimeoutThreshold !== undefined && {
 				executionTimeoutThreshold: importedConfig.executionTimeoutThreshold
 			}),
+			...(importedConfig.runOnStartup !== undefined && {
+				runOnStartup: importedConfig.runOnStartup
+			}),
 		});
 
 		onChange(mergedConfig);
@@ -344,6 +347,22 @@ export default function (props: {
 									</span>
 									<ContextMenuToggle
 										filePath={props.filePath}
+									/>
+								</CpsFormItem>
+								<CpsFormItem label={localInstance.run_on_startup}>
+									<span className="form--FormFieldLabelDescription">
+										{localInstance.run_on_startup_description}
+									</span>
+									<ToggleControl
+										value={formConfig.runOnStartup === true}
+										onValueChange={(v) => {
+											const newConfig = new FormConfig(formConfig.id);
+											Object.assign(newConfig, {
+												...formConfig,
+												runOnStartup: v,
+											});
+											onChange(newConfig);
+										}}
 									/>
 								</CpsFormItem>
 									<CpsFormItem label={localInstance.show_submit_success_toast}>

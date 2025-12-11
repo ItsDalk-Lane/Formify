@@ -885,9 +885,11 @@ export function FormImportDialog({
                                             updateOtherSetting('showSubmitSuccessToast', true);
                                             updateOtherSetting('enableExecutionTimeout', true);
                                             updateOtherSetting('executionTimeoutThreshold', 30);
+                                            updateOtherSetting('runOnStartup', false);
                                         } else {
                                             updateOtherSetting('showSubmitSuccessToast', false);
                                             updateOtherSetting('enableExecutionTimeout', false);
+                                            updateOtherSetting('runOnStartup', false);
                                         }
                                     }}
                                     onClick={(e) => e.stopPropagation()}
@@ -904,11 +906,13 @@ export function FormImportDialog({
                                             updateOtherSetting('showSubmitSuccessToast', true);
                                             updateOtherSetting('enableExecutionTimeout', true);
                                             updateOtherSetting('executionTimeoutThreshold', 30);
+                                            updateOtherSetting('runOnStartup', false);
                                             // 如果选择了其他设置，确保展开状态为true
                                             setExpandedSections(prev => ({ ...prev, otherSettings: true }));
                                         } else {
                                             updateOtherSetting('showSubmitSuccessToast', false);
                                             updateOtherSetting('enableExecutionTimeout', false);
+                                            updateOtherSetting('runOnStartup', false);
                                         }
                                     }}
                                 >
@@ -1003,6 +1007,29 @@ export function FormImportDialog({
                                             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>秒后超时</span>
                                         </div>
                                     )}
+                                    <label style={{
+                                        display: 'flex',
+                                        alignItems: 'flex-start',
+                                        gap: '8px',
+                                        cursor: 'pointer',
+                                        fontSize: '12px',
+                                        padding: '8px 12px',
+                                        borderRadius: '4px',
+                                        background: 'var(--background-secondary)',
+                                    }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={importOptions.partialImport.otherSettings?.runOnStartup === true}
+                                            onChange={(e) => updateOtherSetting('runOnStartup', e.target.checked)}
+                                            style={{ marginTop: '2px' }}
+                                        />
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontWeight: '500', marginBottom: '2px' }}>{localInstance.run_on_startup}</div>
+                                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                                {localInstance.run_on_startup_description}
+                                            </div>
+                                        </div>
+                                    </label>
                                 </div>
                             </div>
                         )}

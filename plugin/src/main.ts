@@ -5,6 +5,7 @@ import { formIntegrationService } from './service/command/FormIntegrationService
 import { contextMenuService } from './service/command/ContextMenuService';
 import { applicationCommandService } from './service/command/ApplicationCommandService';
 import { applicationFileViewService } from './service/file-view/ApplicationFileViewService';
+import { getStartupFormService } from './service/command/StartupFormService';
 import { PluginSettingTab } from './settings/PluginSettingTab';
 import './style/base.css'
 import './style/chat.css'
@@ -46,7 +47,22 @@ export default class FormPlugin extends Plugin {
 
 			// 然后初始化脚本服务
 			formScriptService.initialize(this.app, this.settings.scriptFolder);
+
+			// 执行启动时运行的表单
+			this.executeStartupForms();
 		});
+	}
+
+	/**
+	 * 执行标记为"启动时运行"的表单
+	 */
+	private async executeStartupForms(): Promise<void> {
+		try {
+			const startupFormService = getStartupFormService(this.app);
+			await startupFormService.executeStartupForms();
+		} catch (error) {
+			DebugLogger.error('[FormPlugin] 执行启动表单失败', error);
+		}
 	}
 
 	onunload() {

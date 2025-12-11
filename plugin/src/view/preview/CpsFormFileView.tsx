@@ -65,6 +65,9 @@ export function CpsFormFileView(props: Props) {
 			...(importedConfig.executionTimeoutThreshold !== undefined && {
 				executionTimeoutThreshold: importedConfig.executionTimeoutThreshold,
 			}),
+			...(importedConfig.runOnStartup !== undefined && {
+				runOnStartup: importedConfig.runOnStartup,
+			}),
 		});
 
 		// 先更新本地状态以立刻刷新界面，再写入文件确保落盘
