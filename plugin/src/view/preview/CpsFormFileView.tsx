@@ -1,5 +1,7 @@
 import { Presentation, Settings, Download } from "lucide-react";
+import { Notice } from "obsidian";
 import { useState } from "react";
+import { useObsidianApp } from "src/context/obsidianAppContext";
 import { useForm } from "../../hooks/useForm";
 import { FormConfig } from "../../model/FormConfig";
 import CpsFormEditView from "../edit/CpsFormEditView";
@@ -25,9 +27,17 @@ export function CpsFormFileView(props: Props) {
 	const [inEditing, setInEditing] = useState<boolean>(false);
 	const [showImportDialog, setShowImportDialog] = useState<boolean>(false);
 	const { filePath, options, className, formConfig: config, ...rest } = props;
-	const { formConfig, formFile } = useForm(filePath, props.formConfig);
+	const app = useObsidianApp();
+	const { formConfig, formFile, setFormConfig, reload } = useForm(filePath, props.formConfig);
 	const fileName = formFile.split("/").pop() || "";
 	const fileBasename = fileName.split(".")[0] || "";
+
+	// 处理导入对话框关闭（无论是完成导入、取消还是点击X）
+	const handleImportDialogClose = () => {
+		setShowImportDialog(false);
+		// 从文件重新加载表单配置，确保界面显示最新数据
+		reload();
+	};
 
 	// 处理导入完成
 	const handleImportComplete = (importedConfig: FormConfig) => {
@@ -36,24 +46,38 @@ export function CpsFormFileView(props: Props) {
 		Object.assign(mergedConfig, {
 			...formConfig,
 			// 合并字段
-			fields: [...formConfig.fields, ...importedConfig.fields],
+			fields: [
+				...(formConfig.fields || []),
+				...(importedConfig.fields || []),
+			],
 			// 合并动作
-			actions: [...formConfig.actions, ...importedConfig.actions],
+			actions: [
+				...(formConfig.actions || []),
+				...(importedConfig.actions || []),
+			],
 			// 合并其他设置（如果导入的设置存在）
 			...(importedConfig.showSubmitSuccessToast !== undefined && {
-				showSubmitSuccessToast: importedConfig.showSubmitSuccessToast
+				showSubmitSuccessToast: importedConfig.showSubmitSuccessToast,
 			}),
 			...(importedConfig.enableExecutionTimeout !== undefined && {
-				enableExecutionTimeout: importedConfig.enableExecutionTimeout
+				enableExecutionTimeout: importedConfig.enableExecutionTimeout,
 			}),
 			...(importedConfig.executionTimeoutThreshold !== undefined && {
-				executionTimeoutThreshold: importedConfig.executionTimeoutThreshold
+				executionTimeoutThreshold: importedConfig.executionTimeoutThreshold,
 			}),
 		});
 
-		// 这里需要触发表单配置的更新
-		// 由于这是在预览视图中，我们需要通过某种方式通知父组件
-		setShowImportDialog(false);
+		// 先更新本地状态以立刻刷新界面，再写入文件确保落盘
+		setFormConfig(mergedConfig);
+		app.vault
+			.writeJson(formFile, mergedConfig)
+			.then(() => {
+				setShowImportDialog(false);
+			})
+			.catch((error) => {
+				console.error("导入结果写入文件失败:", error);
+				new Notice("导入结果写入失败，请重试或检查存储权限。");
+			});
 	};
 
 	return (
@@ -131,7 +155,7 @@ export function CpsFormFileView(props: Props) {
 				<FormImportDialog
 					app={(window as any).app}
 					currentConfig={formConfig}
-					onClose={() => setShowImportDialog(false)}
+					onClose={handleImportDialogClose}
 					onComplete={handleImportComplete}
 				/>
 			)}

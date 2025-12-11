@@ -52,52 +52,28 @@ export class FilterService {
 
             // 获取字段定义
             const fieldDef = fieldDefinitions?.find(f => f.id === root.property);
-            
-            console.log('[FilterService] 调试信息:', {
-                property: root.property,
-                operator: root.operator,
-                conditionValueRaw: root.value,
-                hasFieldDefinitions: !!fieldDefinitions,
-                fieldDefinitionsCount: fieldDefinitions?.length,
-                foundFieldDef: !!fieldDef,
-                fieldDefType: fieldDef?.type
-            });
-            
+
             // 获取字段值和条件值
             let fieldValue = getFieldValue(root.property);
             let conditionValue = getValue(root.value);
-            
-            console.log('[FilterService] 获取的值:', {
-                fieldValueRaw: fieldValue,
-                conditionValueRaw: conditionValue
-            });
 
             // 如果有字段定义，使用FieldValueReader规范化值
             if (fieldDef) {
                 const reader = FieldValueReaderFactory.getReader(fieldDef.type);
                 fieldValue = reader.getFieldValue(fieldDef, fieldValue);
                 conditionValue = reader.getFieldValue(fieldDef, conditionValue);
-                
-                console.log('[FilterService] 规范化后的值:', {
-                    fieldValueNormalized: fieldValue,
-                    conditionValueNormalized: conditionValue,
-                    readerType: fieldDef.type
-                });
 
                 // 传递字段定义和读取器给操作符处理器
                 const result = OperatorHandlers.apply(root, fieldValue, conditionValue, {
                     fieldDefinition: fieldDef,
                     valueReader: reader
                 });
-                
-                console.log('[FilterService] 条件判断结果:', result);
+
                 return result;
             }
 
             // 向后兼容：如果没有字段定义，使用原始比较逻辑
-            console.log('[FilterService] 使用原始比较逻辑（无字段定义）');
             const result = OperatorHandlers.apply(root, fieldValue, conditionValue);
-            console.log('[FilterService] 原始比较结果:', result);
             return result;
         }
     }

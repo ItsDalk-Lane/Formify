@@ -12,6 +12,11 @@ export default function (props: {
 	const { filePath, defaultConfig } = props;
 	const [formConfig, setFormConfig] = useState<FormConfig>(defaultConfig);
 
+	// 监听 defaultConfig 变化，当外部配置更新时同步内部状态
+	useEffect(() => {
+		setFormConfig(defaultConfig);
+	}, [defaultConfig]);
+
 	useEffect(() => {
 		if (formConfig) {
 			app.vault.writeJson(filePath, formConfig);

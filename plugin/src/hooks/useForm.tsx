@@ -58,5 +58,7 @@ export function useForm(filePath: string, defaultConfig: FormConfig) {
 	return {
 		formConfig,
 		formFile,
+		setFormConfig,
+		reload: () => parseConfig().then((c) => c && setFormConfig(c)),
 	};
 }
