@@ -61,6 +61,8 @@ export interface ChatSettings {
 	linkParseTimeout: number; // 单个链接解析超时时间(毫秒)
 	// 自动添加活跃文件配置
 	autoAddActiveFile: boolean; // 是否自动将当前活跃的Markdown文件添加为上下文
+	// 功能区图标配置
+	showRibbonIcon: boolean; // 是否在功能区显示AI Chat图标
 }
 
 export interface ChatState {
@@ -96,5 +98,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	linkParseTimeout: 5000, // 默认超时5秒
 	// 自动添加活跃文件默认配置
 	autoAddActiveFile: true, // 默认启用自动添加活跃文件
+	// 功能区图标默认配置
+	showRibbonIcon: true, // 默认显示功能区图标
 };
 

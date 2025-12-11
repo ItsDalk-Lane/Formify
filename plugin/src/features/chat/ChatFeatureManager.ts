@@ -32,6 +32,11 @@ export class ChatFeatureManager {
 
 	updateChatSettings(settings: Partial<ChatSettings>) {
 		this.service.updateSettings(settings);
+		
+		// 如果设置了功能区图标显示状态，则更新图标
+		if ('showRibbonIcon' in settings) {
+			this.updateRibbonIcon(settings.showRibbonIcon);
+		}
 	}
 
 	updateProviderSettings(settings: TarsSettings) {
@@ -151,11 +156,41 @@ export class ChatFeatureManager {
 	}
 
 	private createRibbon() {
-		this.ribbonEl = this.plugin.addRibbonIcon('message-circle', 'AI Chat', () => {
-			const openMode = this.plugin.settings.chat.openMode;
-			this.activateChatView(openMode);
-		});
-		this.ribbonEl?.addClass('chat-ribbon-icon');
+		// 检查设置中是否应该显示功能区图标
+		const shouldShowRibbon = this.plugin.settings.chat.showRibbonIcon ?? true;
+		
+		if (shouldShowRibbon) {
+			this.ribbonEl = this.plugin.addRibbonIcon('message-circle', 'AI Chat', () => {
+				const openMode = this.plugin.settings.chat.openMode;
+				this.activateChatView(openMode);
+			});
+			this.ribbonEl?.addClass('chat-ribbon-icon');
+		} else {
+			this.ribbonEl = null;
+		}
+	}
+	
+	private updateRibbonIcon(show: boolean) {
+		// 如果当前状态与目标状态相同，则不需要更新
+		const isCurrentlyShowing = this.ribbonEl !== null;
+		if (isCurrentlyShowing === show) {
+			return;
+		}
+		
+		// 先移除现有图标
+		if (this.ribbonEl) {
+			this.ribbonEl.remove();
+			this.ribbonEl = null;
+		}
+		
+		// 根据新状态创建或隐藏图标
+		if (show) {
+			this.ribbonEl = this.plugin.addRibbonIcon('message-circle', 'AI Chat', () => {
+				const openMode = this.plugin.settings.chat.openMode;
+				this.activateChatView(openMode);
+			});
+			this.ribbonEl?.addClass('chat-ribbon-icon');
+		}
 	}
 
 	private async waitForWorkspaceReady(): Promise<void> {

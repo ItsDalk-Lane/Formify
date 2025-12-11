@@ -683,6 +683,17 @@ export class TarsSettingTab {
 				});
 			});
 
+		// 功能区图标显示设置
+		new Setting(chatSection)
+			.setName("显示功能区图标")
+			.setDesc("在Obsidian左侧功能区显示AI Chat图标按钮。禁用后可以通过命令面板或快捷键打开AI Chat。")
+			.addToggle((toggle) => {
+				toggle.setValue(this.chatSettings.showRibbonIcon ?? true);
+				toggle.onChange(async (value) => {
+					await this.updateChatSettings({ showRibbonIcon: value });
+				});
+			});
+
 		// 高级设置区域（使用 Setting 组件，与上方保持一致）
 		const advancedHeaderSetting = new Setting(containerEl)
 			.setName(t('Advanced'))
