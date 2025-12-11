@@ -8,6 +8,7 @@ import FormPlugin from "src/main";
 import { GeneralSettingTabItem } from "./GeneralSettingTabItem";
 import { TarsSettingTabItem } from "./TarsSettingTabItem";
 import { VariableManagementTabItem } from "./VariableManagementTabItem";
+import { CommandIdManagementTabItem } from "./CommandIdManagementTabItem";
 
 export class PluginSettingTab extends ObPluginSettingTab {
 	plugin: FormPlugin;
@@ -44,6 +45,11 @@ export class PluginSettingTab extends ObPluginSettingTab {
 								id: "variable_management",
 								title: localInstance.variable_management,
 								content: <VariableManagementTabItem plugin={this.plugin} />,
+							},
+							{
+								id: "command_id_management",
+								title: localInstance.command_id_management,
+								content: <CommandIdManagementTabItem plugin={this.plugin} />,
 							}
 						]}
 					></Tab>

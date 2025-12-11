@@ -47,7 +47,7 @@ export class FormConfig {
      * 生成稳定的命令ID
      * @param filePath 文件路径
      */
-    private generateCommandId(filePath: string): string {
+    public generateCommandId(filePath: string): string {
         const timestamp = Date.now();
         const pathHash = this.hashString(filePath).substr(0, 6);
         const random = Math.random().toString(36).substr(2, 4);

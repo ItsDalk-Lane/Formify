@@ -205,6 +205,88 @@
 	color: var(--text-muted);
 }
 
+.form--ConflictFiles {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.form--ConflictFile {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px;
+	background: var(--background-primary);
+	border-radius: 6px;
+	border: 1px solid var(--background-modifier-border);
+}
+
+.form--ConflictFileName {
+	font-weight: 500;
+	font-size: 13px;
+}
+
+.form--ConflictFilePath {
+	font-size: 11px;
+	color: var(--text-muted);
+	padding: 2px 4px;
+	background: var(--background-secondary);
+	border-radius: 4px;
+}
+
+.form--ConflictCount {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 8px;
+	background: var(--background-secondary);
+	border-radius: 4px;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.form--VariableInfo {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	border-radius: 6px;
+	background: rgba(46, 204, 113, 0.15);
+	color: var(--color-green, #2ecc71);
+}
+
+.form--VariableInfo[data-type="loading"] {
+	background: rgba(255, 149, 0, 0.15);
+	color: var(--color-orange);
+}
+
+.form--VariableFooter {
+	display: flex;
+	justify-content: center;
+	padding: 12px 0;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.form--VariableFooterInfo {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	color: var(--text-muted);
+}
+
+.animate-spin {
+	animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(360deg);
+	}
+}
+
 @media screen and (max-width: 768px) {
 	.form--VariableToolbar {
 		flex-direction: column;
