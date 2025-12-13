@@ -14,7 +14,9 @@ import { TextFormAction } from "../model/action/TextFormAction";
 import { AIFormAction } from "../model/action/AIFormAction";
 import { AI_MODEL_SELECT_ON_SUBMIT } from "../model/action/AIFormActionConstants";
 import { LoopFormAction } from "src/model/action/LoopFormAction";
+import { RunCommandFormAction } from "src/model/action/RunCommandFormAction";
 import { LoopType } from "src/model/enums/LoopType";
+import { CommandSourceMode } from "src/model/enums/CommandSourceMode";
 import { FormActionType } from "../model/enums/FormActionType";
 import { ButtonActionType } from "../model/enums/ButtonActionType";
 import { TargetFileType } from "../model/enums/TargetFileType";
@@ -99,11 +101,28 @@ export function useActionTitle(value: IFormAction) {
 		}
 
 		if (value.type === FormActionType.RUN_COMMAND) {
-			const runCommandAction = value as any;
-			title =
-				runCommandAction.commandName ||
-				runCommandAction.commandId ||
-				localInstance.no_command_selected;
+			const runCommandAction = value as RunCommandFormAction;
+			
+			// 根据命令来源模式显示不同的标题
+			const mode = runCommandAction.commandSourceMode || CommandSourceMode.FIXED;
+			
+			if (mode === CommandSourceMode.FIXED) {
+				title =
+					runCommandAction.commandName ||
+					runCommandAction.commandId ||
+					localInstance.no_command_selected;
+			} else if (mode === CommandSourceMode.ALL_COMMANDS) {
+				title = localInstance.command_source_mode_all;
+			} else if (mode === CommandSourceMode.SINGLE_PLUGIN) {
+				title = runCommandAction.sourcePluginId 
+					? `${localInstance.command_source_mode_single_plugin}: ${runCommandAction.sourcePluginId}`
+					: localInstance.no_plugin_selected;
+			} else if (mode === CommandSourceMode.SELECTED_COMMANDS) {
+				const count = runCommandAction.selectedCommands?.length || 0;
+				title = count > 0 
+					? `${localInstance.command_source_mode_selected} (${count})`
+					: localInstance.no_commands_selected;
+			}
 		}
 
 		if (value.type === FormActionType.BUTTON) {

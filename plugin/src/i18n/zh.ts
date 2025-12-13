@@ -207,6 +207,7 @@ export class Zh implements Local {
 	loop_variable_conflict_self = "循环变量之间存在冲突";
 	apply_suggestion = "应用建议";
 	search_variables = "搜索变量";
+	search_commands = "搜索命令...";
 	conflict_status = "冲突状态";
 	has_conflicts = "存在冲突";
 	no_conflicts = "无冲突";
@@ -509,6 +510,19 @@ export class Zh implements Local {
 	ai_select_model_prompt = "请选择AI模型";
 	ai_select_template_prompt = "请选择提示词模板";
 	ai_template_folder_empty = "模板文件夹为空";
+	// 命令来源模式
+	select_command_to_run = "请选择要执行的命令";
+	command_source_mode = "命令来源";
+	command_source_mode_fixed = "固定命令";
+	command_source_mode_all = "所有可用命令";
+	command_source_mode_single_plugin = "指定插件的命令";
+	command_source_mode_selected = "指定命令列表";
+	command_source_plugin = "选择插件";
+	command_source_selected_commands = "已选择的命令";
+	no_plugin_selected = "未选择插件";
+	no_commands_selected = "未选择命令";
+	add_command = "添加命令";
+	select_plugin = "请选择插件";
 	// AI流式输出相关
 	ai_enable_streaming_modal = "启用流式输出模态框";
 	ai_enable_streaming_modal_desc = "开启后AI执行时将显示实时输出模态框,可查看生成过程";

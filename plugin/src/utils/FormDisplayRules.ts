@@ -5,10 +5,13 @@ import { ISelectField } from "../model/field/ISelectField";
 import { BaseTimeField, TimeFieldDefaultValueType } from "../model/field/time/BaseTimeField";
 import { isTimeFormField } from "./isTimeFormField";
 import { AIFormAction } from "../model/action/AIFormAction";
+import { RunCommandFormAction } from "../model/action/RunCommandFormAction";
 import { FormActionType } from "../model/enums/FormActionType";
 import { PromptSourceType } from "../model/enums/PromptSourceType";
+import { CommandSourceMode } from "../model/enums/CommandSourceMode";
 import { AI_MODEL_SELECT_ON_SUBMIT } from "../model/action/AIFormActionConstants";
 import { Strings } from "./Strings";
+import { IFormAction } from "../model/action/IFormAction";
 
 /**
  * 表单提交界面显示规则系统
@@ -34,7 +37,13 @@ export class FormDisplayRules {
             return true;
         }
 
-        // 所有字段都有默认值且AI动作配置完整，不显示表单界面
+        // 检查命令动作配置
+        const commandActionResult = this.checkCommandActionDefaults(formConfig.actions);
+        if (commandActionResult.needsUserInput) {
+            return true;
+        }
+
+        // 所有字段都有默认值且动作配置完整，不显示表单界面
         return false;
     }
 
@@ -213,6 +222,54 @@ export class FormDisplayRules {
      */
     static getActionsNeedingInput(formConfig: FormConfig): AIFormAction[] {
         const result = this.checkAIActionDefaults(formConfig.actions);
+        return result.actionsNeedingInput;
+    }
+
+    /**
+     * 检查命令动作配置情况
+     * @param actions 动作列表
+     * @returns 检查结果
+     */
+    private static checkCommandActionDefaults(actions: IFormAction[]): {
+        needsUserInput: boolean;
+        actionsNeedingInput: RunCommandFormAction[];
+    } {
+        const actionsNeedingInput: RunCommandFormAction[] = [];
+
+        for (const action of actions) {
+            if (action.type === FormActionType.RUN_COMMAND) {
+                const commandAction = action as RunCommandFormAction;
+                // 直接检查属性，因为从JSON反序列化的对象不是类实例
+                const mode = commandAction.commandSourceMode || CommandSourceMode.FIXED;
+                let needsSelection = false;
+                
+                if (mode === CommandSourceMode.FIXED) {
+                    // 固定命令模式下，如果没有命令ID则需要用户输入
+                    needsSelection = Strings.isEmpty(commandAction.commandId);
+                } else {
+                    // 非固定命令模式（所有命令、指定插件、指定命令列表）总是需要运行时选择
+                    needsSelection = true;
+                }
+                
+                if (needsSelection) {
+                    actionsNeedingInput.push(commandAction);
+                }
+            }
+        }
+
+        return {
+            needsUserInput: actionsNeedingInput.length > 0,
+            actionsNeedingInput
+        };
+    }
+
+    /**
+     * 获取需要运行时选择命令的动作列表
+     * @param formConfig 表单配置
+     * @returns 需要运行时选择命令的动作列表
+     */
+    static getCommandActionsNeedingInput(formConfig: FormConfig): RunCommandFormAction[] {
+        const result = this.checkCommandActionDefaults(formConfig.actions);
         return result.actionsNeedingInput;
     }
 }

@@ -10,7 +10,9 @@ import { TextFormAction } from "src/model/action/TextFormAction";
 import { AIFormAction } from "src/model/action/AIFormAction";
 import { AI_MODEL_SELECT_ON_SUBMIT } from "src/model/action/AIFormActionConstants";
 import { LoopFormAction } from "src/model/action/LoopFormAction";
+import { RunCommandFormAction } from "src/model/action/RunCommandFormAction";
 import { LoopType } from "src/model/enums/LoopType";
+import { CommandSourceMode } from "src/model/enums/CommandSourceMode";
 import { BreakFormAction } from "src/model/action/BreakFormAction";
 import { ContinueFormAction } from "src/model/action/ContinueFormAction";
 import { FormActionType } from "../model/enums/FormActionType";
@@ -33,6 +35,7 @@ type FormActionImp =
     | TextFormAction
     | AIFormAction
     | LoopFormAction
+    | RunCommandFormAction
     | BreakFormAction
     | ContinueFormAction;
 
@@ -65,7 +68,10 @@ function validateAction(action: FormActionImp) {
             loop_data_source_required: "Loop data source is required",
             loop_condition_required: "Loop condition expression is required",
             loop_count_range_required: "Count loop requires start and end values",
-            loop_pagination_config_required: "Pagination loop requires full configuration"
+            loop_pagination_config_required: "Pagination loop requires full configuration",
+            command_required: "Please select a command",
+            plugin_required: "Please select a plugin",
+            commands_required: "Please select at least one command"
         },
         "zh-CN": {
             target_folder_required: "请填写目标文件夹",
@@ -84,7 +90,10 @@ function validateAction(action: FormActionImp) {
             loop_data_source_required: "请填写循环数据源",
             loop_condition_required: "请填写循环条件表达式",
             loop_count_range_required: "请填写计数循环的起始和结束值",
-            loop_pagination_config_required: "请完善分页循环的配置"
+            loop_pagination_config_required: "请完善分页循环的配置",
+            command_required: "请选择要执行的命令",
+            plugin_required: "请选择插件",
+            commands_required: "请至少选择一个命令"
 
         },
         "zh-TW": {
@@ -104,7 +113,10 @@ function validateAction(action: FormActionImp) {
             loop_data_source_required: "請填寫循環資料來源",
             loop_condition_required: "請填寫循環條件表示式",
             loop_count_range_required: "請填寫計數循環的起始與結束值",
-            loop_pagination_config_required: "請完善分頁循環的參數設定"
+            loop_pagination_config_required: "請完善分頁循環的參數設定",
+            command_required: "請選擇要執行的命令",
+            plugin_required: "請選擇插件",
+            commands_required: "請至少選擇一個命令"
         }
     }
 
@@ -280,6 +292,34 @@ function validateAction(action: FormActionImp) {
                     ) {
                         messages.push(l.loop_pagination_config_required);
                     }
+                    break;
+            }
+            break;
+        case FormActionType.RUN_COMMAND:
+            const runCommandAction = action as RunCommandFormAction;
+            const mode = runCommandAction.commandSourceMode || CommandSourceMode.FIXED;
+            
+            switch (mode) {
+                case CommandSourceMode.FIXED:
+                    // 固定命令模式必须选择一个命令
+                    if (Strings.isEmpty(runCommandAction.commandId)) {
+                        messages.push(l.command_required);
+                    }
+                    break;
+                case CommandSourceMode.SINGLE_PLUGIN:
+                    // 单个插件模式必须选择一个插件
+                    if (Strings.isEmpty(runCommandAction.sourcePluginId)) {
+                        messages.push(l.plugin_required);
+                    }
+                    break;
+                case CommandSourceMode.SELECTED_COMMANDS:
+                    // 选定命令模式必须选择至少一个命令
+                    if (!runCommandAction.selectedCommands || runCommandAction.selectedCommands.length === 0) {
+                        messages.push(l.commands_required);
+                    }
+                    break;
+                case CommandSourceMode.ALL_COMMANDS:
+                    // 所有命令模式不需要额外验证
                     break;
             }
             break;

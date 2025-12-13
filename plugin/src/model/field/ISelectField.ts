@@ -9,6 +9,8 @@ export interface ISelectField extends IOptionsField {
 export interface IOptionsField extends IFormField {
     options: SelectOption[];
     enableCustomValue?: boolean;
+    searchable?: boolean;
+    searchPlaceholder?: string;
 }
 
 export interface SelectOption {

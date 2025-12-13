@@ -206,6 +206,7 @@ export class En implements Local {
 	loop_variable_conflict_self = "Loop variable names conflict with each other";
 	apply_suggestion = "Apply suggestion";
 	search_variables = "Search variables";
+	search_commands = "Search commands...";
 	conflict_status = "Conflict status";
 	has_conflicts = "Has conflicts";
 	no_conflicts = "No conflicts";
@@ -497,6 +498,19 @@ export class En implements Local {
 	ai_select_model_prompt = "Please select an AI model";
 	ai_select_template_prompt = "Please select a prompt template";
 	ai_template_folder_empty = "Template folder is empty";
+	// Command source mode
+	select_command_to_run = "Please select a command to run";
+	command_source_mode = "Command source";
+	command_source_mode_fixed = "Fixed command";
+	command_source_mode_all = "All available commands";
+	command_source_mode_single_plugin = "Commands from specified plugin";
+	command_source_mode_selected = "Selected commands list";
+	command_source_plugin = "Select plugin";
+	command_source_selected_commands = "Selected commands";
+	no_plugin_selected = "No plugin selected";
+	no_commands_selected = "No commands selected";
+	add_command = "Add command";
+	select_plugin = "Please select a plugin";
 	// AI streaming output related
 	ai_enable_streaming_modal = "Enable Streaming Output Modal";
 	ai_enable_streaming_modal_desc = "When enabled, AI execution will show a real-time output modal";

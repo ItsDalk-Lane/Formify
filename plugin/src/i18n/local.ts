@@ -457,6 +457,20 @@ export interface Local {
 	ai_select_model_prompt: string;
 	ai_select_template_prompt: string;
 	ai_template_folder_empty: string;
+	// Command source mode
+	select_command_to_run: string;
+	command_source_mode: string;
+	command_source_mode_fixed: string;
+	command_source_mode_all: string;
+	command_source_mode_single_plugin: string;
+	command_source_mode_selected: string;
+	command_source_plugin: string;
+	command_source_selected_commands: string;
+	no_plugin_selected: string;
+	no_commands_selected: string;
+	add_command: string;
+	search_commands: string;
+	select_plugin: string;
 	// AI streaming modal
 	ai_enable_streaming_modal: string;
 	ai_enable_streaming_modal_desc: string;

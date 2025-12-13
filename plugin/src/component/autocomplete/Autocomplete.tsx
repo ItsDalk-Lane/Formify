@@ -9,6 +9,7 @@ type Props = {
 	onSelect: (value: string) => void;
 	getOptions: () => AutocompleteOption[];
 	searchPlaceholder?: string;
+	allowCreate?: boolean;
 	defaultOpen?: boolean;
 	onOpenChange?: (open: boolean) => void;
 	customTriggerElement?: React.ReactNode;
@@ -100,6 +101,7 @@ export function Autocomplete(props: Props) {
 						value={props.value}
 						onSelect={handleSelect}
 						placeholder={props.searchPlaceholder}
+						allowCreate={props.allowCreate}
 					/>
 				</Popover.Content>
 			)}

@@ -1,6 +1,7 @@
 import { Code } from "lucide-react";
 import { Command } from "obsidian";
 import { useCallback, useMemo } from "react";
+import type { ReactNode } from "react";
 import {
 	Autocomplete,
 	AutocompleteOption,
@@ -20,6 +21,8 @@ export class CommandInfo {
 
 export function ObsidianCommandAutocomplete(props: {
 	commandId?: string;
+	customTriggerElement?: ReactNode;
+	triggerAriaLabel?: string;
 	onChange: (path: { id: string; name: string }) => void;
 }): JSX.Element {
 	const app = useObsidianApp();
@@ -60,8 +63,10 @@ export function ObsidianCommandAutocomplete(props: {
 
 	return (
 		<Autocomplete
+			customTriggerElement={props.customTriggerElement}
 			label={label}
 			value={commandId}
+			searchPlaceholder={localInstance.search_commands}
 			onSelect={function (value: string): void {
 				if (!value) {
 					props.onChange({ id: "", name: "" });

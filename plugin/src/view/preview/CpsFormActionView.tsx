@@ -6,6 +6,7 @@ import { CpsFormRenderView } from "./CpsFormRenderView";
 import { FormIdValues } from "src/service/FormValues";
 import { useObsidianApp } from "src/context/obsidianAppContext";
 import { AIRuntimeFieldsGenerator } from "src/utils/AIRuntimeFieldsGenerator";
+import { CommandRuntimeFieldsGenerator } from "src/utils/CommandRuntimeFieldsGenerator";
 import { FormDisplayRules } from "src/utils/FormDisplayRules";
 
 type Props = {
@@ -23,18 +24,26 @@ export default function (props: Props) {
 	
 	// 确定要显示的字段
 	const displayFields = useMemo(() => {
-		const runtimeFields = AIRuntimeFieldsGenerator.generateRuntimeFields(formConfig.actions, app);
-		const allFields = [...formConfig.fields, ...runtimeFields];
+		// 生成AI运行时字段
+		const aiRuntimeFields = AIRuntimeFieldsGenerator.generateRuntimeFields(formConfig.actions, app);
+		// 生成命令运行时选择字段
+		const commandRuntimeFields = CommandRuntimeFieldsGenerator.generateRuntimeFields(formConfig.actions, app);
+		// 合并所有字段
+		const allFields = [...formConfig.fields, ...aiRuntimeFields, ...commandRuntimeFields];
 
 		// 如果启用了字段过滤，只显示需要用户输入的字段
 		if (viewOptions.showOnlyFieldsNeedingInput) {
 			const fieldsNeedingInput = FormDisplayRules.getFieldsNeedingInput(formConfig);
 			const fieldsNeedingInputIds = new Set(fieldsNeedingInput.map(f => f.id));
 
-			// 过滤出需要用户输入的字段和运行时AI字段
+			// 过滤出需要用户输入的字段和运行时字段
 			return allFields.filter(field => {
 				// 运行时AI字段总是需要显示（注意字段ID格式是 __ai_runtime_）
 				if (field.id.startsWith('__ai_runtime_')) {
+					return true;
+				}
+				// 运行时命令选择字段总是需要显示
+				if (field.id.startsWith('__command_runtime_')) {
 					return true;
 				}
 				// 检查是否是需要用户输入的字段

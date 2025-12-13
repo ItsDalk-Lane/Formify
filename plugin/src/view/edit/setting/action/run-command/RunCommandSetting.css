@@ -6,3 +6,75 @@
 	background: var(--background-modifier-form-field);
 	cursor: pointer;
 }
+
+/* 已选择的命令列表容器 */
+.form--SelectedCommandsList {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	width: 100%;
+	max-height: 200px;
+	overflow-y: auto;
+	padding: 4px 0;
+}
+
+/* 空列表提示 */
+.form--SelectedCommandsEmpty {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	padding: 8px 12px;
+	background: var(--background-secondary);
+	border-radius: var(--radius-s);
+	text-align: center;
+}
+
+/* 单个命令项 */
+.form--SelectedCommandItem {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 6px 10px;
+	background: var(--background-secondary);
+	border-radius: var(--radius-s);
+	gap: 8px;
+}
+
+/* 命令名称 */
+.form--SelectedCommandName {
+	flex: 1;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 删除按钮 */
+.form--SelectedCommandRemove {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 4px;
+	border: none;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	border-radius: var(--radius-s);
+	transition: color 0.15s ease, background 0.15s ease;
+}
+
+.form--SelectedCommandRemove:hover {
+	color: var(--text-error);
+	background: var(--background-modifier-error);
+}
+
+/* 运行时选择模式提示 */
+.form--RunCommandModeHint {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	padding: 8px 12px;
+	background: var(--background-secondary);
+	border-radius: var(--radius-s);
+	margin-top: 4px;
+	border-left: 3px solid var(--interactive-accent);
+}

@@ -205,6 +205,7 @@ export class ZhTw implements Local {
 	loop_variable_conflict_self = "循環變量之間存在衝突";
 	apply_suggestion = "應用建議";
 	search_variables = "搜索變量";
+	search_commands = "搜尋命令...";
 	conflict_status = "衝突狀態";
 	has_conflicts = "存在衝突";
 	no_conflicts = "無衝突";
@@ -497,6 +498,19 @@ export class ZhTw implements Local {
 	ai_select_model_prompt = "請選擇AI模型";
 	ai_select_template_prompt = "請選擇提示詞模板";
 	ai_template_folder_empty = "模板文件夾為空";
+	// 命令來源模式
+	select_command_to_run = "請選擇要執行的命令";
+	command_source_mode = "命令來源";
+	command_source_mode_fixed = "固定命令";
+	command_source_mode_all = "所有可用命令";
+	command_source_mode_single_plugin = "指定插件的命令";
+	command_source_mode_selected = "指定命令列表";
+	command_source_plugin = "選擇插件";
+	command_source_selected_commands = "已選擇的命令";
+	no_plugin_selected = "未選擇插件";
+	no_commands_selected = "未選擇命令";
+	add_command = "添加命令";
+	select_plugin = "請選擇插件";
 	// AI流式輸出相關
 	ai_enable_streaming_modal = "啟用流式輸出模態框";
 	ai_enable_streaming_modal_desc = "開啟後AI執行時將顯示實時輸出模態框,可查看生成過程";

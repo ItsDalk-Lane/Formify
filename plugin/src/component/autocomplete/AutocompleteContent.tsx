@@ -12,6 +12,7 @@ export function AutocompleteContent(props: {
 	value?: string;
 	onSelect: (value: string) => void;
 	placeholder?: string;
+	allowCreate?: boolean;
 }) {
 	const [query, setQuery] = React.useState("");
 	const [activeIndex, setActiveIndex] = React.useState(-1);
@@ -105,7 +106,10 @@ export function AutocompleteContent(props: {
 				e.nativeEvent.stopImmediatePropagation();
 				if (activeIndex >= 0) {
 					onSelect(options[activeIndex].value);
-				} else if (Strings.isNotEmpty(query.trim())) {
+				} else if (
+					props.allowCreate === true &&
+					Strings.isNotEmpty(query.trim())
+				) {
 					onSelect(query);
 				}
 				break;
@@ -119,7 +123,8 @@ export function AutocompleteContent(props: {
 		);
 	}, [options, query]);
 
-	const showCreateOption = query.trim() && !hasExactMatch;
+	const showCreateOption =
+		props.allowCreate === true && query.trim() && !hasExactMatch;
 
 	useEffect(() => {
 		if (contentRef.current) {
