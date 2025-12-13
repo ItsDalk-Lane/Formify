@@ -85,9 +85,17 @@ export class MessageService {
 
 		messages.forEach((message) => {
 			const embeds = this.createEmbedsFromImages(message.images ?? []);
+			
+			// 如果消息的 metadata 中包含 parsedContent，使用解析后的内容
+			// 否则使用原始内容
+			let messageContent = message.content;
+			if (message.metadata?.parsedContent && typeof message.metadata.parsedContent === 'string') {
+				messageContent = message.metadata.parsedContent;
+			}
+			
 			providerMessages.push({
 				role: message.role,
-				content: message.content,
+				content: messageContent,
 				embeds: embeds.length > 0 ? embeds : undefined
 			});
 		});

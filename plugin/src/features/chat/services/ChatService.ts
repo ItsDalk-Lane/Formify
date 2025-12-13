@@ -346,11 +346,16 @@ export class ChatService {
 			return;
 		}
 
-		// 内链解析：处理用户输入中的内链
+		// 保存用户输入的原始内容，用于在对话消息框中显示
+		const originalUserInput = trimmed;
+		
+		// 内链解析：处理用户输入中的内链，用于发送给 AI
+		// 解析后的内容仅用于 AI 理解，不影响对话消息框的显示
+		let parsedContent = trimmed;
 		if (this.settings.enableInternalLinkParsing && trimmed) {
 			const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
 			const parser = new InternalLinkParserService(this.app);
-			trimmed = await parser.parseLinks(trimmed, sourcePath, {
+			parsedContent = await parser.parseLinks(trimmed, sourcePath, {
 				enableParsing: true,
 				maxDepth: this.settings.maxLinkParseDepth,
 				timeout: this.settings.linkParseTimeout,
@@ -359,8 +364,8 @@ export class ChatService {
 			});
 		}
 
-		// 检测图片生成意图
-		const isImageGenerationIntent = this.detectImageGenerationIntent(trimmed);
+		// 检测图片生成意图（使用原始输入）
+		const isImageGenerationIntent = this.detectImageGenerationIntent(originalUserInput);
 		const isModelSupportImageGeneration = this.isCurrentModelSupportImageGeneration();
 		
 		// 如果用户意图生成图片但当前模型不支持，提示用户
@@ -383,7 +388,9 @@ export class ChatService {
 		session.selectedFolders = [...this.state.selectedFolders];
 
 		// 处理提示词模板
-		let finalUserMessage = trimmed;
+		// 用户消息使用原始输入，模板处理使用解析后的内容
+		let finalUserMessage = originalUserInput;
+		let finalParsedContentForAI = parsedContent;
 		let templateSystemPrompt: string | undefined;
 		let templateTag: string | undefined;
 		
@@ -411,15 +418,15 @@ export class ChatService {
 			templateTag = `[[${templateName}]]`;
 			
 			if (hasVariables) {
-				// 如果模板有变量，用用户输入替换所有变量，并将结果作为系统提示词
-				templateSystemPrompt = templateContent.replace(variableRegex, trimmed);
-				// 用户输入已经替换到模板中，但用户消息仍显示用户输入和模板标签
-				finalUserMessage = `${trimmed}\n\n${templateTag}`;
+				// 如果模板有变量，用解析后的内容替换所有变量，并将结果作为系统提示词
+				templateSystemPrompt = templateContent.replace(variableRegex, parsedContent);
+				// 用户消息仍显示原始输入和模板标签
+				finalUserMessage = `${originalUserInput}\n\n${templateTag}`;
 			} else {
 				// 如果模板没有变量，将模板内容作为系统提示词，用户输入作为用户消息
 				templateSystemPrompt = templateContent;
-				// 用户消息显示用户输入和模板标签
-				finalUserMessage = `${trimmed}\n\n${templateTag}`;
+				// 用户消息显示原始输入和模板标签
+				finalUserMessage = `${originalUserInput}\n\n${templateTag}`;
 			}
 		}
 
@@ -464,7 +471,11 @@ export class ChatService {
 		}
 
 		const userMessage = this.messageService.createMessage('user', messageContent, {
-			images: this.state.selectedImages
+			images: this.state.selectedImages,
+			metadata: {
+				// 存储解析后的内容，用于发送给 AI
+				parsedContent: parsedContent !== originalUserInput ? parsedContent : undefined
+			}
 		});
 		
 		// 不再将系统提示词作为消息添加到会话中，而是作为内部参数传递
