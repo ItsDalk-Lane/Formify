@@ -1,6 +1,6 @@
 import { useRef } from "react";
 
-export default function () {
+export default function useInputComposition() {
 	const isCompositionRef = useRef(false);
 	const onCompositionStart = () => {
 		isCompositionRef.current = true;

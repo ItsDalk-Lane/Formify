@@ -16,7 +16,7 @@ import { AISetting } from "./ai/AISetting";
 import { LoopSetting } from "./loop/LoopSetting";
 import { FormConfig } from "src/model/FormConfig";
 
-export default function (props: {
+export default function CpsFormActionDetailSetting(props: {
 	value: IFormAction;
 	onChange: (value: IFormAction) => void;
 	formConfig: FormConfig;

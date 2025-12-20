@@ -2,7 +2,7 @@ import RadioSelect from "src/component/radio/RadioSelect";
 import { localInstance } from "src/i18n/locals";
 import { ScriptSourceType } from "src/model/action/RunScriptFormAction";
 
-export default function (props: {
+export default function ScriptSourceSelect(props: {
 	value: string;
 	onChange: (value: ScriptSourceType) => void;
 }) {

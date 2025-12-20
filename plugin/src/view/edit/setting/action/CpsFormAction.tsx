@@ -28,7 +28,7 @@ import { FilterRoot } from "src/component/filter/FilterRoot";
 import "./CpsFormAction.css";
 import { FormConfig } from "src/model/FormConfig";
 
-export default function (props: {
+export default function CpsFormAction(props: {
 	value: IFormAction;
 	onChange: (action: IFormAction) => void;
 	onDelete: (action: IFormAction) => void;

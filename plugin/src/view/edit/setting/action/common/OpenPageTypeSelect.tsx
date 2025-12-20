@@ -2,7 +2,7 @@ import { localInstance } from "src/i18n/locals";
 import { OpenPageInType } from "src/model/enums/OpenPageInType";
 import { TextInsertPosition } from "src/model/enums/TextInsertPosition";
 
-export default function (props: {
+export default function OpenPageTypeSelect(props: {
 	value: string;
 	onChange: (value: OpenPageInType) => void;
 }) {

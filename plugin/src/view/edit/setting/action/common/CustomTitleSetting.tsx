@@ -1,7 +1,7 @@
 import { localInstance } from "src/i18n/locals";
 import { IFormAction } from "src/model/action/IFormAction";
 import CpsFormItem from "src/view/shared/CpsFormItem";
-import { useLoopContext } from "src/contexts/LoopContext";
+import { useLoopContext } from "src/context/LoopContext";
 import LoopAwareInputSetting from "./LoopAwareInputSetting";
 
 export function CustomTitleSetting(props: {

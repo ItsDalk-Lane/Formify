@@ -20,7 +20,7 @@ type Props = {
 	onClose?: () => void;
 };
 
-export default function (props: Props) {
+export default function PopupEl(props: Props) {
 	const [isOpen, setIsOpen] = useState(props.open);
 	const { refs, floatingStyles, context } = useFloating({
 		placement: "top",

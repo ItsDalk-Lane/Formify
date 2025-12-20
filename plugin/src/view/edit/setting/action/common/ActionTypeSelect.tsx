@@ -17,7 +17,7 @@ import { localInstance } from "src/i18n/locals";
 import { FormActionType } from "src/model/enums/FormActionType";
 import { FormTypeSelect } from "src/view/shared/select/FormTypeSelect";
 
-export default function (props: {
+export default function ActionTypeSelect(props: {
 	value: string;
 	onChange: (value: FormActionType) => void;
 	styles?: Record<string, string>;

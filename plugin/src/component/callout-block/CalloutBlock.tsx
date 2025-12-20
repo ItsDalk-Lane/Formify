@@ -2,7 +2,7 @@ import React from "react";
 import "./CalloutBlock.css";
 import { X } from "lucide-react";
 
-export default function (props: {
+export default function CalloutBlock(props: {
 	title?: string;
 	icon?: React.ReactNode;
 	content?: React.ReactNode;

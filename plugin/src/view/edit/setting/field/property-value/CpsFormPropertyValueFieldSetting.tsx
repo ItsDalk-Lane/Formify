@@ -5,7 +5,7 @@ import { IFormField } from "src/model/field/IFormField";
 import { IPropertyValueField } from "src/model/field/IPropertyValueField";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 
-export default function (props: {
+export default function CpsFormPropertyValueFieldSetting(props: {
 	field: IFormField;
 	onChange: (field: IFormField) => void;
 }) {

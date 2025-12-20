@@ -2,7 +2,7 @@ import RadioSelect from "src/component/radio/RadioSelect";
 import { localInstance } from "src/i18n/locals";
 import { ContentTemplateSource } from "src/model/action/CreateFileFormAction";
 
-export default function (props: {
+export default function ContentTemplateSourceSelect(props: {
 	value: string;
 	onChange: (value: ContentTemplateSource) => void;
 }) {

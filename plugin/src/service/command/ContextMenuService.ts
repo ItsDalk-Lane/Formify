@@ -1,7 +1,7 @@
 import { App, TFile, TAbstractFile, Menu, MenuItem } from "obsidian";
-import { FormService } from "../FormService";
 import { FormConfig } from "src/model/FormConfig";
 import FormPlugin from "src/main";
+import { ServiceContainer } from "../ServiceContainer";
 
 export interface ContextMenuItem {
     id: string;
@@ -12,6 +12,7 @@ export interface ContextMenuItem {
 
 export class ContextMenuService {
     private plugin: FormPlugin;
+    private services: ServiceContainer | null = null;
     private isInitialized: boolean = false;
     private contextMenuItems: Map<string, ContextMenuItem> = new Map();
 
@@ -22,9 +23,11 @@ export class ContextMenuService {
     /**
      * 初始化右键菜单服务
      * @param plugin 插件实例
+     * @param services 服务容器
      */
-    async initialize(plugin: FormPlugin): Promise<void> {
+    async initialize(plugin: FormPlugin, services: ServiceContainer): Promise<void> {
         this.plugin = plugin;
+        this.services = services;
 
         if (this.isInitialized) {
             return;
@@ -179,7 +182,7 @@ export class ContextMenuService {
                 title: file.basename,
                 icon: "file-spreadsheet",
                 callback: () => {
-                    new FormService().open(file, this.plugin.app);
+                    this.services?.formService.open(file, this.plugin.app);
                 }
             };
 
@@ -245,5 +248,3 @@ export class ContextMenuService {
         this.isInitialized = false;
     }
 }
-
-export const contextMenuService = new ContextMenuService();

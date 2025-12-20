@@ -2,7 +2,7 @@ import RadioSelect from "src/component/radio/RadioSelect";
 import { IFormField } from "src/model/field/IFormField";
 import { IRadioField } from "src/model/field/IRadioField";
 
-export default function (props: {
+export default function RadioControl(props: {
 	field: IFormField;
 	value: any;
 	onValueChange: (value: any) => void;

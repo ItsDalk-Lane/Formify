@@ -7,7 +7,7 @@ export type RadioOption = {
 	value: any;
 };
 
-export default function (props: {
+export default function RadioSelect(props: {
 	name?: string;
 	value: any;
 	options: RadioOption[];

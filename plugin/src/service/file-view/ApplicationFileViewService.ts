@@ -21,5 +21,3 @@ export class ApplicationFileViewService {
         plugin.app.embedRegistry.unregisterExtensions(["cform"]);
     }
 }
-
-export const applicationFileViewService = new ApplicationFileViewService();

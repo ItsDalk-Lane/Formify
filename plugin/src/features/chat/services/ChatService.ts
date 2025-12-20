@@ -10,7 +10,7 @@ import { FileContentService } from './FileContentService';
 import type { ChatMessage, ChatSession, ChatSettings, ChatState, SelectedFile, SelectedFolder } from '../types/chat';
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
 import { v4 as uuidv4 } from 'uuid';
-import { InternalLinkParserService } from '../../../services/InternalLinkParserService';
+import { InternalLinkParserService } from '../../../service/InternalLinkParserService';
 
 type ChatSubscriber = (state: ChatState) => void;
 

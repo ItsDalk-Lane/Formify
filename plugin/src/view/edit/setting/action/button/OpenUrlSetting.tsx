@@ -5,7 +5,7 @@ import CpsFormItem from "src/view/shared/CpsFormItem";
 import useFormConfig from "src/hooks/useFormConfig";
 import { useVariables } from "src/hooks/useVariables";
 import { useVariablesWithLoop } from "src/hooks/useVariablesWithLoop";
-import { useLoopContext } from "src/contexts/LoopContext";
+import { useLoopContext } from "src/context/LoopContext";
 import CodeEditor from "../common/code-editor/CodeEditor";
 import { timeTemplatePreviewExtension } from "../common/code-editor/FormTimeVariableWidget";
 import { createFormVariableSuggestions } from "../common/code-editor/FormVariableSuggest";

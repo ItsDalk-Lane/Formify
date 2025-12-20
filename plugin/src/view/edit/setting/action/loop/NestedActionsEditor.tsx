@@ -5,7 +5,7 @@ import { FormConfig } from "src/model/FormConfig";
 import { LoopType } from "src/model/enums/LoopType";
 import { LoopVariableMeta } from "src/utils/LoopVariableScope";
 import { CpsFormActions } from "../CpsFormActions";
-import { LoopProvider } from "src/contexts/LoopContext";
+import { LoopProvider } from "src/context/LoopContext";
 
 /**
  * 根据循环类型获取对应的循环变量列表（从 useVariablesWithLoop.tsx 复制）

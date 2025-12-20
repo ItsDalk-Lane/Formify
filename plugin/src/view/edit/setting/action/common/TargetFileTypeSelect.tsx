@@ -2,7 +2,7 @@ import RadioSelect from "src/component/radio/RadioSelect";
 import { localInstance } from "src/i18n/locals";
 import { TargetFileType } from "src/model/enums/TargetFileType";
 
-export default function (props: {
+export default function TargetFileTypeSelect(props: {
 	value: string;
 	onChange: (value: TargetFileType) => void;
 }) {

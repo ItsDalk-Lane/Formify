@@ -9,7 +9,7 @@ import CalloutBlock from "../callout-block/CalloutBlock";
 import ExtensionFunctionItem from "./ExtensionFcuntionItem";
 import ExtensionFunctionDetail from "./ExtensionFunctionDetail";
 import "./ExtensionTagSelector.css";
-import { formScriptService } from "src/service/extend/FormScriptService";
+import { getServiceContainer } from "src/service/ServiceContainer";
 
 export default function ExtensionFunctionBody(props: {
 	extensions: FormScript[];
@@ -25,7 +25,7 @@ export default function ExtensionFunctionBody(props: {
 	} = props;
 	const app = useObsidianApp();
 	const [selectedTag, setSelectedTag] = useState<string>("all");
-	const scriptFolder = formScriptService.getExtensionFolder();
+	const scriptFolder = getServiceContainer().formScriptService.getExtensionFolder();
 	const allTags = useMemo(() => {
 		const tagSet = new Set<string>();
 		extensions.forEach((extension) => {

@@ -1,6 +1,6 @@
 import { App, TFile, TFolder } from "obsidian";
 
-export default function (folder: string, app: App) {
+export default function locateFile(folder: string, app: App) {
     const f = app.vault.getAbstractFileByPath(folder);
     if (f instanceof TFolder || f instanceof TFile) {
         const fileExplorer =

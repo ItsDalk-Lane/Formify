@@ -16,7 +16,7 @@ import CommonSuggestModal from "src/component/modal/CommonSuggestModal";
 import { AIRuntimeFieldsGenerator } from "src/utils/AIRuntimeFieldsGenerator";
 import { AIStreamingModal, AIStreamingModalOptions } from "src/component/modal/AIStreamingModal";
 import "src/component/modal/AIStreamingModal.css";
-import { InternalLinkParserService, ParseOptions } from "src/services/InternalLinkParserService";
+import { InternalLinkParserService, ParseOptions } from "src/service/InternalLinkParserService";
 
 /**
  * AI动作服务

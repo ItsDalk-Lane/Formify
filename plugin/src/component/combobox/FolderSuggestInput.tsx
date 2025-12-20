@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { useObsidianApp } from "src/context/obsidianAppContext";
 import ComboboxSuggestion from "./ComboboxSuggestion";
 
-export default function (props: {
+export default function FolderSuggestInput(props: {
 	placeholder?: string;
 	value: string;
 	onChange: (value: string) => void;

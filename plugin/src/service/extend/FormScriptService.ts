@@ -36,22 +36,24 @@ export class FormScriptService {
     }
 
     async refresh(extensionFolder: string) {
-        if (this.extensionFolder !== extensionFolder) {
-            const folder = this.normalizeExtensionFolder(extensionFolder);
-            this.extensionFolder = folder;
-            const functions = await this.formScriptLoader.loadAll(this.app, this.extensionFolder);
-            this.formScripts.clear();
-            functions.forEach((extension) => {
-                this.formScripts.set(extension.id, extension);
-            });
+        if (!this.app) {
+            return;
+        }
+        const normalizedFolder = this.normalizeExtensionFolder(extensionFolder);
+        const folderChanged = this.extensionFolder !== normalizedFolder;
+        this.extensionFolder = normalizedFolder;
+        const functions = await this.formScriptLoader.loadAll(this.app, this.extensionFolder);
+        this.formScripts.clear();
+        functions.forEach((extension) => {
+            this.formScripts.set(extension.id, extension);
+        });
+        if (folderChanged) {
+            this.resetWatchers();
         }
     }
 
     unload() {
-        const app = this.app;
-        this.eventRefs.forEach(ref => {
-            app.vault.offref(ref);
-        });
+        this.clearWatchers();
     }
 
     async initialize(app: App, scriptFolder: string) {
@@ -63,15 +65,22 @@ export class FormScriptService {
         functions.forEach((extension) => {
             this.formScripts.set(extension.id, extension);
         });
-        this.watchFolder();
+        this.resetWatchers();
         // DebugLogger.info("script extension loaded " + this.formScripts.size + " functions from " + this.extensionFolder, this.formScripts);
     }
 
-    private watchFolder() {
+    private resetWatchers() {
+        this.clearWatchers();
+        if (!this.app || !this.extensionFolder) {
+            return;
+        }
+        this.eventRefs = this.createWatchers();
+    }
+
+    private createWatchers(): EventRef[] {
         const app = this.app;
         const createFileEventRef = app.vault.on("create", async (file: TFile) => {
             if (this.isExtensionFile(file)) {
-                // DebugLogger.info("script extension created " + file.path)
                 const extension = await this.formScriptLoader.load(app, file);
                 if (extension) {
                     this.formScripts.set(file.path, extension);
@@ -79,37 +88,41 @@ export class FormScriptService {
             }
         });
 
-        // delete file
         const deleteFileEventRef = app.vault.on("delete", (file: TFile) => {
             if (this.isExtensionFile(file)) {
-                // DebugLogger.info("script extension deleted " + file.path)
                 this.formScripts.delete(file.path);
             }
         });
 
-        // modify file
         const modifyFileEventRef = app.vault.on("modify", async (file: TFile) => {
             if (this.isExtensionFile(file)) {
                 const extension = await this.formScriptLoader.load(app, file);
-                // DebugLogger.info("script extension modified " + file.path, extension)
                 if (extension) {
                     this.formScripts.set(file.path, extension);
                 }
             }
-        })
+        });
 
-        // rename file
         const renameFileEventRef = app.vault.on("rename", async (file: TFile, oldPath: string) => {
             if (this.isExtensionFile(file)) {
-                // DebugLogger.info("script extension renamed " + oldPath + " to " + file.path)
                 this.formScripts.delete(oldPath);
                 const extension = await this.formScriptLoader.load(app, file);
                 if (extension) {
                     this.formScripts.set(file.path, extension);
                 }
             }
-        })
-        this.eventRefs = [createFileEventRef, deleteFileEventRef, modifyFileEventRef, renameFileEventRef];
+        });
+        return [createFileEventRef, deleteFileEventRef, modifyFileEventRef, renameFileEventRef];
+    }
+
+    private clearWatchers() {
+        if (!this.app) {
+            return;
+        }
+        this.eventRefs.forEach(ref => {
+            this.app.vault.offref(ref);
+        });
+        this.eventRefs = [];
     }
 
 
@@ -132,5 +145,3 @@ export class FormScriptService {
         return this.extensionFolder;
     }
 }
-
-export const formScriptService = new FormScriptService();

@@ -4,7 +4,7 @@ import { useObsidianApp } from "src/context/obsidianAppContext";
 import { localInstance } from "src/i18n/locals";
 import { IFormField } from "src/model/field/IFormField";
 import { FormConfig } from "src/model/FormConfig";
-import { formIntegrationService } from "src/service/command/FormIntegrationService";
+import { getServiceContainer } from "src/service/ServiceContainer";
 import ToggleControl from "src/view/shared/control/ToggleControl";
 import CpsForm from "src/view/shared/CpsForm";
 import CpsFormItem from "src/view/shared/CpsFormItem";
@@ -17,7 +17,7 @@ import { useState, useEffect } from "react";
 import { FormConfigContext } from "src/hooks/useFormConfig";
 import { FormImportDialog } from "./import/FormImportDialog";
 
-export default function (props: {
+export default function CpsFormSetting(props: {
 	filePath: string;
 	formConfig: FormConfig;
 	onChange: (config: FormConfig) => void;
@@ -43,7 +43,7 @@ export default function (props: {
 
 		const loadShortcuts = async () => {
 			try {
-				const keys = await formIntegrationService.getShortcut(props.filePath, app);
+				const keys = await getServiceContainer().formIntegrationService.getShortcut(props.filePath, app);
 				if (mounted) {
 					setCommandKeys(keys.join(","));
 				}

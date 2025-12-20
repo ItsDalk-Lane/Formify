@@ -10,11 +10,11 @@ import { LoopType } from "src/model/enums/LoopType";
 import { AIFormAction } from "src/model/action/AIFormAction";
 import { Objects } from "src/utils/Objects";
 import { LoopVariableScope, LoopVariableMeta } from "src/utils/LoopVariableScope";
-import { useLoopContext } from "src/contexts/LoopContext";
+import { useLoopContext } from "src/context/LoopContext";
 import "./FormVariableQuotePanel.css";
 import InternalVariablePopover from "./InternalVariablePopover";
 
-export default function (props: {
+export default function FormVariableQuotePanel(props: {
     formConfig: FormConfig;
     isInsideLoop?: boolean; // 是否在循环内部，用于控制是否显示循环变量
 }) {

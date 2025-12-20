@@ -4,7 +4,7 @@ import { FormConfig } from "src/model/FormConfig";
 import "./CpsFormEditView.css";
 import CpsFormSetting from "./setting/CpsFormSetting";
 
-export default function (props: {
+export default function CpsFormEditView(props: {
 	filePath: string;
 	defaultConfig: FormConfig;
 }) {

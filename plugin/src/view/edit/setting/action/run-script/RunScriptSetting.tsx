@@ -11,14 +11,14 @@ import { FormActionType } from "src/model/enums/FormActionType";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import CodeEditor from "../common/code-editor/CodeEditor";
 import ScriptSourceSelect from "./ScriptSourceSelect";
-import { formScriptService } from "src/service/extend/FormScriptService";
+import { getServiceContainer } from "src/service/ServiceContainer";
 import ExtensionEditor from "src/component/extension-editor/ExtensionEditor";
 
 export function RunScriptSetting(props: {
 	value: IFormAction;
 	onChange: (value: IFormAction) => void;
 }) {
-	const extensions = formScriptService.getFunctions();
+	const extensions = getServiceContainer().formScriptService.getFunctions();
 	const { value } = props;
 
 	if (value.type !== FormActionType.RUN_SCRIPT) {

@@ -1,7 +1,7 @@
 import { ToggleComponent } from "obsidian";
 import { useRef, useLayoutEffect, useEffect } from "react";
 
-export default function (props: {
+export default function ToggleControl(props: {
 	value: any;
 	onValueChange: (value: any) => void;
 	required?: boolean;

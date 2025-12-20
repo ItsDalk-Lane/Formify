@@ -14,7 +14,7 @@ import "./CpsFormFields.css";
 import { ConfirmPopover } from "src/component/confirm/ConfirmPopover";
 import { NewFieldGridPopover } from "./common/new-field-grid/NewFieldGridPopover";
 
-export default function (props: {
+export default function CpsFormFields(props: {
     fields: IFormField[];
     onSave: (fields: IFormField[], modified: IFormField[]) => void;
     selectMode?: boolean;

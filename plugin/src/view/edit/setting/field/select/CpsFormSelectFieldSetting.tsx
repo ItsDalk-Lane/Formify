@@ -9,7 +9,7 @@ import { IOptionsField } from "src/model/field/ISelectField";
 import { v4 } from "uuid";
 import "./CpsFormSelectFieldSetting.css";
 
-export default function (props: {
+export default function CpsFormSelectFieldSetting(props: {
 	field: IOptionsField;
 	onFieldChange: (field: IOptionsField) => void;
 }) {

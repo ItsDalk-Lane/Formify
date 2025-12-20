@@ -1,6 +1,5 @@
 import { localInstance } from "src/i18n/locals";
 import FormPlugin from "src/main";
-import { FormService } from "../FormService";
 import CFormSuggestModal from "src/component/modal/CFormSuggestModal";
 import { normalizePath, Notice } from "obsidian";
 import { FormConfig } from "src/model/FormConfig";
@@ -11,10 +10,14 @@ import { processObTemplate } from "src/utils/templates";
 import { v4 } from "uuid";
 import { CreateFileModal } from "src/component/modal/CreateFileModal";
 import { Files } from "src/utils/Files";
+import { ServiceContainer } from "src/service/ServiceContainer";
 
 export class ApplicationCommandService {
 
-    initialize(plugin: FormPlugin) {
+    private services: ServiceContainer | null = null;
+
+    initialize(plugin: FormPlugin, services: ServiceContainer) {
+        this.services = services;
         const app = plugin.app;
         plugin.addCommand({
             id: "open-form",
@@ -23,7 +26,7 @@ export class ApplicationCommandService {
             callback: () => {
                 const modal = new CFormSuggestModal(app,
                     (file) => {
-                        new FormService().open(file, app);
+                        this.services?.formService.open(file, app);
                     })
                 modal.open();
             }
@@ -68,5 +71,3 @@ export class ApplicationCommandService {
         modal.open();
     }
 }
-
-export const applicationCommandService = new ApplicationCommandService();

@@ -2,15 +2,37 @@ import { App, TFile, EventRef, TAbstractFile } from "obsidian";
 import { FormService } from "../FormService";
 import { FormConfig } from "src/model/FormConfig";
 import FormPlugin from "src/main";
-import { contextMenuService } from "./ContextMenuService";
+
+/**
+ * 菜单刷新回调类型
+ */
+type MenuRefreshCallback = () => void;
 
 export class FormIntegrationService {
 
     private plugin: FormPlugin;
     private fileEventRefs: EventRef[] = [];
     private isInitialized: boolean = false;
+    private onMenuRefresh: MenuRefreshCallback | null = null;
 
     constructor() {
+    }
+
+    /**
+     * 设置菜单刷新回调
+     * @param callback 菜单刷新回调函数
+     */
+    setMenuRefreshCallback(callback: MenuRefreshCallback): void {
+        this.onMenuRefresh = callback;
+    }
+
+    /**
+     * 触发菜单刷新
+     */
+    private triggerMenuRefresh(): void {
+        if (this.onMenuRefresh) {
+            this.onMenuRefresh();
+        }
     }
 
     /**
@@ -245,7 +267,7 @@ export class FormIntegrationService {
             if (this.isValidFormFile(file)) {
                 await this.registerFormCommand(file);
                 // 刷新右键菜单
-                contextMenuService.refreshContextMenuItems();
+                this.triggerMenuRefresh();
             }
         });
         this.fileEventRefs.push(createEventRef);
@@ -263,7 +285,7 @@ export class FormIntegrationService {
                     console.warn(`Failed to clean up command for deleted file ${file.path}:`, error);
                 }
                 // 刷新右键菜单
-                contextMenuService.refreshContextMenuItems();
+                this.triggerMenuRefresh();
             }
         });
         this.fileEventRefs.push(deleteEventRef);
@@ -273,7 +295,7 @@ export class FormIntegrationService {
             if (this.isValidFormFile(file)) {
                 await this.handleFileRenameOrCopy(file, oldPath);
                 // 刷新右键菜单
-                contextMenuService.refreshContextMenuItems();
+                this.triggerMenuRefresh();
             }
         });
         this.fileEventRefs.push(renameEventRef);
@@ -380,7 +402,7 @@ export class FormIntegrationService {
             // 保存配置（包括可能的commandId）
             await this.saveFormConfig(filePath, config);
             // 刷新右键菜单
-            contextMenuService.refreshContextMenuItems();
+            this.triggerMenuRefresh();
         } catch (error) {
             console.error(`Failed to enable command for ${filePath}:`, error);
             throw error;
@@ -410,7 +432,7 @@ export class FormIntegrationService {
             // 保存配置
             await this.saveFormConfig(filePath, config);
             // 刷新右键菜单
-            contextMenuService.refreshContextMenuItems();
+            this.triggerMenuRefresh();
         } catch (error) {
             console.error(`Failed to disable command for ${filePath}:`, error);
             throw error;
@@ -451,7 +473,3 @@ export class FormIntegrationService {
         await this.enableCommand(filePath);
     }
 }
-
-// 创建并导出单例实例
-const formIntegrationServiceInstance = new FormIntegrationService();
-export const formIntegrationService = formIntegrationServiceInstance;

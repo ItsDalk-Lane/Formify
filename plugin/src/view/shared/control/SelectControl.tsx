@@ -6,7 +6,7 @@ import { IFormField } from "src/model/field/IFormField";
 import { ISelectField } from "src/model/field/ISelectField";
 import { useMemo } from "react";
 
-export default function (props: {
+export default function SelectControl(props: {
 	field: IFormField;
 	value: any;
 	onValueChange: (value: any) => void;

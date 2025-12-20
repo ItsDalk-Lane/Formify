@@ -1,7 +1,7 @@
 import { localInstance } from "src/i18n/locals";
 import { FileConflictResolution } from "src/model/enums/FileConflictResolution";
 
-export default function (props: {
+export default function FileConflictResolutionSelect(props: {
 	value?: FileConflictResolution;
 	onChange: (value: FileConflictResolution) => void;
 }) {

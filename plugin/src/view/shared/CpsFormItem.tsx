@@ -1,6 +1,6 @@
 import "./CpsFormItem.css";
 
-export default function (
+export default function CpsFormItem(
 	props: {
 		label: React.ReactNode;
 		description?: React.ReactNode;

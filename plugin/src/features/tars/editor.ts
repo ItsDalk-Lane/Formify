@@ -22,7 +22,7 @@ import { APP_FOLDER, EditorStatus, TarsSettings, availableVendors } from './sett
 import { GenerationStats, StatusBarManager } from './statusBarManager'
 import { TagRole } from './suggest'
 import { DebugLogger } from '../../utils/DebugLogger'
-import { InternalLinkParserService } from '../../services/InternalLinkParserService'
+import { InternalLinkParserService } from '../../service/InternalLinkParserService'
 
 export interface RunEnv {
 	readonly app: App

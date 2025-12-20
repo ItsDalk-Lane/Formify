@@ -10,7 +10,7 @@ import {
 	extractClosestEdge,
 } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
 
-export default function (
+export default function useSortableItem(
 	id: string,
 	allowedEdges: Edge[] = ["top", "bottom"],
 	canSort?: () => boolean,

@@ -4,7 +4,7 @@ import { FormActionType } from "src/model/enums/FormActionType";
 import { ActionChain, ActionContext, IActionService } from "../IActionService";
 import { FormScriptComipler } from "src/service/extend/FormScriptComipler";
 import { FormScriptRunner } from "src/service/extend/FormScriptRunner";
-import { formScriptService } from "src/service/extend/FormScriptService";
+import { getServiceContainer } from "src/service/ServiceContainer";
 
 export default class RunScriptActionService implements IActionService {
 
@@ -29,7 +29,7 @@ export default class RunScriptActionService implements IActionService {
             }
             await FormScriptRunner.runFunction(context.app, extension, extraContext)
         } else {
-            await formScriptService.run(scriptAction.expression, extraContext);
+            await getServiceContainer().formScriptService.run(scriptAction.expression, extraContext);
         }
 
         // do next

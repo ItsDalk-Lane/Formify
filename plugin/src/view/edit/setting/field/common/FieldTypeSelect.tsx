@@ -16,7 +16,7 @@ import {
 import { localInstance } from "src/i18n/locals";
 import { FormFieldType } from "src/model/enums/FormFieldType";
 
-export default function (props: {
+export default function FieldTypeSelect(props: {
 	value: string;
 	onChange: (value: FormFieldType) => void;
 }) {

@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Message as ProviderMessage, EmbedCache } from 'src/features/tars/providers';
 import type { ChatMessage, ChatRole, SelectedFile, SelectedFolder } from '../types/chat';
 import { FileContentService, FileContentOptions, FileContent, FolderContent } from './FileContentService';
-import { InternalLinkParserService, ParseOptions } from 'src/services/InternalLinkParserService';
+import { InternalLinkParserService, ParseOptions } from 'src/service/InternalLinkParserService';
 
 interface LinkParseOptions {
 	enabled: boolean;

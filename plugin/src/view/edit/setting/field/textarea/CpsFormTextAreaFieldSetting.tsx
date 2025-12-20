@@ -4,7 +4,7 @@ import { IFormField } from "src/model/field/IFormField";
 import { ITextAreaField } from "src/model/field/ITextAreaField";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 
-export default function (props: {
+export default function CpsFormTextAreaFieldSetting(props: {
 	field: IFormField;
 	onChange: (field: IFormField) => void;
 }) {

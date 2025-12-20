@@ -2,7 +2,7 @@ import { localInstance } from "src/i18n/locals";
 import { TargetFileType } from "src/model/enums/TargetFileType";
 import { TextInsertPosition } from "src/model/enums/TextInsertPosition";
 
-export default function (props: {
+export default function InsertPositionSelect(props: {
 	targetFileType?: TargetFileType;
 	value: string;
 	onChange: (value: TextInsertPosition) => void;

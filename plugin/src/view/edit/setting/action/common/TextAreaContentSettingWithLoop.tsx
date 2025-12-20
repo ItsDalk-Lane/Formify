@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import useFormConfig from "src/hooks/useFormConfig";
 import { useVariablesWithLoop } from "src/hooks/useVariablesWithLoop";
-import { useLoopContext } from "src/contexts/LoopContext";
+import { useLoopContext } from "src/context/LoopContext";
 import { localInstance } from "src/i18n/locals";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import CodeEditor from "./code-editor/CodeEditor";
@@ -9,7 +9,7 @@ import { timeTemplatePreviewExtension } from "./code-editor/FormTimeVariableWidg
 import { createFormVariableSuggestions } from "./code-editor/FormVariableSuggest";
 import { createFormVariableWidgetExtension } from "./code-editor/FormVariableWidget";
 
-export default function (props: {
+export default function TextAreaContentSettingWithLoop(props: {
 	actionId: string;
 	content: string;
 	placeholder?: string;

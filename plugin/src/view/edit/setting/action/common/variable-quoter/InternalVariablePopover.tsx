@@ -62,7 +62,7 @@ export const internalFieldNames = [
 	},
 ];
 
-export default function (props: { onSelect: (value: string) => void }) {
+export default function InternalVariablePopover(props: { onSelect: (value: string) => void }) {
 	return (
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger asChild>

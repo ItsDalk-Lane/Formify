@@ -5,7 +5,7 @@ import "./Dialog2.css";
 import { Strings } from "src/utils/Strings";
 import { localInstance } from "src/i18n/locals";
 
-export default function (props: {
+export default function Dialog2(props: {
 	title?: string;
 	description?: string;
 	open: boolean;

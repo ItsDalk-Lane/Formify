@@ -11,7 +11,7 @@ import FormVariableQuotePanel from "./common/variable-quoter/FormVariableQuotePa
 import CpsFormAction from "./CpsFormAction";
 import { useState } from "react";
 import { ConfirmPopover } from "src/component/confirm/ConfirmPopover";
-import { useLoopContext } from "src/contexts/LoopContext";
+import { useLoopContext } from "src/context/LoopContext";
 
 export function CpsFormActions(props: {
     config: FormConfig;

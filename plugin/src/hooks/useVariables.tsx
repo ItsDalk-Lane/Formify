@@ -1,73 +1,18 @@
-import { useMemo } from "react";
-import { GenerateFormAction } from "../model/action/OpenFormAction";
-import { SuggestModalFormAction } from "../model/action/SuggestModalFormAction";
-import { AIFormAction } from "../model/action/AIFormAction";
-import { FormActionType } from "../model/enums/FormActionType";
+import { useVariablesWithLoop, VariableItem } from "./useVariablesWithLoop";
 import { FormConfig } from "../model/FormConfig";
-import { VariableSource } from "../types/variable";
-import type { VariableItem } from "./useVariablesWithLoop";
-import { localInstance } from "src/i18n/locals";
 
-export function useVariables(actionId: string, formConfig: FormConfig) {
-	return useMemo(() => {
-		const actions = formConfig.actions || [];
-		const fields: VariableItem[] = (formConfig.fields || []).map((f) => {
-			return {
-				label: f.label,
-				info: f.description,
-				type: "variable",
-				source: VariableSource.FORM_FIELD,
-				priority: 2,
-			};
-		});
-		const currentIndex = actions.findIndex((a) => a.id === actionId);
-		for (let i = currentIndex - 1; i >= 0; i--) {
-			const action = actions[i];
-			if (action.type === FormActionType.SUGGEST_MODAL) {
-				const a = action as SuggestModalFormAction;
-				if (fields.find((f) => f.label === a.fieldName)) {
-					continue;
-				}
-				fields.push({
-					label: a.fieldName,
-					info: "",
-					type: "variable",
-					source: VariableSource.SUGGEST_MODAL,
-					priority: 3,
-				});
-			}
-
-			if (action.type === FormActionType.GENERATE_FORM) {
-				const a = action as GenerateFormAction;
-				const afields = a.fields || [];
-				afields.forEach((f) => {
-					if (!fields.find((ff) => ff.label === f.label)) {
-						fields.push({
-							label: f.label,
-							info: f.description,
-							type: "variable",
-							source: VariableSource.FORM_FIELD,
-							priority: 3,
-						});
-					}
-				});
-			}
-
-			if (action.type === FormActionType.AI) {
-				const aiAction = action as AIFormAction;
-				if (aiAction.outputVariableName && !fields.find((f) => f.label === aiAction.outputVariableName)) {
-					fields.push({
-						label: aiAction.outputVariableName,
-						info: localInstance.ai_output_variable,
-						type: "variable",
-						source: VariableSource.AI_OUTPUT,
-						priority: 4,
-					});
-				}
-			}
-		}
-
-		return fields;
-	}, [formConfig]);
+/**
+ * 获取当前动作可用的表单变量
+ * 
+ * 这是 useVariablesWithLoop 的简化版本，不包含循环变量。
+ * 用于不需要循环变量支持的场景。
+ * 
+ * @param actionId - 当前动作的ID
+ * @param formConfig - 表单配置
+ * @returns 可用的变量列表
+ */
+export function useVariables(actionId: string, formConfig: FormConfig): VariableItem[] {
+	// 委托给 useVariablesWithLoop，传入 isInsideLoop=false 以排除循环变量
+	return useVariablesWithLoop(actionId, formConfig, false);
 }
 

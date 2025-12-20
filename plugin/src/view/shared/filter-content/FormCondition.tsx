@@ -7,7 +7,7 @@ import { ConditionOperator } from "./ConditionOperator";
 import { ConditionValue } from "./ConditionValue";
 import "./FormCondition.css";
 import { normalizeValue } from "./util/normalizeValue";
-import { useLoopContext } from "src/contexts/LoopContext";
+import { useLoopContext } from "src/context/LoopContext";
 import { useVariablesWithLoop, VariableItem } from "src/hooks/useVariablesWithLoop";
 import { useMemo, useRef, useEffect } from "react";
 

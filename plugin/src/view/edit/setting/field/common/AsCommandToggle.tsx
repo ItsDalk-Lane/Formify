@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { App, TFile } from "obsidian";
-import { formIntegrationService } from "src/service/command/FormIntegrationService";
+import { getServiceContainer } from "src/service/ServiceContainer";
 import ToggleControl from "src/view/shared/control/ToggleControl";
 import { useObsidianApp } from "src/context/obsidianAppContext";
 
@@ -8,6 +8,7 @@ export function AsCommandToggle(props: { filePath: string }) {
 	const { filePath } = props;
 	const [isEnabled, setIsEnabled] = useState(true);
 	const [isLoading, setIsLoading] = useState(true);
+	const formIntegrationService = getServiceContainer().formIntegrationService;
 
 	// 获取当前命令状态
 	useEffect(() => {

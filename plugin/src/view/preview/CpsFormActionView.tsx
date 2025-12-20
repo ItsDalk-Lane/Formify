@@ -17,7 +17,7 @@ type Props = {
 	};
 } & React.HTMLAttributes<HTMLDivElement>;
 
-export default function (props: Props) {
+export default function CpsFormActionView(props: Props) {
 	const viewOptions = props.options || {};
 	const app = useObsidianApp();
 	const { formConfig } = props;
