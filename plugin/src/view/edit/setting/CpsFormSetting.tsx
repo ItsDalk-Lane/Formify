@@ -219,9 +219,15 @@ export default function CpsFormSetting(props: {
 		Object.assign(mergedConfig, {
 			...formConfig,
 			// 合并字段
-			fields: [...formConfig.fields, ...importedConfig.fields],
+			fields: [
+				...(formConfig.fields || []),
+				...(importedConfig.fields || []),
+			],
 			// 合并动作
-			actions: [...formConfig.actions, ...importedConfig.actions],
+			actions: [
+				...(formConfig.actions || []),
+				...(importedConfig.actions || []),
+			],
 			// 合并其他设置（如果导入的设置存在）
 			...(importedConfig.showSubmitSuccessToast !== undefined && {
 				showSubmitSuccessToast: importedConfig.showSubmitSuccessToast

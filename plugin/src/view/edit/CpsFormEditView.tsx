@@ -17,13 +17,26 @@ export default function CpsFormEditView(props: {
 	// 防抖定时器
 	const writeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+	// 当外部配置发生变化（例如：导入表单、外部写入文件触发 reload）时，
+	// 在未处于用户编辑中的情况下，同步刷新编辑界面。
+	useEffect(() => {
+		if (isUserEdit.current) {
+			return;
+		}
+		setFormConfig(defaultConfig);
+	}, [defaultConfig, filePath]);
+
 	// 保存配置到文件（带防抖）
 	const saveConfig = useCallback((config: FormConfig) => {
 		if (writeTimeoutRef.current) {
 			clearTimeout(writeTimeoutRef.current);
 		}
-		writeTimeoutRef.current = setTimeout(() => {
-			app.vault.writeJson(filePath, config);
+		writeTimeoutRef.current = setTimeout(async () => {
+			try {
+				await app.vault.writeJson(filePath, config);
+			} finally {
+				isUserEdit.current = false;
+			}
 		}, 150);
 	}, [app, filePath]);
 
