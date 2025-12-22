@@ -48,10 +48,7 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 		};
 	}, [historyOpen]);
 
-	const tokenCount = useMemo(() => {
-		const messages = state.activeSession?.messages ?? [];
-		return messages.reduce((acc, message) => acc + message.content.length, 0);
-	}, [state.activeSession?.messages]);
+
 
 	const handleNewChat = () => {
 		service.createNewSession();
@@ -162,9 +159,6 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 			</div>
 			<div className="tw-flex-1"></div>
 			<div className="tw-flex tw-items-center tw-gap-2">
-				<span className="tw-text-xs tw-text-muted-foreground">
-					Tokens <span className="tw-font-semibold">{tokenCount}</span>
-				</span>
 				<span onClick={handleNewChat} aria-label="新建聊天" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 					<MessageCirclePlus className="tw-size-4" />
 				</span>
