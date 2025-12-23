@@ -10,6 +10,7 @@ import { FormFlowApi } from './api/FormFlowApi';
 import { cloneTarsSettings } from './features/tars';
 import { DebugLogger } from './utils/DebugLogger';
 import { getStartupFormService } from './service/command/StartupFormService';
+import { ConflictMonitor } from './service/conflict/ConflictMonitor';
 
 export default class FormPlugin extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
@@ -19,6 +20,7 @@ export default class FormPlugin extends Plugin {
 	private settingsManager = new SettingsManager(this);
 	private featureCoordinator = new FeatureCoordinator(this);
 	private services = new ServiceContainer();
+	private conflictMonitor: ConflictMonitor | null = null;
 
 
 	async onload() {
@@ -37,6 +39,9 @@ export default class FormPlugin extends Plugin {
 		this.featureCoordinator.initializeTars(this.settings);
 
 		this.app.workspace.onLayoutReady(async () => {
+			this.conflictMonitor = new ConflictMonitor(this.app);
+			this.conflictMonitor.start();
+
 			this.featureCoordinator.initializeChat(this.settings);
 			await this.services.formScriptService.initialize(this.app, this.settings.scriptFolder);
 			await this.executeStartupForms();
@@ -57,6 +62,9 @@ export default class FormPlugin extends Plugin {
 
 
 	onunload() {
+		this.conflictMonitor?.dispose();
+		this.conflictMonitor = null;
+
 		this.services.dispose();
 		this.services.applicationCommandService.unload(this);
 		this.services.applicationFileViewService.unload(this);
