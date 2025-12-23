@@ -13,6 +13,7 @@ import "./CpsFormSetting.css";
 import { CpsFormSettingGroup } from "./CpsFormSettingGroup";
 import CpsFormFields from "./field/CpsFormFields";
 import { AsCommandToggle, ContextMenuToggle } from "./field/common/AsCommandToggle";
+import ContextMenuGroupSuggestInput from "./field/common/ContextMenuGroupSuggestInput";
 import { useState, useEffect } from "react";
 import { FormConfigContext } from "src/hooks/useFormConfig";
 import { FormImportDialog } from "./import/FormImportDialog";
@@ -353,6 +354,25 @@ export default function CpsFormSetting(props: {
 									</span>
 									<ContextMenuToggle
 										filePath={props.filePath}
+									/>
+								</CpsFormItem>
+								<CpsFormItem
+									label={localInstance.context_menu_group}
+									description={localInstance.context_menu_group_description}
+								>
+									<ContextMenuGroupSuggestInput
+										filePath={props.filePath}
+										value={formConfig.contextMenuGroup ?? ""}
+										placeholder={localInstance.default_value}
+										className="form--ContextMenuGroupCombobox"
+										onChange={(v) => {
+											const newConfig = new FormConfig(formConfig.id);
+											Object.assign(newConfig, {
+												...formConfig,
+												contextMenuGroup: v,
+											});
+											onChange(newConfig);
+										}}
 									/>
 								</CpsFormItem>
 								<CpsFormItem label={localInstance.run_on_startup}>

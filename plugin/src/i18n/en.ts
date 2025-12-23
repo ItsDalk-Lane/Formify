@@ -173,6 +173,8 @@ export class En implements Local {
 	run_on_startup_description = "When enabled, this form will be automatically submitted when Obsidian starts";
 	enable_context_menu = "Show in Context Menu";
 	enable_context_menu_description = "When enabled, this form can be accessed directly from the editor's context menu";
+	context_menu_group = "Context Menu Group";
+	context_menu_group_description = "Group name used for the editor context menu. Leave empty to use the default group";
 	remove_value = "Remove value";
 		custom_title = "Custom Title";
 		custom_title_description = "Enter a custom action title, leave empty to use system-generated title";

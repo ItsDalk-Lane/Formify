@@ -172,6 +172,8 @@ export class ZhTw implements Local {
 	run_on_startup_description = "開啟後，Obsidian 啟動時將自動提交此表單";
 	enable_context_menu = "在右鍵選單中顯示";
 	enable_context_menu_description = "啟用後可以在編輯器右鍵選單中直接訪問此表單";
+	context_menu_group = "右鍵選單分組";
+	context_menu_group_description = "用於右鍵選單分組顯示；留空則歸入默認分組";
 	remove_value = "刪除值";
 		custom_title = "自定義標題";
 		custom_title_description = "輸入自定義動作標題，留空則使用系統生成的標題";

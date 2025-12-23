@@ -7,6 +7,7 @@ export interface ContextMenuItem {
     id: string;
     title: string;
     icon: string;
+    group: string;
     callback: () => void;
 }
 
@@ -125,18 +126,47 @@ export class ContextMenuService {
             // 添加子菜单
             if (enabledForms.length > 0) {
                 const submenu = item.setSubmenu();
-                
-                // 按标题排序
-                enabledForms.sort((a, b) => a.title.localeCompare(b.title));
-                
-                // 添加每个表单到子菜单
-                enabledForms.forEach(formItem => {
-                    submenu.addItem((subItem) => {
-                        subItem.setTitle(formItem.title)
-                            .setIcon(formItem.icon)
-                            .onClick(() => {
-                                formItem.callback();
+
+                const DEFAULT_GROUP_NAME = '默认';
+
+                const groupToItems = new Map<string, ContextMenuItem[]>();
+                for (const formItem of enabledForms) {
+                    const groupName = (formItem.group ?? '').trim() || DEFAULT_GROUP_NAME;
+                    const groupItems = groupToItems.get(groupName) ?? [];
+                    groupItems.push(formItem);
+                    groupToItems.set(groupName, groupItems);
+                }
+
+                const groupNames = Array.from(groupToItems.keys()).sort((a, b) => {
+                    const aIsDefault = a === DEFAULT_GROUP_NAME;
+                    const bIsDefault = b === DEFAULT_GROUP_NAME;
+                    if (aIsDefault && !bIsDefault) return -1;
+                    if (!aIsDefault && bIsDefault) return 1;
+                    return a.localeCompare(b, undefined, { sensitivity: 'base' });
+                });
+
+                groupNames.forEach((groupName, groupIndex) => {
+                    const itemsInGroup = groupToItems.get(groupName) ?? [];
+
+                    // 分组作为子菜单容器（可展开）
+                    submenu.addItem((groupItem) => {
+                        groupItem.setTitle(groupName);
+
+                        const groupSubmenu = groupItem.setSubmenu();
+
+                        // 组内按标题排序
+                        itemsInGroup.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+
+                        // 添加每个表单到该分组子菜单
+                        itemsInGroup.forEach(formItem => {
+                            groupSubmenu.addItem((subItem) => {
+                                subItem.setTitle(formItem.title)
+                                    .setIcon(formItem.icon)
+                                    .onClick(() => {
+                                        formItem.callback();
+                                    });
                             });
+                        });
                     });
                 });
             }
@@ -181,6 +211,7 @@ export class ContextMenuService {
                 id: file.path,
                 title: file.basename,
                 icon: "file-spreadsheet",
+                group: config.getContextMenuGroup(),
                 callback: () => {
                     this.services?.formService.open(file, this.plugin.app);
                 }

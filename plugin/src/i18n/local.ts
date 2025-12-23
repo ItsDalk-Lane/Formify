@@ -164,6 +164,10 @@ export interface Local {
 	register_as_command: string;
 	run_on_startup: string;
 	run_on_startup_description: string;
+	enable_context_menu: string;
+	enable_context_menu_description: string;
+	context_menu_group: string;
+	context_menu_group_description: string;
 	remove_value: string;
 	custom_title: string;
 	custom_title_description: string;
