@@ -23,7 +23,7 @@ export class VariableConflictAutoFixer {
 
     const raw = await vault.read(abstract);
     const parsed = JSON.parse(raw);
-    const config = Object.assign(new FormConfig(parsed.id), parsed) as FormConfig;
+    const config = FormConfig.fromJSON(parsed);
 
     const allVariables = VariableRegistry.collectAllVariables(config, { includeSystemReserved: false });
     const usedNames = new Set(allVariables.map((v) => (v.name ?? "").trim()).filter(Boolean));

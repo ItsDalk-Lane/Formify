@@ -162,4 +162,18 @@ export class FormConfig {
     updateLastExecutionTime(): void {
         this.lastExecutionTime = Date.now();
     }
+
+    /**
+     * 从普通对象创建 FormConfig 实例
+     * 用于将从 JSON 文件读取的对象转换为 FormConfig 类的实例
+     */
+    static fromJSON(data: any): FormConfig {
+        if (!data || typeof data !== 'object') {
+            throw new Error('Invalid FormConfig data');
+        }
+
+        const config = new FormConfig(data.id || '');
+        Object.assign(config, data);
+        return config;
+    }
 }

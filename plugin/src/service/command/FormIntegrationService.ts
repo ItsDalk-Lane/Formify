@@ -48,10 +48,10 @@ export class FormIntegrationService {
         try {
             // 读取表单配置
             const configData = await this.plugin.app.vault.read(file);
-            const config = JSON.parse(configData) as FormConfig;
+            const config = JSON.parse(configData);
 
             // 确保是FormConfig实例
-            const formConfig = Object.assign(new FormConfig(config.id), config);
+            const formConfig = FormConfig.fromJSON(config);
 
             // 获取或生成命令ID
             const commandId = formConfig.getOrCreateCommandId(filePath);
@@ -92,14 +92,7 @@ export class FormIntegrationService {
 
             // 确保是FormConfig实例
             if (typeof config === 'object' && config.id) {
-                const formConfig = Object.assign(new FormConfig(config.id), config);
-
-                // 确保commandId字段被正确处理（即使未定义）
-                if (!formConfig.commandId) {
-                    formConfig.commandId = undefined;
-                }
-
-                return formConfig;
+                return FormConfig.fromJSON(config);
             }
 
             return null;

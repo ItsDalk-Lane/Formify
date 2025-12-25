@@ -129,7 +129,8 @@ export class FormService {
     }
 
     async open(file: TFile, app: App) {
-        const form = await app.vault.readJson(file.path) as FormConfig;
+        const data = await app.vault.readJson(file.path);
+        const form = FormConfig.fromJSON(data);
 
         // 检查是否需要显示表单界面
         if (FormDisplayRules.shouldShowForm(form)) {

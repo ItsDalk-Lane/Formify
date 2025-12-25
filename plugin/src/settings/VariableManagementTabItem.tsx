@@ -52,7 +52,7 @@ export function VariableManagementTabItem(props: { plugin: FormPlugin }) {
 				try {
 					const raw = await vault.read(file);
 					const parsed = JSON.parse(raw);
-					const config = Object.assign(new FormConfig(parsed.id), parsed);
+					const config = FormConfig.fromJSON(parsed);
 					const variables = VariableRegistry.collectAllVariables(config, { includeSystemReserved: false });
 					const conflicts = VariableConflictDetector.detectConflictsFromConfig(config);
 					const conflictMap = new Map<string, ConflictInfo>();

@@ -177,8 +177,7 @@ export class StartupFormService {
             const config = JSON.parse(configData);
 
             if (typeof config === 'object' && config.id) {
-                const formConfig = Object.assign(new FormConfig(config.id), config);
-                return formConfig;
+                return FormConfig.fromJSON(config);
             }
 
             return null;

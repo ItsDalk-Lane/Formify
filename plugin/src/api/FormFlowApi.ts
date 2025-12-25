@@ -18,7 +18,8 @@ export class FormFlowApi {
     async submitFormFile(filePath: string): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (file instanceof TFile) {
-            const form = await this.app.vault.readJson(file.path) as FormConfig;
+            const data = await this.app.vault.readJson(file.path);
+            const form = FormConfig.fromJSON(data);
             await this.formService.submitDirectly(form, this.app);
         } else {
             new Notice(`Form File not found: ${filePath}`);

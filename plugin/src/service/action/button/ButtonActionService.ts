@@ -122,7 +122,8 @@ export class ButtonActionService implements IActionService {
         }
 
         try {
-            const formConfig = await app.vault.readJson(file.path) as FormConfig;
+            const data = await app.vault.readJson(file.path);
+            const formConfig = FormConfig.fromJSON(data);
             const formService = new FormService();
             await formService.openForm(formConfig, app);
         } catch (e) {

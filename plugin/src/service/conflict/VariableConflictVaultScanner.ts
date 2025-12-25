@@ -57,7 +57,7 @@ export class VariableConflictVaultScanner {
     try {
       const raw = await vault.read(file);
       const parsed = JSON.parse(raw);
-      const config = Object.assign(new FormConfig(parsed.id), parsed);
+      const config = FormConfig.fromJSON(parsed);
       return VariableConflictDetector.detectConflictsFromConfig(config);
     } catch {
       return [];
