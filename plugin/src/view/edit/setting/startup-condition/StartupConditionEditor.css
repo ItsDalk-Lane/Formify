@@ -1,0 +1,332 @@
+.form--StartupConditionEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background-color: var(--background-secondary);
+}
+
+.form--StartupConditionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.form--StartupConditionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: var(--text-normal);
+}
+
+.form--StartupConditionModeSwitch {
+  display: flex;
+  gap: 4px;
+}
+
+.form--StartupConditionModeSwitch button {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.form--StartupConditionModeSwitch button.active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.form--StartupConditionModeSwitch button:hover:not(.active) {
+  background: var(--background-modifier-hover);
+}
+
+.form--StartupConditionPresets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.form--StartupConditionPresetCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-width: 140px;
+}
+
+.form--StartupConditionPresetCard:hover {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+}
+
+.form--StartupConditionPresetCard.selected {
+  border-color: var(--interactive-accent);
+  background: var(--interactive-accent-hover);
+}
+
+.form--StartupConditionPresetName {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-normal);
+}
+
+.form--StartupConditionPresetDesc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.form--StartupConditionAdvanced {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form--StartupConditionList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form--StartupConditionItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+}
+
+.form--StartupConditionItem.disabled {
+  opacity: 0.5;
+}
+
+.form--StartupConditionRelation {
+  min-width: 50px;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-top: 6px;
+}
+
+.form--StartupConditionContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form--StartupConditionTypeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form--StartupConditionTypeSelect {
+  min-width: 120px;
+}
+
+.form--StartupConditionConfigRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.form--StartupConditionConfigRow label {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 60px;
+}
+
+.form--StartupConditionConfigRow input,
+.form--StartupConditionConfigRow select {
+  padding: 4px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  font-size: 12px;
+}
+
+.form--StartupConditionConfigRow input[type="time"],
+.form--StartupConditionConfigRow input[type="date"] {
+  min-width: 100px;
+}
+
+.form--StartupConditionConfigRow input[type="number"] {
+  width: 80px;
+}
+
+.form--StartupConditionActions {
+  display: flex;
+  gap: 4px;
+}
+
+.form--StartupConditionActions button {
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.form--StartupConditionActions button:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.form--StartupConditionActions button[data-type="danger"]:hover {
+  background: rgba(255, 0, 0, 0.1);
+  color: var(--text-error);
+}
+
+.form--StartupConditionAddButton {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 12px;
+}
+
+.form--StartupConditionAddButton:hover {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+
+.form--StartupConditionFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.form--StartupConditionTestButton {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 12px;
+}
+
+.form--StartupConditionTestButton:hover {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+}
+
+.form--StartupConditionTestResult {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.form--StartupConditionTestResult.success {
+  background: rgba(0, 200, 0, 0.1);
+  color: var(--text-success);
+}
+
+.form--StartupConditionTestResult.failure {
+  background: rgba(255, 0, 0, 0.1);
+  color: var(--text-error);
+}
+
+.form--DayOfWeekPicker {
+  display: flex;
+  gap: 4px;
+}
+
+.form--DayOfWeekPicker button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.15s ease;
+}
+
+.form--DayOfWeekPicker button.selected {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.form--DayOfWeekPicker button:hover:not(.selected) {
+  background: var(--background-modifier-hover);
+}
+
+.form--ScriptEditor {
+  width: 100%;
+  min-height: 80px;
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  resize: vertical;
+}
+
+.form--StartupConditionGroup {
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-secondary-alt);
+}
+
+.form--StartupConditionGroupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.form--StartupConditionGroupRelation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form--RelationDropdown {
+  padding: 4px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  font-size: 12px;
+  cursor: pointer;
+}

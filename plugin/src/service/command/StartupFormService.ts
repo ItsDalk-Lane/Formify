@@ -2,6 +2,7 @@ import { App, TFile } from "obsidian";
 import { FormConfig } from "src/model/FormConfig";
 import { FormService } from "../FormService";
 import { DebugLogger } from "src/utils/DebugLogger";
+import { getStartupConditionService, ConditionEvaluationContext } from "../startup-condition/StartupConditionService";
 
 /**
  * 启动时表单执行服务
@@ -11,6 +12,7 @@ export class StartupFormService {
     private static instance: StartupFormService | null = null;
     private app: App;
     private isExecuted: boolean = false;
+    private pluginVersion: string = "";
 
     private constructor(app: App) {
         this.app = app;
@@ -24,6 +26,13 @@ export class StartupFormService {
             StartupFormService.instance = new StartupFormService(app);
         }
         return StartupFormService.instance;
+    }
+
+    /**
+     * 设置插件版本（用于条件评估）
+     */
+    setPluginVersion(version: string): void {
+        this.pluginVersion = version;
     }
 
     /**
@@ -70,11 +79,26 @@ export class StartupFormService {
 
             // 依次执行启动时运行的表单
             const formService = new FormService();
+            const conditionService = getStartupConditionService();
+
             for (const { file, config } of startupForms) {
                 try {
+                    // 评估启动条件
+                    const conditionResult = await this.evaluateStartupConditions(file, config, conditionService);
+                    
+                    if (!conditionResult.satisfied) {
+                        DebugLogger.debug(
+                            `[StartupFormService] 表单 ${file.path} 的启动条件不满足，跳过执行。原因: ${conditionResult.details}`
+                        );
+                        continue;
+                    }
+
                     DebugLogger.debug(`[StartupFormService] 执行表单: ${file.path}`);
                     // 使用与命令提交相同的逻辑
                     await formService.open(file, this.app);
+                    
+                    // 更新执行时间
+                    await this.updateLastExecutionTime(file, config);
                 } catch (error) {
                     DebugLogger.error(`[StartupFormService] 执行表单失败: ${file.path}`, error);
                     // 单个表单执行失败不影响其他表单
@@ -84,6 +108,63 @@ export class StartupFormService {
             DebugLogger.info('[StartupFormService] 启动时运行表单执行完成');
         } catch (error) {
             DebugLogger.error('[StartupFormService] 执行启动表单时发生错误', error);
+        }
+    }
+
+    /**
+     * 评估表单的启动条件
+     */
+    private async evaluateStartupConditions(
+        file: TFile,
+        config: FormConfig,
+        conditionService: ReturnType<typeof getStartupConditionService>
+    ): Promise<{ satisfied: boolean; details: string }> {
+        // 如果没有配置启动条件，默认满足
+        if (!config.hasStartupConditions()) {
+            return { satisfied: true, details: "未配置启动条件，默认执行" };
+        }
+
+        try {
+            // 构建评估上下文
+            const context: ConditionEvaluationContext = {
+                app: this.app,
+                currentFile: this.app.workspace.getActiveFile(),
+                formFilePath: file.path,
+                lastExecutionTime: config.getLastExecutionTime(),
+                pluginVersion: this.pluginVersion,
+            };
+
+            // 评估条件
+            const result = await conditionService.evaluateConditions(
+                config.getStartupConditions(),
+                context
+            );
+
+            return {
+                satisfied: result.satisfied,
+                details: result.details,
+            };
+        } catch (error) {
+            DebugLogger.error(`[StartupFormService] 评估启动条件时发生错误: ${file.path}`, error);
+            // 条件评估失败时，为了安全起见，不执行表单
+            return {
+                satisfied: false,
+                details: `条件评估失败: ${error instanceof Error ? error.message : String(error)}`,
+            };
+        }
+    }
+
+    /**
+     * 更新表单的上次执行时间
+     */
+    private async updateLastExecutionTime(file: TFile, config: FormConfig): Promise<void> {
+        try {
+            config.updateLastExecutionTime();
+            const configData = JSON.stringify(config, null, 2);
+            await this.app.vault.modify(file, configData);
+            DebugLogger.debug(`[StartupFormService] 已更新表单 ${file.path} 的执行时间`);
+        } catch (error) {
+            DebugLogger.warn(`[StartupFormService] 更新执行时间失败: ${file.path}`, error);
         }
     }
 

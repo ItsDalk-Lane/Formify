@@ -3,6 +3,7 @@ import { IFormAction } from "./action/IFormAction";
 import { ActionGroup } from "./ActionGroup";
 import { FormActionType } from "./enums/FormActionType";
 import { IFormField } from "./field/IFormField";
+import { StartupConditionsConfig, createEmptyStartupConditionsConfig } from "./startup-condition/StartupCondition";
 
 export class FormConfig {
     id: string;
@@ -21,6 +22,8 @@ export class FormConfig {
     contextMenuEnabled?: boolean;  // 右键菜单启用状态
     contextMenuGroup?: string;  // 右键菜单分组标识，未设置则归入默认分组
     runOnStartup?: boolean;  // 是否在Obsidian启动时自动运行
+    startupConditions?: StartupConditionsConfig;  // 启动条件配置
+    lastExecutionTime?: number;  // 上次执行时间（毫秒时间戳）
 
     constructor(id: string) {
         this.id = id;
@@ -34,6 +37,7 @@ export class FormConfig {
         this.contextMenuEnabled = false;  // 默认不启用右键菜单
         this.contextMenuGroup = '';  // 默认分组（空字符串表示未分组）
         this.runOnStartup = false;  // 默认不在启动时自动运行
+        this.startupConditions = undefined;  // 默认不设置启动条件
     }
 
     /**
@@ -120,5 +124,42 @@ export class FormConfig {
      */
     setRunOnStartup(enabled: boolean): void {
         this.runOnStartup = enabled;
+    }
+
+    /**
+     * 获取启动条件配置
+     */
+    getStartupConditions(): StartupConditionsConfig | undefined {
+        return this.startupConditions;
+    }
+
+    /**
+     * 设置启动条件配置
+     */
+    setStartupConditions(conditions: StartupConditionsConfig | undefined): void {
+        this.startupConditions = conditions;
+    }
+
+    /**
+     * 检查是否配置了启动条件
+     */
+    hasStartupConditions(): boolean {
+        return this.startupConditions !== undefined && 
+               this.startupConditions.enabled === true && 
+               this.startupConditions.conditions.length > 0;
+    }
+
+    /**
+     * 获取上次执行时间
+     */
+    getLastExecutionTime(): number | undefined {
+        return this.lastExecutionTime;
+    }
+
+    /**
+     * 更新上次执行时间
+     */
+    updateLastExecutionTime(): void {
+        this.lastExecutionTime = Date.now();
     }
 }

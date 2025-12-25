@@ -1,4 +1,4 @@
-import { ClipboardIcon, Wrench, Zap, Download, Search, Filter } from "lucide-react";
+import { ClipboardIcon, Wrench, Zap, Download, Search, Filter, Settings } from "lucide-react";
 import { Tab } from "src/component/tab/Tab";
 import { useObsidianApp } from "src/context/obsidianAppContext";
 import { localInstance } from "src/i18n/locals";
@@ -17,6 +17,8 @@ import ContextMenuGroupSuggestInput from "./field/common/ContextMenuGroupSuggest
 import { useState, useEffect } from "react";
 import { FormConfigContext } from "src/hooks/useFormConfig";
 import { FormImportDialog } from "./import/FormImportDialog";
+import { StartupConditionEditor } from "./startup-condition/StartupConditionEditor";
+import { StartupConditionsConfig } from "src/model/startup-condition/StartupCondition";
 
 export default function CpsFormSetting(props: {
 	filePath: string;
@@ -311,6 +313,24 @@ export default function CpsFormSetting(props: {
 									onToggleSelection={handleActionToggleSelection}
 								/>
 							</CpsFormSettingGroup>
+
+							<CpsFormSettingGroup
+								icon={<Settings />}
+								title={localInstance.startup_conditions}
+							>
+								<StartupConditionEditor
+									config={formConfig.startupConditions}
+									formFilePath={props.filePath}
+									onChange={(conditions: StartupConditionsConfig) => {
+										const newConfig = new FormConfig(formConfig.id);
+										Object.assign(newConfig, {
+											...formConfig,
+											startupConditions: conditions,
+										});
+										onChange(newConfig);
+									}}
+								/>
+							</CpsFormSettingGroup>
 						</CpsForm>
 					),
 				},
@@ -391,6 +411,7 @@ export default function CpsFormSetting(props: {
 										}}
 									/>
 								</CpsFormItem>
+
 									<CpsFormItem label={localInstance.show_submit_success_toast}>
 									<span className="form--FormFieldLabelDescription">
 										{localInstance.show_submit_success_toast_description}

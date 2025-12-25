@@ -3,6 +3,7 @@ import FormViewModal2 from "src/component/modal/FormViewModal2";
 import { localInstance } from "src/i18n/locals";
 import { showPromiseToast } from "../component/toast/PromiseToast";
 import { ToastManager } from "../component/toast/ToastManager";
+import { getStartupConditionService } from "../service/startup-condition/StartupConditionService";
 import { FormConfig } from "../model/FormConfig";
 import { getActionsCompatible } from "../utils/getActionsCompatible";
 import { resolveDefaultFormIdValues } from "../utils/resolveDefaultFormIdValues";
@@ -69,6 +70,26 @@ export class FormService {
         const executionManager = FormExecutionManager.getInstance(app);
         
         try {
+            // 检查执行条件
+            if (formConfig.hasStartupConditions()) {
+                const conditionService = getStartupConditionService();
+                const canExecute = await conditionService.evaluate(
+                    formConfig.getStartupConditions()!,
+                    {
+                        app,
+                        formConfig,
+                        currentTime: Date.now(),
+                        lastExecutionTime: formConfig.lastExecutionTime,
+                        pluginVersion: app.plugins.getPlugin('obsidian-formify')?.manifest.version || '0.0.0'
+                    }
+                );
+                
+                if (!canExecute) {
+                    ToastManager.info(localInstance.execution_condition_not_met || '表单执行条件未满足', 3000);
+                    return;
+                }
+            }
+            
             // 启动执行监控
             const abortController = executionManager.startExecution(
                 formConfig.enableExecutionTimeout ?? false,
@@ -85,6 +106,10 @@ export class FormService {
             // 完成后清理
             promise.finally(() => {
                 executionManager.finishExecution();
+                // 更新最后执行时间
+                if (formConfig.hasStartupConditions()) {
+                    formConfig.updateLastExecutionTime();
+                }
             });
             
             // 根据配置决定是否显示提交成功提示
