@@ -24,6 +24,7 @@ export function CpsFormActions(props: {
     selectedIds?: string[];
     onToggleSelection?: (id: string) => void;
     isInsideLoop?: boolean; // 是否在循环内部，用于控制动作显示（已废弃，使用LoopContext）
+    hideVariablePanel?: boolean;
 }) {
     const { config } = props;
     const loopContext = useLoopContext();
@@ -78,7 +79,7 @@ export function CpsFormActions(props: {
 
     return (
         <div className="form--CpsFormActionsSetting">
-            <FormVariableQuotePanel formConfig={config} isInsideLoop={isInsideLoop} />
+            {!props.hideVariablePanel && <FormVariableQuotePanel formConfig={config} isInsideLoop={isInsideLoop} />}
             {actions.map((action, index) => {
                 return (
                     <div key={action.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>

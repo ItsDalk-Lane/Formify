@@ -10,6 +10,7 @@ import "./CpsFormFileView.css";
 import { FormConfigContext } from "src/hooks/useFormConfig";
 import { localInstance } from "src/i18n/locals";
 import { FormImportDialog } from "../edit/setting/import/FormImportDialog";
+import FormVariableQuotePanel from "../edit/setting/action/common/variable-quoter/FormVariableQuotePanel";
 
 type Props = {
 	filePath: string;
@@ -96,7 +97,8 @@ export function CpsFormFileView(props: Props) {
 					>
 						{<div>{fileBasename}</div>}
 						{inEditing ? (
-							<div style={{ display: 'flex', gap: '8px' }}>
+							<div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+								<FormVariableQuotePanel formConfig={formConfig} simpleMode={true} />
 								<button
 									style={{
 										padding: '6px 12px',

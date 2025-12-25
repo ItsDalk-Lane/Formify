@@ -6,6 +6,17 @@
 	align-items: flex-start;
 }
 
+.form--FormVariableQuotePanel--simple {
+    flex-direction: row;
+    gap: 0;
+    align-items: center;
+}
+
+.form--FormVariableQuotePanel--simple .form--FormVariables {
+    padding: 0;
+    width: auto;
+}
+
 /* 确保描述文字左对齐 */
 .form--FormVariableQuotePanel .form--CpsFormDescription {
 	text-align: left;

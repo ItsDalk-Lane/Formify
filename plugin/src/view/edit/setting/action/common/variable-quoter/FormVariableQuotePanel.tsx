@@ -17,6 +17,7 @@ import InternalVariablePopover from "./InternalVariablePopover";
 export default function FormVariableQuotePanel(props: {
     formConfig: FormConfig;
     isInsideLoop?: boolean; // 是否在循环内部，用于控制是否显示循环变量
+    simpleMode?: boolean;
 }) {
     const loopContext = useLoopContext();
     const actualLoopType = loopContext.isInsideLoop ? loopContext.loopType : undefined;
@@ -212,10 +213,12 @@ export default function FormVariableQuotePanel(props: {
 		);
 	};
 	return (
-		<div className="form--FormVariableQuotePanel ">
-			<span className="form--CpsFormDescription">
-				{localInstance.form_variable_usage}
-			</span>
+		<div className={`form--FormVariableQuotePanel ${props.simpleMode ? "form--FormVariableQuotePanel--simple" : ""}`}>
+			{!props.simpleMode && (
+				<span className="form--CpsFormDescription">
+					{localInstance.form_variable_usage}
+				</span>
+			)}
 			<div className="form--FormVariables">
 				<DropdownMenu
 					menuLabel={localInstance.form_variables}

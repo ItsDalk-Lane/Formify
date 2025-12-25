@@ -299,6 +299,7 @@ export default function CpsFormSetting(props: {
 							>
 								<CpsFormActions
 									config={formConfig}
+									hideVariablePanel={true}
 									onChange={(action) => {
 										const newConfig = new FormConfig(formConfig.id);
 										Object.assign(newConfig, {
