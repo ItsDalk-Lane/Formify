@@ -64,7 +64,16 @@ export function CpsFormSettingGroup(props: {
 							{props.icon}
 						</div>
 					) : (
-						props.icon
+						<div
+							style={{
+								display: "flex",
+								alignItems: "center",
+								marginRight: "8px",
+								padding: "4px",
+							}}
+						>
+							{props.icon}
+						</div>
 					)}
 					{props.title}
 				</div>

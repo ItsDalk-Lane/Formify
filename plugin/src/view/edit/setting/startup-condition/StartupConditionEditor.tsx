@@ -196,22 +196,18 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
 
   return (
     <div className="form--StartupConditionEditor">
-      <div className="form--StartupConditionHeader">
-        <div className="form--StartupConditionTitle">
-          <Clock size={16} />
-          <span>{localInstance.startup_conditions}</span>
-          <button
-            className="form--ToggleButton"
-            onClick={handleToggleEnabled}
-            title={currentConfig.enabled ? localInstance.enabled : localInstance.disabled}
-          >
-            {currentConfig.enabled ? (
-              <ToggleRight size={20} className="text-accent" />
-            ) : (
-              <ToggleLeft size={20} />
-            )}
-          </button>
-        </div>
+      <div className="form--StartupConditionControls">
+        <button
+          className="form--ToggleButton"
+          onClick={handleToggleEnabled}
+          title={currentConfig.enabled ? localInstance.enabled : localInstance.disabled}
+        >
+          {currentConfig.enabled ? (
+            <ToggleRight size={20} className="text-accent" />
+          ) : (
+            <ToggleLeft size={20} />
+          )}
+        </button>
         <div className="form--StartupConditionModeSwitch">
           <button
             className={mode === "simple" ? "active" : ""}
