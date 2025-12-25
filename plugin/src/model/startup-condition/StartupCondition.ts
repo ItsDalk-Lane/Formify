@@ -32,14 +32,36 @@ export enum TimeConditionSubType {
  * 文件条件子类型
  */
 export enum FileConditionSubType {
-  /** 当前文件存在性检查 */
+  /** 文件存在性检查（仅在指定具体文件模式下可用） */
   FileExists = "file_exists",
-  /** 路径匹配（支持通配符） */
-  PathMatch = "path_match",
+  /** 文件状态检查（是否打开、是否激活）（仅在指定具体文件模式下可用） */
+  FileStatus = "file_status",
   /** 文件内容包含检查 */
   ContentContains = "content_contains",
   /** Frontmatter 属性检查 */
   FrontmatterProperty = "frontmatter_property",
+  /** @deprecated 路径匹配（已废弃，保留用于向后兼容） */
+  PathMatch = "path_match",
+}
+
+/**
+ * 文件目标模式
+ */
+export enum FileTargetMode {
+  /** 当前激活文件 */
+  CurrentFile = "current_file",
+  /** 指定具体文件 */
+  SpecificFile = "specific_file",
+}
+
+/**
+ * 文件状态检查选项
+ */
+export enum FileStatusCheckType {
+  /** 文件是否在编辑器中打开 */
+  IsOpen = "is_open",
+  /** 文件是否是当前激活文件 */
+  IsActive = "is_active",
 }
 
 /**
@@ -104,16 +126,36 @@ export interface TimeConditionConfig {
  */
 export interface FileConditionConfig {
   subType: FileConditionSubType;
-  /** 文件路径或通配符模式 */
-  pathPattern?: string;
+  /** 文件目标模式 */
+  targetMode?: FileTargetMode;
+  /** 指定的文件路径（当 targetMode 为 SpecificFile 时使用） */
+  targetFilePath?: string;
   /** 文件内容搜索文本 */
   searchText?: string;
-  /** Frontmatter 属性名 */
+  /** Frontmatter 属性名（单属性检查，向后兼容） */
   propertyName?: string;
-  /** Frontmatter 属性值 */
+  /** Frontmatter 属性值（单属性检查，向后兼容） */
   propertyValue?: string;
-  /** 操作符 */
+  /** 操作符（单属性检查，向后兼容） */
   operator?: ConditionOperator;
+  /** 多属性检查配置 */
+  properties?: PropertyCheckConfig[];
+  /** 文件状态检查选项 */
+  fileStatusChecks?: FileStatusCheckType[];
+  /** @deprecated 文件路径模式（已废弃，保留用于向后兼容） */
+  pathPattern?: string;
+}
+
+/**
+ * 属性检查配置
+ */
+export interface PropertyCheckConfig {
+  /** 属性名 */
+  name: string;
+  /** 操作符 */
+  operator: ConditionOperator;
+  /** 期望值 */
+  value: string;
 }
 
 /**
@@ -221,7 +263,8 @@ function getDefaultConfig(
       };
     case StartupConditionType.File:
       return {
-        subType: FileConditionSubType.FileExists,
+        subType: FileConditionSubType.ContentContains,
+        targetMode: FileTargetMode.CurrentFile,
         operator: ConditionOperator.Equals,
       };
     case StartupConditionType.System:

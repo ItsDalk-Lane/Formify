@@ -3,7 +3,7 @@ import FormViewModal2 from "src/component/modal/FormViewModal2";
 import { localInstance } from "src/i18n/locals";
 import { showPromiseToast } from "../component/toast/PromiseToast";
 import { ToastManager } from "../component/toast/ToastManager";
-import { getStartupConditionService } from "../service/startup-condition/StartupConditionService";
+import { getStartupConditionService, ConditionEvaluationResult } from "../service/startup-condition/StartupConditionService";
 import { FormConfig } from "../model/FormConfig";
 import { getActionsCompatible } from "../utils/getActionsCompatible";
 import { resolveDefaultFormIdValues } from "../utils/resolveDefaultFormIdValues";
@@ -73,19 +73,21 @@ export class FormService {
             // 检查执行条件
             if (formConfig.hasStartupConditions()) {
                 const conditionService = getStartupConditionService();
-                const canExecute = await conditionService.evaluate(
+                const evaluationResult = await conditionService.evaluateConditions(
                     formConfig.getStartupConditions()!,
                     {
                         app,
-                        formConfig,
-                        currentTime: Date.now(),
+                        currentFile: app.workspace.getActiveFile(),
+                        formFilePath: formConfig.filePath,
                         lastExecutionTime: formConfig.lastExecutionTime,
                         pluginVersion: app.plugins.getPlugin('obsidian-formify')?.manifest.version || '0.0.0'
                     }
                 );
                 
-                if (!canExecute) {
-                    ToastManager.info(localInstance.execution_condition_not_met || '表单执行条件未满足', 3000);
+                if (!evaluationResult.satisfied) {
+                    // 显示详细的条件不满足信息
+                    const detailMessage = this.formatConditionFailureMessage(evaluationResult);
+                    ToastManager.info(detailMessage, 5000);
                     return;
                 }
             }
@@ -165,5 +167,40 @@ export class FormService {
             const formService = new FormService();
             await formService.submitDirectly(formConfig, app);
         }
+    }
+
+    /**
+     * 格式化条件不满足的提示信息
+     */
+    private formatConditionFailureMessage(result: ConditionEvaluationResult): string {
+        const baseMessage = localInstance.startup_condition_not_met_detail || "表单执行条件未满足：{0}";
+        
+        // 收集所有不满足的条件详情
+        const failedDetails: string[] = [];
+        
+        // 主要详情
+        if (result.details) {
+            failedDetails.push(result.details);
+        }
+        
+        // 子条件详情
+        if (result.childResults) {
+            for (const childResult of result.childResults) {
+                if (!childResult.satisfied && childResult.details) {
+                    failedDetails.push(childResult.details);
+                }
+            }
+        }
+        
+        // 错误信息
+        if (result.error) {
+            failedDetails.push(`错误: ${result.error}`);
+        }
+        
+        const detailText = failedDetails.length > 0 
+            ? failedDetails.join("；") 
+            : "未知原因";
+        
+        return baseMessage.replace("{0}", detailText);
     }
 }

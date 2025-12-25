@@ -322,6 +322,7 @@ export default function CpsFormSetting(props: {
 								<StartupConditionEditor
 									config={formConfig.startupConditions}
 									formFilePath={props.filePath}
+									formConfig={formConfig}
 									onChange={(conditions: StartupConditionsConfig) => {
 										const newConfig = new FormConfig(formConfig.id);
 										Object.assign(newConfig, {

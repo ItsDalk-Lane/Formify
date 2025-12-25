@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import {
   Plus,
   Trash2,
@@ -14,8 +14,11 @@ import {
   ToggleLeft,
   ToggleRight,
   CopyPlus,
+  AlertCircle,
+  Variable,
 } from "lucide-react";
 import { localInstance } from "src/i18n/locals";
+import { week } from "src/i18n/week";
 import {
   StartupCondition,
   StartupConditionsConfig,
@@ -23,6 +26,8 @@ import {
   ConditionRelation,
   TimeConditionSubType,
   FileConditionSubType,
+  FileTargetMode,
+  FileStatusCheckType,
   SystemConditionSubType,
   ConditionOperator,
   createCondition,
@@ -33,6 +38,7 @@ import {
 import type {
   TimeConditionConfig,
   FileConditionConfig,
+  PropertyCheckConfig,
   SystemConditionConfig,
   ScriptConditionConfig,
   ConditionPreset,
@@ -43,8 +49,246 @@ import {
   ConditionEvaluationResult,
 } from "src/service/startup-condition/StartupConditionService";
 import { useObsidianApp } from "src/context/obsidianAppContext";
+import { TFile } from "obsidian";
 import { v4 } from "uuid";
 import "./StartupConditionEditor.css";
+import { FormConfig } from "src/model/FormConfig";
+import { FormField } from "src/model/field/IFormField";
+
+/**
+ * 允许的内置变量类型（用于启动条件）
+ * 排除 selection 和 clipboard，因为它们需要用户交互
+ */
+const ALLOWED_BUILTIN_VARIABLES = [
+  { name: "date", pattern: "{{date}}", description: localInstance.builtin_var_date || "当前日期" },
+  { name: "date:format", pattern: "{{date:YYYY-MM-DD}}", description: localInstance.builtin_var_date_format || "格式化日期" },
+  { name: "time", pattern: "{{time}}", description: localInstance.builtin_var_time || "当前时间" },
+  { name: "random", pattern: "{{random:10}}", description: localInstance.builtin_var_random || "随机字符串" },
+];
+
+/**
+ * 获取可用的表单变量（只返回有默认值的字段）
+ */
+function getAvailableFormVariables(formConfig?: FormConfig): { name: string; label: string; defaultValue: any }[] {
+  if (!formConfig || !formConfig.fields) return [];
+  
+  return formConfig.fields
+    .filter((field: FormField) => field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== "")
+    .map((field: FormField) => ({
+      name: field.label,
+      label: field.label,
+      defaultValue: field.defaultValue,
+    }));
+}
+
+/**
+ * 变量引用输入组件
+ * 支持引用表单变量和内置变量
+ */
+/**
+ * 变量引用输入组件
+ * 支持引用表单变量和内置变量
+ * 支持文件搜索建议
+ */
+interface VariableReferenceInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  formConfig?: FormConfig;
+  style?: React.CSSProperties;
+  enableFileSearch?: boolean;
+}
+
+function VariableReferenceInput(props: VariableReferenceInputProps) {
+  const { value, onChange, placeholder, formConfig, style, enableFileSearch } = props;
+  const app = useObsidianApp();
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [fileSuggestions, setFileSuggestions] = useState<TFile[]>([]);
+  const [showFileDropdown, setShowFileDropdown] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const fileDropdownRef = useRef<HTMLDivElement>(null);
+
+  const formVariables = useMemo(() => getAvailableFormVariables(formConfig), [formConfig]);
+
+  // 点击外部关闭下拉菜单
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      
+      // Close variable dropdown
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target) &&
+        inputRef.current &&
+        !inputRef.current.contains(target)
+      ) {
+        setShowDropdown(false);
+      }
+
+      // Close file dropdown
+      if (
+        fileDropdownRef.current &&
+        !fileDropdownRef.current.contains(target) &&
+        inputRef.current &&
+        !inputRef.current.contains(target)
+      ) {
+        setShowFileDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Handle input change with file search
+  const handleInputChange = (newValue: string) => {
+    onChange(newValue);
+    
+    if (enableFileSearch && newValue.trim()) {
+      const search = newValue.toLowerCase();
+      const files = app.vault.getFiles();
+      const matches = files
+        .filter(f => f.path.toLowerCase().includes(search))
+        .slice(0, 10);
+      
+      if (matches.length > 0) {
+        setFileSuggestions(matches);
+        setShowFileDropdown(true);
+        setShowDropdown(false);
+      } else {
+        setShowFileDropdown(false);
+      }
+    } else {
+      setShowFileDropdown(false);
+    }
+  };
+
+  // Select file from suggestions
+  const selectFile = (file: TFile) => {
+    onChange(file.path);
+    setShowFileDropdown(false);
+    inputRef.current?.focus();
+  };
+
+  // 插入变量引用
+  const insertVariable = (variablePattern: string) => {
+    const input = inputRef.current;
+    if (!input) {
+      onChange(value + variablePattern);
+      setShowDropdown(false);
+      return;
+    }
+
+    const start = input.selectionStart || 0;
+    const end = input.selectionEnd || 0;
+    const newValue = value.substring(0, start) + variablePattern + value.substring(end);
+    onChange(newValue);
+    setShowDropdown(false);
+    setShowFileDropdown(false);
+
+    // 设置光标位置
+    setTimeout(() => {
+      input.focus();
+      input.setSelectionRange(start + variablePattern.length, start + variablePattern.length);
+    }, 0);
+  };
+
+  return (
+    <div className="form--VariableReferenceInput" style={{ position: "relative", ...style }}>
+      <div className="form--VariableReferenceInputWrapper">
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={(e) => handleInputChange(e.target.value)}
+          placeholder={placeholder}
+          className="form--VariableReferenceInputField"
+          autoComplete="off"
+        />
+        <button
+          type="button"
+          className="form--VariableReferenceButton"
+          onClick={() => {
+            setShowDropdown(!showDropdown);
+            setShowFileDropdown(false);
+          }}
+          title={localInstance.insert_variable || "插入变量"}
+        >
+          <Variable size={14} />
+        </button>
+      </div>
+
+      {showDropdown && (
+        <div ref={dropdownRef} className="form--VariableReferenceDropdown">
+          {/* 表单变量部分 */}
+          {formVariables.length > 0 && (
+            <>
+              <div className="form--VariableReferenceSection">
+                <span className="form--VariableReferenceSectionTitle">
+                  {localInstance.form_variables || "表单变量"}
+                </span>
+              </div>
+              {formVariables.map((v) => (
+                <div
+                  key={v.name}
+                  className="form--VariableReferenceItem"
+                  onClick={() => insertVariable(`{{@${v.name}}}`)}
+                >
+                  <span className="form--VariableReferenceName">{"{{@" + v.name + "}}"}</span>
+                  <span className="form--VariableReferenceDesc">
+                    {localInstance.default_value || "默认值"}: {String(v.defaultValue)}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* 内置变量部分 */}
+          <div className="form--VariableReferenceSection">
+            <span className="form--VariableReferenceSectionTitle">
+              {localInstance.builtin_variables || "内置变量"}
+            </span>
+          </div>
+          {ALLOWED_BUILTIN_VARIABLES.map((v) => (
+            <div
+              key={v.name}
+              className="form--VariableReferenceItem"
+              onClick={() => insertVariable(v.pattern)}
+            >
+              <span className="form--VariableReferenceName">{v.pattern}</span>
+              <span className="form--VariableReferenceDesc">{v.description}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* File Suggestions Dropdown */}
+      {showFileDropdown && (
+        <div ref={fileDropdownRef} className="form--VariableReferenceDropdown">
+          {fileSuggestions.map((file) => (
+            <div
+              key={file.path}
+              className="form--VariableReferenceItem"
+              onClick={() => selectFile(file)}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", width: "100%" }}>
+                <File size={14} className="text-muted" style={{ flexShrink: 0 }} />
+                <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                  <span className="form--VariableReferenceName" style={{ color: "var(--text-normal)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {file.name}
+                  </span>
+                  <span className="form--VariableReferenceDesc" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {file.path}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 type EditorMode = "simple" | "advanced";
 
@@ -52,13 +296,14 @@ interface StartupConditionEditorProps {
   config: StartupConditionsConfig | undefined;
   onChange: (config: StartupConditionsConfig) => void;
   formFilePath?: string;
+  formConfig?: FormConfig;
 }
 
 /**
  * 启动条件编辑器组件
  */
 export function StartupConditionEditor(props: StartupConditionEditorProps) {
-  const { config, onChange, formFilePath } = props;
+  const { config, onChange, formFilePath, formConfig } = props;
   const app = useObsidianApp();
   const [mode, setMode] = useState<EditorMode>("simple");
   const [testResult, setTestResult] = useState<ConditionEvaluationResult | null>(null);
@@ -234,6 +479,7 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
           ) : (
             <AdvancedConditionEditor
               config={currentConfig}
+              formConfig={formConfig}
               onAddCondition={handleAddCondition}
               onAddGroup={handleAddGroup}
               onRemoveCondition={handleRemoveCondition}
@@ -331,6 +577,7 @@ function SimpleConditionEditor(props: {
  */
 function AdvancedConditionEditor(props: {
   config: StartupConditionsConfig;
+  formConfig?: FormConfig;
   onAddCondition: (type: StartupConditionType) => void;
   onAddGroup: () => void;
   onRemoveCondition: (id: string) => void;
@@ -341,6 +588,7 @@ function AdvancedConditionEditor(props: {
 }) {
   const {
     config,
+    formConfig,
     onAddCondition,
     onAddGroup,
     onRemoveCondition,
@@ -377,6 +625,7 @@ function AdvancedConditionEditor(props: {
             condition={condition}
             index={index}
             relation={config.relation}
+            formConfig={formConfig}
             onUpdate={(updates) => onUpdateCondition(condition.id, updates)}
             onRemove={() => onRemoveCondition(condition.id)}
             onDuplicate={() => onDuplicateCondition(condition.id)}
@@ -541,11 +790,12 @@ function ConditionItem(props: {
   condition: StartupCondition;
   index: number;
   relation: ConditionRelation;
+  formConfig?: FormConfig;
   onUpdate: (updates: Partial<StartupCondition>) => void;
   onRemove: () => void;
   onDuplicate: () => void;
 }) {
-  const { condition, index, relation, onUpdate, onRemove, onDuplicate } = props;
+  const { condition, index, relation, formConfig, onUpdate, onRemove, onDuplicate } = props;
 
   const getRelationText = () => {
     if (index === 0) return localInstance.operator_condition;
@@ -562,11 +812,13 @@ function ConditionItem(props: {
         {condition.type === "group" ? (
           <ConditionGroupEditor
             condition={condition}
+            formConfig={formConfig}
             onUpdate={onUpdate}
           />
         ) : (
           <ConditionConfigEditor
             condition={condition}
+            formConfig={formConfig}
             onUpdate={onUpdate}
           />
         )}
@@ -595,9 +847,10 @@ function ConditionItem(props: {
  */
 function ConditionGroupEditor(props: {
   condition: StartupCondition;
+  formConfig?: FormConfig;
   onUpdate: (updates: Partial<StartupCondition>) => void;
 }) {
-  const { condition, onUpdate } = props;
+  const { condition, formConfig, onUpdate } = props;
 
   const handleAddCondition = (type: StartupConditionType) => {
     const newCondition = createCondition(type);
@@ -643,6 +896,7 @@ function ConditionGroupEditor(props: {
             condition={child}
             index={index}
             relation={condition.relation}
+            formConfig={formConfig}
             onUpdate={(updates) => handleUpdateChild(child.id, updates)}
             onRemove={() => handleRemoveChild(child.id)}
             onDuplicate={() => {
@@ -671,9 +925,10 @@ function ConditionGroupEditor(props: {
  */
 function ConditionConfigEditor(props: {
   condition: StartupCondition;
+  formConfig?: FormConfig;
   onUpdate: (updates: Partial<StartupCondition>) => void;
 }) {
-  const { condition, onUpdate } = props;
+  const { condition, formConfig, onUpdate } = props;
 
   const getTypeIcon = () => {
     switch (condition.type) {
@@ -722,6 +977,7 @@ function ConditionConfigEditor(props: {
       {condition.type === StartupConditionType.File && (
         <FileConditionConfigEditor
           config={condition.config as FileConditionConfig}
+          formConfig={formConfig}
           onChange={(config) => onUpdate({ config })}
         />
       )}
@@ -752,15 +1008,8 @@ function TimeConditionConfigEditor(props: {
 }) {
   const { config, onChange } = props;
 
-  const dayNames = [
-    localInstance.sunday,
-    localInstance.monday,
-    localInstance.tuesday,
-    localInstance.wednesday,
-    localInstance.thursday,
-    localInstance.friday,
-    localInstance.saturday,
-  ];
+  // 使用短名称显示星期几 (日、一、二、三、四、五、六)
+  const dayShortNames = [0, 1, 2, 3, 4, 5, 6].map(i => week(i, 'short'));
 
   return (
     <div className="form--StartupConditionConfigRow">
@@ -803,10 +1052,11 @@ function TimeConditionConfigEditor(props: {
 
       {config.subType === TimeConditionSubType.DayOfWeek && (
         <div className="form--DayOfWeekPicker">
-          {dayNames.map((name, index) => (
+          {dayShortNames.map((name, index) => (
             <button
               key={index}
               className={(config.daysOfWeek || []).includes(index) ? "selected" : ""}
+              title={week(index, 'full')}
               onClick={() => {
                 const days = config.daysOfWeek || [];
                 const newDays = days.includes(index)
@@ -815,7 +1065,7 @@ function TimeConditionConfigEditor(props: {
                 onChange({ ...config, daysOfWeek: newDays });
               }}
             >
-              {name.substring(0, 1)}
+              {name}
             </button>
           ))}
         </div>
@@ -859,80 +1109,262 @@ function TimeConditionConfigEditor(props: {
  */
 function FileConditionConfigEditor(props: {
   config: FileConditionConfig;
+  formConfig?: FormConfig;
   onChange: (config: FileConditionConfig) => void;
 }) {
-  const { config, onChange } = props;
+  const { config, formConfig, onChange } = props;
+
+  // 获取当前目标模式，默认为当前文件
+  const targetMode = config.targetMode || FileTargetMode.CurrentFile;
+  const isSpecificFile = targetMode === FileTargetMode.SpecificFile;
+
+  // 根据目标模式获取可用的子类型
+  const getAvailableSubTypes = () => {
+    if (isSpecificFile) {
+      // 指定具体文件模式：所有子类型都可用
+      return [
+        { value: FileConditionSubType.FileExists, label: localInstance.startup_condition_file_exists },
+        { value: FileConditionSubType.FileStatus, label: localInstance.startup_condition_file_status },
+        { value: FileConditionSubType.ContentContains, label: localInstance.startup_condition_content_contains },
+        { value: FileConditionSubType.FrontmatterProperty, label: localInstance.startup_condition_frontmatter },
+      ];
+    } else {
+      // 当前文件模式：只有内容包含和属性检查可用
+      return [
+        { value: FileConditionSubType.ContentContains, label: localInstance.startup_condition_content_contains },
+        { value: FileConditionSubType.FrontmatterProperty, label: localInstance.startup_condition_frontmatter },
+      ];
+    }
+  };
+
+  const availableSubTypes = getAvailableSubTypes();
+
+  // 当切换目标模式时，检查并修正子类型
+  const handleTargetModeChange = (newMode: FileTargetMode) => {
+    let newConfig = { ...config, targetMode: newMode };
+    
+    // 如果切换到当前文件模式，且当前子类型是仅指定文件可用的，则切换到内容包含
+    if (newMode === FileTargetMode.CurrentFile) {
+      if (config.subType === FileConditionSubType.FileExists || 
+          config.subType === FileConditionSubType.FileStatus) {
+        newConfig.subType = FileConditionSubType.ContentContains;
+      }
+    }
+    
+    onChange(newConfig);
+  };
+
+  // 处理属性列表变更
+  const handleAddProperty = () => {
+    const properties = config.properties || [];
+    onChange({
+      ...config,
+      properties: [...properties, { name: "", operator: ConditionOperator.Equals, value: "" }],
+    });
+  };
+
+  const handleRemoveProperty = (index: number) => {
+    const properties = config.properties || [];
+    onChange({
+      ...config,
+      properties: properties.filter((_, i) => i !== index),
+    });
+  };
+
+  const handleUpdateProperty = (index: number, updates: Partial<PropertyCheckConfig>) => {
+    const properties = config.properties || [];
+    onChange({
+      ...config,
+      properties: properties.map((p, i) => (i === index ? { ...p, ...updates } : p)),
+    });
+  };
+
+  // 处理文件状态检查选项变更
+  const handleFileStatusCheckChange = (checkType: FileStatusCheckType, checked: boolean) => {
+    const currentChecks = config.fileStatusChecks || [];
+    let newChecks: FileStatusCheckType[];
+    if (checked) {
+      newChecks = [...currentChecks, checkType];
+    } else {
+      newChecks = currentChecks.filter((c) => c !== checkType);
+    }
+    onChange({ ...config, fileStatusChecks: newChecks });
+  };
 
   return (
-    <div className="form--StartupConditionConfigRow">
-      <label>{localInstance.startup_condition_subtype}:</label>
-      <select
-        value={config.subType}
-        onChange={(e) =>
-          onChange({ ...config, subType: e.target.value as FileConditionSubType })
-        }
-      >
-        <option value={FileConditionSubType.FileExists}>
-          {localInstance.startup_condition_file_exists}
-        </option>
-        <option value={FileConditionSubType.PathMatch}>
-          {localInstance.startup_condition_path_match}
-        </option>
-        <option value={FileConditionSubType.ContentContains}>
-          {localInstance.startup_condition_content_contains}
-        </option>
-        <option value={FileConditionSubType.FrontmatterProperty}>
-          {localInstance.startup_condition_frontmatter}
-        </option>
-      </select>
+    <div className="form--StartupConditionFileConfig">
+      {/* 目标文件模式选择 */}
+      <div className="form--StartupConditionConfigRow">
+        <label>{localInstance.startup_condition_target_mode}:</label>
+        <select
+          value={targetMode}
+          onChange={(e) => handleTargetModeChange(e.target.value as FileTargetMode)}
+        >
+          <option value={FileTargetMode.CurrentFile}>
+            {localInstance.startup_condition_current_file}
+          </option>
+          <option value={FileTargetMode.SpecificFile}>
+            {localInstance.startup_condition_specific_file}
+          </option>
+        </select>
+      </div>
 
-      {config.subType === FileConditionSubType.PathMatch && (
-        <input
-          type="text"
-          placeholder={localInstance.startup_condition_path_pattern_placeholder}
-          value={config.pathPattern || ""}
-          onChange={(e) => onChange({ ...config, pathPattern: e.target.value })}
-          style={{ flex: 1, minWidth: 200 }}
-        />
+      {/* 指定文件路径输入 */}
+      {isSpecificFile && (
+        <div className="form--StartupConditionConfigRow">
+          <label>{localInstance.file_path}:</label>
+          <VariableReferenceInput
+            placeholder={localInstance.startup_condition_file_path_placeholder}
+            value={config.targetFilePath || ""}
+            onChange={(value) => onChange({ ...config, targetFilePath: value })}
+            formConfig={formConfig}
+            style={{ flex: 1, minWidth: 200 }}
+            enableFileSearch={true}
+          />
+        </div>
       )}
 
+      {/* 条件子类型选择 */}
+      <div className="form--StartupConditionConfigRow">
+        <label>{localInstance.startup_condition_subtype}:</label>
+        <select
+          value={config.subType}
+          onChange={(e) =>
+            onChange({ ...config, subType: e.target.value as FileConditionSubType })
+          }
+        >
+          {availableSubTypes.map((st) => (
+            <option key={st.value} value={st.value}>
+              {st.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* 文件状态检查选项 */}
+      {config.subType === FileConditionSubType.FileStatus && isSpecificFile && (
+        <div className="form--StartupConditionConfigRow">
+          <label>{localInstance.startup_condition_file_status_options}:</label>
+          <div className="form--FileStatusCheckOptions">
+            <label className="form--CheckboxLabel">
+              <input
+                type="checkbox"
+                checked={(config.fileStatusChecks || []).includes(FileStatusCheckType.IsOpen)}
+                onChange={(e) => handleFileStatusCheckChange(FileStatusCheckType.IsOpen, e.target.checked)}
+              />
+              {localInstance.startup_condition_file_is_open}
+            </label>
+            <label className="form--CheckboxLabel">
+              <input
+                type="checkbox"
+                checked={(config.fileStatusChecks || []).includes(FileStatusCheckType.IsActive)}
+                onChange={(e) => handleFileStatusCheckChange(FileStatusCheckType.IsActive, e.target.checked)}
+              />
+              {localInstance.startup_condition_file_is_active}
+            </label>
+          </div>
+        </div>
+      )}
+
+      {/* 内容包含检查 */}
       {config.subType === FileConditionSubType.ContentContains && (
-        <input
-          type="text"
-          placeholder={localInstance.startup_condition_search_text_placeholder}
-          value={config.searchText || ""}
-          onChange={(e) => onChange({ ...config, searchText: e.target.value })}
-          style={{ flex: 1, minWidth: 200 }}
-        />
+        <div className="form--StartupConditionConfigRow">
+          <label>{localInstance.startup_condition_search_text}:</label>
+          <VariableReferenceInput
+            placeholder={localInstance.startup_condition_search_text_placeholder}
+            value={config.searchText || ""}
+            onChange={(value) => onChange({ ...config, searchText: value })}
+            formConfig={formConfig}
+            style={{ flex: 1, minWidth: 200 }}
+          />
+        </div>
       )}
 
+      {/* 属性检查 - 多属性支持 */}
       {config.subType === FileConditionSubType.FrontmatterProperty && (
-        <>
-          <input
-            type="text"
-            placeholder={localInstance.property_name}
-            value={config.propertyName || ""}
-            onChange={(e) => onChange({ ...config, propertyName: e.target.value })}
-            style={{ width: 100 }}
-          />
-          <select
-            value={config.operator || ConditionOperator.Equals}
-            onChange={(e) =>
-              onChange({ ...config, operator: e.target.value as ConditionOperator })
-            }
+        <div className="form--StartupConditionPropertyConfig">
+          <div className="form--StartupConditionConfigRow">
+            <label>{localInstance.startup_condition_properties}:</label>
+          </div>
+          
+          {/* 显示属性列表 */}
+          {(config.properties && config.properties.length > 0) ? (
+            <div className="form--PropertyList">
+              {config.properties.map((prop, index) => (
+                <div key={index} className="form--PropertyItem">
+                  <VariableReferenceInput
+                    placeholder={localInstance.property_name}
+                    value={prop.name}
+                    onChange={(value) => handleUpdateProperty(index, { name: value })}
+                    formConfig={formConfig}
+                    style={{ width: 100 }}
+                  />
+                  <select
+                    value={prop.operator}
+                    onChange={(e) => handleUpdateProperty(index, { operator: e.target.value as ConditionOperator })}
+                  >
+                    <option value={ConditionOperator.Equals}>{localInstance.equal}</option>
+                    <option value={ConditionOperator.NotEquals}>{localInstance.not_equal}</option>
+                    <option value={ConditionOperator.Contains}>{localInstance.contains}</option>
+                  </select>
+                  <VariableReferenceInput
+                    placeholder={localInstance.property_value}
+                    value={prop.value}
+                    onChange={(value) => handleUpdateProperty(index, { value: value })}
+                    formConfig={formConfig}
+                    style={{ width: 100 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveProperty(index)}
+                    className="form--PropertyRemoveButton"
+                    title={localInstance.delete}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            // 向后兼容：显示旧的单属性配置
+            config.propertyName && (
+              <div className="form--PropertyItem">
+                <VariableReferenceInput
+                  placeholder={localInstance.property_name}
+                  value={config.propertyName || ""}
+                  onChange={(value) => onChange({ ...config, propertyName: value })}
+                  formConfig={formConfig}
+                  style={{ width: 100 }}
+                />
+                <select
+                  value={config.operator || ConditionOperator.Equals}
+                  onChange={(e) => onChange({ ...config, operator: e.target.value as ConditionOperator })}
+                >
+                  <option value={ConditionOperator.Equals}>{localInstance.equal}</option>
+                  <option value={ConditionOperator.NotEquals}>{localInstance.not_equal}</option>
+                  <option value={ConditionOperator.Contains}>{localInstance.contains}</option>
+                </select>
+                <VariableReferenceInput
+                  placeholder={localInstance.property_value}
+                  value={config.propertyValue || ""}
+                  onChange={(value) => onChange({ ...config, propertyValue: value })}
+                  formConfig={formConfig}
+                  style={{ width: 100 }}
+                />
+              </div>
+            )
+          )}
+          
+          {/* 添加属性按钮 */}
+          <button
+            type="button"
+            onClick={handleAddProperty}
+            className="form--AddPropertyButton"
           >
-            <option value={ConditionOperator.Equals}>{localInstance.equal}</option>
-            <option value={ConditionOperator.NotEquals}>{localInstance.not_equal}</option>
-            <option value={ConditionOperator.Contains}>{localInstance.contains}</option>
-          </select>
-          <input
-            type="text"
-            placeholder={localInstance.property_value}
-            value={config.propertyValue || ""}
-            onChange={(e) => onChange({ ...config, propertyValue: e.target.value })}
-            style={{ width: 100 }}
-          />
-        </>
+            <Plus size={14} />
+            {localInstance.startup_condition_add_property}
+          </button>
+        </div>
       )}
     </div>
   );

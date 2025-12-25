@@ -621,6 +621,28 @@ export class Zh implements Local {
 	startup_condition_preset_once_per_day_desc = "24小时内仅执行一次";
 	startup_condition_preset_weekday_daytime = "工作时间";
 	startup_condition_preset_weekday_daytime_desc = "工作日9:00-18:00执行";
+	// 新增的文件条件相关
+	startup_condition_target_mode = "目标文件";
+	startup_condition_current_file = "当前文件";
+	startup_condition_specific_file = "指定具体文件";
+	startup_condition_file_path_placeholder = "输入 vault 中的文件路径";
+	startup_condition_file_suggestions = "文件建议";
+	startup_condition_file_status = "文件状态";
+	startup_condition_file_status_options = "状态检查";
+	startup_condition_file_is_open = "文件已在编辑器中打开";
+	startup_condition_file_is_active = "文件是当前激活文件";
+	startup_condition_search_text = "搜索文本";
+	startup_condition_search_text_placeholder = "输入要搜索的文本";
+	startup_condition_properties = "属性列表";
+	startup_condition_add_property = "添加属性";
+	startup_condition_not_met_detail = "表单执行条件未满足：{0}";
+	// 变量引用相关
+	insert_variable = "插入变量";
+	builtin_variables = "内置变量";
+	builtin_var_date = "当前日期";
+	builtin_var_date_format = "格式化日期";
+	builtin_var_time = "当前时间";
+	builtin_var_random = "随机字符串";
 	condition_relation = "条件关系";
 	condition_group = "条件组";
 	test_condition = "测试条件";

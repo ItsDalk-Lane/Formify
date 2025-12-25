@@ -4,6 +4,9 @@ import {
   ConditionRelation,
   FileConditionConfig,
   FileConditionSubType,
+  FileTargetMode,
+  FileStatusCheckType,
+  PropertyCheckConfig,
   ScriptConditionConfig,
   StartupCondition,
   StartupConditionsConfig,
@@ -14,6 +17,8 @@ import {
   TimeConditionSubType,
 } from "src/model/startup-condition/StartupCondition";
 import { DebugLogger } from "src/utils/DebugLogger";
+import { FormConfig } from "src/model/FormConfig";
+import { processObTemplate } from "src/utils/templates";
 
 /**
  * 条件评估上下文
@@ -29,6 +34,8 @@ export interface ConditionEvaluationContext {
   lastExecutionTime?: number;
   /** 插件版本 */
   pluginVersion?: string;
+  /** 表单配置（用于解析变量引用） */
+  formConfig?: FormConfig;
 }
 
 /**
@@ -53,6 +60,36 @@ export interface IConditionEvaluator {
    * 评估条件是否满足
    */
   evaluate(condition: StartupCondition, context: ConditionEvaluationContext): Promise<ConditionEvaluationResult>;
+}
+
+/**
+ * 解析字符串中的变量引用
+ * 支持:
+ * - 表单变量: {{@fieldLabel}} - 使用字段的默认值
+ * - 内置变量: {{date}}, {{time}}, {{random:n}} - 使用 processObTemplate 处理
+ */
+function resolveVariableReferences(value: string, context: ConditionEvaluationContext): string {
+  if (!value) return value;
+
+  let result = value;
+
+  // 解析表单变量 {{@fieldLabel}}
+  if (context.formConfig && context.formConfig.fields) {
+    result = result.replace(/\{\{@([^}]+)\}\}/g, (match, fieldLabel) => {
+      const field = context.formConfig!.fields.find(f => f.label === fieldLabel.trim());
+      if (field && field.defaultValue !== undefined && field.defaultValue !== null) {
+        return String(field.defaultValue);
+      }
+      // 如果找不到字段或没有默认值，返回原始匹配
+      DebugLogger.debug(`[StartupConditionService] 无法解析变量 ${match}: 字段不存在或没有默认值`);
+      return match;
+    });
+  }
+
+  // 解析内置变量（date, time, random），使用 processObTemplate
+  result = processObTemplate(result);
+
+  return result;
 }
 
 /**
@@ -120,14 +157,14 @@ export class StartupConditionService {
         if (config.relation === ConditionRelation.And && !result.satisfied) {
           return {
             satisfied: false,
-            details: `AND 条件不满足: ${result.details}`,
+            details: `AND 条件不满足`,
             childResults: results,
           };
         }
         if (config.relation === ConditionRelation.Or && result.satisfied) {
           return {
             satisfied: true,
-            details: `OR 条件满足: ${result.details}`,
+            details: `OR 条件满足`,
             childResults: results,
           };
         }
@@ -373,32 +410,58 @@ class FileConditionEvaluator implements IConditionEvaluator {
       return { satisfied: false, details: "文件条件配置缺失" };
     }
 
+    // 确定目标文件
+    const targetFile = await this.resolveTargetFile(config, context);
+
     switch (config.subType) {
       case FileConditionSubType.FileExists:
         return this.evaluateFileExists(config, context);
-      case FileConditionSubType.PathMatch:
-        return this.evaluatePathMatch(config, context);
+      case FileConditionSubType.FileStatus:
+        return this.evaluateFileStatus(config, context);
       case FileConditionSubType.ContentContains:
-        return await this.evaluateContentContains(config, context);
+        return await this.evaluateContentContains(config, context, targetFile);
       case FileConditionSubType.FrontmatterProperty:
-        return await this.evaluateFrontmatterProperty(config, context);
+        return await this.evaluateFrontmatterProperty(config, context, targetFile);
+      case FileConditionSubType.PathMatch:
+        // 向后兼容：PathMatch 已废弃，转换为检查当前文件路径
+        return this.evaluatePathMatchLegacy(config, context);
       default:
         return { satisfied: false, details: `未知的文件条件子类型: ${config.subType}` };
     }
   }
 
-  private evaluateFileExists(
+  /**
+   * 解析目标文件
+   */
+  private async resolveTargetFile(
     config: FileConditionConfig,
     context: ConditionEvaluationContext
-  ): ConditionEvaluationResult {
-    const satisfied = context.currentFile !== null && context.currentFile !== undefined;
-    return {
-      satisfied,
-      details: satisfied ? "当前有打开的文件" : "当前没有打开的文件",
-    };
+  ): Promise<TFile | null> {
+    const targetMode = config.targetMode || FileTargetMode.CurrentFile;
+    
+    if (targetMode === FileTargetMode.CurrentFile) {
+      return context.currentFile || null;
+    }
+
+    // 指定具体文件模式
+    if (!config.targetFilePath) {
+      return null;
+    }
+
+    // 解析变量引用
+    const resolvedPath = resolveVariableReferences(config.targetFilePath, context);
+    const abstractFile = context.app.vault.getAbstractFileByPath(resolvedPath);
+    if (abstractFile instanceof TFile) {
+      return abstractFile;
+    }
+
+    return null;
   }
 
-  private evaluatePathMatch(
+  /**
+   * @deprecated 向后兼容：评估旧的路径匹配条件
+   */
+  private evaluatePathMatchLegacy(
     config: FileConditionConfig,
     context: ConditionEvaluationContext
   ): ConditionEvaluationResult {
@@ -422,21 +485,116 @@ class FileConditionEvaluator implements IConditionEvaluator {
     };
   }
 
-  private async evaluateContentContains(
+  /**
+   * 评估文件存在性（仅在指定具体文件模式下使用）
+   */
+  private evaluateFileExists(
     config: FileConditionConfig,
     context: ConditionEvaluationContext
+  ): ConditionEvaluationResult {
+    // 文件存在检查只在指定具体文件模式下有意义
+    if (config.targetMode !== FileTargetMode.SpecificFile) {
+      return { satisfied: true, details: "当前文件模式下此检查无意义，默认满足" };
+    }
+
+    if (!config.targetFilePath) {
+      return { satisfied: false, details: "未指定目标文件路径" };
+    }
+
+    // 解析变量引用
+    const resolvedPath = resolveVariableReferences(config.targetFilePath, context);
+    const abstractFile = context.app.vault.getAbstractFileByPath(resolvedPath);
+    const satisfied = abstractFile instanceof TFile;
+
+    return {
+      satisfied,
+      details: satisfied 
+        ? `文件 "${resolvedPath}" 在 vault 中存在` 
+        : `文件 "${resolvedPath}" 在 vault 中不存在`,
+    };
+  }
+
+  /**
+   * 评估文件状态（是否打开、是否激活）
+   */
+  private evaluateFileStatus(
+    config: FileConditionConfig,
+    context: ConditionEvaluationContext
+  ): ConditionEvaluationResult {
+    // 文件状态检查只在指定具体文件模式下有意义
+    if (config.targetMode !== FileTargetMode.SpecificFile) {
+      return { satisfied: true, details: "当前文件模式下此检查无意义，默认满足" };
+    }
+
+    if (!config.targetFilePath) {
+      return { satisfied: false, details: "未指定目标文件路径" };
+    }
+
+    // 解析变量引用
+    const resolvedPath = resolveVariableReferences(config.targetFilePath, context);
+    
+    const checks = config.fileStatusChecks || [];
+    if (checks.length === 0) {
+      return { satisfied: true, details: "未指定文件状态检查条件" };
+    }
+
+    const results: string[] = [];
+    let allSatisfied = true;
+
+    // 检查文件是否在编辑器中打开
+    if (checks.includes(FileStatusCheckType.IsOpen)) {
+      const isOpen = this.isFileOpen(context.app, resolvedPath);
+      results.push(`文件${isOpen ? "已" : "未"}在编辑器中打开`);
+      if (!isOpen) allSatisfied = false;
+    }
+
+    // 检查文件是否是当前激活文件
+    if (checks.includes(FileStatusCheckType.IsActive)) {
+      const isActive = context.currentFile?.path === resolvedPath;
+      results.push(`文件${isActive ? "是" : "不是"}当前激活文件`);
+      if (!isActive) allSatisfied = false;
+    }
+
+    return {
+      satisfied: allSatisfied,
+      details: results.join("；"),
+    };
+  }
+
+  /**
+   * 检查文件是否在编辑器中打开
+   */
+  private isFileOpen(app: App, filePath: string): boolean {
+    const leaves = app.workspace.getLeavesOfType("markdown");
+    return leaves.some((leaf) => {
+      // @ts-ignore - 访问 leaf.view.file
+      const file = leaf.view?.file;
+      return file?.path === filePath;
+    });
+  }
+
+  private async evaluateContentContains(
+    config: FileConditionConfig,
+    context: ConditionEvaluationContext,
+    targetFile: TFile | null
   ): Promise<ConditionEvaluationResult> {
-    if (!context.currentFile || !config.searchText) {
-      return { satisfied: false, details: "当前无文件或未配置搜索文本" };
+    if (!targetFile) {
+      return { satisfied: false, details: "目标文件不存在或未指定" };
+    }
+    
+    if (!config.searchText) {
+      return { satisfied: false, details: "未配置搜索文本" };
     }
 
     try {
-      const content = await context.app.vault.read(context.currentFile);
-      const satisfied = content.includes(config.searchText);
+      const content = await context.app.vault.read(targetFile);
+      // 解析变量引用
+      const resolvedSearchText = resolveVariableReferences(config.searchText, context);
+      const satisfied = content.includes(resolvedSearchText);
 
       return {
         satisfied,
-        details: `文件内容${satisfied ? "包含" : "不包含"}指定文本`,
+        details: `文件 "${targetFile.path}" 的内容${satisfied ? "包含" : "不包含"}指定文本`,
       };
     } catch (error) {
       return {
@@ -449,18 +607,29 @@ class FileConditionEvaluator implements IConditionEvaluator {
 
   private async evaluateFrontmatterProperty(
     config: FileConditionConfig,
-    context: ConditionEvaluationContext
+    context: ConditionEvaluationContext,
+    targetFile: TFile | null
   ): Promise<ConditionEvaluationResult> {
-    if (!context.currentFile || !config.propertyName) {
-      return { satisfied: false, details: "当前无文件或未配置属性名" };
+    if (!targetFile) {
+      return { satisfied: false, details: "目标文件不存在或未指定" };
     }
 
     try {
-      const cache = context.app.metadataCache.getFileCache(context.currentFile);
+      const cache = context.app.metadataCache.getFileCache(targetFile);
       const frontmatter = cache?.frontmatter;
 
       if (!frontmatter) {
         return { satisfied: false, details: "文件没有 frontmatter" };
+      }
+
+      // 优先使用新的多属性配置
+      if (config.properties && config.properties.length > 0) {
+        return this.evaluateMultipleProperties(frontmatter, config.properties, context);
+      }
+
+      // 向后兼容：使用旧的单属性配置
+      if (!config.propertyName) {
+        return { satisfied: false, details: "未配置属性名" };
       }
 
       const propertyValue = frontmatter[config.propertyName];
@@ -477,6 +646,38 @@ class FileConditionEvaluator implements IConditionEvaluator {
         error: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  /**
+   * 评估多个属性条件
+   */
+  private evaluateMultipleProperties(
+    frontmatter: Record<string, any>,
+    properties: PropertyCheckConfig[],
+    context: ConditionEvaluationContext
+  ): ConditionEvaluationResult {
+    const results: string[] = [];
+    let allSatisfied = true;
+
+    for (const prop of properties) {
+      // 解析属性名和值中的变量引用
+      const resolvedName = resolveVariableReferences(prop.name, context);
+      const resolvedValue = resolveVariableReferences(prop.value, context);
+      
+      const actualValue = frontmatter[resolvedName];
+      const satisfied = this.compareValues(actualValue, resolvedValue, prop.operator);
+      
+      results.push(`属性 "${resolvedName}" 的值 "${actualValue}" ${satisfied ? "满足" : "不满足"}条件`);
+      
+      if (!satisfied) {
+        allSatisfied = false;
+      }
+    }
+
+    return {
+      satisfied: allSatisfied,
+      details: results.join("；"),
+    };
   }
 
   private compareValues(

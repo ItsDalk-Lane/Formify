@@ -609,6 +609,28 @@ export class En implements Local {
 	startup_condition_preset_once_per_day_desc = "Execute only once in 24 hours";
 	startup_condition_preset_weekday_daytime = "Working Hours";
 	startup_condition_preset_weekday_daytime_desc = "Execute weekdays 9:00-18:00";
+	// New file condition related
+	startup_condition_target_mode = "Target File";
+	startup_condition_current_file = "Current File";
+	startup_condition_specific_file = "Specific File";
+	startup_condition_file_path_placeholder = "Enter file path in vault";
+	startup_condition_file_suggestions = "File Suggestions";
+	startup_condition_file_status = "File Status";
+	startup_condition_file_status_options = "Status Check";
+	startup_condition_file_is_open = "File is open in editor";
+	startup_condition_file_is_active = "File is currently active";
+	startup_condition_search_text = "Search Text";
+	startup_condition_search_text_placeholder = "Enter text to search";
+	startup_condition_properties = "Properties";
+	startup_condition_add_property = "Add Property";
+	startup_condition_not_met_detail = "Form execution conditions not met: {0}";
+	// Variable reference related
+	insert_variable = "Insert Variable";
+	builtin_variables = "Built-in Variables";
+	builtin_var_date = "Current Date";
+	builtin_var_date_format = "Formatted Date";
+	builtin_var_time = "Current Time";
+	builtin_var_random = "Random String";
 	condition_relation = "Condition Relation";
 	condition_group = "Condition Group";
 	test_condition = "Test Condition";

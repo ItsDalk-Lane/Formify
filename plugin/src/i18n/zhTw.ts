@@ -635,6 +635,27 @@ export class ZhTw implements Local {
 	startup_condition_preset_once_per_day_desc = "24小時內僅執行一次";
 	startup_condition_preset_weekday_daytime = "工作時間";
 	startup_condition_preset_weekday_daytime_desc = "工作日9:00-18:00執行";
+	// 新增的檔案條件相關
+	startup_condition_target_mode = "目標檔案";
+	startup_condition_current_file = "當前檔案";
+	startup_condition_specific_file = "指定具體檔案";
+	startup_condition_file_path_placeholder = "輸入 vault 中的檔案路徑";
+	startup_condition_file_status = "檔案狀態";
+	startup_condition_file_status_options = "狀態檢查";
+	startup_condition_file_is_open = "檔案已在編輯器中打開";
+	startup_condition_file_is_active = "檔案是當前激活檔案";
+	startup_condition_search_text = "搜索文字";
+	startup_condition_search_text_placeholder = "輸入要搜索的文字";
+	startup_condition_properties = "屬性列表";
+	startup_condition_add_property = "添加屬性";
+	startup_condition_not_met_detail = "表單執行條件未滿足：{0}";
+	// 變量引用相關
+	insert_variable = "插入變量";
+	builtin_variables = "內置變量";
+	builtin_var_date = "當前日期";
+	builtin_var_date_format = "格式化日期";
+	builtin_var_time = "當前時間";
+	builtin_var_random = "隨機字符串";
 	condition_relation = "條件關係";
 	condition_group = "條件組";
 	test_condition = "測試條件";

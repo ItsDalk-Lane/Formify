@@ -557,6 +557,28 @@ export interface Local {
 	startup_condition_preset_once_per_day_desc: string;
 	startup_condition_preset_weekday_daytime: string;
 	startup_condition_preset_weekday_daytime_desc: string;
+	// 新增的文件条件相关
+	startup_condition_target_mode: string;
+	startup_condition_current_file: string;
+	startup_condition_specific_file: string;
+	startup_condition_file_path_placeholder: string;
+	startup_condition_file_suggestions: string;
+	startup_condition_file_status: string;
+	startup_condition_file_status_options: string;
+	startup_condition_file_is_open: string;
+	startup_condition_file_is_active: string;
+	startup_condition_search_text: string;
+	startup_condition_properties: string;
+	startup_condition_add_property: string;
+	startup_condition_not_met_detail: string;
+	startup_condition_search_text_placeholder: string;
+	// 变量引用相关
+	insert_variable: string;
+	builtin_variables: string;
+	builtin_var_date: string;
+	builtin_var_date_format: string;
+	builtin_var_time: string;
+	builtin_var_random: string;
 	condition_relation: string;
 	condition_group: string;
 	test_condition: string;
