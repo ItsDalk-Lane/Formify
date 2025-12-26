@@ -37,6 +37,11 @@ function hasValidFilters(conditions: any[]): boolean {
             return hasValidFilters(condition.conditions || []);
         }
 
+        // 如果是时间条件或文件条件，检查是否有扩展配置
+        if (condition.type === FilterType.timeCondition || condition.type === FilterType.fileCondition) {
+            return !!condition.extendedConfig;
+        }
+
         // 如果是过滤条件，检查是否有有效的属性和操作符
         return condition.property && condition.operator;
     });

@@ -674,4 +674,7 @@ export class ZhTw implements Local {
 	saturday = "週六";
 	between = "在";
 	and_text = "至";
+	// 擴展條件類型
+	add_time_condition = "添加時間條件";
+	add_file_condition = "添加檔案條件";
 }

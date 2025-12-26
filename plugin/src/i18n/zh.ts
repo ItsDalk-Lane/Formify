@@ -661,4 +661,7 @@ export class Zh implements Local {
 	saturday = "周六";
 	between = "在";
 	and_text = "至";
+	// 扩展条件类型
+	add_time_condition = "添加时间条件";
+	add_file_condition = "添加文件条件";
 }

@@ -19,6 +19,7 @@ import LoopActionService from "./loop/LoopActionService";
 import { BreakActionService } from "./loop/BreakActionService";
 import { ContinueActionService } from "./loop/ContinueActionService";
 import { LoopVariableScope } from "../../utils/LoopVariableScope";
+import type { ExtendedConditionContext } from "../filter/ExtendedConditionEvaluator";
 
 export interface IActionService {
 
@@ -107,6 +108,12 @@ export class ActionChain {
                 condition: action.condition
             });
             
+            // 创建扩展条件评估上下文
+            const extendedContext: ExtendedConditionContext = {
+                app: context.app,
+                currentFile: context.app.workspace.getActiveFile(),
+            };
+            
             const result = FilterService.match(
                 action.condition,
                 (property) => {
@@ -134,7 +141,8 @@ export class ActionChain {
                     // 直接返回原始值（条件值本身就是要比较的目标值）
                     return value;
                 },
-                context.config.fields  // 传递字段定义数组
+                context.config.fields,  // 传递字段定义数组
+                extendedContext  // 传递扩展条件上下文
             );
             
             console.log('[IActionService] 条件判断结果:', result);

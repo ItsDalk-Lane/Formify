@@ -34,10 +34,21 @@ export function CpsFormFieldSettingContent(props: {
 		if (!field.condition) {
 			return 0;
 		}
+		// 对于扩展条件类型（timeCondition, fileCondition），它们本身就是一个条件
+		if (field.condition.type === FilterType.timeCondition || 
+			field.condition.type === FilterType.fileCondition) {
+			return 1;
+		}
 		if (!field.condition.conditions) {
 			return 0;
 		}
-		return field.condition.conditions.length;
+		// 统计子条件数量，包括扩展条件类型
+		return field.condition.conditions.filter(c => 
+			c.type === FilterType.timeCondition ||
+			c.type === FilterType.fileCondition ||
+			c.type === FilterType.field ||
+			c.type === FilterType.group
+		).length;
 	}, [field.condition]);
 
 	const error = useMemo(() => {

@@ -73,6 +73,9 @@ export default function CpsFormAction(props: {
 			return conditions.reduce((count, condition) => {
 				if (condition.type === FilterType.group) {
 					return count + countValidFilters(condition.conditions || []);
+				} else if (condition.type === FilterType.timeCondition || condition.type === FilterType.fileCondition) {
+					// 时间条件或文件条件视为有效条件
+					return condition.extendedConfig ? count + 1 : count;
 				} else if (condition.property && condition.operator) {
 					return count + 1;
 				}

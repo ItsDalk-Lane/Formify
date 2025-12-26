@@ -50,8 +50,8 @@ export class FormService {
         const processedIdValues = await fieldValueProcessor.processValues(decodedIdValues, options.app);
         
         const chain = new ActionChain(actions);
-        const visibleIdValues = FormVisibilies.getVisibleIdValues(config.fields, processedIdValues);
-        const formLabelValues = FormVisibilies.toFormLabelValues(config.fields, processedIdValues);
+        const visibleIdValues = FormVisibilies.getVisibleIdValues(config.fields, processedIdValues, options.app);
+        const formLabelValues = FormVisibilies.toFormLabelValues(config.fields, processedIdValues, options.app);
         const actionContext: ActionContext = {
             app: options.app,
             config: config,

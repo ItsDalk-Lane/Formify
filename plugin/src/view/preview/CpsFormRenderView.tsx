@@ -151,9 +151,9 @@ export function CpsFormRenderView(props: Props) {
 	useAutoFocus(formRef);
 
 	const visibleFields = useMemo(() => {
-		const newFields = FormVisibilies.visibleFields(fields, formIdValues);
+		const newFields = FormVisibilies.visibleFields(fields, formIdValues, app);
 		return newFields;
-	}, [fields, formIdValues]);
+	}, [fields, formIdValues, app]);
 
 	return (
 		<form

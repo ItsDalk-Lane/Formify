@@ -597,4 +597,7 @@ export interface Local {
 	saturday: string;
 	between: string;
 	and_text: string;
+	// 扩展条件类型
+	add_time_condition: string;
+	add_file_condition: string;
 }

@@ -1,0 +1,192 @@
+/**
+ * 扩展条件编辑器样式
+ */
+
+.form--ExtendedConditionEditor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.form--DayOfWeekPicker {
+  display: flex;
+  gap: 4px;
+}
+
+.form--DayOfWeekPicker button {
+  padding: 4px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s ease;
+}
+
+.form--DayOfWeekPicker button:hover {
+  background: var(--background-modifier-hover);
+}
+
+.form--DayOfWeekPicker button.selected {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.form--FilePathInputContainer {
+  position: relative;
+  flex: 1;
+  min-width: 150px;
+}
+
+.form--FilePathDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+}
+
+.form--FilePathItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.form--FilePathItem:hover {
+  background: var(--background-modifier-hover);
+}
+
+.form--FilePathItemContent {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.form--FilePathItemName {
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.form--FilePathItemPath {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.form--FileStatusCheckOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.form--CheckboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.form--CheckboxLabel input[type="checkbox"] {
+  margin: 0;
+}
+
+.form--FrontmatterPropertyEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.form--PropertyList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: var(--background-secondary);
+  border-radius: 4px;
+}
+
+.form--PropertyItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.form--PropertyItem .form--ConditionInput {
+  flex: 1;
+  min-width: 80px;
+}
+
+.form--RemovePropertyButton {
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.form--RemovePropertyButton:hover {
+  color: var(--text-error);
+}
+
+.form--AddPropertyButton {
+  padding: 6px 12px;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s ease;
+}
+
+.form--AddPropertyButton:hover {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+
+.form--ConditionInput {
+  padding: 4px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 13px;
+}
+
+.form--ConditionInput:focus {
+  outline: none;
+  border-color: var(--interactive-accent);
+}
+
+.form--ConditionInputFlex {
+  flex: 1;
+  min-width: 100px;
+}
+
+.form--ConditionOperatorLabel {
+  color: var(--text-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}

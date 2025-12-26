@@ -649,4 +649,7 @@ export class En implements Local {
 	saturday = "Sat";
 	between = "between";
 	and_text = "and";
+	// Extended condition types
+	add_time_condition = "Add Time Condition";
+	add_file_condition = "Add File Condition";
 }

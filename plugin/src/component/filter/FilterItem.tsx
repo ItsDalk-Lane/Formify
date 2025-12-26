@@ -6,8 +6,9 @@ import { FilterAddDropdown } from "./menu/FilterAddDropdown";
 import { FilterMenuDropdown } from "./menu/FilterMenuDropdown";
 import { FilterRelationDropdown } from "./menu/FilterRelationDropdown";
 import { localInstance } from "src/i18n/locals";
-import { Filter } from "src/model/filter/Filter";
+import { Filter, FilterType } from "src/model/filter/Filter";
 import { RelationType, OperatorType } from "src/model/filter/OperatorType";
+import { ExtendedConditionContent } from "./ExtendedConditionEditor";
 
 export interface FilternProps {
 	index: number;
@@ -51,18 +52,23 @@ export function FilterItem(props: FilternProps) {
 		}
 	}, [index, relation, onRelationChange]);
 
+	// 判断是否为扩展条件类型
+	const isExtendedCondition = filter.type === FilterType.timeCondition || filter.type === FilterType.fileCondition;
+
 	return (
 		<div className="form--Filter">
 			<div className="form--FilterRelation">{relationEl}</div>
 			<div className="form--FilterContent">
-				{filter.type === "filter" ? (
+				{filter.type === FilterType.group ? (
+					<FilterGroup filter={filter} onChange={onFilterChange} />
+				) : isExtendedCondition ? (
+					<ExtendedConditionContent filter={filter} onChange={onFilterChange} />
+				) : (
 					<FilterRule
 						filter={filter}
 						onChange={onFilterChange}
 						onRemove={onFilterRemove}
 					/>
-				) : (
-					<FilterGroup filter={filter} onChange={onFilterChange} />
 				)}
 			</div>
 			<div className="form--FilterMenu">

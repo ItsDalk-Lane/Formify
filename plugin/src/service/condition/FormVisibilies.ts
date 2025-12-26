@@ -1,14 +1,28 @@
 
+import { App } from "obsidian";
 import { IFormField } from "src/model/field/IFormField";
 import { getFieldDefaultValue } from "src/utils/getFieldDefaultValue";
 import { FilterService } from "../filter/FilterService";
 import { FormIdValues, FormLabelValues } from "../FormValues";
+import type { ExtendedConditionContext } from "../filter/ExtendedConditionEvaluator";
 
 export class FormVisibilies {
 
-    static visibleFields(fields: IFormField[], values: FormIdValues) {
+    /**
+     * 获取可见字段列表
+     * @param fields 所有字段
+     * @param values 字段值
+     * @param app Obsidian App 实例（可选，用于扩展条件评估）
+     */
+    static visibleFields(fields: IFormField[], values: FormIdValues, app?: App) {
         const visibleFields: IFormField[] = [];
         const visibleFormIdValues: FormIdValues = {};
+        
+        // 创建扩展条件评估上下文
+        const extendedContext: ExtendedConditionContext | undefined = app ? {
+            app,
+            currentFile: app.workspace.getActiveFile(),
+        } : undefined;
 
         const isVisible = (id: string) => visibleFields.some(f => f.id === id);
         for (let i = 0; i < fields.length; i++) {
@@ -33,7 +47,8 @@ export class FormVisibilies {
                         }
                         return value;
                     },
-                    fields  // 传递字段定义数组
+                    fields,  // 传递字段定义数组
+                    extendedContext  // 传递扩展条件上下文
                 );
             }
             if (isMatch) {
@@ -44,8 +59,8 @@ export class FormVisibilies {
         return visibleFields;
     }
 
-    static toFormLabelValues(fields: IFormField[], values: FormIdValues): FormLabelValues {
-        const visibleFields = this.visibleFields(fields, values);
+    static toFormLabelValues(fields: IFormField[], values: FormIdValues, app?: App): FormLabelValues {
+        const visibleFields = this.visibleFields(fields, values, app);
         const formLabelValues: FormLabelValues = {};
         visibleFields.forEach((field) => {
             const defaultValue = getFieldDefaultValue(field);
@@ -54,8 +69,8 @@ export class FormVisibilies {
         return formLabelValues;
     }
 
-    static getVisibleIdValues(fields: IFormField[], values: FormIdValues): FormIdValues {
-        const visibleFields = this.visibleFields(fields, values);
+    static getVisibleIdValues(fields: IFormField[], values: FormIdValues, app?: App): FormIdValues {
+        const visibleFields = this.visibleFields(fields, values, app);
         const visibleIdValues: FormIdValues = {};
         visibleFields.forEach((field) => {
             visibleIdValues[field.id] = values[field.id];

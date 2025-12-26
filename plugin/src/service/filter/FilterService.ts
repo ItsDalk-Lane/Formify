@@ -5,6 +5,7 @@ import { Filter, FilterType } from "src/model/filter/Filter";
 import { RelationType, OperatorType } from "src/model/filter/OperatorType";
 import { IFormField } from "src/model/field/IFormField";
 import { FieldValueReaderFactory } from "src/service/field-value/FieldValueReaderFactory";
+import { ExtendedConditionEvaluator, ExtendedConditionContext } from "./ExtendedConditionEvaluator";
 
 export class FilterService {
 
@@ -14,13 +15,15 @@ export class FilterService {
      * @param getFieldValue 获取字段值的函数
      * @param getValue 获取条件值的函数
      * @param fieldDefinitions 字段定义数组（可选）
+     * @param extendedContext 扩展条件评估上下文（可选，用于时间条件和文件条件）
      * @returns 是否匹配
      */
     static match(
         root: Filter,
         getFieldValue: (property?: string) => any,
         getValue: (value?: any) => any,
-        fieldDefinitions?: IFormField[]
+        fieldDefinitions?: IFormField[],
+        extendedContext?: ExtendedConditionContext
     ): boolean {
 
         if (!root) {
@@ -35,14 +38,22 @@ export class FilterService {
             const relation = root.operator as RelationType;
             if (relation === OperatorType.And) {
                 return root.conditions.every((condition) => {
-                    return FilterService.match(condition, getFieldValue, getValue, fieldDefinitions);
+                    return FilterService.match(condition, getFieldValue, getValue, fieldDefinitions, extendedContext);
                 });
             } else {
                 return root.conditions.some((condition) => {
-                    return FilterService.match(condition, getFieldValue, getValue, fieldDefinitions);
+                    return FilterService.match(condition, getFieldValue, getValue, fieldDefinitions, extendedContext);
                 });
             }
-        } else {
+        } 
+        
+        // 处理扩展条件类型（时间条件和文件条件）
+        if (root.type === FilterType.timeCondition || root.type === FilterType.fileCondition) {
+            return ExtendedConditionEvaluator.evaluate(root, extendedContext);
+        }
+        
+        // 处理普通的字段条件
+        else {
             if (Strings.isEmpty(root.property)) {
                 return true;
             }
