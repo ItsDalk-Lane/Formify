@@ -1,0 +1,158 @@
+/* 变量引用输入组件样式 */
+.form--VariableReferenceInput {
+  display: inline-flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.form--VariableReferenceInputWrapper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  overflow: hidden;
+  width: 100%;
+}
+
+.form--VariableReferenceInputWrapper:focus-within {
+  border-color: var(--interactive-accent);
+}
+
+.form--VariableReferenceInputField {
+  flex: 1;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-normal);
+  min-width: 0;
+}
+
+.form--VariableReferenceInputField:focus {
+  outline: none;
+}
+
+.form--VariableReferenceButton {
+  padding: 6px 8px;
+  border: none;
+  border-left: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.form--VariableReferenceButton:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+/* Dropdown styles for Portal */
+.form--VariableReferenceDropdown {
+  position: fixed; /* Changed to fixed for Portal */
+  z-index: 9999; /* High z-index */
+  max-height: 250px;
+  overflow-y: auto;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin-top: 4px;
+}
+
+.form--VariableReferenceSection {
+  padding: 6px 10px;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.form--VariableReferenceSectionTitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.form--VariableReferenceItem {
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.form--VariableReferenceItem:last-child {
+  border-bottom: none;
+}
+
+.form--VariableReferenceItem:hover {
+  background: var(--background-modifier-hover);
+}
+
+.form--VariableReferenceName {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-normal);
+}
+
+.form--VariableReferenceDesc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* File Dropdown styles */
+.form--FilePathDropdown {
+  position: fixed; /* Changed to fixed for Portal */
+  z-index: 9999;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin-top: 4px;
+}
+
+.form--FilePathItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.form--FilePathItem:last-child {
+  border-bottom: none;
+}
+
+.form--FilePathItem:hover {
+  background: var(--background-modifier-hover);
+}
+
+.form--FilePathItemContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.form--FilePathItemName {
+  font-size: 13px;
+  color: var(--text-normal);
+  font-weight: 500;
+}
+
+.form--FilePathItemPath {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -58,6 +58,15 @@ export class En implements Local {
 	default_location_for_form_file_desc = "New form files will be saved in this directory. Supports date variables like {{date:YYYY-MM-DD}}";
 	default_location_for_form_placeholder = "form/forms";
 	default_value = "Default value";
+	// Condition operator related
+	condition_in_range = "In range";
+	condition_not_in_range = "Not in range";
+	condition_in_list = "In list";
+	condition_not_in_list = "Not in list";
+	condition_file_exists = "File exists";
+	condition_file_not_exists = "File not exists";
+	condition_status_match = "Status matches";
+	condition_status_not_match = "Status not match";
 	delete = "Delete";
 	description = "Description";
 	do_not_open = "Do not open";

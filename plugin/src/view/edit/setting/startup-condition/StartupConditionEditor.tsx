@@ -53,6 +53,7 @@ import { FormConfig } from "src/model/FormConfig";
 import { FormField } from "src/model/field/IFormField";
 import { Select2 } from "src/component/select2/Select";
 import { DropdownMenu as RadixDropdownMenu } from "radix-ui";
+import { VariableReferenceInput } from "src/component/input/VariableReferenceInput";
 
 /**
  * 统一的条件子类型枚举（扁平化所有子类型）
@@ -347,225 +348,76 @@ function createNewConditionGroup(): StartupCondition {
 }
 
 /**
- * 允许的内置变量类型（用于启动条件）
+ * 获取时间范围条件的操作符选项
  */
-const ALLOWED_BUILTIN_VARIABLES = [
-  { name: "date", pattern: "{{date}}", description: localInstance.builtin_var_date || "当前日期" },
-  { name: "date:format", pattern: "{{date:YYYY-MM-DD}}", description: localInstance.builtin_var_date_format || "格式化日期" },
-  { name: "time", pattern: "{{time}}", description: localInstance.builtin_var_time || "当前时间" },
-  { name: "random", pattern: "{{random:10}}", description: localInstance.builtin_var_random || "随机字符串" },
-];
-
-/**
- * 获取可用的表单变量（只返回有默认值的字段）
- */
-function getAvailableFormVariables(formConfig?: FormConfig): { name: string; label: string; defaultValue: any }[] {
-  if (!formConfig || !formConfig.fields) return [];
-  
-  return formConfig.fields
-    .filter((field: FormField) => field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== "")
-    .map((field: FormField) => ({
-      name: field.label,
-      label: field.label,
-      defaultValue: field.defaultValue,
-    }));
+function getTimeRangeOperatorOptions() {
+  return [
+    { label: localInstance.condition_in_range || "在范围内", value: ConditionOperator.Between },
+    { label: localInstance.condition_not_in_range || "不在范围内", value: ConditionOperator.NotIn },
+    { label: localInstance.time_before || "早于开始时间", value: ConditionOperator.LessThan },
+    { label: localInstance.time_before_or_equal || "早于或等于开始时间", value: ConditionOperator.LessThanOrEqual },
+    { label: localInstance.time_after || "晚于结束时间", value: ConditionOperator.GreaterThan },
+    { label: localInstance.time_after_or_equal || "晚于或等于结束时间", value: ConditionOperator.GreaterThanOrEqual },
+  ];
 }
 
 /**
- * 变量引用输入组件
- * 支持引用表单变量和内置变量
- * 支持文件搜索建议
+ * 获取星期几条件的操作符选项
  */
-interface VariableReferenceInputProps {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  formConfig?: FormConfig;
-  style?: React.CSSProperties;
-  enableFileSearch?: boolean;
-  className?: string;
+function getDayOfWeekOperatorOptions() {
+  return [
+    { label: localInstance.condition_in_list || "在列表中", value: ConditionOperator.In },
+    { label: localInstance.condition_not_in_list || "不在列表中", value: ConditionOperator.NotIn },
+    { label: localInstance.condition_in_range || "在范围内", value: ConditionOperator.Between },
+    { label: localInstance.condition_not_in_range || "不在范围内", value: ConditionOperator.NotContains },
+  ];
 }
 
-function VariableReferenceInput(props: VariableReferenceInputProps) {
-  const { value, onChange, placeholder, formConfig, style, enableFileSearch, className } = props;
-  const app = useObsidianApp();
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [fileSuggestions, setFileSuggestions] = useState<TFile[]>([]);
-  const [showFileDropdown, setShowFileDropdown] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const fileDropdownRef = useRef<HTMLDivElement>(null);
-
-  const formVariables = useMemo(() => getAvailableFormVariables(formConfig), [formConfig]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(target) &&
-        inputRef.current &&
-        !inputRef.current.contains(target)
-      ) {
-        setShowDropdown(false);
-      }
-
-      if (
-        fileDropdownRef.current &&
-        !fileDropdownRef.current.contains(target) &&
-        inputRef.current &&
-        !inputRef.current.contains(target)
-      ) {
-        setShowFileDropdown(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleInputChange = (newValue: string) => {
-    onChange(newValue);
-    
-    if (enableFileSearch && newValue.trim()) {
-      const search = newValue.toLowerCase();
-      const files = app.vault.getFiles();
-      const matches = files
-        .filter(f => f.path.toLowerCase().includes(search))
-        .slice(0, 10);
-      
-      if (matches.length > 0) {
-        setFileSuggestions(matches);
-        setShowFileDropdown(true);
-        setShowDropdown(false);
-      } else {
-        setShowFileDropdown(false);
-      }
-    } else {
-      setShowFileDropdown(false);
-    }
-  };
-
-  const selectFile = (file: TFile) => {
-    onChange(file.path);
-    setShowFileDropdown(false);
-    inputRef.current?.focus();
-  };
-
-  const insertVariable = (variablePattern: string) => {
-    const input = inputRef.current;
-    if (!input) {
-      onChange(value + variablePattern);
-      setShowDropdown(false);
-      return;
-    }
-
-    const start = input.selectionStart || 0;
-    const end = input.selectionEnd || 0;
-    const newValue = value.substring(0, start) + variablePattern + value.substring(end);
-    onChange(newValue);
-    setShowDropdown(false);
-    setShowFileDropdown(false);
-
-    setTimeout(() => {
-      input.focus();
-      input.setSelectionRange(start + variablePattern.length, start + variablePattern.length);
-    }, 0);
-  };
-
-  return (
-    <div className={`form--VariableReferenceInput ${className || ""}`} style={{ position: "relative", ...style }}>
-      <div className="form--VariableReferenceInputWrapper">
-        <input
-          ref={inputRef}
-          type="text"
-          value={value}
-          onChange={(e) => handleInputChange(e.target.value)}
-          placeholder={placeholder}
-          className="form--VariableReferenceInputField"
-          autoComplete="off"
-        />
-        <button
-          type="button"
-          className="form--VariableReferenceButton"
-          onClick={() => {
-            setShowDropdown(!showDropdown);
-            setShowFileDropdown(false);
-          }}
-          title={localInstance.insert_variable || "插入变量"}
-        >
-          <Variable size={14} />
-        </button>
-      </div>
-
-      {showDropdown && (
-        <div ref={dropdownRef} className="form--VariableReferenceDropdown">
-          {formVariables.length > 0 && (
-            <>
-              <div className="form--VariableReferenceSection">
-                <span className="form--VariableReferenceSectionTitle">
-                  {localInstance.form_variables || "表单变量"}
-                </span>
-              </div>
-              {formVariables.map((v) => (
-                <div
-                  key={v.name}
-                  className="form--VariableReferenceItem"
-                  onClick={() => insertVariable(`{{@${v.name}}}`)}
-                >
-                  <span className="form--VariableReferenceName">{"{{@" + v.name + "}}"}</span>
-                  <span className="form--VariableReferenceDesc">
-                    {localInstance.default_value || "默认值"}: {String(v.defaultValue)}
-                  </span>
-                </div>
-              ))}
-            </>
-          )}
-
-          <div className="form--VariableReferenceSection">
-            <span className="form--VariableReferenceSectionTitle">
-              {localInstance.builtin_variables || "内置变量"}
-            </span>
-          </div>
-          {ALLOWED_BUILTIN_VARIABLES.map((v) => (
-            <div
-              key={v.name}
-              className="form--VariableReferenceItem"
-              onClick={() => insertVariable(v.pattern)}
-            >
-              <span className="form--VariableReferenceName">{v.pattern}</span>
-              <span className="form--VariableReferenceDesc">{v.description}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {showFileDropdown && (
-        <div ref={fileDropdownRef} className="form--VariableReferenceDropdown">
-          {fileSuggestions.map((file) => (
-            <div
-              key={file.path}
-              className="form--VariableReferenceItem"
-              onClick={() => selectFile(file)}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", width: "100%" }}>
-                <File size={14} className="text-muted" style={{ flexShrink: 0 }} />
-                <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
-                  <span className="form--VariableReferenceName" style={{ color: "var(--text-normal)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {file.name}
-                  </span>
-                  <span className="form--VariableReferenceDesc" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {file.path}
-                  </span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+/**
+ * 获取日期范围条件的操作符选项
+ */
+function getDateRangeOperatorOptions() {
+  return [
+    { label: localInstance.condition_in_range || "在范围内", value: ConditionOperator.Between },
+    { label: localInstance.condition_not_in_range || "不在范围内", value: ConditionOperator.NotIn },
+    { label: localInstance.time_before || "早于开始日期", value: ConditionOperator.LessThan },
+    { label: localInstance.time_before_or_equal || "早于或等于开始日期", value: ConditionOperator.LessThanOrEqual },
+    { label: localInstance.time_after || "晚于结束日期", value: ConditionOperator.GreaterThan },
+    { label: localInstance.time_after_or_equal || "晚于或等于结束日期", value: ConditionOperator.GreaterThanOrEqual },
+  ];
 }
+
+/**
+ * 获取文件存在性条件的操作符选项
+ */
+function getFileExistsOperatorOptions() {
+  return [
+    { label: localInstance.condition_file_exists || "文件存在", value: ConditionOperator.Equals },
+    { label: localInstance.condition_file_not_exists || "文件不存在", value: ConditionOperator.NotEquals },
+  ];
+}
+
+/**
+ * 获取文件状态条件的操作符选项
+ */
+function getFileStatusOperatorOptions() {
+  return [
+    { label: localInstance.condition_status_match || "状态满足", value: ConditionOperator.Equals },
+    { label: localInstance.condition_status_not_match || "状态不满足", value: ConditionOperator.NotEquals },
+  ];
+}
+
+/**
+ * 获取内容包含条件的操作符选项
+ */
+function getContentContainsOperatorOptions() {
+  return [
+    { label: localInstance.contains, value: ConditionOperator.Contains },
+    { label: localInstance.not_contains, value: ConditionOperator.NotContains },
+  ];
+}
+
+
 
 interface StartupConditionEditorProps {
   config: StartupConditionsConfig | undefined;
@@ -1077,7 +929,11 @@ function ConditionValueEditor(props: {
     const config = condition.config as TimeConditionConfig;
     return (
       <>
-        <span className="form--ConditionOperatorLabel">{localInstance.between || "在"}</span>
+        <Select2
+          value={config.operator || ConditionOperator.Between}
+          onChange={(value) => updateConfig<TimeConditionConfig>({ operator: value as ConditionOperator })}
+          options={getTimeRangeOperatorOptions()}
+        />
         <input
           type="time"
           className="form--ConditionInput"
@@ -1100,25 +956,32 @@ function ConditionValueEditor(props: {
     const config = condition.config as TimeConditionConfig;
     const dayShortNames = [0, 1, 2, 3, 4, 5, 6].map(i => week(i, 'short'));
     return (
-      <div className="form--DayOfWeekPicker">
-        {dayShortNames.map((name, index) => (
-          <button
-            key={index}
-            type="button"
-            className={(config.daysOfWeek || []).includes(index) ? "selected" : ""}
-            title={week(index, 'full')}
-            onClick={() => {
-              const days = config.daysOfWeek || [];
-              const newDays = days.includes(index)
-                ? days.filter((d) => d !== index)
-                : [...days, index];
-              updateConfig<TimeConditionConfig>({ daysOfWeek: newDays });
-            }}
-          >
-            {name}
-          </button>
-        ))}
-      </div>
+      <>
+        <Select2
+          value={config.operator || ConditionOperator.In}
+          onChange={(value) => updateConfig<TimeConditionConfig>({ operator: value as ConditionOperator })}
+          options={getDayOfWeekOperatorOptions()}
+        />
+        <div className="form--DayOfWeekPicker">
+          {dayShortNames.map((name, index) => (
+            <button
+              key={index}
+              type="button"
+              className={(config.daysOfWeek || []).includes(index) ? "selected" : ""}
+              title={week(index, 'full')}
+              onClick={() => {
+                const days = config.daysOfWeek || [];
+                const newDays = days.includes(index)
+                  ? days.filter((d) => d !== index)
+                  : [...days, index];
+                updateConfig<TimeConditionConfig>({ daysOfWeek: newDays });
+              }}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      </>
     );
   }
 
@@ -1127,7 +990,11 @@ function ConditionValueEditor(props: {
     const config = condition.config as TimeConditionConfig;
     return (
       <>
-        <span className="form--ConditionOperatorLabel">{localInstance.between || "在"}</span>
+        <Select2
+          value={config.operator || ConditionOperator.Between}
+          onChange={(value) => updateConfig<TimeConditionConfig>({ operator: value as ConditionOperator })}
+          options={getDateRangeOperatorOptions()}
+        />
         <input
           type="date"
           className="form--ConditionInput"
@@ -1178,6 +1045,11 @@ function ConditionValueEditor(props: {
           enableFileSearch={true}
           className="form--ConditionInputFlex"
         />
+        <Select2
+          value={config.operator || ConditionOperator.Equals}
+          onChange={(value) => updateConfig<FileConditionConfig>({ operator: value as ConditionOperator })}
+          options={getFileExistsOperatorOptions()}
+        />
       </>
     );
   }
@@ -1187,6 +1059,11 @@ function ConditionValueEditor(props: {
     const config = condition.config as FileConditionConfig;
     return (
       <>
+        <Select2
+          value={config.operator || ConditionOperator.Equals}
+          onChange={(value) => updateConfig<FileConditionConfig>({ operator: value as ConditionOperator })}
+          options={getFileStatusOperatorOptions()}
+        />
         <VariableReferenceInput
           value={config.targetFilePath || ""}
           onChange={(value) => updateConfig<FileConditionConfig>({ targetFilePath: value })}
@@ -1252,7 +1129,11 @@ function ConditionValueEditor(props: {
             className="form--ConditionInputFlex"
           />
         )}
-        <span className="form--ConditionOperatorLabel">{localInstance.contains}</span>
+        <Select2
+          value={config.operator || ConditionOperator.Contains}
+          onChange={(value) => updateConfig<FileConditionConfig>({ operator: value as ConditionOperator })}
+          options={getContentContainsOperatorOptions()}
+        />
         <VariableReferenceInput
           value={config.searchText || ""}
           onChange={(value) => updateConfig<FileConditionConfig>({ searchText: value })}

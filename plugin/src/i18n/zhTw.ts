@@ -58,6 +58,15 @@ export class ZhTw implements Local {
 	default_location_for_form_file_desc = "新創建的表單檔案將會被保存到該目錄下，支持 {{date:YYYY-MM-DD}} 日期變數";
 	default_location_for_form_placeholder = "form/forms";
 	default_value = "預設值";
+	// 條件操作符相關
+	condition_in_range = "在範圍內";
+	condition_not_in_range = "不在範圍內";
+	condition_in_list = "在列表中";
+	condition_not_in_list = "不在列表中";
+	condition_file_exists = "檔案存在";
+	condition_file_not_exists = "檔案不存在";
+	condition_status_match = "狀態滿足";
+	condition_status_not_match = "狀態不滿足";
 	delete = "刪除";
 	description = "描述";
 	do_not_open = "不打開";

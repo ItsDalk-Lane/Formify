@@ -48,6 +48,15 @@ export interface Local {
 	create_file: string;
 	create_form: string;
 	create_from_template: string;
+	// 条件操作符相关
+	condition_in_range: string;
+	condition_not_in_range: string;
+	condition_in_list: string;
+	condition_not_in_list: string;
+	condition_file_exists: string;
+	condition_file_not_exists: string;
+	condition_status_match: string;
+	condition_status_not_match: string;
 	ctrl_enter_to_submit: string;
 	default_location_for_form_file_desc: string;
 	default_location_for_form_file: string;

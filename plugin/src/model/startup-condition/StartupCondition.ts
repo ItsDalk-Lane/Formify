@@ -107,6 +107,8 @@ export enum ConditionOperator {
  */
 export interface TimeConditionConfig {
   subType: TimeConditionSubType;
+  /** 比较操作符（可选，默认根据子类型使用默认行为） */
+  operator?: ConditionOperator;
   /** 时间段开始（HH:mm 格式） */
   startTime?: string;
   /** 时间段结束（HH:mm 格式） */

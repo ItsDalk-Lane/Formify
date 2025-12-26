@@ -327,18 +327,62 @@ class TimeConditionEvaluator implements IConditionEvaluator {
     const startMinutes = startHour * 60 + startMin;
     const endMinutes = endHour * 60 + endMin;
 
+    const operator = config.operator || ConditionOperator.Between;
     let satisfied: boolean;
-    if (startMinutes <= endMinutes) {
-      satisfied = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
-    } else {
-      // 跨午夜
-      satisfied = currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+    let details: string;
+
+    switch (operator) {
+      case ConditionOperator.NotEquals:
+      case ConditionOperator.NotIn:
+        // 不在时间范围内
+        if (startMinutes <= endMinutes) {
+          satisfied = currentMinutes < startMinutes || currentMinutes > endMinutes;
+        } else {
+          satisfied = currentMinutes < startMinutes && currentMinutes > endMinutes;
+        }
+        details = `当前时间 ${now.toLocaleTimeString()} ${satisfied ? "不在" : "在"} ${config.startTime}-${config.endTime} 范围内`;
+        break;
+
+      case ConditionOperator.LessThan:
+        // 早于开始时间
+        satisfied = currentMinutes < startMinutes;
+        details = `当前时间 ${now.toLocaleTimeString()} ${satisfied ? "早于" : "不早于"} ${config.startTime}`;
+        break;
+
+      case ConditionOperator.LessThanOrEqual:
+        // 早于或等于开始时间
+        satisfied = currentMinutes <= startMinutes;
+        details = `当前时间 ${now.toLocaleTimeString()} ${satisfied ? "早于或等于" : "晚于"} ${config.startTime}`;
+        break;
+
+      case ConditionOperator.GreaterThan:
+        // 晚于结束时间
+        satisfied = currentMinutes > endMinutes;
+        details = `当前时间 ${now.toLocaleTimeString()} ${satisfied ? "晚于" : "不晚于"} ${config.endTime}`;
+        break;
+
+      case ConditionOperator.GreaterThanOrEqual:
+        // 晚于或等于结束时间
+        satisfied = currentMinutes >= endMinutes;
+        details = `当前时间 ${now.toLocaleTimeString()} ${satisfied ? "晚于或等于" : "早于"} ${config.endTime}`;
+        break;
+
+      case ConditionOperator.Equals:
+      case ConditionOperator.Between:
+      case ConditionOperator.In:
+      default:
+        // 在时间范围内（默认行为）
+        if (startMinutes <= endMinutes) {
+          satisfied = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+        } else {
+          // 跨午夜
+          satisfied = currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+        }
+        details = `当前时间 ${now.toLocaleTimeString()} ${satisfied ? "在" : "不在"} ${config.startTime}-${config.endTime} 范围内`;
+        break;
     }
 
-    return {
-      satisfied,
-      details: `当前时间 ${now.toLocaleTimeString()} ${satisfied ? "在" : "不在"} ${config.startTime}-${config.endTime} 范围内`,
-    };
+    return { satisfied, details };
   }
 
   private evaluateDayOfWeek(config: TimeConditionConfig, now: Date): ConditionEvaluationResult {
@@ -347,28 +391,122 @@ class TimeConditionEvaluator implements IConditionEvaluator {
     }
 
     const currentDay = now.getDay();
-    const satisfied = config.daysOfWeek.includes(currentDay);
     const dayNames = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+    const operator = config.operator || ConditionOperator.In;
 
-    return {
-      satisfied,
-      details: `今天是${dayNames[currentDay]}，${satisfied ? "在" : "不在"}允许的日期列表中`,
-    };
+    let satisfied: boolean;
+    let details: string;
+
+    switch (operator) {
+      case ConditionOperator.NotEquals:
+      case ConditionOperator.NotIn:
+        // 不在星期列表中
+        satisfied = !config.daysOfWeek.includes(currentDay);
+        details = `今天是${dayNames[currentDay]}，${satisfied ? "不在" : "在"}指定的日期列表中`;
+        break;
+
+      case ConditionOperator.Between:
+        // 在连续星期范围内（使用列表的最小和最大值作为范围）
+        if (config.daysOfWeek.length >= 2) {
+          const minDay = Math.min(...config.daysOfWeek);
+          const maxDay = Math.max(...config.daysOfWeek);
+          satisfied = currentDay >= minDay && currentDay <= maxDay;
+          details = `今天是${dayNames[currentDay]}，${satisfied ? "在" : "不在"}${dayNames[minDay]}至${dayNames[maxDay]}范围内`;
+        } else {
+          satisfied = config.daysOfWeek.includes(currentDay);
+          details = `今天是${dayNames[currentDay]}，${satisfied ? "在" : "不在"}允许的日期列表中`;
+        }
+        break;
+
+      case ConditionOperator.NotContains:
+        // 不在连续星期范围内
+        if (config.daysOfWeek.length >= 2) {
+          const minDay = Math.min(...config.daysOfWeek);
+          const maxDay = Math.max(...config.daysOfWeek);
+          satisfied = currentDay < minDay || currentDay > maxDay;
+          details = `今天是${dayNames[currentDay]}，${satisfied ? "不在" : "在"}${dayNames[minDay]}至${dayNames[maxDay]}范围内`;
+        } else {
+          satisfied = !config.daysOfWeek.includes(currentDay);
+          details = `今天是${dayNames[currentDay]}，${satisfied ? "不在" : "在"}允许的日期列表中`;
+        }
+        break;
+
+      case ConditionOperator.Equals:
+      case ConditionOperator.In:
+      default:
+        // 在星期列表中（默认行为）
+        satisfied = config.daysOfWeek.includes(currentDay);
+        details = `今天是${dayNames[currentDay]}，${satisfied ? "在" : "不在"}允许的日期列表中`;
+        break;
+    }
+
+    return { satisfied, details };
   }
 
   private evaluateDateRange(config: TimeConditionConfig, now: Date): ConditionEvaluationResult {
     const today = now.toISOString().split("T")[0];
-    let satisfied = true;
-    let details = "";
+    const operator = config.operator || ConditionOperator.Between;
 
-    if (config.startDate && today < config.startDate) {
-      satisfied = false;
-      details = `当前日期 ${today} 早于开始日期 ${config.startDate}`;
-    } else if (config.endDate && today > config.endDate) {
-      satisfied = false;
-      details = `当前日期 ${today} 晚于结束日期 ${config.endDate}`;
-    } else {
-      details = `当前日期 ${today} 在指定范围内`;
+    let satisfied: boolean;
+    let details: string;
+
+    // 检查是否在日期范围内
+    const inRange = (): boolean => {
+      if (config.startDate && today < config.startDate) return false;
+      if (config.endDate && today > config.endDate) return false;
+      return true;
+    };
+
+    switch (operator) {
+      case ConditionOperator.NotEquals:
+      case ConditionOperator.NotIn:
+        // 不在日期范围内
+        satisfied = !inRange();
+        details = `当前日期 ${today} ${satisfied ? "不在" : "在"} ${config.startDate || "起始"} 至 ${config.endDate || "结束"} 范围内`;
+        break;
+
+      case ConditionOperator.LessThan:
+        // 早于开始日期
+        satisfied = config.startDate ? today < config.startDate : false;
+        details = `当前日期 ${today} ${satisfied ? "早于" : "不早于"} ${config.startDate || "未指定"}`;
+        break;
+
+      case ConditionOperator.LessThanOrEqual:
+        // 早于或等于开始日期
+        satisfied = config.startDate ? today <= config.startDate : false;
+        details = `当前日期 ${today} ${satisfied ? "早于或等于" : "晚于"} ${config.startDate || "未指定"}`;
+        break;
+
+      case ConditionOperator.GreaterThan:
+        // 晚于结束日期
+        satisfied = config.endDate ? today > config.endDate : false;
+        details = `当前日期 ${today} ${satisfied ? "晚于" : "不晚于"} ${config.endDate || "未指定"}`;
+        break;
+
+      case ConditionOperator.GreaterThanOrEqual:
+        // 晚于或等于结束日期
+        satisfied = config.endDate ? today >= config.endDate : false;
+        details = `当前日期 ${today} ${satisfied ? "晚于或等于" : "早于"} ${config.endDate || "未指定"}`;
+        break;
+
+      case ConditionOperator.Equals:
+      case ConditionOperator.Between:
+      case ConditionOperator.In:
+      default:
+        // 在日期范围内（默认行为）
+        satisfied = inRange();
+        if (!satisfied) {
+          if (config.startDate && today < config.startDate) {
+            details = `当前日期 ${today} 早于开始日期 ${config.startDate}`;
+          } else if (config.endDate && today > config.endDate) {
+            details = `当前日期 ${today} 晚于结束日期 ${config.endDate}`;
+          } else {
+            details = `当前日期 ${today} 不在指定范围内`;
+          }
+        } else {
+          details = `当前日期 ${today} 在指定范围内`;
+        }
+        break;
     }
 
     return { satisfied, details };
@@ -504,14 +642,32 @@ class FileConditionEvaluator implements IConditionEvaluator {
     // 解析变量引用
     const resolvedPath = resolveVariableReferences(config.targetFilePath, context);
     const abstractFile = context.app.vault.getAbstractFileByPath(resolvedPath);
-    const satisfied = abstractFile instanceof TFile;
+    const fileExists = abstractFile instanceof TFile;
 
-    return {
-      satisfied,
-      details: satisfied 
-        ? `文件 "${resolvedPath}" 在 vault 中存在` 
-        : `文件 "${resolvedPath}" 在 vault 中不存在`,
-    };
+    const operator = config.operator || ConditionOperator.Equals;
+    let satisfied: boolean;
+    let details: string;
+
+    switch (operator) {
+      case ConditionOperator.NotEquals:
+        // 文件不存在
+        satisfied = !fileExists;
+        details = satisfied 
+          ? `文件 "${resolvedPath}" 在 vault 中不存在（符合预期）` 
+          : `文件 "${resolvedPath}" 在 vault 中存在（预期不存在）`;
+        break;
+
+      case ConditionOperator.Equals:
+      default:
+        // 文件存在（默认行为）
+        satisfied = fileExists;
+        details = satisfied 
+          ? `文件 "${resolvedPath}" 在 vault 中存在` 
+          : `文件 "${resolvedPath}" 在 vault 中不存在`;
+        break;
+    }
+
+    return { satisfied, details };
   }
 
   /**
@@ -539,25 +695,42 @@ class FileConditionEvaluator implements IConditionEvaluator {
     }
 
     const results: string[] = [];
-    let allSatisfied = true;
+    let allChecksPassed = true;
 
     // 检查文件是否在编辑器中打开
     if (checks.includes(FileStatusCheckType.IsOpen)) {
       const isOpen = this.isFileOpen(context.app, resolvedPath);
       results.push(`文件${isOpen ? "已" : "未"}在编辑器中打开`);
-      if (!isOpen) allSatisfied = false;
+      if (!isOpen) allChecksPassed = false;
     }
 
     // 检查文件是否是当前激活文件
     if (checks.includes(FileStatusCheckType.IsActive)) {
       const isActive = context.currentFile?.path === resolvedPath;
       results.push(`文件${isActive ? "是" : "不是"}当前激活文件`);
-      if (!isActive) allSatisfied = false;
+      if (!isActive) allChecksPassed = false;
+    }
+
+    // 应用操作符
+    const operator = config.operator || ConditionOperator.Equals;
+    let satisfied: boolean;
+
+    switch (operator) {
+      case ConditionOperator.NotEquals:
+        // 文件状态不满足（期望不满足配置的状态检查）
+        satisfied = !allChecksPassed;
+        break;
+
+      case ConditionOperator.Equals:
+      default:
+        // 文件状态满足（默认行为）
+        satisfied = allChecksPassed;
+        break;
     }
 
     return {
-      satisfied: allSatisfied,
-      details: results.join("；"),
+      satisfied,
+      details: results.join("；") + (operator === ConditionOperator.NotEquals ? "（期望不满足）" : ""),
     };
   }
 
@@ -590,12 +763,30 @@ class FileConditionEvaluator implements IConditionEvaluator {
       const content = await context.app.vault.read(targetFile);
       // 解析变量引用
       const resolvedSearchText = resolveVariableReferences(config.searchText, context);
-      const satisfied = content.includes(resolvedSearchText);
+      const contentContainsText = content.includes(resolvedSearchText);
 
-      return {
-        satisfied,
-        details: `文件 "${targetFile.path}" 的内容${satisfied ? "包含" : "不包含"}指定文本`,
-      };
+      const operator = config.operator || ConditionOperator.Contains;
+      let satisfied: boolean;
+      let details: string;
+
+      switch (operator) {
+        case ConditionOperator.NotContains:
+        case ConditionOperator.NotEquals:
+          // 内容不包含
+          satisfied = !contentContainsText;
+          details = `文件 "${targetFile.path}" 的内容${satisfied ? "不包含" : "包含"}指定文本`;
+          break;
+
+        case ConditionOperator.Contains:
+        case ConditionOperator.Equals:
+        default:
+          // 内容包含（默认行为）
+          satisfied = contentContainsText;
+          details = `文件 "${targetFile.path}" 的内容${satisfied ? "包含" : "不包含"}指定文本`;
+          break;
+      }
+
+      return { satisfied, details };
     } catch (error) {
       return {
         satisfied: false,

@@ -58,6 +58,15 @@ export class Zh implements Local {
 	default_location_for_form_file_desc = "新创建的表单文件将会被保存到该目录下，支持 {{date:YYYY-MM-DD}} 日期变量";
 	default_location_for_form_placeholder = "form/forms";
 	default_value = "默认值";
+	// 条件操作符相关
+	condition_in_range = "在范围内";
+	condition_not_in_range = "不在范围内";
+	condition_in_list = "在列表中";
+	condition_not_in_list = "不在列表中";
+	condition_file_exists = "文件存在";
+	condition_file_not_exists = "文件不存在";
+	condition_status_match = "状态满足";
+	condition_status_not_match = "状态不满足";
 	delete = "删除";
 	description = "描述";
 	do_not_open = "不打开";

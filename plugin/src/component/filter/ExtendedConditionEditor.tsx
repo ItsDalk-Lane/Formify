@@ -22,6 +22,7 @@ import type {
 } from "src/model/startup-condition/StartupCondition";
 import { useObsidianApp } from "src/context/obsidianAppContext";
 import { TFile } from "obsidian";
+import { VariableReferenceInput } from "src/component/input/VariableReferenceInput";
 import "./ExtendedConditionEditor.css";
 
 /**
@@ -144,88 +145,76 @@ export function createDefaultFileConditionConfig(subType: FileConditionSubType):
   }
 }
 
+
+
 /**
- * 文件路径输入组件（带文件建议）
+ * 获取时间范围条件的操作符选项
  */
-function FilePathInput(props: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-}) {
-  const { value, onChange, placeholder } = props;
-  const app = useObsidianApp();
-  const [fileSuggestions, setFileSuggestions] = useState<TFile[]>([]);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+function getTimeRangeOperatorOptions() {
+  return [
+    { label: localInstance.condition_in_range || "在范围内", value: ConditionOperator.Between },
+    { label: localInstance.condition_not_in_range || "不在范围内", value: ConditionOperator.NotIn },
+    { label: localInstance.time_before || "早于开始时间", value: ConditionOperator.LessThan },
+    { label: localInstance.time_before_or_equal || "早于或等于开始时间", value: ConditionOperator.LessThanOrEqual },
+    { label: localInstance.time_after || "晚于结束时间", value: ConditionOperator.GreaterThan },
+    { label: localInstance.time_after_or_equal || "晚于或等于结束时间", value: ConditionOperator.GreaterThanOrEqual },
+  ];
+}
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node) &&
-        inputRef.current &&
-        !inputRef.current.contains(event.target as Node)
-      ) {
-        setShowDropdown(false);
-      }
-    };
+/**
+ * 获取星期几条件的操作符选项
+ */
+function getDayOfWeekOperatorOptions() {
+  return [
+    { label: localInstance.condition_in_list || "在列表中", value: ConditionOperator.In },
+    { label: localInstance.condition_not_in_list || "不在列表中", value: ConditionOperator.NotIn },
+    { label: localInstance.condition_in_range || "在范围内", value: ConditionOperator.Between },
+    { label: localInstance.condition_not_in_range || "不在范围内", value: ConditionOperator.NotContains },
+  ];
+}
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+/**
+ * 获取日期范围条件的操作符选项
+ */
+function getDateRangeOperatorOptions() {
+  return [
+    { label: localInstance.condition_in_range || "在范围内", value: ConditionOperator.Between },
+    { label: localInstance.condition_not_in_range || "不在范围内", value: ConditionOperator.NotIn },
+    { label: localInstance.time_before || "早于开始日期", value: ConditionOperator.LessThan },
+    { label: localInstance.time_before_or_equal || "早于或等于开始日期", value: ConditionOperator.LessThanOrEqual },
+    { label: localInstance.time_after || "晚于结束日期", value: ConditionOperator.GreaterThan },
+    { label: localInstance.time_after_or_equal || "晚于或等于结束日期", value: ConditionOperator.GreaterThanOrEqual },
+  ];
+}
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    onChange(newValue);
+/**
+ * 获取文件存在性条件的操作符选项
+ */
+function getFileExistsOperatorOptions() {
+  return [
+    { label: localInstance.condition_file_exists || "文件存在", value: ConditionOperator.Equals },
+    { label: localInstance.condition_file_not_exists || "文件不存在", value: ConditionOperator.NotEquals },
+  ];
+}
 
-    // 搜索文件建议
-    if (newValue.trim() && app) {
-      const files = app.vault.getMarkdownFiles();
-      const filtered = files
-        .filter((f) => f.path.toLowerCase().includes(newValue.toLowerCase()))
-        .slice(0, 10);
-      setFileSuggestions(filtered);
-      setShowDropdown(filtered.length > 0);
-    } else {
-      setShowDropdown(false);
-    }
-  };
+/**
+ * 获取文件状态条件的操作符选项
+ */
+function getFileStatusOperatorOptions() {
+  return [
+    { label: localInstance.condition_status_match || "状态满足", value: ConditionOperator.Equals },
+    { label: localInstance.condition_status_not_match || "状态不满足", value: ConditionOperator.NotEquals },
+  ];
+}
 
-  const selectFile = (file: TFile) => {
-    onChange(file.path);
-    setShowDropdown(false);
-  };
-
-  return (
-    <div className="form--FilePathInputContainer">
-      <input
-        ref={inputRef}
-        type="text"
-        className="form--ConditionInput form--ConditionInputFlex"
-        value={value}
-        onChange={handleInputChange}
-        placeholder={placeholder || localInstance.startup_condition_file_path_placeholder}
-      />
-      {showDropdown && (
-        <div ref={dropdownRef} className="form--FilePathDropdown">
-          {fileSuggestions.map((file) => (
-            <div
-              key={file.path}
-              className="form--FilePathItem"
-              onClick={() => selectFile(file)}
-            >
-              <File size={14} />
-              <div className="form--FilePathItemContent">
-                <span className="form--FilePathItemName">{file.name}</span>
-                <span className="form--FilePathItemPath">{file.path}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+/**
+ * 获取内容包含条件的操作符选项
+ */
+function getContentContainsOperatorOptions() {
+  return [
+    { label: localInstance.contains, value: ConditionOperator.Contains },
+    { label: localInstance.not_contains, value: ConditionOperator.NotContains },
+  ];
 }
 
 /**
@@ -265,7 +254,11 @@ export function TimeConditionEditor(props: {
       {/* 时间范围 */}
       {config.subType === TimeConditionSubType.TimeRange && (
         <>
-          <span className="form--ConditionOperatorLabel">{localInstance.between || "在"}</span>
+          <Select2
+            value={config.operator || ConditionOperator.Between}
+            onChange={(value) => updateConfig({ operator: value as ConditionOperator })}
+            options={getTimeRangeOperatorOptions()}
+          />
           <input
             type="time"
             className="form--ConditionInput"
@@ -284,31 +277,42 @@ export function TimeConditionEditor(props: {
 
       {/* 星期几 */}
       {config.subType === TimeConditionSubType.DayOfWeek && (
-        <div className="form--DayOfWeekPicker">
-          {[0, 1, 2, 3, 4, 5, 6].map((index) => (
-            <button
-              key={index}
-              type="button"
-              className={(config.daysOfWeek || []).includes(index) ? "selected" : ""}
-              title={week(index, "full")}
-              onClick={() => {
-                const days = config.daysOfWeek || [];
-                const newDays = days.includes(index)
-                  ? days.filter((d) => d !== index)
-                  : [...days, index];
-                updateConfig({ daysOfWeek: newDays });
-              }}
-            >
-              {week(index, "short")}
-            </button>
-          ))}
-        </div>
+        <>
+          <Select2
+            value={config.operator || ConditionOperator.In}
+            onChange={(value) => updateConfig({ operator: value as ConditionOperator })}
+            options={getDayOfWeekOperatorOptions()}
+          />
+          <div className="form--DayOfWeekPicker">
+            {[0, 1, 2, 3, 4, 5, 6].map((index) => (
+              <button
+                key={index}
+                type="button"
+                className={(config.daysOfWeek || []).includes(index) ? "selected" : ""}
+                title={week(index, "full")}
+                onClick={() => {
+                  const days = config.daysOfWeek || [];
+                  const newDays = days.includes(index)
+                    ? days.filter((d) => d !== index)
+                    : [...days, index];
+                  updateConfig({ daysOfWeek: newDays });
+                }}
+              >
+                {week(index, "short")}
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
       {/* 日期范围 */}
       {config.subType === TimeConditionSubType.DateRange && (
         <>
-          <span className="form--ConditionOperatorLabel">{localInstance.between || "在"}</span>
+          <Select2
+            value={config.operator || ConditionOperator.Between}
+            onChange={(value) => updateConfig({ operator: value as ConditionOperator })}
+            options={getDateRangeOperatorOptions()}
+          />
           <input
             type="date"
             className="form--ConditionInput"
@@ -364,18 +368,34 @@ export function FileConditionEditor(props: {
 
       {/* 文件存在 */}
       {config.subType === FileConditionSubType.FileExists && (
-        <FilePathInput
-          value={config.targetFilePath || ""}
-          onChange={(value) => updateConfig({ targetFilePath: value })}
-        />
+        <>
+          <VariableReferenceInput
+            value={config.targetFilePath || ""}
+            onChange={(value) => updateConfig({ targetFilePath: value })}
+            enableFileSearch={true}
+            placeholder={localInstance.startup_condition_file_path_placeholder}
+          />
+          <Select2
+            value={config.operator || ConditionOperator.Equals}
+            onChange={(value) => updateConfig({ operator: value as ConditionOperator })}
+            options={getFileExistsOperatorOptions()}
+          />
+        </>
       )}
 
       {/* 文件状态 */}
       {config.subType === FileConditionSubType.FileStatus && (
         <>
-          <FilePathInput
+          <Select2
+            value={config.operator || ConditionOperator.Equals}
+            onChange={(value) => updateConfig({ operator: value as ConditionOperator })}
+            options={getFileStatusOperatorOptions()}
+          />
+          <VariableReferenceInput
             value={config.targetFilePath || ""}
             onChange={(value) => updateConfig({ targetFilePath: value })}
+            enableFileSearch={true}
+            placeholder={localInstance.startup_condition_file_path_placeholder}
           />
           <div className="form--FileStatusCheckOptions">
             <label className="form--CheckboxLabel">
@@ -422,12 +442,18 @@ export function FileConditionEditor(props: {
             ]}
           />
           {config.targetMode === FileTargetMode.SpecificFile && (
-            <FilePathInput
+            <VariableReferenceInput
               value={config.targetFilePath || ""}
               onChange={(value) => updateConfig({ targetFilePath: value })}
+              enableFileSearch={true}
+              placeholder={localInstance.startup_condition_file_path_placeholder}
             />
           )}
-          <span className="form--ConditionOperatorLabel">{localInstance.contains}</span>
+          <Select2
+            value={config.operator || ConditionOperator.Contains}
+            onChange={(value) => updateConfig({ operator: value as ConditionOperator })}
+            options={getContentContainsOperatorOptions()}
+          />
           <input
             type="text"
             className="form--ConditionInput form--ConditionInputFlex"
@@ -496,9 +522,11 @@ function FrontmatterPropertyEditorCompact(props: {
         ]}
       />
       {config.targetMode === FileTargetMode.SpecificFile && (
-        <FilePathInput
+        <VariableReferenceInput
           value={config.targetFilePath || ""}
           onChange={(value) => onChange({ targetFilePath: value })}
+          enableFileSearch={true}
+          placeholder={localInstance.startup_condition_file_path_placeholder}
         />
       )}
 
