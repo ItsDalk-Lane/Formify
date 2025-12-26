@@ -11,199 +11,95 @@
 .form--StartupConditionControls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
 
-.form--StartupConditionModeSwitch {
-  display: flex;
-  gap: 4px;
-}
-
-.form--StartupConditionModeSwitch button {
-  padding: 4px 8px;
-  font-size: 12px;
-  border-radius: 4px;
-  border: 1px solid var(--background-modifier-border);
-  background: var(--background-primary);
+.form--StartupConditionStatusText {
+  font-size: 13px;
   color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s ease;
 }
 
-.form--StartupConditionModeSwitch button.active {
-  background: var(--interactive-accent);
-  color: var(--text-on-accent);
-  border-color: var(--interactive-accent);
-}
-
-.form--StartupConditionModeSwitch button:hover:not(.active) {
-  background: var(--background-modifier-hover);
-}
-
-.form--StartupConditionPresets {
+/* 统一条件规则样式 */
+.form--StartupConditionRule {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
 }
 
-.form--StartupConditionPresetCard {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 14px;
+/* 条件输入框样式 */
+.form--ConditionInput {
+  padding: 4px 8px;
   border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--background-primary);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  min-width: 140px;
-}
-
-.form--StartupConditionPresetCard:hover {
-  border-color: var(--interactive-accent);
-  background: var(--background-modifier-hover);
-}
-
-.form--StartupConditionPresetCard.selected {
-  border-color: var(--interactive-accent);
-  background: var(--interactive-accent-hover);
-}
-
-.form--StartupConditionPresetName {
-  font-weight: 500;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-normal);
 }
 
-.form--StartupConditionPresetDesc {
+.form--ConditionInput:focus {
+  outline: none;
+  border-color: var(--interactive-accent);
+}
+
+.form--ConditionInputNumber {
+  width: 80px;
+}
+
+.form--ConditionInputFlex {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* 条件操作符标签 */
+.form--ConditionOperatorLabel {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* 添加条件菜单样式 */
+.form--StartupConditionAddMenu {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.form--StartupConditionAddMenuGroup {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.form--StartupConditionAddMenuDivider {
+  height: 1px;
+  background: var(--background-modifier-border);
+  margin: 4px 0;
+}
+
+/* 脚本条件编辑器样式 */
+.form--ScriptConditionEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.form--ScriptHelpText {
   font-size: 11px;
   color: var(--text-muted);
 }
 
-.form--StartupConditionAdvanced {
+/* Frontmatter 属性编辑器样式 */
+.form--FrontmatterPropertyEditor {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.form--StartupConditionList {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.form--StartupConditionItem {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
-  background: var(--background-primary);
-}
-
-.form--StartupConditionItem.disabled {
-  opacity: 0.5;
-}
-
-.form--StartupConditionRelation {
-  min-width: 50px;
-  font-size: 12px;
-  color: var(--text-muted);
-  padding-top: 6px;
-}
-
-.form--StartupConditionContent {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.form--StartupConditionTypeRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.form--StartupConditionTypeSelect {
-  min-width: 120px;
-}
-
-.form--StartupConditionConfigRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.form--StartupConditionConfigRow label {
-  font-size: 12px;
-  color: var(--text-muted);
-  min-width: 60px;
-}
-
-.form--StartupConditionConfigRow input,
-.form--StartupConditionConfigRow select {
-  padding: 4px 8px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 4px;
-  background: var(--background-primary);
-  font-size: 12px;
-}
-
-.form--StartupConditionConfigRow input[type="time"],
-.form--StartupConditionConfigRow input[type="date"] {
-  min-width: 100px;
-}
-
-.form--StartupConditionConfigRow input[type="number"] {
-  width: 80px;
-}
-
-.form--StartupConditionActions {
-  display: flex;
-  gap: 4px;
-}
-
-.form--StartupConditionActions button {
-  padding: 4px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.15s ease;
-}
-
-.form--StartupConditionActions button:hover {
-  background: var(--background-modifier-hover);
-  color: var(--text-normal);
-}
-
-.form--StartupConditionActions button[data-type="danger"]:hover {
-  background: rgba(255, 0, 0, 0.1);
-  color: var(--text-error);
-}
-
-.form--StartupConditionAddButton {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  border: 1px dashed var(--background-modifier-border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-size: 12px;
-}
-
-.form--StartupConditionAddButton:hover {
-  border-color: var(--interactive-accent);
-  color: var(--interactive-accent);
+  width: 100%;
 }
 
 .form--StartupConditionFooter {
@@ -282,7 +178,7 @@
 
 .form--ScriptEditor {
   width: 100%;
-  min-height: 80px;
+  min-height: 60px;
   padding: 8px;
   border: 1px solid var(--background-modifier-border);
   border-radius: 4px;
@@ -292,44 +188,9 @@
   resize: vertical;
 }
 
-.form--StartupConditionGroup {
-  padding: 8px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
-  background: var(--background-secondary-alt);
-}
-
-.form--StartupConditionGroupHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--background-modifier-border);
-}
-
-.form--StartupConditionGroupRelation {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.form--RelationDropdown {
-  padding: 4px 8px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 4px;
-  background: var(--background-primary);
-  font-size: 12px;
-  cursor: pointer;
-}
+/* 移除旧的条件组样式，使用FilterGroup样式 */
 
 /* 文件条件配置样式 */
-.form--StartupConditionFileConfig {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .form--FileStatusCheckOptions {
   display: flex;
   flex-wrap: wrap;
@@ -350,16 +211,11 @@
 }
 
 /* 属性列表样式 */
-.form--StartupConditionPropertyConfig {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .form--PropertyList {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 100%;
 }
 
 .form--PropertyItem {

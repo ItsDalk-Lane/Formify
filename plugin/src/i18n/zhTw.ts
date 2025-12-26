@@ -672,4 +672,6 @@ export class ZhTw implements Local {
 	thursday = "週四";
 	friday = "週五";
 	saturday = "週六";
+	between = "在";
+	and_text = "至";
 }

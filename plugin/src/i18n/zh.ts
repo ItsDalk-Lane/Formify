@@ -659,4 +659,6 @@ export class Zh implements Local {
 	thursday = "周四";
 	friday = "周五";
 	saturday = "周六";
+	between = "在";
+	and_text = "至";
 }

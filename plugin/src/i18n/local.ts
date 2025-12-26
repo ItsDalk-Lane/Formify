@@ -595,4 +595,6 @@ export interface Local {
 	thursday: string;
 	friday: string;
 	saturday: string;
+	between: string;
+	and_text: string;
 }

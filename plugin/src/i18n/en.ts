@@ -647,4 +647,6 @@ export class En implements Local {
 	thursday = "Thu";
 	friday = "Fri";
 	saturday = "Sat";
+	between = "between";
+	and_text = "and";
 }

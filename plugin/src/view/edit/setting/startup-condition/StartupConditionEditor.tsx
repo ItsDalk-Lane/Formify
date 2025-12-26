@@ -14,8 +14,9 @@ import {
   ToggleLeft,
   ToggleRight,
   CopyPlus,
-  AlertCircle,
   Variable,
+  MoreHorizontal,
+  Undo,
 } from "lucide-react";
 import { localInstance } from "src/i18n/locals";
 import { week } from "src/i18n/week";
@@ -30,10 +31,7 @@ import {
   FileStatusCheckType,
   SystemConditionSubType,
   ConditionOperator,
-  createCondition,
-  createConditionGroup,
   createEmptyStartupConditionsConfig,
-  getConditionPresets,
 } from "src/model/startup-condition/StartupCondition";
 import type {
   TimeConditionConfig,
@@ -41,7 +39,6 @@ import type {
   PropertyCheckConfig,
   SystemConditionConfig,
   ScriptConditionConfig,
-  ConditionPreset,
 } from "src/model/startup-condition/StartupCondition";
 import {
   getStartupConditionService,
@@ -54,10 +51,303 @@ import { v4 } from "uuid";
 import "./StartupConditionEditor.css";
 import { FormConfig } from "src/model/FormConfig";
 import { FormField } from "src/model/field/IFormField";
+import { Select2 } from "src/component/select2/Select";
+import { DropdownMenu as RadixDropdownMenu } from "radix-ui";
+
+/**
+ * 统一的条件子类型枚举（扁平化所有子类型）
+ */
+export enum UnifiedConditionSubType {
+  // 时间类
+  TimeRange = "time_range",
+  DayOfWeek = "day_of_week",
+  DateRange = "date_range",
+  LastExecutionInterval = "last_execution_interval",
+  // 文件类
+  FileExists = "file_exists",
+  FileStatus = "file_status",
+  ContentContains = "content_contains",
+  FrontmatterProperty = "frontmatter_property",
+  // 系统类
+  PluginVersion = "plugin_version",
+  ObsidianVersion = "obsidian_version",
+  WorkspaceLayout = "workspace_layout",
+  // 脚本类
+  ScriptExpression = "script_expression",
+}
+
+/**
+ * 从统一子类型获取原始条件类型
+ */
+function getConditionTypeFromSubType(subType: UnifiedConditionSubType): StartupConditionType {
+  switch (subType) {
+    case UnifiedConditionSubType.TimeRange:
+    case UnifiedConditionSubType.DayOfWeek:
+    case UnifiedConditionSubType.DateRange:
+    case UnifiedConditionSubType.LastExecutionInterval:
+      return StartupConditionType.Time;
+    case UnifiedConditionSubType.FileExists:
+    case UnifiedConditionSubType.FileStatus:
+    case UnifiedConditionSubType.ContentContains:
+    case UnifiedConditionSubType.FrontmatterProperty:
+      return StartupConditionType.File;
+    case UnifiedConditionSubType.PluginVersion:
+    case UnifiedConditionSubType.ObsidianVersion:
+    case UnifiedConditionSubType.WorkspaceLayout:
+      return StartupConditionType.System;
+    case UnifiedConditionSubType.ScriptExpression:
+      return StartupConditionType.Script;
+  }
+}
+
+/**
+ * 从原始条件获取统一子类型
+ */
+function getUnifiedSubType(condition: StartupCondition): UnifiedConditionSubType {
+  switch (condition.type) {
+    case StartupConditionType.Time: {
+      const config = condition.config as TimeConditionConfig;
+      switch (config?.subType) {
+        case TimeConditionSubType.TimeRange:
+          return UnifiedConditionSubType.TimeRange;
+        case TimeConditionSubType.DayOfWeek:
+          return UnifiedConditionSubType.DayOfWeek;
+        case TimeConditionSubType.DateRange:
+          return UnifiedConditionSubType.DateRange;
+        case TimeConditionSubType.LastExecutionInterval:
+          return UnifiedConditionSubType.LastExecutionInterval;
+        default:
+          return UnifiedConditionSubType.TimeRange;
+      }
+    }
+    case StartupConditionType.File: {
+      const config = condition.config as FileConditionConfig;
+      switch (config?.subType) {
+        case FileConditionSubType.FileExists:
+          return UnifiedConditionSubType.FileExists;
+        case FileConditionSubType.FileStatus:
+          return UnifiedConditionSubType.FileStatus;
+        case FileConditionSubType.ContentContains:
+          return UnifiedConditionSubType.ContentContains;
+        case FileConditionSubType.FrontmatterProperty:
+          return UnifiedConditionSubType.FrontmatterProperty;
+        default:
+          return UnifiedConditionSubType.ContentContains;
+      }
+    }
+    case StartupConditionType.System: {
+      const config = condition.config as SystemConditionConfig;
+      switch (config?.subType) {
+        case SystemConditionSubType.PluginVersion:
+          return UnifiedConditionSubType.PluginVersion;
+        case SystemConditionSubType.ObsidianVersion:
+          return UnifiedConditionSubType.ObsidianVersion;
+        case SystemConditionSubType.WorkspaceLayout:
+          return UnifiedConditionSubType.WorkspaceLayout;
+        default:
+          return UnifiedConditionSubType.PluginVersion;
+      }
+    }
+    case StartupConditionType.Script:
+      return UnifiedConditionSubType.ScriptExpression;
+    default:
+      return UnifiedConditionSubType.TimeRange;
+  }
+}
+
+/**
+ * 获取所有子类型选项
+ */
+function getAllSubTypeOptions() {
+  return [
+    // 时间类
+    {
+      value: UnifiedConditionSubType.TimeRange,
+      label: localInstance.startup_condition_time_range,
+      icon: <Clock size={14} />,
+      group: localInstance.startup_condition_type_time,
+    },
+    {
+      value: UnifiedConditionSubType.DayOfWeek,
+      label: localInstance.startup_condition_day_of_week,
+      icon: <Clock size={14} />,
+      group: localInstance.startup_condition_type_time,
+    },
+    {
+      value: UnifiedConditionSubType.DateRange,
+      label: localInstance.startup_condition_date_range,
+      icon: <Clock size={14} />,
+      group: localInstance.startup_condition_type_time,
+    },
+    {
+      value: UnifiedConditionSubType.LastExecutionInterval,
+      label: localInstance.startup_condition_interval,
+      icon: <Clock size={14} />,
+      group: localInstance.startup_condition_type_time,
+    },
+    // 文件类
+    {
+      value: UnifiedConditionSubType.FileExists,
+      label: localInstance.startup_condition_file_exists,
+      icon: <File size={14} />,
+      group: localInstance.startup_condition_type_file,
+    },
+    {
+      value: UnifiedConditionSubType.FileStatus,
+      label: localInstance.startup_condition_file_status,
+      icon: <File size={14} />,
+      group: localInstance.startup_condition_type_file,
+    },
+    {
+      value: UnifiedConditionSubType.ContentContains,
+      label: localInstance.startup_condition_content_contains,
+      icon: <File size={14} />,
+      group: localInstance.startup_condition_type_file,
+    },
+    {
+      value: UnifiedConditionSubType.FrontmatterProperty,
+      label: localInstance.startup_condition_frontmatter,
+      icon: <File size={14} />,
+      group: localInstance.startup_condition_type_file,
+    },
+    // 系统类
+    {
+      value: UnifiedConditionSubType.PluginVersion,
+      label: localInstance.startup_condition_plugin_version,
+      icon: <Settings size={14} />,
+      group: localInstance.startup_condition_type_system,
+    },
+    {
+      value: UnifiedConditionSubType.ObsidianVersion,
+      label: localInstance.startup_condition_obsidian_version,
+      icon: <Settings size={14} />,
+      group: localInstance.startup_condition_type_system,
+    },
+    {
+      value: UnifiedConditionSubType.WorkspaceLayout,
+      label: localInstance.startup_condition_workspace_layout,
+      icon: <Settings size={14} />,
+      group: localInstance.startup_condition_type_system,
+    },
+    // 脚本类
+    {
+      value: UnifiedConditionSubType.ScriptExpression,
+      label: localInstance.startup_condition_script_expression,
+      icon: <Code size={14} />,
+      group: localInstance.startup_condition_type_script,
+    },
+  ];
+}
+
+/**
+ * 创建新条件
+ */
+function createNewCondition(subType: UnifiedConditionSubType): StartupCondition {
+  const type = getConditionTypeFromSubType(subType);
+  const config = getDefaultConfigForSubType(subType);
+  return {
+    id: v4(),
+    type,
+    relation: ConditionRelation.And,
+    enabled: true,
+    config,
+  };
+}
+
+/**
+ * 根据子类型获取默认配置
+ */
+function getDefaultConfigForSubType(
+  subType: UnifiedConditionSubType
+): TimeConditionConfig | FileConditionConfig | SystemConditionConfig | ScriptConditionConfig {
+  switch (subType) {
+    case UnifiedConditionSubType.TimeRange:
+      return {
+        subType: TimeConditionSubType.TimeRange,
+        startTime: "09:00",
+        endTime: "18:00",
+      };
+    case UnifiedConditionSubType.DayOfWeek:
+      return {
+        subType: TimeConditionSubType.DayOfWeek,
+        daysOfWeek: [1, 2, 3, 4, 5],
+      };
+    case UnifiedConditionSubType.DateRange:
+      return {
+        subType: TimeConditionSubType.DateRange,
+        startDate: "",
+        endDate: "",
+      };
+    case UnifiedConditionSubType.LastExecutionInterval:
+      return {
+        subType: TimeConditionSubType.LastExecutionInterval,
+        intervalMinutes: 60,
+      };
+    case UnifiedConditionSubType.FileExists:
+      return {
+        subType: FileConditionSubType.FileExists,
+        targetMode: FileTargetMode.SpecificFile,
+        targetFilePath: "",
+      };
+    case UnifiedConditionSubType.FileStatus:
+      return {
+        subType: FileConditionSubType.FileStatus,
+        targetMode: FileTargetMode.SpecificFile,
+        targetFilePath: "",
+        fileStatusChecks: [FileStatusCheckType.IsOpen],
+      };
+    case UnifiedConditionSubType.ContentContains:
+      return {
+        subType: FileConditionSubType.ContentContains,
+        targetMode: FileTargetMode.CurrentFile,
+        searchText: "",
+      };
+    case UnifiedConditionSubType.FrontmatterProperty:
+      return {
+        subType: FileConditionSubType.FrontmatterProperty,
+        targetMode: FileTargetMode.CurrentFile,
+        properties: [],
+        operator: ConditionOperator.Equals,
+      };
+    case UnifiedConditionSubType.PluginVersion:
+      return {
+        subType: SystemConditionSubType.PluginVersion,
+        operator: ConditionOperator.GreaterThanOrEqual,
+        version: "",
+      };
+    case UnifiedConditionSubType.ObsidianVersion:
+      return {
+        subType: SystemConditionSubType.ObsidianVersion,
+        operator: ConditionOperator.GreaterThanOrEqual,
+        version: "",
+      };
+    case UnifiedConditionSubType.WorkspaceLayout:
+      return {
+        subType: SystemConditionSubType.WorkspaceLayout,
+        layoutType: "",
+      };
+    case UnifiedConditionSubType.ScriptExpression:
+      return {
+        expression: "return true;",
+      };
+  }
+}
+
+/**
+ * 创建条件组
+ */
+function createNewConditionGroup(): StartupCondition {
+  return {
+    id: v4(),
+    type: "group",
+    relation: ConditionRelation.And,
+    enabled: true,
+    conditions: [],
+  };
+}
 
 /**
  * 允许的内置变量类型（用于启动条件）
- * 排除 selection 和 clipboard，因为它们需要用户交互
  */
 const ALLOWED_BUILTIN_VARIABLES = [
   { name: "date", pattern: "{{date}}", description: localInstance.builtin_var_date || "当前日期" },
@@ -84,10 +374,6 @@ function getAvailableFormVariables(formConfig?: FormConfig): { name: string; lab
 /**
  * 变量引用输入组件
  * 支持引用表单变量和内置变量
- */
-/**
- * 变量引用输入组件
- * 支持引用表单变量和内置变量
  * 支持文件搜索建议
  */
 interface VariableReferenceInputProps {
@@ -97,10 +383,11 @@ interface VariableReferenceInputProps {
   formConfig?: FormConfig;
   style?: React.CSSProperties;
   enableFileSearch?: boolean;
+  className?: string;
 }
 
 function VariableReferenceInput(props: VariableReferenceInputProps) {
-  const { value, onChange, placeholder, formConfig, style, enableFileSearch } = props;
+  const { value, onChange, placeholder, formConfig, style, enableFileSearch, className } = props;
   const app = useObsidianApp();
   const [showDropdown, setShowDropdown] = useState(false);
   const [fileSuggestions, setFileSuggestions] = useState<TFile[]>([]);
@@ -111,12 +398,10 @@ function VariableReferenceInput(props: VariableReferenceInputProps) {
 
   const formVariables = useMemo(() => getAvailableFormVariables(formConfig), [formConfig]);
 
-  // 点击外部关闭下拉菜单
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
       
-      // Close variable dropdown
       if (
         dropdownRef.current &&
         !dropdownRef.current.contains(target) &&
@@ -126,7 +411,6 @@ function VariableReferenceInput(props: VariableReferenceInputProps) {
         setShowDropdown(false);
       }
 
-      // Close file dropdown
       if (
         fileDropdownRef.current &&
         !fileDropdownRef.current.contains(target) &&
@@ -140,7 +424,6 @@ function VariableReferenceInput(props: VariableReferenceInputProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Handle input change with file search
   const handleInputChange = (newValue: string) => {
     onChange(newValue);
     
@@ -163,14 +446,12 @@ function VariableReferenceInput(props: VariableReferenceInputProps) {
     }
   };
 
-  // Select file from suggestions
   const selectFile = (file: TFile) => {
     onChange(file.path);
     setShowFileDropdown(false);
     inputRef.current?.focus();
   };
 
-  // 插入变量引用
   const insertVariable = (variablePattern: string) => {
     const input = inputRef.current;
     if (!input) {
@@ -186,7 +467,6 @@ function VariableReferenceInput(props: VariableReferenceInputProps) {
     setShowDropdown(false);
     setShowFileDropdown(false);
 
-    // 设置光标位置
     setTimeout(() => {
       input.focus();
       input.setSelectionRange(start + variablePattern.length, start + variablePattern.length);
@@ -194,7 +474,7 @@ function VariableReferenceInput(props: VariableReferenceInputProps) {
   };
 
   return (
-    <div className="form--VariableReferenceInput" style={{ position: "relative", ...style }}>
+    <div className={`form--VariableReferenceInput ${className || ""}`} style={{ position: "relative", ...style }}>
       <div className="form--VariableReferenceInputWrapper">
         <input
           ref={inputRef}
@@ -220,7 +500,6 @@ function VariableReferenceInput(props: VariableReferenceInputProps) {
 
       {showDropdown && (
         <div ref={dropdownRef} className="form--VariableReferenceDropdown">
-          {/* 表单变量部分 */}
           {formVariables.length > 0 && (
             <>
               <div className="form--VariableReferenceSection">
@@ -243,7 +522,6 @@ function VariableReferenceInput(props: VariableReferenceInputProps) {
             </>
           )}
 
-          {/* 内置变量部分 */}
           <div className="form--VariableReferenceSection">
             <span className="form--VariableReferenceSectionTitle">
               {localInstance.builtin_variables || "内置变量"}
@@ -262,7 +540,6 @@ function VariableReferenceInput(props: VariableReferenceInputProps) {
         </div>
       )}
 
-      {/* File Suggestions Dropdown */}
       {showFileDropdown && (
         <div ref={fileDropdownRef} className="form--VariableReferenceDropdown">
           {fileSuggestions.map((file) => (
@@ -290,8 +567,6 @@ function VariableReferenceInput(props: VariableReferenceInputProps) {
   );
 }
 
-type EditorMode = "simple" | "advanced";
-
 interface StartupConditionEditorProps {
   config: StartupConditionsConfig | undefined;
   onChange: (config: StartupConditionsConfig) => void;
@@ -300,19 +575,17 @@ interface StartupConditionEditorProps {
 }
 
 /**
- * 启动条件编辑器组件
+ * 启动条件编辑器组件 - 统一界面版本
  */
 export function StartupConditionEditor(props: StartupConditionEditorProps) {
   const { config, onChange, formFilePath, formConfig } = props;
   const app = useObsidianApp();
-  const [mode, setMode] = useState<EditorMode>("simple");
   const [testResult, setTestResult] = useState<ConditionEvaluationResult | null>(null);
   const [isTesting, setIsTesting] = useState(false);
+  const [undo, setUndo] = useState<StartupConditionsConfig | null>(null);
 
-  // 确保配置存在
   const currentConfig = config || createEmptyStartupConditionsConfig();
 
-  // 切换启用状态
   const handleToggleEnabled = useCallback(() => {
     onChange({
       ...currentConfig,
@@ -320,22 +593,9 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
     });
   }, [currentConfig, onChange]);
 
-  // 应用预设
-  const handleApplyPreset = useCallback(
-    (preset: ConditionPreset) => {
-      onChange({
-        enabled: true,
-        relation: ConditionRelation.And,
-        conditions: preset.conditions.map((c) => ({ ...c, id: v4() })),
-      });
-    },
-    [onChange]
-  );
-
-  // 添加条件
   const handleAddCondition = useCallback(
-    (type: StartupConditionType) => {
-      const newCondition = createCondition(type);
+    (subType: UnifiedConditionSubType) => {
+      const newCondition = createNewCondition(subType);
       onChange({
         ...currentConfig,
         enabled: true,
@@ -345,9 +605,8 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
     [currentConfig, onChange]
   );
 
-  // 添加条件组
   const handleAddGroup = useCallback(() => {
-    const newGroup = createConditionGroup();
+    const newGroup = createNewConditionGroup();
     onChange({
       ...currentConfig,
       enabled: true,
@@ -355,7 +614,6 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
     });
   }, [currentConfig, onChange]);
 
-  // 删除条件
   const handleRemoveCondition = useCallback(
     (id: string) => {
       onChange({
@@ -366,12 +624,12 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
     [currentConfig, onChange]
   );
 
-  // 复制条件
   const handleDuplicateCondition = useCallback(
     (id: string) => {
       const condition = currentConfig.conditions.find((c) => c.id === id);
       if (condition) {
-        const newCondition = { ...condition, id: v4() };
+        const newCondition = JSON.parse(JSON.stringify(condition));
+        newCondition.id = v4();
         onChange({
           ...currentConfig,
           conditions: [...currentConfig.conditions, newCondition],
@@ -381,7 +639,6 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
     [currentConfig, onChange]
   );
 
-  // 更新条件
   const handleUpdateCondition = useCallback(
     (id: string, updates: Partial<StartupCondition>) => {
       onChange({
@@ -394,7 +651,6 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
     [currentConfig, onChange]
   );
 
-  // 更改根逻辑关系
   const handleRelationChange = useCallback(
     (relation: ConditionRelation) => {
       onChange({
@@ -405,7 +661,6 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
     [currentConfig, onChange]
   );
 
-  // 测试条件
   const handleTestConditions = useCallback(async () => {
     setIsTesting(true);
     setTestResult(null);
@@ -431,16 +686,26 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
     }
   }, [app, currentConfig, formFilePath]);
 
-  // 清除条件
   const handleClearConditions = useCallback(() => {
+    if (currentConfig.conditions && currentConfig.conditions.length > 0) {
+      setUndo(currentConfig);
+    }
     onChange({
       ...currentConfig,
       conditions: [],
     });
   }, [currentConfig, onChange]);
 
+  const handleUndo = useCallback(() => {
+    if (undo) {
+      onChange(undo);
+      setUndo(null);
+    }
+  }, [undo, onChange]);
+
   return (
     <div className="form--StartupConditionEditor">
+      {/* 启用开关 */}
       <div className="form--StartupConditionControls">
         <button
           className="form--ToggleButton"
@@ -453,64 +718,87 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
             <ToggleLeft size={20} />
           )}
         </button>
-        <div className="form--StartupConditionModeSwitch">
-          <button
-            className={mode === "simple" ? "active" : ""}
-            onClick={() => setMode("simple")}
-          >
-            {localInstance.startup_condition_mode_simple}
-          </button>
-          <button
-            className={mode === "advanced" ? "active" : ""}
-            onClick={() => setMode("advanced")}
-          >
-            {localInstance.startup_condition_mode_advanced}
-          </button>
-        </div>
-      </div>
+        <span className="form--StartupConditionStatusText">
+          {currentConfig.enabled ? localInstance.enabled : localInstance.disabled}
+        </span>
 
-      {currentConfig.enabled && (
-        <>
-          {mode === "simple" ? (
-            <SimpleConditionEditor
-              config={currentConfig}
-              onApplyPreset={handleApplyPreset}
-            />
-          ) : (
-            <AdvancedConditionEditor
-              config={currentConfig}
-              formConfig={formConfig}
-              onAddCondition={handleAddCondition}
-              onAddGroup={handleAddGroup}
-              onRemoveCondition={handleRemoveCondition}
-              onDuplicateCondition={handleDuplicateCondition}
-              onUpdateCondition={handleUpdateCondition}
-              onRelationChange={handleRelationChange}
-              onClear={handleClearConditions}
-            />
-          )}
-
-          <div className="form--StartupConditionFooter">
+        {currentConfig.enabled && (
+          <div style={{ display: "flex", gap: "8px", marginLeft: "auto" }}>
             <button
               className="form--StartupConditionTestButton"
               onClick={handleTestConditions}
               disabled={isTesting}
+              title={localInstance.test_condition}
+              style={{ padding: "4px 8px", height: "28px", fontSize: "12px" }}
             >
               <Play size={14} />
               {isTesting ? localInstance.testing : localInstance.test_condition}
             </button>
 
-            {testResult && (
-              <div
-                className={`form--StartupConditionTestResult ${
-                  testResult.satisfied ? "success" : "failure"
-                }`}
+            <button
+              className="form--ClearFilterButton"
+              data-type="danger"
+              onClick={handleClearConditions}
+              title={localInstance.clear_condition}
+              style={{ padding: "4px 8px", height: "28px" }}
+            >
+              <Trash2 size={14} />
+            </button>
+            {undo && (
+              <button
+                className="form--UndoClearFilterButton"
+                data-type="primary"
+                onClick={handleUndo}
+                title={localInstance.undo}
+                style={{ padding: "4px 8px", height: "28px" }}
               >
-                {testResult.satisfied ? <Check size={14} /> : <X size={14} />}
-                <span>{testResult.details}</span>
-              </div>
+                <Undo size={14} />
+              </button>
             )}
           </div>
+        )}
+      </div>
+
+      {currentConfig.enabled && (
+        <>
+          {/* 条件列表 - 使用 FilterRoot 样式 */}
+          <div className="form--FilterRoot">
+            <div className="form--FilterRootContent">
+              {currentConfig.conditions.map((condition, index) => (
+                <UnifiedConditionItem
+                  key={condition.id}
+                  condition={condition}
+                  index={index}
+                  relation={currentConfig.relation}
+                  formConfig={formConfig}
+                  onUpdate={(updates) => handleUpdateCondition(condition.id, updates)}
+                  onRemove={() => handleRemoveCondition(condition.id)}
+                  onDuplicate={() => handleDuplicateCondition(condition.id)}
+                  onRelationChange={handleRelationChange}
+                />
+              ))}
+
+              {/* 添加条件按钮 */}
+              <div className="form--FilterRootAdd">
+                <StartupConditionAddDropdown
+                  onAddCondition={handleAddCondition}
+                  onAddGroup={handleAddGroup}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 测试结果 */}
+          {testResult && (
+            <div
+              className={`form--StartupConditionTestResult ${
+                testResult.satisfied ? "success" : "failure"
+              }`}
+            >
+              {testResult.satisfied ? <Check size={14} /> : <X size={14} />}
+              <span>{testResult.details}</span>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -518,275 +806,91 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
 }
 
 /**
- * 简单模式编辑器
+ * 添加条件下拉菜单
  */
-function SimpleConditionEditor(props: {
-  config: StartupConditionsConfig;
-  onApplyPreset: (preset: ConditionPreset) => void;
+function StartupConditionAddDropdown(props: {
+  onAddCondition: (subType: UnifiedConditionSubType) => void;
+  onAddGroup: () => void;
 }) {
-  const { config, onApplyPreset } = props;
-  const presets = getConditionPresets();
+  const { onAddCondition, onAddGroup } = props;
+  const [open, setOpen] = useState(false);
+  const allSubTypes = getAllSubTypeOptions();
 
-  // 检查当前配置是否匹配预设
-  const getSelectedPresetId = (): string | null => {
-    // 简单检查：比较条件数量和类型
-    for (const preset of presets) {
-      if (
-        config.conditions.length === preset.conditions.length &&
-        config.conditions.every((c, i) => {
-          const presetCondition = preset.conditions[i];
-          if (c.type !== presetCondition.type) return false;
-          const cConfig = c.config as TimeConditionConfig;
-          const pConfig = presetCondition.config as TimeConditionConfig;
-          return cConfig?.subType === pConfig?.subType;
-        })
-      ) {
-        return preset.id;
+  const groupedOptions = useMemo(() => {
+    const groups: Record<string, typeof allSubTypes> = {};
+    allSubTypes.forEach((opt) => {
+      if (!groups[opt.group]) {
+        groups[opt.group] = [];
       }
-    }
-    return null;
-  };
-
-  const selectedPresetId = getSelectedPresetId();
-
-  return (
-    <div className="form--StartupConditionPresets">
-      {presets.map((preset) => (
-        <div
-          key={preset.id}
-          className={`form--StartupConditionPresetCard ${
-            selectedPresetId === preset.id ? "selected" : ""
-          }`}
-          onClick={() => onApplyPreset(preset)}
-        >
-          <span className="form--StartupConditionPresetName">
-            {localInstance[preset.name as keyof typeof localInstance] || preset.name}
-          </span>
-          <span className="form--StartupConditionPresetDesc">
-            {localInstance[preset.description as keyof typeof localInstance] ||
-              preset.description}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/**
- * 高级模式编辑器
- */
-function AdvancedConditionEditor(props: {
-  config: StartupConditionsConfig;
-  formConfig?: FormConfig;
-  onAddCondition: (type: StartupConditionType) => void;
-  onAddGroup: () => void;
-  onRemoveCondition: (id: string) => void;
-  onDuplicateCondition: (id: string) => void;
-  onUpdateCondition: (id: string, updates: Partial<StartupCondition>) => void;
-  onRelationChange: (relation: ConditionRelation) => void;
-  onClear: () => void;
-}) {
-  const {
-    config,
-    formConfig,
-    onAddCondition,
-    onAddGroup,
-    onRemoveCondition,
-    onDuplicateCondition,
-    onUpdateCondition,
-    onRelationChange,
-    onClear,
-  } = props;
-
-  const [showAddMenu, setShowAddMenu] = useState(false);
+      groups[opt.group].push(opt);
+    });
+    return groups;
+  }, []);
 
   return (
-    <div className="form--StartupConditionAdvanced">
-      {/* 根关系选择 */}
-      {config.conditions.length > 1 && (
-        <div className="form--StartupConditionGroupRelation">
-          <span>{localInstance.condition_relation}:</span>
-          <select
-            className="form--RelationDropdown"
-            value={config.relation}
-            onChange={(e) => onRelationChange(e.target.value as ConditionRelation)}
+    <RadixDropdownMenu.Root onOpenChange={setOpen} open={open}>
+      <RadixDropdownMenu.Trigger asChild>
+        <button className="form--TextButton">
+          <Plus size={16} /> {localInstance.add_condition}
+          <ChevronDown size={16} />
+        </button>
+      </RadixDropdownMenu.Trigger>
+      {open && (
+        <RadixDropdownMenu.Portal container={window.activeDocument.body}>
+          <RadixDropdownMenu.Content
+            className="form--FilterDropdownMenuContent form--StartupConditionAddMenu"
+            sideOffset={5}
+            collisionPadding={8}
+            align="start"
+            side="bottom"
           >
-            <option value={ConditionRelation.And}>{localInstance.operator_and}</option>
-            <option value={ConditionRelation.Or}>{localInstance.operator_or}</option>
-          </select>
-        </div>
+            {Object.entries(groupedOptions).map(([groupName, options]) => (
+              <div key={groupName}>
+                <div className="form--StartupConditionAddMenuGroup">
+                  {groupName}
+                </div>
+                {options.map((opt) => (
+                  <RadixDropdownMenu.Item
+                    key={opt.value}
+                    className="form--FilterDropdownMenuItem"
+                    onClick={() => {
+                      onAddCondition(opt.value);
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="form--FilterDropdownMenuItemIcon">
+                      {opt.icon}
+                    </span>
+                    {opt.label}
+                  </RadixDropdownMenu.Item>
+                ))}
+              </div>
+            ))}
+            <div className="form--StartupConditionAddMenuDivider" />
+            <RadixDropdownMenu.Item
+              className="form--FilterDropdownMenuItem"
+              onClick={() => {
+                onAddGroup();
+                setOpen(false);
+              }}
+            >
+              <span className="form--FilterDropdownMenuItemIcon">
+                <CopyPlus size={16} />
+              </span>
+              {localInstance.add_condition_group}
+            </RadixDropdownMenu.Item>
+            <RadixDropdownMenu.Arrow className="form--FilterDropdownMenuArrow" />
+          </RadixDropdownMenu.Content>
+        </RadixDropdownMenu.Portal>
       )}
-
-      {/* 条件列表 */}
-      <div className="form--StartupConditionList">
-        {config.conditions.map((condition, index) => (
-          <ConditionItem
-            key={condition.id}
-            condition={condition}
-            index={index}
-            relation={config.relation}
-            formConfig={formConfig}
-            onUpdate={(updates) => onUpdateCondition(condition.id, updates)}
-            onRemove={() => onRemoveCondition(condition.id)}
-            onDuplicate={() => onDuplicateCondition(condition.id)}
-          />
-        ))}
-      </div>
-
-      {/* 添加按钮 */}
-      <div style={{ position: "relative" }}>
-        <button
-          className="form--StartupConditionAddButton"
-          onClick={() => setShowAddMenu(!showAddMenu)}
-        >
-          <Plus size={14} />
-          {localInstance.add_condition}
-          <ChevronDown size={14} />
-        </button>
-
-        {showAddMenu && (
-          <AddConditionMenu
-            onAddCondition={(type) => {
-              onAddCondition(type);
-              setShowAddMenu(false);
-            }}
-            onAddGroup={() => {
-              onAddGroup();
-              setShowAddMenu(false);
-            }}
-            onClose={() => setShowAddMenu(false)}
-          />
-        )}
-      </div>
-
-      {/* 清除按钮 */}
-      {config.conditions.length > 0 && (
-        <button
-          className="form--StartupConditionAddButton"
-          style={{ color: "var(--text-error)" }}
-          onClick={onClear}
-        >
-          <Trash2 size={14} />
-          {localInstance.clear_condition}
-        </button>
-      )}
-    </div>
+    </RadixDropdownMenu.Root>
   );
 }
 
 /**
- * 添加条件菜单
+ * 统一条件项组件 - 类似 FilterItem
  */
-function AddConditionMenu(props: {
-  onAddCondition: (type: StartupConditionType) => void;
-  onAddGroup: () => void;
-  onClose: () => void;
-}) {
-  const { onAddCondition, onAddGroup, onClose } = props;
-
-  const conditionTypes = [
-    {
-      type: StartupConditionType.Time,
-      icon: <Clock size={14} />,
-      label: localInstance.startup_condition_type_time,
-    },
-    {
-      type: StartupConditionType.File,
-      icon: <File size={14} />,
-      label: localInstance.startup_condition_type_file,
-    },
-    {
-      type: StartupConditionType.System,
-      icon: <Settings size={14} />,
-      label: localInstance.startup_condition_type_system,
-    },
-    {
-      type: StartupConditionType.Script,
-      icon: <Code size={14} />,
-      label: localInstance.startup_condition_type_script,
-    },
-  ];
-
-  return (
-    <div
-      className="form--AddConditionMenu"
-      style={{
-        position: "absolute",
-        top: "100%",
-        left: 0,
-        zIndex: 100,
-        background: "var(--background-primary)",
-        border: "1px solid var(--background-modifier-border)",
-        borderRadius: "6px",
-        padding: "4px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-        minWidth: "160px",
-      }}
-    >
-      {conditionTypes.map((item) => (
-        <button
-          key={item.type}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            width: "100%",
-            padding: "8px 12px",
-            border: "none",
-            background: "transparent",
-            cursor: "pointer",
-            borderRadius: "4px",
-            fontSize: "12px",
-            color: "var(--text-normal)",
-          }}
-          onClick={() => onAddCondition(item.type)}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.background = "var(--background-modifier-hover)")
-          }
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-        >
-          {item.icon}
-          {item.label}
-        </button>
-      ))}
-      <div
-        style={{
-          height: "1px",
-          background: "var(--background-modifier-border)",
-          margin: "4px 0",
-        }}
-      />
-      <button
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          width: "100%",
-          padding: "8px 12px",
-          border: "none",
-          background: "transparent",
-          cursor: "pointer",
-          borderRadius: "4px",
-          fontSize: "12px",
-          color: "var(--text-normal)",
-        }}
-        onClick={onAddGroup}
-        onMouseEnter={(e) =>
-          (e.currentTarget.style.background = "var(--background-modifier-hover)")
-        }
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-      >
-        <CopyPlus size={14} />
-        {localInstance.add_condition_group}
-      </button>
-    </div>
-  );
-}
-
-/**
- * 单个条件项
- */
-function ConditionItem(props: {
+function UnifiedConditionItem(props: {
   condition: StartupCondition;
   index: number;
   relation: ConditionRelation;
@@ -794,48 +898,603 @@ function ConditionItem(props: {
   onUpdate: (updates: Partial<StartupCondition>) => void;
   onRemove: () => void;
   onDuplicate: () => void;
+  onRelationChange: (relation: ConditionRelation) => void;
 }) {
-  const { condition, index, relation, formConfig, onUpdate, onRemove, onDuplicate } = props;
+  const { condition, index, relation, formConfig, onUpdate, onRemove, onDuplicate, onRelationChange } = props;
 
-  const getRelationText = () => {
-    if (index === 0) return localInstance.operator_condition;
-    return relation === ConditionRelation.And
-      ? localInstance.operator_and
-      : localInstance.operator_or;
-  };
+  const relationEl = useMemo(() => {
+    if (index === 0) {
+      return localInstance.operator_condition;
+    }
+
+    if (index === 1) {
+      return (
+        <Select2
+          value={relation}
+          onChange={(value) => onRelationChange(value as ConditionRelation)}
+          options={[
+            { label: localInstance.operator_and, value: ConditionRelation.And },
+            { label: localInstance.operator_or, value: ConditionRelation.Or },
+          ]}
+        />
+      );
+    } else {
+      return relation === ConditionRelation.And
+        ? localInstance.operator_and
+        : localInstance.operator_or;
+    }
+  }, [index, relation, onRelationChange]);
 
   return (
-    <div className={`form--StartupConditionItem ${condition.enabled ? "" : "disabled"}`}>
-      <div className="form--StartupConditionRelation">{getRelationText()}</div>
-
-      <div className="form--StartupConditionContent">
+    <div className="form--Filter">
+      <div className="form--FilterRelation">{relationEl}</div>
+      <div className="form--FilterContent">
         {condition.type === "group" ? (
-          <ConditionGroupEditor
+          <UnifiedConditionGroup
             condition={condition}
             formConfig={formConfig}
             onUpdate={onUpdate}
           />
         ) : (
-          <ConditionConfigEditor
+          <UnifiedConditionRule
             condition={condition}
             formConfig={formConfig}
             onUpdate={onUpdate}
           />
         )}
       </div>
+      <div className="form--FilterMenu">
+        <ConditionMenuDropdown
+          onDelete={onRemove}
+          onDuplicate={onDuplicate}
+        />
+      </div>
+    </div>
+  );
+}
 
-      <div className="form--StartupConditionActions">
+/**
+ * 条件菜单下拉
+ */
+function ConditionMenuDropdown(props: {
+  onDelete: () => void;
+  onDuplicate: () => void;
+}) {
+  const { onDelete, onDuplicate } = props;
+  const [open, setOpen] = useState(false);
+
+  return (
+    <RadixDropdownMenu.Root onOpenChange={setOpen} open={open}>
+      <RadixDropdownMenu.Trigger asChild>
+        <button className="form--TextButton">
+          <MoreHorizontal size={16} />
+        </button>
+      </RadixDropdownMenu.Trigger>
+      {open && (
+        <RadixDropdownMenu.Portal container={window.activeDocument.body}>
+          <RadixDropdownMenu.Content
+            className="form--FilterDropdownMenuContent"
+            sideOffset={5}
+            collisionPadding={8}
+            align="end"
+            side="bottom"
+          >
+            <RadixDropdownMenu.Item
+              className="form--FilterDropdownMenuItem"
+              onClick={() => {
+                onDuplicate();
+                setOpen(false);
+              }}
+            >
+              <span className="form--FilterDropdownMenuItemIcon">
+                <Copy size={16} />
+              </span>
+              {localInstance.duplicate}
+            </RadixDropdownMenu.Item>
+            <RadixDropdownMenu.Item
+              className="form--FilterDropdownMenuItem"
+              onClick={() => {
+                onDelete();
+                setOpen(false);
+              }}
+            >
+              <span className="form--FilterDropdownMenuItemIcon">
+                <Trash2 size={16} />
+              </span>
+              {localInstance.delete}
+            </RadixDropdownMenu.Item>
+            <RadixDropdownMenu.Arrow className="form--FilterDropdownMenuArrow" />
+          </RadixDropdownMenu.Content>
+        </RadixDropdownMenu.Portal>
+      )}
+    </RadixDropdownMenu.Root>
+  );
+}
+
+/**
+ * 统一条件规则组件
+ */
+function UnifiedConditionRule(props: {
+  condition: StartupCondition;
+  formConfig?: FormConfig;
+  onUpdate: (updates: Partial<StartupCondition>) => void;
+}) {
+  const { condition, formConfig, onUpdate } = props;
+  const currentSubType = getUnifiedSubType(condition);
+  const allSubTypes = getAllSubTypeOptions();
+
+  const handleSubTypeChange = (newSubType: UnifiedConditionSubType) => {
+    const newType = getConditionTypeFromSubType(newSubType);
+    const newConfig = getDefaultConfigForSubType(newSubType);
+    onUpdate({
+      type: newType,
+      config: newConfig,
+    });
+  };
+
+  return (
+    <div className="form--FilterRule form--StartupConditionRule">
+      {/* 比较对象下拉 - 包含所有子类型 */}
+      <Select2
+        value={currentSubType}
+        onChange={(value) => handleSubTypeChange(value as UnifiedConditionSubType)}
+        options={allSubTypes.map((opt) => ({
+          label: opt.label,
+          value: opt.value,
+        }))}
+      />
+
+      {/* 根据子类型动态渲染比较符和比较值 */}
+      <ConditionValueEditor
+        condition={condition}
+        subType={currentSubType}
+        formConfig={formConfig}
+        onUpdate={onUpdate}
+      />
+    </div>
+  );
+}
+
+/**
+ * 条件值编辑器 - 根据子类型动态渲染
+ */
+function ConditionValueEditor(props: {
+  condition: StartupCondition;
+  subType: UnifiedConditionSubType;
+  formConfig?: FormConfig;
+  onUpdate: (updates: Partial<StartupCondition>) => void;
+}) {
+  const { condition, subType, formConfig, onUpdate } = props;
+
+  const updateConfig = <T extends object>(updates: Partial<T>) => {
+    onUpdate({
+      config: { ...condition.config, ...updates } as any,
+    });
+  };
+
+  // 时间范围
+  if (subType === UnifiedConditionSubType.TimeRange) {
+    const config = condition.config as TimeConditionConfig;
+    return (
+      <>
+        <span className="form--ConditionOperatorLabel">{localInstance.between || "在"}</span>
+        <input
+          type="time"
+          className="form--ConditionInput"
+          value={config.startTime || "09:00"}
+          onChange={(e) => updateConfig<TimeConditionConfig>({ startTime: e.target.value })}
+        />
+        <span className="form--ConditionOperatorLabel">{localInstance.and_text || "至"}</span>
+        <input
+          type="time"
+          className="form--ConditionInput"
+          value={config.endTime || "18:00"}
+          onChange={(e) => updateConfig<TimeConditionConfig>({ endTime: e.target.value })}
+        />
+      </>
+    );
+  }
+
+  // 星期几
+  if (subType === UnifiedConditionSubType.DayOfWeek) {
+    const config = condition.config as TimeConditionConfig;
+    const dayShortNames = [0, 1, 2, 3, 4, 5, 6].map(i => week(i, 'short'));
+    return (
+      <div className="form--DayOfWeekPicker">
+        {dayShortNames.map((name, index) => (
+          <button
+            key={index}
+            type="button"
+            className={(config.daysOfWeek || []).includes(index) ? "selected" : ""}
+            title={week(index, 'full')}
+            onClick={() => {
+              const days = config.daysOfWeek || [];
+              const newDays = days.includes(index)
+                ? days.filter((d) => d !== index)
+                : [...days, index];
+              updateConfig<TimeConditionConfig>({ daysOfWeek: newDays });
+            }}
+          >
+            {name}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  // 日期范围
+  if (subType === UnifiedConditionSubType.DateRange) {
+    const config = condition.config as TimeConditionConfig;
+    return (
+      <>
+        <span className="form--ConditionOperatorLabel">{localInstance.between || "在"}</span>
+        <input
+          type="date"
+          className="form--ConditionInput"
+          value={config.startDate || ""}
+          onChange={(e) => updateConfig<TimeConditionConfig>({ startDate: e.target.value })}
+        />
+        <span className="form--ConditionOperatorLabel">{localInstance.and_text || "至"}</span>
+        <input
+          type="date"
+          className="form--ConditionInput"
+          value={config.endDate || ""}
+          onChange={(e) => updateConfig<TimeConditionConfig>({ endDate: e.target.value })}
+        />
+      </>
+    );
+  }
+
+  // 执行间隔
+  if (subType === UnifiedConditionSubType.LastExecutionInterval) {
+    const config = condition.config as TimeConditionConfig;
+    return (
+      <>
+        <span className="form--ConditionOperatorLabel">{localInstance.greater_than_or_equal || ">="}</span>
+        <input
+          type="number"
+          className="form--ConditionInput form--ConditionInputNumber"
+          min="1"
+          value={config.intervalMinutes || 60}
+          onChange={(e) =>
+            updateConfig<TimeConditionConfig>({ intervalMinutes: parseInt(e.target.value, 10) || 60 })
+          }
+        />
+        <span className="form--ConditionOperatorLabel">{localInstance.minutes}</span>
+      </>
+    );
+  }
+
+  // 文件存在
+  if (subType === UnifiedConditionSubType.FileExists) {
+    const config = condition.config as FileConditionConfig;
+    return (
+      <>
+        <VariableReferenceInput
+          value={config.targetFilePath || ""}
+          onChange={(value) => updateConfig<FileConditionConfig>({ targetFilePath: value })}
+          placeholder={localInstance.startup_condition_file_path_placeholder}
+          formConfig={formConfig}
+          enableFileSearch={true}
+          className="form--ConditionInputFlex"
+        />
+      </>
+    );
+  }
+
+  // 文件状态
+  if (subType === UnifiedConditionSubType.FileStatus) {
+    const config = condition.config as FileConditionConfig;
+    return (
+      <>
+        <VariableReferenceInput
+          value={config.targetFilePath || ""}
+          onChange={(value) => updateConfig<FileConditionConfig>({ targetFilePath: value })}
+          placeholder={localInstance.startup_condition_file_path_placeholder}
+          formConfig={formConfig}
+          enableFileSearch={true}
+          className="form--ConditionInputFlex"
+        />
+        <div className="form--FileStatusCheckOptions">
+          <label className="form--CheckboxLabel">
+            <input
+              type="checkbox"
+              checked={(config.fileStatusChecks || []).includes(FileStatusCheckType.IsOpen)}
+              onChange={(e) => {
+                const currentChecks = config.fileStatusChecks || [];
+                const newChecks = e.target.checked
+                  ? [...currentChecks, FileStatusCheckType.IsOpen]
+                  : currentChecks.filter((c) => c !== FileStatusCheckType.IsOpen);
+                updateConfig<FileConditionConfig>({ fileStatusChecks: newChecks });
+              }}
+            />
+            {localInstance.startup_condition_file_is_open}
+          </label>
+          <label className="form--CheckboxLabel">
+            <input
+              type="checkbox"
+              checked={(config.fileStatusChecks || []).includes(FileStatusCheckType.IsActive)}
+              onChange={(e) => {
+                const currentChecks = config.fileStatusChecks || [];
+                const newChecks = e.target.checked
+                  ? [...currentChecks, FileStatusCheckType.IsActive]
+                  : currentChecks.filter((c) => c !== FileStatusCheckType.IsActive);
+                updateConfig<FileConditionConfig>({ fileStatusChecks: newChecks });
+              }}
+            />
+            {localInstance.startup_condition_file_is_active}
+          </label>
+        </div>
+      </>
+    );
+  }
+
+  // 内容包含
+  if (subType === UnifiedConditionSubType.ContentContains) {
+    const config = condition.config as FileConditionConfig;
+    return (
+      <>
+        <Select2
+          value={config.targetMode || FileTargetMode.CurrentFile}
+          onChange={(value) => updateConfig<FileConditionConfig>({ targetMode: value as FileTargetMode })}
+          options={[
+            { label: localInstance.startup_condition_current_file, value: FileTargetMode.CurrentFile },
+            { label: localInstance.startup_condition_specific_file, value: FileTargetMode.SpecificFile },
+          ]}
+        />
+        {config.targetMode === FileTargetMode.SpecificFile && (
+          <VariableReferenceInput
+            value={config.targetFilePath || ""}
+            onChange={(value) => updateConfig<FileConditionConfig>({ targetFilePath: value })}
+            placeholder={localInstance.startup_condition_file_path_placeholder}
+            formConfig={formConfig}
+            enableFileSearch={true}
+            className="form--ConditionInputFlex"
+          />
+        )}
+        <span className="form--ConditionOperatorLabel">{localInstance.contains}</span>
+        <VariableReferenceInput
+          value={config.searchText || ""}
+          onChange={(value) => updateConfig<FileConditionConfig>({ searchText: value })}
+          placeholder={localInstance.startup_condition_search_text_placeholder}
+          formConfig={formConfig}
+          className="form--ConditionInputFlex"
+        />
+      </>
+    );
+  }
+
+  // 属性检查
+  if (subType === UnifiedConditionSubType.FrontmatterProperty) {
+    const config = condition.config as FileConditionConfig;
+    return (
+      <FrontmatterPropertyEditor
+        config={config}
+        formConfig={formConfig}
+        onChange={(updates) => updateConfig<FileConditionConfig>(updates)}
+      />
+    );
+  }
+
+  // 插件版本
+  if (subType === UnifiedConditionSubType.PluginVersion) {
+    const config = condition.config as SystemConditionConfig;
+    return (
+      <>
+        <Select2
+          value={config.operator || ConditionOperator.GreaterThanOrEqual}
+          onChange={(value) => updateConfig<SystemConditionConfig>({ operator: value as ConditionOperator })}
+          options={[
+            { label: localInstance.equal, value: ConditionOperator.Equals },
+            { label: localInstance.greater_than, value: ConditionOperator.GreaterThan },
+            { label: localInstance.greater_than_or_equal, value: ConditionOperator.GreaterThanOrEqual },
+            { label: localInstance.less_than, value: ConditionOperator.LessThan },
+            { label: localInstance.less_than_or_equal, value: ConditionOperator.LessThanOrEqual },
+          ]}
+        />
+        <input
+          type="text"
+          className="form--ConditionInput"
+          placeholder="1.0.0"
+          value={config.version || ""}
+          onChange={(e) => updateConfig<SystemConditionConfig>({ version: e.target.value })}
+        />
+      </>
+    );
+  }
+
+  // Obsidian 版本
+  if (subType === UnifiedConditionSubType.ObsidianVersion) {
+    const config = condition.config as SystemConditionConfig;
+    return (
+      <>
+        <Select2
+          value={config.operator || ConditionOperator.GreaterThanOrEqual}
+          onChange={(value) => updateConfig<SystemConditionConfig>({ operator: value as ConditionOperator })}
+          options={[
+            { label: localInstance.equal, value: ConditionOperator.Equals },
+            { label: localInstance.greater_than, value: ConditionOperator.GreaterThan },
+            { label: localInstance.greater_than_or_equal, value: ConditionOperator.GreaterThanOrEqual },
+            { label: localInstance.less_than, value: ConditionOperator.LessThan },
+            { label: localInstance.less_than_or_equal, value: ConditionOperator.LessThanOrEqual },
+          ]}
+        />
+        <input
+          type="text"
+          className="form--ConditionInput"
+          placeholder="1.0.0"
+          value={config.version || ""}
+          onChange={(e) => updateConfig<SystemConditionConfig>({ version: e.target.value })}
+        />
+      </>
+    );
+  }
+
+  // 工作区布局
+  if (subType === UnifiedConditionSubType.WorkspaceLayout) {
+    const config = condition.config as SystemConditionConfig;
+    return (
+      <>
+        <span className="form--ConditionOperatorLabel">{localInstance.equal}</span>
+        <Select2
+          value={config.layoutType || ""}
+          onChange={(value) => updateConfig<SystemConditionConfig>({ layoutType: value })}
+          options={[
+            { label: localInstance.startup_condition_layout_single, value: "single" },
+            { label: localInstance.startup_condition_layout_split, value: "split" },
+          ]}
+        />
+      </>
+    );
+  }
+
+  // 脚本表达式
+  if (subType === UnifiedConditionSubType.ScriptExpression) {
+    const config = condition.config as ScriptConditionConfig;
+    return (
+      <div className="form--ScriptConditionEditor">
+        <textarea
+          className="form--ScriptEditor"
+          placeholder={localInstance.startup_condition_script_placeholder}
+          value={config.expression || ""}
+          onChange={(e) => updateConfig<ScriptConditionConfig>({ expression: e.target.value })}
+        />
+        <span className="form--ScriptHelpText">
+          {localInstance.startup_condition_script_help}
+        </span>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Frontmatter 属性编辑器
+ */
+function FrontmatterPropertyEditor(props: {
+  config: FileConditionConfig;
+  formConfig?: FormConfig;
+  onChange: (updates: Partial<FileConditionConfig>) => void;
+}) {
+  const { config, formConfig, onChange } = props;
+
+  const handleAddProperty = () => {
+    const properties = config.properties || [];
+    onChange({
+      properties: [...properties, { name: "", operator: ConditionOperator.Equals, value: "" }],
+    });
+  };
+
+  const handleRemoveProperty = (index: number) => {
+    const properties = config.properties || [];
+    onChange({
+      properties: properties.filter((_, i) => i !== index),
+    });
+  };
+
+  const handleUpdateProperty = (index: number, updates: Partial<PropertyCheckConfig>) => {
+    const properties = config.properties || [];
+    onChange({
+      properties: properties.map((p, i) => (i === index ? { ...p, ...updates } : p)),
+    });
+  };
+
+  return (
+    <div className="form--FrontmatterPropertyEditor">
+      <Select2
+        value={config.targetMode || FileTargetMode.CurrentFile}
+        onChange={(value) => onChange({ targetMode: value as FileTargetMode })}
+        options={[
+          { label: localInstance.startup_condition_current_file, value: FileTargetMode.CurrentFile },
+          { label: localInstance.startup_condition_specific_file, value: FileTargetMode.SpecificFile },
+        ]}
+      />
+      {config.targetMode === FileTargetMode.SpecificFile && (
+        <VariableReferenceInput
+          value={config.targetFilePath || ""}
+          onChange={(value) => onChange({ targetFilePath: value })}
+          placeholder={localInstance.startup_condition_file_path_placeholder}
+          formConfig={formConfig}
+          enableFileSearch={true}
+          className="form--ConditionInputFlex"
+        />
+      )}
+      
+      <div className="form--PropertyList">
+        {(config.properties && config.properties.length > 0) ? (
+          config.properties.map((prop, index) => (
+            <div key={index} className="form--PropertyItem">
+              <VariableReferenceInput
+                value={prop.name}
+                onChange={(value) => handleUpdateProperty(index, { name: value })}
+                placeholder={localInstance.property_name}
+                formConfig={formConfig}
+                style={{ width: 100 }}
+              />
+              <Select2
+                value={prop.operator}
+                onChange={(value) => handleUpdateProperty(index, { operator: value as ConditionOperator })}
+                options={[
+                  { label: localInstance.equal, value: ConditionOperator.Equals },
+                  { label: localInstance.not_equal, value: ConditionOperator.NotEquals },
+                  { label: localInstance.contains, value: ConditionOperator.Contains },
+                ]}
+              />
+              <VariableReferenceInput
+                value={prop.value}
+                onChange={(value) => handleUpdateProperty(index, { value: value })}
+                placeholder={localInstance.property_value}
+                formConfig={formConfig}
+                style={{ width: 100 }}
+              />
+              <button
+                type="button"
+                onClick={() => handleRemoveProperty(index)}
+                className="form--PropertyRemoveButton"
+                title={localInstance.delete}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))
+        ) : (
+          config.propertyName && (
+            <div className="form--PropertyItem">
+              <VariableReferenceInput
+                value={config.propertyName || ""}
+                onChange={(value) => onChange({ propertyName: value })}
+                placeholder={localInstance.property_name}
+                formConfig={formConfig}
+                style={{ width: 100 }}
+              />
+              <Select2
+                value={config.operator || ConditionOperator.Equals}
+                onChange={(value) => onChange({ operator: value as ConditionOperator })}
+                options={[
+                  { label: localInstance.equal, value: ConditionOperator.Equals },
+                  { label: localInstance.not_equal, value: ConditionOperator.NotEquals },
+                  { label: localInstance.contains, value: ConditionOperator.Contains },
+                ]}
+              />
+              <VariableReferenceInput
+                value={config.propertyValue || ""}
+                onChange={(value) => onChange({ propertyValue: value })}
+                placeholder={localInstance.property_value}
+                formConfig={formConfig}
+                style={{ width: 100 }}
+              />
+            </div>
+          )
+        )}
+        
         <button
-          onClick={() => onUpdate({ enabled: !condition.enabled })}
-          title={condition.enabled ? localInstance.disable : localInstance.enable}
+          type="button"
+          onClick={handleAddProperty}
+          className="form--AddPropertyButton"
         >
-          {condition.enabled ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
-        </button>
-        <button onClick={onDuplicate} title={localInstance.duplicate}>
-          <Copy size={14} />
-        </button>
-        <button onClick={onRemove} data-type="danger" title={localInstance.delete}>
-          <Trash2 size={14} />
+          <Plus size={14} />
+          {localInstance.startup_condition_add_property}
         </button>
       </div>
     </div>
@@ -843,19 +1502,26 @@ function ConditionItem(props: {
 }
 
 /**
- * 条件组编辑器
+ * 条件组组件
  */
-function ConditionGroupEditor(props: {
+function UnifiedConditionGroup(props: {
   condition: StartupCondition;
   formConfig?: FormConfig;
   onUpdate: (updates: Partial<StartupCondition>) => void;
 }) {
   const { condition, formConfig, onUpdate } = props;
 
-  const handleAddCondition = (type: StartupConditionType) => {
-    const newCondition = createCondition(type);
+  const handleAddCondition = (subType: UnifiedConditionSubType) => {
+    const newCondition = createNewCondition(subType);
     onUpdate({
       conditions: [...(condition.conditions || []), newCondition],
+    });
+  };
+
+  const handleAddGroup = () => {
+    const newGroup = createNewConditionGroup();
+    onUpdate({
+      conditions: [...(condition.conditions || []), newGroup],
     });
   };
 
@@ -863,6 +1529,17 @@ function ConditionGroupEditor(props: {
     onUpdate({
       conditions: (condition.conditions || []).filter((c) => c.id !== id),
     });
+  };
+
+  const handleDuplicateChild = (id: string) => {
+    const child = (condition.conditions || []).find((c) => c.id === id);
+    if (child) {
+      const newChild = JSON.parse(JSON.stringify(child));
+      newChild.id = v4();
+      onUpdate({
+        conditions: [...(condition.conditions || []), newChild],
+      });
+    }
   };
 
   const handleUpdateChild = (id: string, updates: Partial<StartupCondition>) => {
@@ -873,596 +1550,31 @@ function ConditionGroupEditor(props: {
     });
   };
 
-  return (
-    <div className="form--StartupConditionGroup">
-      <div className="form--StartupConditionGroupHeader">
-        <div className="form--StartupConditionGroupRelation">
-          <span>{localInstance.condition_group}</span>
-          <select
-            className="form--RelationDropdown"
-            value={condition.relation}
-            onChange={(e) => onUpdate({ relation: e.target.value as ConditionRelation })}
-          >
-            <option value={ConditionRelation.And}>{localInstance.operator_and}</option>
-            <option value={ConditionRelation.Or}>{localInstance.operator_or}</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="form--StartupConditionList">
-        {(condition.conditions || []).map((child, index) => (
-          <ConditionItem
-            key={child.id}
-            condition={child}
-            index={index}
-            relation={condition.relation}
-            formConfig={formConfig}
-            onUpdate={(updates) => handleUpdateChild(child.id, updates)}
-            onRemove={() => handleRemoveChild(child.id)}
-            onDuplicate={() => {
-              const newChild = { ...child, id: v4() };
-              onUpdate({
-                conditions: [...(condition.conditions || []), newChild],
-              });
-            }}
-          />
-        ))}
-      </div>
-
-      <button
-        className="form--StartupConditionAddButton"
-        onClick={() => handleAddCondition(StartupConditionType.Time)}
-      >
-        <Plus size={14} />
-        {localInstance.add_condition}
-      </button>
-    </div>
-  );
-}
-
-/**
- * 条件配置编辑器
- */
-function ConditionConfigEditor(props: {
-  condition: StartupCondition;
-  formConfig?: FormConfig;
-  onUpdate: (updates: Partial<StartupCondition>) => void;
-}) {
-  const { condition, formConfig, onUpdate } = props;
-
-  const getTypeIcon = () => {
-    switch (condition.type) {
-      case StartupConditionType.Time:
-        return <Clock size={14} />;
-      case StartupConditionType.File:
-        return <File size={14} />;
-      case StartupConditionType.System:
-        return <Settings size={14} />;
-      case StartupConditionType.Script:
-        return <Code size={14} />;
-      default:
-        return null;
-    }
-  };
-
-  const getTypeLabel = () => {
-    switch (condition.type) {
-      case StartupConditionType.Time:
-        return localInstance.startup_condition_type_time;
-      case StartupConditionType.File:
-        return localInstance.startup_condition_type_file;
-      case StartupConditionType.System:
-        return localInstance.startup_condition_type_system;
-      case StartupConditionType.Script:
-        return localInstance.startup_condition_type_script;
-      default:
-        return "";
-    }
+  const handleRelationChange = (relation: ConditionRelation) => {
+    onUpdate({ relation });
   };
 
   return (
-    <div>
-      <div className="form--StartupConditionTypeRow">
-        {getTypeIcon()}
-        <span style={{ fontWeight: 500 }}>{getTypeLabel()}</span>
-      </div>
-
-      {condition.type === StartupConditionType.Time && (
-        <TimeConditionConfigEditor
-          config={condition.config as TimeConditionConfig}
-          onChange={(config) => onUpdate({ config })}
-        />
-      )}
-
-      {condition.type === StartupConditionType.File && (
-        <FileConditionConfigEditor
-          config={condition.config as FileConditionConfig}
+    <div className="form--FilterGroup">
+      {(condition.conditions || []).map((child, index) => (
+        <UnifiedConditionItem
+          key={child.id}
+          condition={child}
+          index={index}
+          relation={condition.relation}
           formConfig={formConfig}
-          onChange={(config) => onUpdate({ config })}
+          onUpdate={(updates) => handleUpdateChild(child.id, updates)}
+          onRemove={() => handleRemoveChild(child.id)}
+          onDuplicate={() => handleDuplicateChild(child.id)}
+          onRelationChange={handleRelationChange}
         />
-      )}
-
-      {condition.type === StartupConditionType.System && (
-        <SystemConditionConfigEditor
-          config={condition.config as SystemConditionConfig}
-          onChange={(config) => onUpdate({ config })}
+      ))}
+      <div className="form--FilterGroupAdd">
+        <StartupConditionAddDropdown
+          onAddCondition={handleAddCondition}
+          onAddGroup={handleAddGroup}
         />
-      )}
-
-      {condition.type === StartupConditionType.Script && (
-        <ScriptConditionConfigEditor
-          config={condition.config as ScriptConditionConfig}
-          onChange={(config) => onUpdate({ config })}
-        />
-      )}
-    </div>
-  );
-}
-
-/**
- * 时间条件配置
- */
-function TimeConditionConfigEditor(props: {
-  config: TimeConditionConfig;
-  onChange: (config: TimeConditionConfig) => void;
-}) {
-  const { config, onChange } = props;
-
-  // 使用短名称显示星期几 (日、一、二、三、四、五、六)
-  const dayShortNames = [0, 1, 2, 3, 4, 5, 6].map(i => week(i, 'short'));
-
-  return (
-    <div className="form--StartupConditionConfigRow">
-      <label>{localInstance.startup_condition_subtype}:</label>
-      <select
-        value={config.subType}
-        onChange={(e) =>
-          onChange({ ...config, subType: e.target.value as TimeConditionSubType })
-        }
-      >
-        <option value={TimeConditionSubType.TimeRange}>
-          {localInstance.startup_condition_time_range}
-        </option>
-        <option value={TimeConditionSubType.DayOfWeek}>
-          {localInstance.startup_condition_day_of_week}
-        </option>
-        <option value={TimeConditionSubType.DateRange}>
-          {localInstance.startup_condition_date_range}
-        </option>
-        <option value={TimeConditionSubType.LastExecutionInterval}>
-          {localInstance.startup_condition_interval}
-        </option>
-      </select>
-
-      {config.subType === TimeConditionSubType.TimeRange && (
-        <>
-          <input
-            type="time"
-            value={config.startTime || "09:00"}
-            onChange={(e) => onChange({ ...config, startTime: e.target.value })}
-          />
-          <span>-</span>
-          <input
-            type="time"
-            value={config.endTime || "18:00"}
-            onChange={(e) => onChange({ ...config, endTime: e.target.value })}
-          />
-        </>
-      )}
-
-      {config.subType === TimeConditionSubType.DayOfWeek && (
-        <div className="form--DayOfWeekPicker">
-          {dayShortNames.map((name, index) => (
-            <button
-              key={index}
-              className={(config.daysOfWeek || []).includes(index) ? "selected" : ""}
-              title={week(index, 'full')}
-              onClick={() => {
-                const days = config.daysOfWeek || [];
-                const newDays = days.includes(index)
-                  ? days.filter((d) => d !== index)
-                  : [...days, index];
-                onChange({ ...config, daysOfWeek: newDays });
-              }}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {config.subType === TimeConditionSubType.DateRange && (
-        <>
-          <input
-            type="date"
-            value={config.startDate || ""}
-            onChange={(e) => onChange({ ...config, startDate: e.target.value })}
-          />
-          <span>-</span>
-          <input
-            type="date"
-            value={config.endDate || ""}
-            onChange={(e) => onChange({ ...config, endDate: e.target.value })}
-          />
-        </>
-      )}
-
-      {config.subType === TimeConditionSubType.LastExecutionInterval && (
-        <>
-          <input
-            type="number"
-            min="1"
-            value={config.intervalMinutes || 60}
-            onChange={(e) =>
-              onChange({ ...config, intervalMinutes: parseInt(e.target.value, 10) || 60 })
-            }
-          />
-          <span>{localInstance.minutes}</span>
-        </>
-      )}
-    </div>
-  );
-}
-
-/**
- * 文件条件配置
- */
-function FileConditionConfigEditor(props: {
-  config: FileConditionConfig;
-  formConfig?: FormConfig;
-  onChange: (config: FileConditionConfig) => void;
-}) {
-  const { config, formConfig, onChange } = props;
-
-  // 获取当前目标模式，默认为当前文件
-  const targetMode = config.targetMode || FileTargetMode.CurrentFile;
-  const isSpecificFile = targetMode === FileTargetMode.SpecificFile;
-
-  // 根据目标模式获取可用的子类型
-  const getAvailableSubTypes = () => {
-    if (isSpecificFile) {
-      // 指定具体文件模式：所有子类型都可用
-      return [
-        { value: FileConditionSubType.FileExists, label: localInstance.startup_condition_file_exists },
-        { value: FileConditionSubType.FileStatus, label: localInstance.startup_condition_file_status },
-        { value: FileConditionSubType.ContentContains, label: localInstance.startup_condition_content_contains },
-        { value: FileConditionSubType.FrontmatterProperty, label: localInstance.startup_condition_frontmatter },
-      ];
-    } else {
-      // 当前文件模式：只有内容包含和属性检查可用
-      return [
-        { value: FileConditionSubType.ContentContains, label: localInstance.startup_condition_content_contains },
-        { value: FileConditionSubType.FrontmatterProperty, label: localInstance.startup_condition_frontmatter },
-      ];
-    }
-  };
-
-  const availableSubTypes = getAvailableSubTypes();
-
-  // 当切换目标模式时，检查并修正子类型
-  const handleTargetModeChange = (newMode: FileTargetMode) => {
-    let newConfig = { ...config, targetMode: newMode };
-    
-    // 如果切换到当前文件模式，且当前子类型是仅指定文件可用的，则切换到内容包含
-    if (newMode === FileTargetMode.CurrentFile) {
-      if (config.subType === FileConditionSubType.FileExists || 
-          config.subType === FileConditionSubType.FileStatus) {
-        newConfig.subType = FileConditionSubType.ContentContains;
-      }
-    }
-    
-    onChange(newConfig);
-  };
-
-  // 处理属性列表变更
-  const handleAddProperty = () => {
-    const properties = config.properties || [];
-    onChange({
-      ...config,
-      properties: [...properties, { name: "", operator: ConditionOperator.Equals, value: "" }],
-    });
-  };
-
-  const handleRemoveProperty = (index: number) => {
-    const properties = config.properties || [];
-    onChange({
-      ...config,
-      properties: properties.filter((_, i) => i !== index),
-    });
-  };
-
-  const handleUpdateProperty = (index: number, updates: Partial<PropertyCheckConfig>) => {
-    const properties = config.properties || [];
-    onChange({
-      ...config,
-      properties: properties.map((p, i) => (i === index ? { ...p, ...updates } : p)),
-    });
-  };
-
-  // 处理文件状态检查选项变更
-  const handleFileStatusCheckChange = (checkType: FileStatusCheckType, checked: boolean) => {
-    const currentChecks = config.fileStatusChecks || [];
-    let newChecks: FileStatusCheckType[];
-    if (checked) {
-      newChecks = [...currentChecks, checkType];
-    } else {
-      newChecks = currentChecks.filter((c) => c !== checkType);
-    }
-    onChange({ ...config, fileStatusChecks: newChecks });
-  };
-
-  return (
-    <div className="form--StartupConditionFileConfig">
-      {/* 目标文件模式选择 */}
-      <div className="form--StartupConditionConfigRow">
-        <label>{localInstance.startup_condition_target_mode}:</label>
-        <select
-          value={targetMode}
-          onChange={(e) => handleTargetModeChange(e.target.value as FileTargetMode)}
-        >
-          <option value={FileTargetMode.CurrentFile}>
-            {localInstance.startup_condition_current_file}
-          </option>
-          <option value={FileTargetMode.SpecificFile}>
-            {localInstance.startup_condition_specific_file}
-          </option>
-        </select>
       </div>
-
-      {/* 指定文件路径输入 */}
-      {isSpecificFile && (
-        <div className="form--StartupConditionConfigRow">
-          <label>{localInstance.file_path}:</label>
-          <VariableReferenceInput
-            placeholder={localInstance.startup_condition_file_path_placeholder}
-            value={config.targetFilePath || ""}
-            onChange={(value) => onChange({ ...config, targetFilePath: value })}
-            formConfig={formConfig}
-            style={{ flex: 1, minWidth: 200 }}
-            enableFileSearch={true}
-          />
-        </div>
-      )}
-
-      {/* 条件子类型选择 */}
-      <div className="form--StartupConditionConfigRow">
-        <label>{localInstance.startup_condition_subtype}:</label>
-        <select
-          value={config.subType}
-          onChange={(e) =>
-            onChange({ ...config, subType: e.target.value as FileConditionSubType })
-          }
-        >
-          {availableSubTypes.map((st) => (
-            <option key={st.value} value={st.value}>
-              {st.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* 文件状态检查选项 */}
-      {config.subType === FileConditionSubType.FileStatus && isSpecificFile && (
-        <div className="form--StartupConditionConfigRow">
-          <label>{localInstance.startup_condition_file_status_options}:</label>
-          <div className="form--FileStatusCheckOptions">
-            <label className="form--CheckboxLabel">
-              <input
-                type="checkbox"
-                checked={(config.fileStatusChecks || []).includes(FileStatusCheckType.IsOpen)}
-                onChange={(e) => handleFileStatusCheckChange(FileStatusCheckType.IsOpen, e.target.checked)}
-              />
-              {localInstance.startup_condition_file_is_open}
-            </label>
-            <label className="form--CheckboxLabel">
-              <input
-                type="checkbox"
-                checked={(config.fileStatusChecks || []).includes(FileStatusCheckType.IsActive)}
-                onChange={(e) => handleFileStatusCheckChange(FileStatusCheckType.IsActive, e.target.checked)}
-              />
-              {localInstance.startup_condition_file_is_active}
-            </label>
-          </div>
-        </div>
-      )}
-
-      {/* 内容包含检查 */}
-      {config.subType === FileConditionSubType.ContentContains && (
-        <div className="form--StartupConditionConfigRow">
-          <label>{localInstance.startup_condition_search_text}:</label>
-          <VariableReferenceInput
-            placeholder={localInstance.startup_condition_search_text_placeholder}
-            value={config.searchText || ""}
-            onChange={(value) => onChange({ ...config, searchText: value })}
-            formConfig={formConfig}
-            style={{ flex: 1, minWidth: 200 }}
-          />
-        </div>
-      )}
-
-      {/* 属性检查 - 多属性支持 */}
-      {config.subType === FileConditionSubType.FrontmatterProperty && (
-        <div className="form--StartupConditionPropertyConfig">
-          <div className="form--StartupConditionConfigRow">
-            <label>{localInstance.startup_condition_properties}:</label>
-          </div>
-          
-          {/* 显示属性列表 */}
-          {(config.properties && config.properties.length > 0) ? (
-            <div className="form--PropertyList">
-              {config.properties.map((prop, index) => (
-                <div key={index} className="form--PropertyItem">
-                  <VariableReferenceInput
-                    placeholder={localInstance.property_name}
-                    value={prop.name}
-                    onChange={(value) => handleUpdateProperty(index, { name: value })}
-                    formConfig={formConfig}
-                    style={{ width: 100 }}
-                  />
-                  <select
-                    value={prop.operator}
-                    onChange={(e) => handleUpdateProperty(index, { operator: e.target.value as ConditionOperator })}
-                  >
-                    <option value={ConditionOperator.Equals}>{localInstance.equal}</option>
-                    <option value={ConditionOperator.NotEquals}>{localInstance.not_equal}</option>
-                    <option value={ConditionOperator.Contains}>{localInstance.contains}</option>
-                  </select>
-                  <VariableReferenceInput
-                    placeholder={localInstance.property_value}
-                    value={prop.value}
-                    onChange={(value) => handleUpdateProperty(index, { value: value })}
-                    formConfig={formConfig}
-                    style={{ width: 100 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveProperty(index)}
-                    className="form--PropertyRemoveButton"
-                    title={localInstance.delete}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            // 向后兼容：显示旧的单属性配置
-            config.propertyName && (
-              <div className="form--PropertyItem">
-                <VariableReferenceInput
-                  placeholder={localInstance.property_name}
-                  value={config.propertyName || ""}
-                  onChange={(value) => onChange({ ...config, propertyName: value })}
-                  formConfig={formConfig}
-                  style={{ width: 100 }}
-                />
-                <select
-                  value={config.operator || ConditionOperator.Equals}
-                  onChange={(e) => onChange({ ...config, operator: e.target.value as ConditionOperator })}
-                >
-                  <option value={ConditionOperator.Equals}>{localInstance.equal}</option>
-                  <option value={ConditionOperator.NotEquals}>{localInstance.not_equal}</option>
-                  <option value={ConditionOperator.Contains}>{localInstance.contains}</option>
-                </select>
-                <VariableReferenceInput
-                  placeholder={localInstance.property_value}
-                  value={config.propertyValue || ""}
-                  onChange={(value) => onChange({ ...config, propertyValue: value })}
-                  formConfig={formConfig}
-                  style={{ width: 100 }}
-                />
-              </div>
-            )
-          )}
-          
-          {/* 添加属性按钮 */}
-          <button
-            type="button"
-            onClick={handleAddProperty}
-            className="form--AddPropertyButton"
-          >
-            <Plus size={14} />
-            {localInstance.startup_condition_add_property}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * 系统条件配置
- */
-function SystemConditionConfigEditor(props: {
-  config: SystemConditionConfig;
-  onChange: (config: SystemConditionConfig) => void;
-}) {
-  const { config, onChange } = props;
-
-  return (
-    <div className="form--StartupConditionConfigRow">
-      <label>{localInstance.startup_condition_subtype}:</label>
-      <select
-        value={config.subType}
-        onChange={(e) =>
-          onChange({ ...config, subType: e.target.value as SystemConditionSubType })
-        }
-      >
-        <option value={SystemConditionSubType.PluginVersion}>
-          {localInstance.startup_condition_plugin_version}
-        </option>
-        <option value={SystemConditionSubType.ObsidianVersion}>
-          {localInstance.startup_condition_obsidian_version}
-        </option>
-        <option value={SystemConditionSubType.WorkspaceLayout}>
-          {localInstance.startup_condition_workspace_layout}
-        </option>
-      </select>
-
-      {(config.subType === SystemConditionSubType.PluginVersion ||
-        config.subType === SystemConditionSubType.ObsidianVersion) && (
-        <>
-          <select
-            value={config.operator || ConditionOperator.GreaterThanOrEqual}
-            onChange={(e) =>
-              onChange({ ...config, operator: e.target.value as ConditionOperator })
-            }
-          >
-            <option value={ConditionOperator.Equals}>{localInstance.equal}</option>
-            <option value={ConditionOperator.GreaterThan}>{localInstance.greater_than}</option>
-            <option value={ConditionOperator.GreaterThanOrEqual}>
-              {localInstance.greater_than_or_equal}
-            </option>
-            <option value={ConditionOperator.LessThan}>{localInstance.less_than}</option>
-            <option value={ConditionOperator.LessThanOrEqual}>
-              {localInstance.less_than_or_equal}
-            </option>
-          </select>
-          <input
-            type="text"
-            placeholder="1.0.0"
-            value={config.version || ""}
-            onChange={(e) => onChange({ ...config, version: e.target.value })}
-            style={{ width: 80 }}
-          />
-        </>
-      )}
-
-      {config.subType === SystemConditionSubType.WorkspaceLayout && (
-        <select
-          value={config.layoutType || ""}
-          onChange={(e) => onChange({ ...config, layoutType: e.target.value })}
-        >
-          <option value="">{localInstance.please_select_option}</option>
-          <option value="single">{localInstance.startup_condition_layout_single}</option>
-          <option value="split">{localInstance.startup_condition_layout_split}</option>
-        </select>
-      )}
-    </div>
-  );
-}
-
-/**
- * 脚本条件配置
- */
-function ScriptConditionConfigEditor(props: {
-  config: ScriptConditionConfig;
-  onChange: (config: ScriptConditionConfig) => void;
-}) {
-  const { config, onChange } = props;
-
-  return (
-    <div className="form--StartupConditionConfigRow" style={{ flexDirection: "column" }}>
-      <label>{localInstance.startup_condition_script_expression}:</label>
-      <textarea
-        className="form--ScriptEditor"
-        placeholder={localInstance.startup_condition_script_placeholder}
-        value={config.expression || ""}
-        onChange={(e) => onChange({ ...config, expression: e.target.value })}
-      />
-      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-        {localInstance.startup_condition_script_help}
-      </span>
     </div>
   );
 }
