@@ -7,6 +7,7 @@ import { OperatorType } from "src/model/filter/OperatorType";
 import { CpsFormFieldControl } from "../control/CpsFormFieldControl";
 import SelectControl from "../control/SelectControl";
 import { FieldValueReaderFactory } from "src/service/field-value/FieldValueReaderFactory";
+import { VariableReferenceInput } from "src/component/input/VariableReferenceInput";
 
 export function ConditionValue(props: {
 	filter: Filter;
@@ -20,22 +21,22 @@ export function ConditionValue(props: {
   const { value, onChange } = props;
   if (!field) {
 		return (
-			<input
-				type="text"
-				value={value}
-				onChange={(e) => onChange(e.target.value)}
+			<VariableReferenceInput
+				value={typeof value === 'string' ? value : String(value ?? '')}
+				onChange={onChange}
 				placeholder={localInstance.value}
+				formConfig={formConfig}
 			/>
 		);
   }
 
   if (filter.operator === OperatorType.RegexMatch) {
     return (
-      <input
-        type="text"
+      <VariableReferenceInput
         value={typeof value === 'string' ? value : (value?.pattern ?? '')}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={onChange}
         placeholder={localInstance.regex_match}
+        formConfig={formConfig}
       />
     );
   }
@@ -92,6 +93,22 @@ export function ConditionValue(props: {
 			/>
 		);
 	}
+	
+	// 对于 TEXT 和 TEXTAREA 类型，使用 VariableReferenceInput 支持变量引用
+	if (
+		field.type === FormFieldType.TEXT ||
+		field.type === FormFieldType.TEXTAREA
+	) {
+		return (
+			<VariableReferenceInput
+				value={typeof value === 'string' ? value : String(value ?? '')}
+				onChange={onChange}
+				placeholder={localInstance.value}
+				formConfig={formConfig}
+			/>
+		);
+	}
+	
 	return (
 		<CpsFormFieldControl
 			field={field}

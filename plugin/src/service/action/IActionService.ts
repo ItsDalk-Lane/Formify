@@ -20,6 +20,7 @@ import { BreakActionService } from "./loop/BreakActionService";
 import { ContinueActionService } from "./loop/ContinueActionService";
 import { LoopVariableScope } from "../../utils/LoopVariableScope";
 import type { ExtendedConditionContext } from "../filter/ExtendedConditionEvaluator";
+import { ConditionVariableResolver } from "../../utils/ConditionVariableResolver";
 
 export interface IActionService {
 
@@ -101,17 +102,12 @@ export class ActionChain {
 
         // 检查条件
         if (action.condition) {
-            console.log('[IActionService] 开始检查动作条件:', {
-                actionType: action.type,
-                hasFields: !!context.config.fields,
-                fieldsCount: context.config.fields?.length,
-                condition: action.condition
-            });
-            
             // 创建扩展条件评估上下文
             const extendedContext: ExtendedConditionContext = {
                 app: context.app,
                 currentFile: context.app.workspace.getActiveFile(),
+                formConfig: context.config,
+                formValues: context.state.idValues,
             };
             
             const result = FilterService.match(
@@ -131,25 +127,25 @@ export class ActionChain {
                     return context.state.idValues[property];
                 },
                 (value) => {
-                    // 如果value是字符串，尝试从循环变量中获取
+                    // 如果value是字符串，尝试从循环变量中获取（完整匹配）
                     if (typeof value === 'string' && value.trim()) {
                         const loopValue = LoopVariableScope.getValue(value.trim());
                         if (loopValue !== undefined) {
                             return loopValue;
                         }
                     }
-                    // 直接返回原始值（条件值本身就是要比较的目标值）
-                    return value;
+                    // 使用变量解析器解析条件值中的变量引用
+                    return ConditionVariableResolver.resolve(value, {
+                        formConfig: context.config,
+                        formValues: context.state.idValues,
+                    });
                 },
                 context.config.fields,  // 传递字段定义数组
                 extendedContext  // 传递扩展条件上下文
             );
             
-            console.log('[IActionService] 条件判断结果:', result);
-            
             if (!result) {
                 // 条件不匹配，直接跳到下一个
-                console.log('[IActionService] 条件不匹配，跳过动作');
                 return this.next(context);
             }
         }

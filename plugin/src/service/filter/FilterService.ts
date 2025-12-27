@@ -47,8 +47,10 @@ export class FilterService {
             }
         } 
         
-        // 处理扩展条件类型（时间条件和文件条件）
-        if (root.type === FilterType.timeCondition || root.type === FilterType.fileCondition) {
+        // 处理扩展条件类型（时间条件、文件条件和脚本条件）
+        if (root.type === FilterType.timeCondition || 
+            root.type === FilterType.fileCondition || 
+            root.type === FilterType.scriptCondition) {
             return ExtendedConditionEvaluator.evaluate(root, extendedContext);
         }
         

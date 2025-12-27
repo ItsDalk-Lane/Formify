@@ -1,11 +1,11 @@
-import { ChevronDown, Clock, CopyPlusIcon, File, Plus } from "lucide-react";
+import { ChevronDown, Clock, CopyPlusIcon, File, Plus, Code } from "lucide-react";
 import { v4 } from "uuid";
 import { DropdownMenuItem, FilterDropdown } from "./FilterDropdown";
 import { localInstance } from "src/i18n/locals";
 import { Filter, FilterType } from "src/model/filter/Filter";
 import { OperatorType } from "src/model/filter/OperatorType";
 import { TimeConditionSubType, FileConditionSubType, FileTargetMode } from "src/model/startup-condition/StartupCondition";
-import { createDefaultTimeConditionConfig, createDefaultFileConditionConfig } from "../ExtendedConditionEditor";
+import { createDefaultTimeConditionConfig, createDefaultFileConditionConfig, createDefaultScriptConditionConfig } from "../ExtendedConditionEditor";
 
 export function FilterAddDropdown(props: {
 	filter: Filter;
@@ -77,6 +77,22 @@ export function FilterAddDropdown(props: {
 		props.onChange(f);
 	};
 
+	const createScriptCondition = () => {
+		const newCondition = {
+			id: v4(),
+			type: FilterType.scriptCondition,
+			operator: OperatorType.Equals,
+			conditions: [],
+			extendedConfig: createDefaultScriptConditionConfig(),
+		} as Filter;
+		const newConditions = [...filter.conditions, newCondition];
+		const f = {
+			...filter,
+			conditions: newConditions,
+		} as Filter;
+		props.onChange(f);
+	};
+
 	const items: DropdownMenuItem[] = [
 		{
 			icon: <Plus size={16} />,
@@ -95,6 +111,12 @@ export function FilterAddDropdown(props: {
 			label: localInstance.add_file_condition || "添加文件条件",
 			value: "add_file_condition",
 			onSelect: createFileCondition,
+		},
+		{
+			icon: <Code size={16} />,
+			label: localInstance.add_script_condition || "添加脚本条件",
+			value: "add_script_condition",
+			onSelect: createScriptCondition,
 		},
 		{
 			icon: <CopyPlusIcon size={16} />,

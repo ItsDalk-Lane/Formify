@@ -661,4 +661,7 @@ export class En implements Local {
 	// Extended condition types
 	add_time_condition = "Add Time Condition";
 	add_file_condition = "Add File Condition";
+	add_script_condition = "Add Script Condition";
+	filter_script_placeholder = "return true; // Return true to match, false to not match";
+	filter_script_help = "Available variables: app, currentFile, formFilePath, formValues";
 }

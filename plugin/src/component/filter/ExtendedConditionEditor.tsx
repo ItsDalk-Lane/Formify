@@ -1,9 +1,9 @@
 /**
  * 扩展条件编辑器
- * 用于编辑时间条件和文件条件
+ * 用于编辑时间条件、文件条件和脚本表达式条件
  */
 import { useState, useMemo, useRef, useEffect } from "react";
-import { Clock, File, Variable } from "lucide-react";
+import { Clock, File, Variable, Code } from "lucide-react";
 import { localInstance } from "src/i18n/locals";
 import { week } from "src/i18n/week";
 import { Filter, FilterType } from "src/model/filter/Filter";
@@ -19,6 +19,7 @@ import {
 import type {
   TimeConditionConfig,
   FileConditionConfig,
+  ScriptConditionConfig,
 } from "src/model/startup-condition/StartupCondition";
 import { useObsidianApp } from "src/context/obsidianAppContext";
 import { TFile } from "obsidian";
@@ -145,7 +146,14 @@ export function createDefaultFileConditionConfig(subType: FileConditionSubType):
   }
 }
 
-
+/**
+ * 创建默认的脚本条件配置
+ */
+export function createDefaultScriptConditionConfig(): ScriptConditionConfig {
+  return {
+    expression: "return true;",
+  };
+}
 
 /**
  * 获取时间范围条件的操作符选项
@@ -575,6 +583,41 @@ function FrontmatterPropertyEditorCompact(props: {
 }
 
 /**
+ * 脚本条件编辑器
+ * 用于编辑 JavaScript 脚本表达式条件
+ */
+export function ScriptConditionEditor(props: {
+  filter: Filter;
+  onChange: (filter: Filter) => void;
+}) {
+  const { filter, onChange } = props;
+  const config = (filter.extendedConfig as ScriptConditionConfig) || createDefaultScriptConditionConfig();
+
+  const updateConfig = (updates: Partial<ScriptConditionConfig>) => {
+    onChange({
+      ...filter,
+      extendedConfig: { ...config, ...updates },
+    });
+  };
+
+  return (
+    <div className="form--ExtendedConditionEditor form--ScriptConditionEditor">
+      <textarea
+        className="form--ScriptExpressionInput"
+        placeholder={localInstance.filter_script_placeholder || "return true; // 返回 true 满足条件，返回 false 不满足条件"}
+        value={config.expression || ""}
+        onChange={(e) => updateConfig({ expression: e.target.value })}
+        rows={3}
+      />
+      <div className="form--ScriptConditionHelp">
+        <Code size={14} />
+        <span>{localInstance.filter_script_help || "可用变量: app, currentFile, formFilePath, formValues"}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
  * 扩展条件编辑器入口组件
  * 根据 FilterType 选择合适的编辑器
  */
@@ -590,6 +633,10 @@ export function ExtendedConditionContent(props: {
 
   if (filter.type === FilterType.fileCondition) {
     return <FileConditionEditor filter={filter} onChange={onChange} />;
+  }
+
+  if (filter.type === FilterType.scriptCondition) {
+    return <ScriptConditionEditor filter={filter} onChange={onChange} />;
   }
 
   return null;

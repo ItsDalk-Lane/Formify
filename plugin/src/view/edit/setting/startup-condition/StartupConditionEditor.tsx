@@ -777,8 +777,11 @@ function UnifiedConditionItem(props: {
     }
   }, [index, relation, onRelationChange]);
 
+  // 判断是否为脚本类型条件
+  const isScriptCondition = condition.type === StartupConditionType.Script;
+
   return (
-    <div className="form--Filter">
+    <div className={`form--Filter ${isScriptCondition ? "form--FilterScript" : ""}`}>
       <div className="form--FilterRelation">{relationEl}</div>
       <div className="form--FilterContent">
         {condition.type === "group" ? (
@@ -884,8 +887,10 @@ function UnifiedConditionRule(props: {
     });
   };
 
+  const isScript = currentSubType === UnifiedConditionSubType.ScriptExpression;
+
   return (
-    <div className="form--FilterRule form--StartupConditionRule">
+    <div className={`form--FilterRule form--StartupConditionRule ${isScript ? "form--StartupConditionRuleScript" : ""}`}>
       {/* 比较对象下拉 - 包含所有子类型 */}
       <Select2
         value={currentSubType}

@@ -1,6 +1,6 @@
 /**
  * 扩展条件评估器
- * 用于评估时间条件和文件条件
+ * 用于评估时间条件、文件条件和脚本表达式条件
  */
 import { App, TFile } from "obsidian";
 import { Filter, FilterType } from "src/model/filter/Filter";
@@ -14,8 +14,11 @@ import {
 import type {
   TimeConditionConfig,
   FileConditionConfig,
+  ScriptConditionConfig,
 } from "src/model/startup-condition/StartupCondition";
 import { DebugLogger } from "src/utils/DebugLogger";
+import { ConditionVariableResolver } from "src/utils/ConditionVariableResolver";
+import { FormConfig } from "src/model/FormConfig";
 
 /**
  * 扩展条件评估上下文
@@ -25,6 +28,12 @@ export interface ExtendedConditionContext {
   app: App;
   /** 当前文件 */
   currentFile?: TFile | null;
+  /** 表单配置（用于变量解析） */
+  formConfig?: FormConfig;
+  /** 表单当前值（用于变量解析） */
+  formValues?: Record<string, any>;
+  /** 表单文件路径 */
+  formFilePath?: string;
 }
 
 /**
@@ -51,6 +60,10 @@ export class ExtendedConditionEvaluator {
 
       if (filter.type === FilterType.fileCondition) {
         return this.evaluateFileCondition(filter.extendedConfig as FileConditionConfig, context);
+      }
+
+      if (filter.type === FilterType.scriptCondition) {
+        return this.evaluateScriptConditionSync(filter.extendedConfig as ScriptConditionConfig, context);
       }
 
       return true;
@@ -93,11 +106,32 @@ export class ExtendedConditionEvaluator {
     const startMinutes = startHour * 60 + startMin;
     const endMinutes = endHour * 60 + endMin;
 
+    const operator = config.operator || ConditionOperator.Between;
+
+    // 判断是否在范围内（考虑跨午夜）
+    let inRange: boolean;
     if (startMinutes <= endMinutes) {
-      return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+      inRange = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
     } else {
       // 跨午夜的情况
-      return currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+      inRange = currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+    }
+
+    switch (operator) {
+      case ConditionOperator.Between:
+        return inRange;
+      case ConditionOperator.NotIn:
+        return !inRange;
+      case ConditionOperator.LessThan:
+        return currentMinutes < startMinutes;
+      case ConditionOperator.LessThanOrEqual:
+        return currentMinutes <= startMinutes;
+      case ConditionOperator.GreaterThan:
+        return currentMinutes > endMinutes;
+      case ConditionOperator.GreaterThanOrEqual:
+        return currentMinutes >= endMinutes;
+      default:
+        return inRange;
     }
   }
 
@@ -110,7 +144,17 @@ export class ExtendedConditionEvaluator {
     }
 
     const currentDay = now.getDay();
-    return config.daysOfWeek.includes(currentDay);
+    const operator = config.operator || ConditionOperator.In;
+    const isInList = config.daysOfWeek.includes(currentDay);
+
+    switch (operator) {
+      case ConditionOperator.In:
+        return isInList;
+      case ConditionOperator.NotIn:
+        return !isInList;
+      default:
+        return isInList;
+    }
   }
 
   /**
@@ -118,16 +162,29 @@ export class ExtendedConditionEvaluator {
    */
   private static evaluateDateRange(config: TimeConditionConfig, now: Date): boolean {
     const today = now.toISOString().split("T")[0];
+    const operator = config.operator || ConditionOperator.Between;
 
-    if (config.startDate && today < config.startDate) {
-      return false;
+    // 判断是否在范围内
+    const afterStart = !config.startDate || today >= config.startDate;
+    const beforeEnd = !config.endDate || today <= config.endDate;
+    const inRange = afterStart && beforeEnd;
+
+    switch (operator) {
+      case ConditionOperator.Between:
+        return inRange;
+      case ConditionOperator.NotIn:
+        return !inRange;
+      case ConditionOperator.LessThan:
+        return config.startDate ? today < config.startDate : true;
+      case ConditionOperator.LessThanOrEqual:
+        return config.startDate ? today <= config.startDate : true;
+      case ConditionOperator.GreaterThan:
+        return config.endDate ? today > config.endDate : true;
+      case ConditionOperator.GreaterThanOrEqual:
+        return config.endDate ? today >= config.endDate : true;
+      default:
+        return inRange;
     }
-
-    if (config.endDate && today > config.endDate) {
-      return false;
-    }
-
-    return true;
   }
 
   /**
@@ -139,18 +196,80 @@ export class ExtendedConditionEvaluator {
       return true;
     }
 
-    switch (config.subType) {
+    // 解析配置中的变量引用
+    const resolvedConfig = this.resolveVariablesInFileConfig(config, context);
+
+    switch (resolvedConfig.subType) {
       case FileConditionSubType.FileExists:
-        return this.evaluateFileExists(config, context);
+        return this.evaluateFileExists(resolvedConfig, context);
       case FileConditionSubType.FileStatus:
-        return this.evaluateFileStatus(config, context);
+        return this.evaluateFileStatus(resolvedConfig, context);
       case FileConditionSubType.ContentContains:
-        return this.evaluateContentContainsSync(config, context);
+        return this.evaluateContentContainsSync(resolvedConfig, context);
       case FileConditionSubType.FrontmatterProperty:
-        return this.evaluateFrontmatterProperty(config, context);
+        return this.evaluateFrontmatterProperty(resolvedConfig, context);
       default:
         return true;
     }
+  }
+
+  /**
+   * 解析文件条件配置中的变量引用
+   */
+  private static resolveVariablesInFileConfig(
+    config: FileConditionConfig,
+    context: ExtendedConditionContext
+  ): FileConditionConfig {
+    const resolvedConfig = { ...config };
+
+    // 解析 targetFilePath
+    if (resolvedConfig.targetFilePath) {
+      resolvedConfig.targetFilePath = ConditionVariableResolver.resolve(
+        resolvedConfig.targetFilePath,
+        {
+          formConfig: context.formConfig,
+          formValues: context.formValues,
+        }
+      );
+    }
+
+    // 解析 searchText
+    if (resolvedConfig.searchText) {
+      resolvedConfig.searchText = ConditionVariableResolver.resolve(
+        resolvedConfig.searchText,
+        {
+          formConfig: context.formConfig,
+          formValues: context.formValues,
+        }
+      );
+    }
+
+    // 解析 propertyValue
+    if (resolvedConfig.propertyValue) {
+      resolvedConfig.propertyValue = ConditionVariableResolver.resolve(
+        resolvedConfig.propertyValue,
+        {
+          formConfig: context.formConfig,
+          formValues: context.formValues,
+        }
+      );
+    }
+
+    // 解析多属性检查中的值
+    if (resolvedConfig.properties) {
+      resolvedConfig.properties = resolvedConfig.properties.map(prop => ({
+        ...prop,
+        value: ConditionVariableResolver.resolve(
+          prop.value,
+          {
+            formConfig: context.formConfig,
+            formValues: context.formValues,
+          }
+        ),
+      }));
+    }
+
+    return resolvedConfig;
   }
 
   /**
@@ -166,7 +285,17 @@ export class ExtendedConditionEvaluator {
     }
 
     const abstractFile = context.app.vault.getAbstractFileByPath(config.targetFilePath);
-    return abstractFile instanceof TFile;
+    const exists = abstractFile instanceof TFile;
+    const operator = config.operator || ConditionOperator.Equals;
+
+    switch (operator) {
+      case ConditionOperator.Equals:
+        return exists;
+      case ConditionOperator.NotEquals:
+        return !exists;
+      default:
+        return exists;
+    }
   }
 
   /**
@@ -186,19 +315,29 @@ export class ExtendedConditionEvaluator {
       return true;
     }
 
+    const operator = config.operator || ConditionOperator.Equals;
+    let statusMatch = true;
+
     // 检查文件是否打开
     if (checks.includes(FileStatusCheckType.IsOpen)) {
       const isOpen = this.isFileOpen(context.app, config.targetFilePath);
-      if (!isOpen) return false;
+      if (!isOpen) statusMatch = false;
     }
 
     // 检查文件是否激活
-    if (checks.includes(FileStatusCheckType.IsActive)) {
+    if (statusMatch && checks.includes(FileStatusCheckType.IsActive)) {
       const isActive = context.currentFile?.path === config.targetFilePath;
-      if (!isActive) return false;
+      if (!isActive) statusMatch = false;
     }
 
-    return true;
+    switch (operator) {
+      case ConditionOperator.Equals:
+        return statusMatch;
+      case ConditionOperator.NotEquals:
+        return !statusMatch;
+      default:
+        return statusMatch;
+    }
   }
 
   /**
@@ -226,6 +365,8 @@ export class ExtendedConditionEvaluator {
       return false;
     }
 
+    const operator = config.operator || ConditionOperator.Contains;
+
     // 使用 metadataCache 获取内容（同步方式）
     // 注意：这只能检查文件的缓存内容，可能不是最新的
     const cache = context.app.metadataCache.getFileCache(targetFile);
@@ -235,17 +376,23 @@ export class ExtendedConditionEvaluator {
     }
 
     // 检查 frontmatter 中是否包含搜索文本
+    let contains = false;
     if (cache.frontmatter) {
       const frontmatterStr = JSON.stringify(cache.frontmatter);
       if (frontmatterStr.includes(config.searchText)) {
-        return true;
+        contains = true;
       }
     }
 
-    // 由于同步方式无法读取完整文件内容，这里返回 true
-    // 完整的内容检查需要异步操作，在这种情况下我们选择不阻止操作
-    DebugLogger.debug("[ExtendedConditionEvaluator] 内容检查需要异步操作，返回 true");
-    return true;
+    // 根据操作符返回结果
+    switch (operator) {
+      case ConditionOperator.Contains:
+        return contains;
+      case ConditionOperator.NotContains:
+        return !contains;
+      default:
+        return contains;
+    }
   }
 
   /**
@@ -328,6 +475,116 @@ export class ExtendedConditionEvaluator {
         return !actualStr.includes(expected);
       default:
         return actualStr === expected;
+    }
+  }
+
+  /**
+   * 评估脚本条件（同步版本）
+   * 注意：此方法会阻塞执行，仅适用于简单的同步脚本
+   * 对于需要异步操作的场景，请使用 evaluateScriptConditionAsync
+   */
+  private static evaluateScriptConditionSync(
+    config: ScriptConditionConfig,
+    context?: ExtendedConditionContext
+  ): boolean {
+    if (!config || !config.expression) {
+      // 没有配置表达式，默认满足条件
+      return true;
+    }
+
+    try {
+      // 构建脚本执行上下文
+      const scriptContext = {
+        app: context?.app,
+        currentFile: context?.currentFile,
+        formFilePath: context?.formFilePath || context?.formConfig?.formPath,
+        formValues: context?.formValues || {},
+        formConfig: context?.formConfig,
+        // 提供安全的内置对象
+        Date,
+        Math,
+        String,
+        Number,
+        Boolean,
+        Array,
+        Object,
+        JSON,
+        console: {
+          log: (...args: any[]) => DebugLogger.debug("[ScriptCondition]", ...args),
+          warn: (...args: any[]) => DebugLogger.warn("[ScriptCondition]", ...args),
+          error: (...args: any[]) => DebugLogger.error("[ScriptCondition]", ...args),
+        },
+      };
+
+      // 构建函数体，使用 with 语句提供上下文访问
+      const funcBody = `
+        with (context) {
+          ${config.expression}
+        }
+      `;
+
+      // 创建并执行函数
+      const func = new Function("context", funcBody);
+      const result = func(scriptContext);
+
+      // 将结果转换为布尔值
+      return Boolean(result);
+    } catch (error) {
+      DebugLogger.error("[ExtendedConditionEvaluator] 脚本条件评估失败", error);
+      // 脚本执行失败时，默认返回 true，不阻止正常操作
+      return true;
+    }
+  }
+
+  /**
+   * 异步评估脚本条件
+   * 支持 async/await 的脚本表达式
+   */
+  static async evaluateScriptConditionAsync(
+    config: ScriptConditionConfig,
+    context?: ExtendedConditionContext
+  ): Promise<boolean> {
+    if (!config || !config.expression) {
+      return true;
+    }
+
+    try {
+      const scriptContext = {
+        app: context?.app,
+        currentFile: context?.currentFile,
+        formFilePath: context?.formFilePath || context?.formConfig?.formPath,
+        formValues: context?.formValues || {},
+        formConfig: context?.formConfig,
+        Date,
+        Math,
+        String,
+        Number,
+        Boolean,
+        Array,
+        Object,
+        JSON,
+        console: {
+          log: (...args: any[]) => DebugLogger.debug("[ScriptCondition]", ...args),
+          warn: (...args: any[]) => DebugLogger.warn("[ScriptCondition]", ...args),
+          error: (...args: any[]) => DebugLogger.error("[ScriptCondition]", ...args),
+        },
+      };
+
+      const funcBody = `
+        with (context) {
+          ${config.expression}
+        }
+      `;
+
+      const func = new Function("context", funcBody);
+      const result = func(scriptContext);
+
+      // 处理 Promise 结果
+      const finalResult = result instanceof Promise ? await result : result;
+      return Boolean(finalResult);
+    } catch (error) {
+      DebugLogger.error("[ExtendedConditionEvaluator] 异步脚本条件评估失败", error);
+      return true;
     }
   }
 }

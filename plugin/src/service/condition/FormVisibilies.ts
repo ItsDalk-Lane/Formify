@@ -5,6 +5,8 @@ import { getFieldDefaultValue } from "src/utils/getFieldDefaultValue";
 import { FilterService } from "../filter/FilterService";
 import { FormIdValues, FormLabelValues } from "../FormValues";
 import type { ExtendedConditionContext } from "../filter/ExtendedConditionEvaluator";
+import { ConditionVariableResolver } from "src/utils/ConditionVariableResolver";
+import { FormConfig } from "src/model/FormConfig";
 
 export class FormVisibilies {
 
@@ -18,13 +20,21 @@ export class FormVisibilies {
         const visibleFields: IFormField[] = [];
         const visibleFormIdValues: FormIdValues = {};
         
+        // 创建用于变量解析的模拟 FormConfig
+        const formConfigForResolver: FormConfig = {
+            fields: fields as any,
+        } as FormConfig;
+        
         // 创建扩展条件评估上下文
         const extendedContext: ExtendedConditionContext | undefined = app ? {
             app,
             currentFile: app.workspace.getActiveFile(),
+            formConfig: formConfigForResolver,
+            formValues: values,
         } : undefined;
 
         const isVisible = (id: string) => visibleFields.some(f => f.id === id);
+        
         for (let i = 0; i < fields.length; i++) {
             const field = fields[i];
             let isMatch;
@@ -45,7 +55,12 @@ export class FormVisibilies {
                         if (value === undefined) {
                             return undefined;
                         }
-                        return value;
+                        // 使用变量解析器解析条件值中的变量引用
+                        // 注意：使用原始 values 对象以便能引用任何字段的值
+                        return ConditionVariableResolver.resolve(value, {
+                            formConfig: formConfigForResolver,
+                            formValues: values,
+                        });
                     },
                     fields,  // 传递字段定义数组
                     extendedContext  // 传递扩展条件上下文

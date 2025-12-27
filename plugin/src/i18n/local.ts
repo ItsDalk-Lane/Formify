@@ -609,4 +609,7 @@ export interface Local {
 	// 扩展条件类型
 	add_time_condition: string;
 	add_file_condition: string;
+	add_script_condition: string;
+	filter_script_placeholder: string;
+	filter_script_help: string;
 }

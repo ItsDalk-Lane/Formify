@@ -673,4 +673,7 @@ export class Zh implements Local {
 	// 扩展条件类型
 	add_time_condition = "添加时间条件";
 	add_file_condition = "添加文件条件";
+	add_script_condition = "添加脚本条件";
+	filter_script_placeholder = "return true; // 返回 true 满足条件，返回 false 不满足条件";
+	filter_script_help = "可用变量: app, currentFile, formFilePath, formValues";
 }

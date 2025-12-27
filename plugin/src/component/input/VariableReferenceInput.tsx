@@ -20,18 +20,16 @@ const ALLOWED_BUILTIN_VARIABLES = [
 ];
 
 /**
- * 获取可用的表单变量（只返回有默认值的字段）
+ * 获取可用的表单变量（返回所有字段）
  */
 function getAvailableFormVariables(formConfig?: FormConfig): { name: string; label: string; defaultValue: any }[] {
   if (!formConfig || !formConfig.fields) return [];
   
-  return formConfig.fields
-    .filter((field: FormField) => field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== "")
-    .map((field: FormField) => ({
-      name: field.label,
-      label: field.label,
-      defaultValue: field.defaultValue,
-    }));
+  return formConfig.fields.map((field: FormField) => ({
+    name: field.label,
+    label: field.label,
+    defaultValue: field.defaultValue,
+  }));
 }
 
 interface VariableReferenceInputProps {
@@ -199,9 +197,11 @@ export function VariableReferenceInput(props: VariableReferenceInputProps) {
                   onClick={() => insertVariable(`{{@${v.name}}}`)}
                 >
                   <span className="form--VariableReferenceName">{"{{@" + v.name + "}}"}</span>
-                  <span className="form--VariableReferenceDesc">
-                    {localInstance.default_value || "默认值"}: {String(v.defaultValue)}
-                  </span>
+                  {v.defaultValue !== undefined && v.defaultValue !== null && v.defaultValue !== "" && (
+                    <span className="form--VariableReferenceDesc">
+                      {localInstance.default_value || "默认值"}: {String(v.defaultValue)}
+                    </span>
+                  )}
                 </div>
               ))}
             </>

@@ -190,3 +190,53 @@
   font-size: 13px;
   white-space: nowrap;
 }
+
+/**
+ * 脚本条件编辑器样式
+ */
+.form--ScriptConditionEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.form--ScriptExpressionInput {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.form--ScriptExpressionInput:focus {
+  outline: none;
+  border-color: var(--interactive-accent);
+}
+
+.form--ScriptExpressionInput::placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.form--ScriptConditionHelp {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--background-secondary);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.form--ScriptConditionHelp svg {
+  flex-shrink: 0;
+  color: var(--text-faint);
+}

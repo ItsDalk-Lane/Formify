@@ -686,4 +686,7 @@ export class ZhTw implements Local {
 	// 擴展條件類型
 	add_time_condition = "添加時間條件";
 	add_file_condition = "添加檔案條件";
+	add_script_condition = "添加腳本條件";
+	filter_script_placeholder = "return true; // 返回 true 滿足條件，返回 false 不滿足條件";
+	filter_script_help = "可用變量: app, currentFile, formFilePath, formValues";
 }

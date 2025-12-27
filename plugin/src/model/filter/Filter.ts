@@ -21,8 +21,8 @@ export interface Filter {
 	conditions: Filter[];
 
 	/**
-	 * 扩展条件配置（用于时间条件、文件条件等启动条件类型）
-	 * 当 type 为 FilterType.timeCondition 或 FilterType.fileCondition 时使用
+	 * 扩展条件配置（用于时间条件、文件条件、脚本条件等扩展条件类型）
+	 * 当 type 为 FilterType.timeCondition、FilterType.fileCondition 或 FilterType.scriptCondition 时使用
 	 */
 	extendedConfig?: TimeConditionConfig | FileConditionConfig | SystemConditionConfig | ScriptConditionConfig;
 
@@ -35,6 +35,7 @@ export interface Filter {
  * - jsQuery: JavaScript 表达式条件
  * - timeCondition: 时间条件（扩展类型）
  * - fileCondition: 文件条件（扩展类型）
+ * - scriptCondition: 脚本表达式条件（扩展类型）
  */
 export enum FilterType {
 	group = "group",
@@ -44,4 +45,6 @@ export enum FilterType {
 	timeCondition = "timeCondition",
 	/** 文件条件 */
 	fileCondition = "fileCondition",
+	/** 脚本表达式条件 */
+	scriptCondition = "scriptCondition",
 }

@@ -34,9 +34,10 @@ export function CpsFormFieldSettingContent(props: {
 		if (!field.condition) {
 			return 0;
 		}
-		// 对于扩展条件类型（timeCondition, fileCondition），它们本身就是一个条件
+		// 对于扩展条件类型（timeCondition, fileCondition, scriptCondition），它们本身就是一个条件
 		if (field.condition.type === FilterType.timeCondition || 
-			field.condition.type === FilterType.fileCondition) {
+			field.condition.type === FilterType.fileCondition ||
+			field.condition.type === FilterType.scriptCondition) {
 			return 1;
 		}
 		if (!field.condition.conditions) {
@@ -46,6 +47,7 @@ export function CpsFormFieldSettingContent(props: {
 		return field.condition.conditions.filter(c => 
 			c.type === FilterType.timeCondition ||
 			c.type === FilterType.fileCondition ||
+			c.type === FilterType.scriptCondition ||
 			c.type === FilterType.field ||
 			c.type === FilterType.group
 		).length;
