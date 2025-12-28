@@ -23,3 +23,7 @@ data.json
 
 # Environment variables file
 .env
+
+
+# Exclude the 'docs' directory from version control
+docs/
