@@ -45,6 +45,18 @@ export enum FileConditionSubType {
 }
 
 /**
+ * 文件检测目标类型
+ */
+export enum FileCheckType {
+  /** 检测文件是否存在 */
+  File = "file",
+  /** 检测文件夹是否存在 */
+  Folder = "folder",
+  /** 检测文件夹中是否存在文件 */
+  FolderHasFiles = "folder_has_files",
+}
+
+/**
  * 文件目标模式
  */
 export enum FileTargetMode {
@@ -128,6 +140,8 @@ export interface TimeConditionConfig {
  */
 export interface FileConditionConfig {
   subType: FileConditionSubType;
+  /** 检测目标类型（文件/文件夹/文件夹是否包含文件），默认 File */
+  checkType?: FileCheckType;
   /** 文件目标模式 */
   targetMode?: FileTargetMode;
   /** 指定的文件路径（当 targetMode 为 SpecificFile 时使用） */

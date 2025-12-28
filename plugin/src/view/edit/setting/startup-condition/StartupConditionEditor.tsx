@@ -27,6 +27,7 @@ import {
   ConditionRelation,
   TimeConditionSubType,
   FileConditionSubType,
+  FileCheckType,
   FileTargetMode,
   FileStatusCheckType,
   SystemConditionSubType,
@@ -287,8 +288,10 @@ function getDefaultConfigForSubType(
     case UnifiedConditionSubType.FileExists:
       return {
         subType: FileConditionSubType.FileExists,
+        checkType: FileCheckType.File,
         targetMode: FileTargetMode.SpecificFile,
         targetFilePath: "",
+        operator: ConditionOperator.Equals,
       };
     case UnifiedConditionSubType.FileStatus:
       return {
@@ -1042,6 +1045,15 @@ function ConditionValueEditor(props: {
     const config = condition.config as FileConditionConfig;
     return (
       <>
+        <Select2
+          value={config.checkType || FileCheckType.File}
+          onChange={(value) => updateConfig<FileConditionConfig>({ checkType: value as FileCheckType })}
+          options={[
+            { label: "文件存在", value: FileCheckType.File },
+            { label: "文件夹存在", value: FileCheckType.Folder },
+            { label: "文件夹包含文件", value: FileCheckType.FolderHasFiles },
+          ]}
+        />
         <VariableReferenceInput
           value={config.targetFilePath || ""}
           onChange={(value) => updateConfig<FileConditionConfig>({ targetFilePath: value })}

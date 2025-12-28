@@ -1,7 +1,8 @@
-import { App, TFile } from "obsidian";
+import { App, TFile, TFolder } from "obsidian";
 import {
   ConditionOperator,
   ConditionRelation,
+  FileCheckType,
   FileConditionConfig,
   FileConditionSubType,
   FileTargetMode,
@@ -642,7 +643,31 @@ class FileConditionEvaluator implements IConditionEvaluator {
     // 解析变量引用
     const resolvedPath = resolveVariableReferences(config.targetFilePath, context);
     const abstractFile = context.app.vault.getAbstractFileByPath(resolvedPath);
-    const fileExists = abstractFile instanceof TFile;
+    const checkType = config.checkType || FileCheckType.File;
+
+    const exists = (() => {
+      switch (checkType) {
+        case FileCheckType.Folder:
+          return abstractFile instanceof TFolder;
+        case FileCheckType.FolderHasFiles:
+          return abstractFile instanceof TFolder && this.folderHasAnyFile(abstractFile);
+        case FileCheckType.File:
+        default:
+          return abstractFile instanceof TFile;
+      }
+    })();
+
+    const targetLabel = (() => {
+      switch (checkType) {
+        case FileCheckType.Folder:
+          return "文件夹";
+        case FileCheckType.FolderHasFiles:
+          return "文件夹（包含文件）";
+        case FileCheckType.File:
+        default:
+          return "文件";
+      }
+    })();
 
     const operator = config.operator || ConditionOperator.Equals;
     let satisfied: boolean;
@@ -650,24 +675,39 @@ class FileConditionEvaluator implements IConditionEvaluator {
 
     switch (operator) {
       case ConditionOperator.NotEquals:
-        // 文件不存在
-        satisfied = !fileExists;
-        details = satisfied 
-          ? `文件 "${resolvedPath}" 在 vault 中不存在（符合预期）` 
-          : `文件 "${resolvedPath}" 在 vault 中存在（预期不存在）`;
+        // 不存在
+        satisfied = !exists;
+        details = satisfied
+          ? `${targetLabel} "${resolvedPath}" 在 vault 中不存在（符合预期）`
+          : `${targetLabel} "${resolvedPath}" 在 vault 中存在（预期不存在）`;
         break;
 
       case ConditionOperator.Equals:
       default:
-        // 文件存在（默认行为）
-        satisfied = fileExists;
-        details = satisfied 
-          ? `文件 "${resolvedPath}" 在 vault 中存在` 
-          : `文件 "${resolvedPath}" 在 vault 中不存在`;
+        // 存在（默认行为）
+        satisfied = exists;
+        details = satisfied
+          ? `${targetLabel} "${resolvedPath}" 在 vault 中存在`
+          : `${targetLabel} "${resolvedPath}" 在 vault 中不存在`;
         break;
     }
 
     return { satisfied, details };
+  }
+
+  private folderHasAnyFile(folder: TFolder): boolean {
+    const queue: TFolder[] = [folder];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) continue;
+
+      for (const child of current.children) {
+        if (child instanceof TFile) return true;
+        if (child instanceof TFolder) queue.push(child);
+      }
+    }
+
+    return false;
   }
 
   /**

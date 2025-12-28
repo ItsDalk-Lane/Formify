@@ -10,6 +10,7 @@ import { Filter, FilterType } from "src/model/filter/Filter";
 import { Select2 } from "src/component/select2/Select";
 import {
   TimeConditionSubType,
+  FileCheckType,
   FileConditionSubType,
   FileTargetMode,
   FileStatusCheckType,
@@ -114,8 +115,10 @@ export function createDefaultFileConditionConfig(subType: FileConditionSubType):
     case FileConditionSubType.FileExists:
       return {
         subType: FileConditionSubType.FileExists,
+        checkType: FileCheckType.File,
         targetMode: FileTargetMode.SpecificFile,
         targetFilePath: "",
+        operator: ConditionOperator.Equals,
       };
     case FileConditionSubType.FileStatus:
       return {
@@ -377,6 +380,15 @@ export function FileConditionEditor(props: {
       {/* 文件存在 */}
       {config.subType === FileConditionSubType.FileExists && (
         <>
+          <Select2
+            value={config.checkType || FileCheckType.File}
+            onChange={(value) => updateConfig({ checkType: value as FileCheckType })}
+            options={[
+              { label: "文件存在", value: FileCheckType.File },
+              { label: "文件夹存在", value: FileCheckType.Folder },
+              { label: "文件夹包含文件", value: FileCheckType.FolderHasFiles },
+            ]}
+          />
           <VariableReferenceInput
             value={config.targetFilePath || ""}
             onChange={(value) => updateConfig({ targetFilePath: value })}

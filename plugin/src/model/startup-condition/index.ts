@@ -6,6 +6,7 @@ export {
   StartupConditionType,
   TimeConditionSubType,
   FileConditionSubType,
+  FileCheckType,
   FileTargetMode,
   FileStatusCheckType,
   SystemConditionSubType,

@@ -2,10 +2,11 @@
  * 扩展条件评估器
  * 用于评估时间条件、文件条件和脚本表达式条件
  */
-import { App, TFile } from "obsidian";
+import { App, TFile, TFolder } from "obsidian";
 import { Filter, FilterType } from "src/model/filter/Filter";
 import {
   TimeConditionSubType,
+  FileCheckType,
   FileConditionSubType,
   FileTargetMode,
   FileStatusCheckType,
@@ -285,7 +286,19 @@ export class ExtendedConditionEvaluator {
     }
 
     const abstractFile = context.app.vault.getAbstractFileByPath(config.targetFilePath);
-    const exists = abstractFile instanceof TFile;
+    const checkType = config.checkType || FileCheckType.File;
+
+    const exists = (() => {
+      switch (checkType) {
+        case FileCheckType.Folder:
+          return abstractFile instanceof TFolder;
+        case FileCheckType.FolderHasFiles:
+          return abstractFile instanceof TFolder && this.folderHasAnyFile(abstractFile);
+        case FileCheckType.File:
+        default:
+          return abstractFile instanceof TFile;
+      }
+    })();
     const operator = config.operator || ConditionOperator.Equals;
 
     switch (operator) {
@@ -296,6 +309,21 @@ export class ExtendedConditionEvaluator {
       default:
         return exists;
     }
+  }
+
+  private static folderHasAnyFile(folder: TFolder): boolean {
+    const queue: TFolder[] = [folder];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) continue;
+
+      for (const child of current.children) {
+        if (child instanceof TFile) return true;
+        if (child instanceof TFolder) queue.push(child);
+      }
+    }
+
+    return false;
   }
 
   /**
