@@ -167,8 +167,11 @@ export class ChatService {
 
 		// 检测到活动文件发生变化
 		if (this.currentActiveFilePath !== file.path) {
-			// 清除之前的手动移除标记（因为已经切换到新文件了）
-			this.manuallyRemovedInCurrentSession = null;
+			// 只有切换到不同的文件时，才清除之前的手动移除标记
+			// 如果新文件之前被手动移除过，不要清除标记
+			if (this.manuallyRemovedInCurrentSession !== file.path) {
+				this.manuallyRemovedInCurrentSession = null;
+			}
 			// 更新当前活动文件路径
 			this.currentActiveFilePath = file.path;
 		}
@@ -225,6 +228,17 @@ export class ChatService {
 	onNoActiveFile() {
 		this.currentActiveFilePath = null;
 		this.manuallyRemovedInCurrentSession = null;
+	}
+
+	// 重新打开AI Chat界面时清除当前文件的手动移除标记
+	onChatViewReopened(currentFile: TFile | null) {
+		if (!currentFile) return;
+		// 如果当前文件之前被手动移除过，清除标记以允许重新自动添加
+		if (this.manuallyRemovedInCurrentSession === currentFile.path) {
+			this.manuallyRemovedInCurrentSession = null;
+		}
+		// 更新当前活动文件路径
+		this.currentActiveFilePath = currentFile.path;
 	}
 
 	addSelectedFolder(folder: TFolder) {

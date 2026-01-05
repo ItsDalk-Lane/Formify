@@ -695,6 +695,64 @@ export class TarsSettingTab {
 				});
 			});
 
+		// 启用编辑器触发
+		new Setting(chatSection)
+			.setName("启用编辑器触发")
+			.setDesc("开启后在编辑器中输入触发符号时会自动打开 AI Chat 模态框")
+			.addToggle((toggle) => {
+				toggle.setValue(this.chatSettings.enableChatTrigger ?? true);
+				toggle.onChange(async (value) => {
+					await this.updateChatSettings({ enableChatTrigger: value });
+				});
+			});
+
+		// 触发符号
+		new Setting(chatSection)
+			.setName("触发符号")
+			.setDesc("输入此符号时打开 AI Chat（仅支持单个字符）")
+			.addText((text) => {
+				text
+					.setPlaceholder("@")
+					.setValue(this.chatSettings.chatTriggerSymbol ?? "@")
+					.onChange(async (value) => {
+						// 只取第一个字符
+						const symbol = value.charAt(0) || "@";
+						await this.updateChatSettings({ chatTriggerSymbol: symbol });
+						text.setValue(symbol);
+					});
+				text.inputEl.maxLength = 1;
+				text.inputEl.style.width = "60px";
+				text.inputEl.style.textAlign = "center";
+			});
+
+		// 模态框宽度
+		new Setting(chatSection)
+			.setName("模态框宽度")
+			.setDesc("AI Chat 模态框的宽度（像素）")
+			.addSlider((slider) => {
+				slider
+					.setLimits(400, 1200, 50)
+					.setValue(this.chatSettings.chatModalWidth ?? 700)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						await this.updateChatSettings({ chatModalWidth: value });
+					});
+			});
+
+		// 模态框高度
+		new Setting(chatSection)
+			.setName("模态框高度")
+			.setDesc("AI Chat 模态框的高度（像素）")
+			.addSlider((slider) => {
+				slider
+					.setLimits(300, 800, 50)
+					.setValue(this.chatSettings.chatModalHeight ?? 500)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						await this.updateChatSettings({ chatModalHeight: value });
+					});
+			});
+
 		// AI Tab 补全设置区域（使用 Setting 组件，与上方保持一致）
 		const tabCompletionHeaderSetting = new Setting(containerEl)
 			.setName('AI Tab 补全')

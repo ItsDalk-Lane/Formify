@@ -691,4 +691,16 @@ export class ZhTw implements Local {
 	add_script_condition = "添加腳本條件";
 	filter_script_placeholder = "return true; // 返回 true 滿足條件，返回 false 不滿足條件";
 	filter_script_help = "可用變量: app, currentFile, formFilePath, formValues";
+	// AI Chat 觸發設定
+	chat_trigger_enable = "啟用編輯器觸發";
+	chat_trigger_enable_desc = "在編輯器中輸入觸發符號時開啟 AI Chat 模態框";
+	chat_trigger_symbol = "觸發符號";
+	chat_trigger_symbol_desc = "輸入此符號時開啟 AI Chat（僅支援單個字元）";
+	chat_modal_width = "模態框寬度";
+	chat_modal_width_desc = "AI Chat 模態框的寬度（像素）";
+	chat_modal_height = "模態框高度";
+	chat_modal_height_desc = "AI Chat 模態框的高度（像素）";
+	chat_modal_title = "AI Chat";
+	chat_trigger_no_active_file = "請先開啟一個 Markdown 檔案";
+	chat_trigger_settings_section = "編輯器觸發設定";
 }

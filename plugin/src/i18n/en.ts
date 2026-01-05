@@ -666,4 +666,16 @@ export class En implements Local {
 	add_script_condition = "Add Script Condition";
 	filter_script_placeholder = "return true; // Return true to match, false to not match";
 	filter_script_help = "Available variables: app, currentFile, formFilePath, formValues";
+	// AI Chat trigger settings
+	chat_trigger_enable = "Enable Editor Trigger";
+	chat_trigger_enable_desc = "Open AI Chat modal when typing trigger symbol in editor";
+	chat_trigger_symbol = "Trigger Symbol";
+	chat_trigger_symbol_desc = "Open AI Chat when this symbol is typed (single character only)";
+	chat_modal_width = "Modal Width";
+	chat_modal_width_desc = "Width of the AI Chat modal (pixels)";
+	chat_modal_height = "Modal Height";
+	chat_modal_height_desc = "Height of the AI Chat modal (pixels)";
+	chat_modal_title = "AI Chat";
+	chat_trigger_no_active_file = "Please open a Markdown file first";
+	chat_trigger_settings_section = "Editor Trigger Settings";
 }

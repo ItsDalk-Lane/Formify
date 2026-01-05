@@ -614,4 +614,16 @@ export interface Local {
 	add_script_condition: string;
 	filter_script_placeholder: string;
 	filter_script_help: string;
+	// AI Chat trigger settings
+	chat_trigger_enable: string;
+	chat_trigger_enable_desc: string;
+	chat_trigger_symbol: string;
+	chat_trigger_symbol_desc: string;
+	chat_modal_width: string;
+	chat_modal_width_desc: string;
+	chat_modal_height: string;
+	chat_modal_height_desc: string;
+	chat_modal_title: string;
+	chat_trigger_no_active_file: string;
+	chat_trigger_settings_section: string;
 }

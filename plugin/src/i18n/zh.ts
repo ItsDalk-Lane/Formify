@@ -678,4 +678,16 @@ export class Zh implements Local {
 	add_script_condition = "添加脚本条件";
 	filter_script_placeholder = "return true; // 返回 true 满足条件，返回 false 不满足条件";
 	filter_script_help = "可用变量: app, currentFile, formFilePath, formValues";
+	// AI Chat 触发配置
+	chat_trigger_enable = "启用编辑器触发";
+	chat_trigger_enable_desc = "在编辑器中输入触发符号时打开 AI Chat 模态框";
+	chat_trigger_symbol = "触发符号";
+	chat_trigger_symbol_desc = "输入此符号时打开 AI Chat（仅支持单个字符）";
+	chat_modal_width = "模态框宽度";
+	chat_modal_width_desc = "AI Chat 模态框的宽度（像素）";
+	chat_modal_height = "模态框高度";
+	chat_modal_height_desc = "AI Chat 模态框的高度（像素）";
+	chat_modal_title = "AI Chat";
+	chat_trigger_no_active_file = "请先打开一个 Markdown 文件";
+	chat_trigger_settings_section = "编辑器触发设置";
 }

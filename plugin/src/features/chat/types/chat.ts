@@ -63,6 +63,11 @@ export interface ChatSettings {
 	autoAddActiveFile: boolean; // 是否自动将当前活跃的Markdown文件添加为上下文
 	// 功能区图标配置
 	showRibbonIcon: boolean; // 是否在功能区显示AI Chat图标
+	// 编辑器触发配置
+	enableChatTrigger: boolean; // 是否启用编辑器触发功能
+	chatTriggerSymbol: string; // 触发符号，默认 "@"
+	chatModalWidth: number; // 模态框宽度
+	chatModalHeight: number; // 模态框高度
 }
 
 export interface ChatState {
@@ -100,5 +105,10 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	autoAddActiveFile: true, // 默认启用自动添加活跃文件
 	// 功能区图标默认配置
 	showRibbonIcon: true, // 默认显示功能区图标
+	// 编辑器触发默认配置
+	enableChatTrigger: true, // 默认启用编辑器触发
+	chatTriggerSymbol: '@', // 默认触发符号 "@"
+	chatModalWidth: 700, // 默认模态框宽度
+	chatModalHeight: 500, // 默认模态框高度
 };
 

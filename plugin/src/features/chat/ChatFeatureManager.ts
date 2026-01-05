@@ -1,13 +1,18 @@
-import { WorkspaceLeaf } from 'obsidian';
+import { WorkspaceLeaf, Notice, TFile } from 'obsidian';
+import { Extension } from '@codemirror/state';
 import FormPlugin from 'src/main';
 import { ChatService } from './services/ChatService';
 import { ChatView, VIEW_TYPE_CHAT_SIDEBAR, VIEW_TYPE_CHAT_TAB } from './views/ChatView';
+import { ChatModal } from './views/ChatModal';
+import { createChatTriggerExtension, updateChatTriggerSettings } from './trigger/ChatTriggerExtension';
 import type { ChatSettings, ChatOpenMode } from './types/chat';
 import type { TarsSettings } from '../tars/settings';
+import { localInstance } from 'src/i18n/locals';
 
 export class ChatFeatureManager {
 	private readonly service: ChatService;
 	private ribbonEl: HTMLElement | null = null;
+	private chatTriggerExtension: Extension | null = null;
 
 	constructor(private readonly plugin: FormPlugin) {
 		this.service = new ChatService(plugin);
@@ -18,6 +23,7 @@ export class ChatFeatureManager {
 		this.registerViews();
 		this.registerCommands();
 		this.createRibbon();
+		this.registerChatTriggerExtension();
 
 		// 延迟自动打开聊天界面，确保工作区完全准备好
 		const shouldAutoOpen = initialSettings?.showSidebarByDefault ?? this.plugin.settings.chat.showSidebarByDefault;
@@ -36,6 +42,11 @@ export class ChatFeatureManager {
 		// 如果设置了功能区图标显示状态，则更新图标
 		if ('showRibbonIcon' in settings) {
 			this.updateRibbonIcon(settings.showRibbonIcon);
+		}
+
+		// 如果触发设置变化，更新编辑器扩展
+		if ('enableChatTrigger' in settings || 'chatTriggerSymbol' in settings) {
+			this.updateChatTriggerExtension();
 		}
 	}
 
@@ -97,6 +108,70 @@ export class ChatFeatureManager {
 		this.plugin.app.workspace.detachLeavesOfType(VIEW_TYPE_CHAT_SIDEBAR);
 		this.plugin.app.workspace.detachLeavesOfType(VIEW_TYPE_CHAT_TAB);
 		this.service.dispose();
+	}
+
+	/**
+	 * 在模态框中打开 AI Chat
+	 * @param activeFile 当前活动的文件（可选）
+	 */
+	openChatInModal(activeFile?: TFile | null) {
+		const settings = this.plugin.settings.chat;
+
+		// 检查是否有活动的 Markdown 文件
+		const file = activeFile ?? this.plugin.app.workspace.getActiveFile();
+		if (!file || file.extension !== 'md') {
+			new Notice(localInstance.chat_trigger_no_active_file);
+			return;
+		}
+
+		// 创建并打开模态框
+		const modal = new ChatModal(
+			this.plugin.app,
+			this.service,
+			{
+				width: settings.chatModalWidth ?? 700,
+				height: settings.chatModalHeight ?? 500,
+				activeFile: file
+			}
+		);
+		modal.open();
+	}
+
+	/**
+	 * 注册 Chat 触发编辑器扩展
+	 */
+	private registerChatTriggerExtension() {
+		const settings = this.plugin.settings.chat;
+
+		// 更新全局设置
+		updateChatTriggerSettings(settings);
+
+		// 创建编辑器扩展
+		this.chatTriggerExtension = createChatTriggerExtension(
+			this.plugin.app,
+			settings,
+			{
+				onTrigger: (activeFile) => {
+					this.openChatInModal(activeFile);
+				}
+			}
+		);
+
+		// 注册扩展到 Obsidian
+		this.plugin.registerEditorExtension(this.chatTriggerExtension);
+	}
+
+	/**
+	 * 更新 Chat 触发编辑器扩展
+	 */
+	private updateChatTriggerExtension() {
+		const settings = this.plugin.settings.chat;
+		
+		// 更新全局设置
+		updateChatTriggerSettings(settings);
+		
+		// 通知工作区更新编辑器选项
+		this.plugin.app.workspace.updateOptions();
 	}
 
 	private registerViews() {

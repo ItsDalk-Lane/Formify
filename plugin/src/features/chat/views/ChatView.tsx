@@ -43,6 +43,11 @@ export class ChatView extends ItemView {
 		this.contentEl.empty();
 		this.root = createRoot(this.contentEl);
 		this.renderReact();
+
+		// 重新打开AI Chat界面时，清除当前文件的手动移除标记
+		// 这样在同一文件中重新打开界面时，文件可以重新被自动添加
+		const currentFile = this.app.workspace.getActiveFile();
+		this.service.onChatViewReopened(currentFile);
 		
 		// 获取当前所有打开的Markdown文件路径
 		const getOpenMarkdownFiles = (): Set<string> => {
