@@ -49,6 +49,13 @@ export interface TarsSettings {
 	enableStreamLog: boolean
 	debugMode: boolean // 调试模式开关
 	debugLevel: 'debug' | 'info' | 'warn' | 'error' // 调试日志级别
+	// Tab 补全功能设置
+	enableTabCompletion: boolean // Tab 补全功能开关
+	tabCompletionTriggerKey: string // 触发快捷键（默认 Alt）
+	tabCompletionContextLengthBefore: number // 上下文长度（光标前）
+	tabCompletionContextLengthAfter: number // 上下文长度（光标后）
+	tabCompletionTimeout: number // 请求超时时间（毫秒）
+	tabCompletionProviderTag: string // 使用的 AI provider 标签
 }
 
 export const DEFAULT_TARS_SETTINGS: TarsSettings = {
@@ -77,7 +84,14 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 	defaultSystemMsg: '',
 	enableStreamLog: false,
 	debugMode: false, // 默认关闭调试模式
-	debugLevel: 'error' // 默认只输出错误日志
+	debugLevel: 'error', // 默认只输出错误日志
+	// Tab 补全功能默认设置
+	enableTabCompletion: false, // 默认关闭
+	tabCompletionTriggerKey: 'Alt', // 默认使用 Alt 键
+	tabCompletionContextLengthBefore: 1000, // 默认获取光标前 1000 字符
+	tabCompletionContextLengthAfter: 500, // 默认获取光标后 500 字符
+	tabCompletionTimeout: 5000, // 默认 5 秒超时
+	tabCompletionProviderTag: '' // 默认为空，使用第一个可用的 provider
 }
 
 export const availableVendors: Vendor[] = [

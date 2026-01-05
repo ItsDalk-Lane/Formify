@@ -47,6 +47,7 @@ export class TarsSettingTab {
 	private isProvidersCollapsed = true // 默认折叠列表
 	private isMessageCollapsed = true // 默认折叠消息设置
 	private isChatCollapsed = true // 默认折叠AI Chat设置
+	private isTabCompletionCollapsed = true // 默认折叠Tab补全设置
 	private isAdvancedCollapsed = true // 默认折叠高级设置
 	private doubaoRenderers = new Map<any, () => void>()
 
@@ -693,6 +694,154 @@ export class TarsSettingTab {
 					await this.updateChatSettings({ showRibbonIcon: value });
 				});
 			});
+
+		// AI Tab 补全设置区域（使用 Setting 组件，与上方保持一致）
+		const tabCompletionHeaderSetting = new Setting(containerEl)
+			.setName('AI Tab 补全')
+
+		// 创建一个包装器来容纳图标
+		const tabCompletionButtonWrapper = tabCompletionHeaderSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
+		tabCompletionButtonWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
+
+		// 添加Chevron图标
+		const tabCompletionChevronIcon = tabCompletionButtonWrapper.createEl('div', { cls: 'ai-provider-chevron' })
+		tabCompletionChevronIcon.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="6 9 12 15 18 9"></polyline>
+			</svg>
+		`
+		tabCompletionChevronIcon.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			color: var(--text-muted);
+			cursor: pointer;
+			transition: transform 0.2s ease;
+			transform: ${this.isTabCompletionCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};
+			width: 16px;
+			height: 16px;
+		`
+
+		// 扩大整行的点击区域
+		const tabCompletionHeaderEl = tabCompletionHeaderSetting.settingEl
+		tabCompletionHeaderEl.style.cursor = 'pointer'
+		tabCompletionHeaderEl.style.borderRadius = '0px'
+		tabCompletionHeaderEl.style.border = '1px solid var(--background-modifier-border)'
+		tabCompletionHeaderEl.style.marginBottom = '0px'
+		tabCompletionHeaderEl.style.padding = '12px 12px'
+
+		// 创建Tab补全设置容器
+		const tabCompletionSection = containerEl.createDiv({ cls: 'tab-completion-settings-container' })
+		tabCompletionSection.style.padding = '0 8px 8px 8px'
+		tabCompletionSection.style.backgroundColor = 'var(--background-secondary)'
+		tabCompletionSection.style.borderRadius = '0px'
+		tabCompletionSection.style.border = '1px solid var(--background-modifier-border)'
+		tabCompletionSection.style.borderTop = 'none'
+		tabCompletionSection.style.display = this.isTabCompletionCollapsed ? 'none' : 'block'
+
+		// 添加Tab补全区域折叠/展开功能
+		const toggleTabCompletionSection = () => {
+			this.isTabCompletionCollapsed = !this.isTabCompletionCollapsed
+			tabCompletionChevronIcon.style.transform = this.isTabCompletionCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'
+			tabCompletionSection.style.display = this.isTabCompletionCollapsed ? 'none' : 'block'
+		}
+
+		tabCompletionHeaderEl.addEventListener('click', (e) => {
+			if ((e.target as HTMLElement).closest('.ai-provider-chevron')) {
+				return
+			}
+			toggleTabCompletionSection()
+		})
+
+		tabCompletionChevronIcon.addEventListener('click', (e) => {
+			e.stopPropagation()
+			toggleTabCompletionSection()
+		})
+
+		new Setting(tabCompletionSection)
+			.setName('启用 Tab 补全')
+			.setDesc('启用后按 Alt 键可触发 AI 自动续写建议。再次按 Alt 或 Enter 确认，按 Esc 或其他键取消')
+			.addToggle((toggle) =>
+				toggle.setValue(this.settings.enableTabCompletion ?? false).onChange(async (value) => {
+					this.settings.enableTabCompletion = value
+					await this.saveSettings()
+				})
+			)
+
+		new Setting(tabCompletionSection)
+			.setName('触发快捷键')
+			.setDesc('触发 Tab 补全的快捷键')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						'Alt': 'Alt 键',
+						'Ctrl-Space': 'Ctrl + Space',
+						'Alt-Tab': 'Alt + Tab'
+					})
+					.setValue(this.settings.tabCompletionTriggerKey ?? 'Alt')
+					.onChange(async (value) => {
+						this.settings.tabCompletionTriggerKey = value
+						await this.saveSettings()
+					})
+			)
+
+		new Setting(tabCompletionSection)
+			.setName('Tab 补全 AI Provider')
+			.setDesc('选择用于 Tab 补全的 AI 服务。留空使用第一个可用的 provider')
+			.addDropdown((dropdown) => {
+				const providers = this.settings.providers
+				dropdown.addOption('', '自动选择（第一个可用）')
+				providers.forEach((provider) => {
+					dropdown.addOption(provider.tag, provider.tag)
+				})
+				dropdown.setValue(this.settings.tabCompletionProviderTag ?? '')
+				dropdown.onChange(async (value) => {
+					this.settings.tabCompletionProviderTag = value
+					await this.saveSettings()
+				})
+			})
+
+		new Setting(tabCompletionSection)
+			.setName('上下文长度（光标前）')
+			.setDesc('发送给 AI 的光标前文本长度（字符数）')
+			.addSlider((slider) =>
+				slider
+					.setLimits(200, 3000, 100)
+					.setValue(this.settings.tabCompletionContextLengthBefore ?? 1000)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.settings.tabCompletionContextLengthBefore = value
+						await this.saveSettings()
+					})
+			)
+
+		new Setting(tabCompletionSection)
+			.setName('上下文长度（光标后）')
+			.setDesc('发送给 AI 的光标后文本长度（字符数）')
+			.addSlider((slider) =>
+				slider
+					.setLimits(0, 1500, 100)
+					.setValue(this.settings.tabCompletionContextLengthAfter ?? 500)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.settings.tabCompletionContextLengthAfter = value
+						await this.saveSettings()
+					})
+			)
+
+		new Setting(tabCompletionSection)
+			.setName('请求超时时间')
+			.setDesc('AI 请求的最大等待时间（秒）')
+			.addSlider((slider) =>
+				slider
+					.setLimits(3, 30, 1)
+					.setValue((this.settings.tabCompletionTimeout ?? 5000) / 1000)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.settings.tabCompletionTimeout = value * 1000
+						await this.saveSettings()
+					})
+			)
 
 		// 高级设置区域（使用 Setting 组件，与上方保持一致）
 		const advancedHeaderSetting = new Setting(containerEl)

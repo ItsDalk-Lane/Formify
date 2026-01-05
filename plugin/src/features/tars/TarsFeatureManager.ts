@@ -1,3 +1,4 @@
+import { Extension } from '@codemirror/state'
 import { Notice, Plugin } from 'obsidian'
 import {
 	asstTagCmd,
@@ -18,6 +19,13 @@ import { ProviderSettings } from './providers'
 import { TarsSettings } from './settings'
 import { StatusBarManager } from './statusBarManager'
 import { getMaxTriggerLineLength, TagEditorSuggest, TagEntry } from './suggest'
+import {
+	createTabCompletionExtension,
+	updateTabCompletionSettings,
+	updateTabCompletionProviders,
+	disposeTabCompletionService,
+	TabCompletionSettings
+} from './tab-completion'
 
 export class TarsFeatureManager {
 	private statusBarManager: StatusBarManager | null = null
@@ -26,6 +34,8 @@ export class TarsFeatureManager {
 	private tagCmdIds: string[] = []
 	private registeredCommandIds: Set<string> = new Set()
 	private tagEditorSuggest: TagEditorSuggest | null = null
+	private tabCompletionExtensions: Extension[] = []
+	private tabCompletionRegistered: boolean = false
 
 	constructor(
 		private readonly plugin: Plugin,
@@ -43,6 +53,7 @@ export class TarsFeatureManager {
 		this.registerCommand(selectCommand.id, selectCommand)
 
 		this.syncEditorSuggest()
+		this.syncTabCompletion()
 
 		this.registerCommand('cancelGeneration', {
 			id: 'cancelGeneration',
@@ -75,6 +86,7 @@ export class TarsFeatureManager {
 		this.tagLowerCaseMap.clear()
 
 		this.disposeEditorSuggest(true)
+		this.disposeTabCompletion()
 
 		this.statusBarManager?.dispose()
 		this.statusBarManager = null
@@ -87,12 +99,17 @@ export class TarsFeatureManager {
 		// 检测 provider 是否有实质性变化（API key、baseURL、model 等）
 		const hasProviderChanges = this.hasProviderConfigChanges(this.settings.providers, settings.providers)
 		
+		// 检测 Tab 补全设置是否有变化
+		const hasTabCompletionChanges = this.hasTabCompletionChanges(this.settings, settings)
+		
 		this.settings = settings
 		
 		// 如果 provider 配置有变化，需要完全重建命令以确保使用新的 API 密钥
 		if (hasProviderChanges) {
 			console.debug('[Tars] 检测到 provider 配置变化，重建所有命令')
 			this.rebuildAllCommands()
+			// 同时更新 Tab 补全的 providers
+			updateTabCompletionProviders(settings.providers)
 		} else {
 			// 否则只进行增量更新
 			console.debug('[Tars] 未检测到 provider 配置变化，执行增量更新')
@@ -101,6 +118,14 @@ export class TarsFeatureManager {
 		
 		this.syncOptionalCommands()
 		this.syncEditorSuggest()
+		
+		// 处理 Tab 补全设置变化
+		if (hasTabCompletionChanges) {
+			this.syncTabCompletion()
+		} else {
+			// 只更新设置，不重新注册扩展
+			updateTabCompletionSettings(this.getTabCompletionSettings())
+		}
 	}
 
 	/**
@@ -297,6 +322,79 @@ export class TarsFeatureManager {
 		} else if (this.registeredCommandIds.has(exportCmdId)) {
 			this.plugin.removeCommand(exportCmdId)
 			this.registeredCommandIds.delete(exportCmdId)
+		}
+	}
+
+	/**
+	 * 从 TarsSettings 提取 Tab 补全设置
+	 */
+	private getTabCompletionSettings(): TabCompletionSettings {
+		return {
+			enabled: this.settings.enableTabCompletion ?? false,
+			triggerKey: this.settings.tabCompletionTriggerKey ?? 'Alt',
+			contextLengthBefore: this.settings.tabCompletionContextLengthBefore ?? 1000,
+			contextLengthAfter: this.settings.tabCompletionContextLengthAfter ?? 500,
+			timeout: this.settings.tabCompletionTimeout ?? 5000,
+			providerTag: this.settings.tabCompletionProviderTag ?? ''
+		}
+	}
+
+	/**
+	 * 检测 Tab 补全设置是否有实质性变化
+	 */
+	private hasTabCompletionChanges(oldSettings: TarsSettings, newSettings: TarsSettings): boolean {
+		return (
+			oldSettings.enableTabCompletion !== newSettings.enableTabCompletion ||
+			oldSettings.tabCompletionTriggerKey !== newSettings.tabCompletionTriggerKey
+		)
+	}
+
+	/**
+	 * 同步 Tab 补全功能
+	 */
+	private syncTabCompletion(): void {
+		const tabCompletionSettings = this.getTabCompletionSettings()
+
+		if (!tabCompletionSettings.enabled) {
+			// 功能被禁用，移除扩展
+			this.disposeTabCompletion()
+			console.debug('[Tars] Tab 补全功能已禁用')
+			return
+		}
+
+		// 如果已经注册，需要先移除（因为快捷键可能变化）
+		if (this.tabCompletionRegistered) {
+			this.disposeTabCompletion()
+		}
+
+		// 创建并注册新的扩展
+		this.tabCompletionExtensions = createTabCompletionExtension(
+			this.plugin.app,
+			this.settings.providers,
+			tabCompletionSettings
+		)
+
+		// 注册到 Obsidian
+		this.plugin.registerEditorExtension(this.tabCompletionExtensions)
+		this.tabCompletionRegistered = true
+
+		console.debug('[Tars] Tab 补全功能已启用', {
+			triggerKey: tabCompletionSettings.triggerKey,
+			providerTag: tabCompletionSettings.providerTag || '(使用第一个可用)'
+		})
+	}
+
+	/**
+	 * 销毁 Tab 补全功能
+	 */
+	private disposeTabCompletion(): void {
+		if (this.tabCompletionRegistered) {
+			disposeTabCompletionService()
+			// 注意：Obsidian 的 registerEditorExtension 没有提供取消注册的方法
+			// 扩展会在插件卸载时自动清理
+			// 但我们可以通过清空扩展数组来标记状态
+			this.tabCompletionExtensions = []
+			this.tabCompletionRegistered = false
 		}
 	}
 }
