@@ -16,6 +16,7 @@ export interface ChatModalOptions {
 	width: number;
 	height: number;
 	activeFile?: TFile | null;
+	initialSelection?: string; // 初始选中文本，用于划词功能
 }
 
 /**
@@ -25,6 +26,8 @@ export interface ChatModalOptions {
 export class ChatModal extends Modal {
 	private root: Root | null = null;
 	private autoAddedFileId: string | null = null;
+	private previousShouldSaveHistory: boolean | null = null; // 保存之前的历史保存状态
+	private previousSession: any = null; // 保存之前的会话状态
 
 	constructor(
 		app: App,
@@ -47,6 +50,15 @@ export class ChatModal extends Modal {
 		modalEl.style.setProperty('--chat-modal-width', `${this.options.width}px`);
 		modalEl.style.setProperty('--chat-modal-height', `${this.options.height}px`);
 
+		// 保存之前的历史保存状态和会话状态
+		const currentState = this.service.getState();
+		this.previousShouldSaveHistory = currentState.shouldSaveHistory;
+		this.previousSession = this.service.saveSessionState();
+		this.service.setShouldSaveHistory(false);
+
+		// 创建全新的会话，确保每次打开模态框都是干净的界面
+		this.service.createNewSession();
+
 		// 重新打开模态框时，清除当前文件的手动移除标记
 		// 这样在同一文件中重新打开模态框时，文件可以重新被自动添加
 		if (this.options.activeFile) {
@@ -54,7 +66,8 @@ export class ChatModal extends Modal {
 		}
 
 		// 自动添加当前活动文件到上下文
-		if (this.options.activeFile) {
+		// 注意：通过划词功能打开时（有 initialSelection）不自动添加文件
+		if (this.options.activeFile && !this.options.initialSelection) {
 			const file = this.options.activeFile;
 			// 使用 addActiveFile 方法，它会正确处理自动添加标记
 			this.service.addActiveFile(file);
@@ -68,17 +81,37 @@ export class ChatModal extends Modal {
 			}
 		}
 
+		// 如果有初始选中文本，设置为选中文本标签（不直接显示在输入框中）
+		if (this.options.initialSelection) {
+			this.service.setSelectedText(this.options.initialSelection);
+		}
+
 		// 创建 React 根节点并渲染
 		this.root = createRoot(contentEl);
 		this.renderReact();
 	}
 
 	onClose() {
+		// 恢复之前的历史保存状态
+		if (this.previousShouldSaveHistory !== null) {
+			this.service.setShouldSaveHistory(this.previousShouldSaveHistory);
+			this.previousShouldSaveHistory = null;
+		}
+
+		// 恢复之前的会话状态
+		if (this.previousSession) {
+			this.service.restoreSessionState(this.previousSession);
+			this.previousSession = null;
+		}
+
 		// 清理自动添加的文件
 		if (this.autoAddedFileId) {
 			this.service.removeSelectedFile(this.autoAddedFileId, false);
 			this.autoAddedFileId = null;
 		}
+
+		// 清理选中文本
+		this.service.clearSelectedText();
 
 		// 卸载 React 组件
 		this.root?.unmount();

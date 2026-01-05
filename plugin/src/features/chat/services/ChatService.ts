@@ -28,7 +28,9 @@ export class ChatService {
 		selectedImages: [],
 		selectedFiles: [],
 		selectedFolders: [],
-		showTemplateSelector: false
+		selectedText: undefined,
+		showTemplateSelector: false,
+		shouldSaveHistory: true // 默认保存历史记录
 	};
 	private subscribers: Set<ChatSubscriber> = new Set();
 	private controller: AbortController | null = null;
@@ -92,6 +94,7 @@ export class ChatService {
 		this.state.selectedImages = [];
 		this.state.selectedFiles = [];
 		this.state.selectedFolders = [];
+		this.state.selectedText = undefined;
 		this.state.inputValue = '';
 		this.state.selectedPromptTemplate = undefined;
 		this.state.showTemplateSelector = false;
@@ -132,6 +135,48 @@ export class ChatService {
 
 	removeSelectedImage(image: string) {
 		this.state.selectedImages = this.state.selectedImages.filter((img) => img !== image);
+		this.emitState();
+	}
+
+	// 选中文本管理方法
+	setSelectedText(text: string) {
+		this.state.selectedText = text;
+		this.emitState();
+	}
+
+	clearSelectedText() {
+		this.state.selectedText = undefined;
+		this.emitState();
+	}
+
+	// 历史保存控制方法
+	setShouldSaveHistory(shouldSave: boolean) {
+		this.state.shouldSaveHistory = shouldSave;
+		this.emitState();
+	}
+
+	/**
+	 * 保存当前会话状态（用于模态框模式）
+	 * @returns 保存的会话状态
+	 */
+	saveSessionState(): { activeSession: ChatSession | null; selectedFiles: any[]; selectedFolders: any[] } {
+		return {
+			activeSession: this.state.activeSession ? JSON.parse(JSON.stringify(this.state.activeSession)) : null,
+			selectedFiles: JSON.parse(JSON.stringify(this.state.selectedFiles)),
+			selectedFolders: JSON.parse(JSON.stringify(this.state.selectedFolders))
+		};
+	}
+
+	/**
+	 * 恢复会话状态（用于模态框模式）
+	 * @param savedState 保存的会话状态
+	 */
+	restoreSessionState(savedState: { activeSession: ChatSession | null; selectedFiles: any[]; selectedFolders: any[] }) {
+		if (savedState.activeSession) {
+			this.state.activeSession = savedState.activeSession;
+		}
+		this.state.selectedFiles = savedState.selectedFiles;
+		this.state.selectedFolders = savedState.selectedFolders;
 		this.emitState();
 	}
 
@@ -459,24 +504,25 @@ export class ChatService {
 
 		// 创建用户消息，包含文件和文件夹信息
 		let messageContent = finalUserMessage;
+
 		if (this.state.selectedFiles.length > 0 || this.state.selectedFolders.length > 0) {
 			const fileTags = [];
 			const folderTags = [];
-			
+
 			// 处理文件标签 - 只包含文件名，不包含路径
 			if (this.state.selectedFiles.length > 0) {
 				for (const file of this.state.selectedFiles) {
 					fileTags.push(`[[${file.name}]]`); // 只使用文件名，不使用路径
 				}
 			}
-			
+
 			// 处理文件夹标签
 			if (this.state.selectedFolders.length > 0) {
 				for (const folder of this.state.selectedFolders) {
 					folderTags.push(`#${folder.path}`);
 				}
 			}
-			
+
 			// 添加文件和文件夹标签到消息内容中，不添加"附件:"标题
 			if (fileTags.length > 0 || folderTags.length > 0) {
 				const allTags = [...fileTags, ...folderTags].join(' ');
@@ -488,7 +534,9 @@ export class ChatService {
 			images: this.state.selectedImages,
 			metadata: {
 				// 存储解析后的内容，用于发送给 AI
-				parsedContent: parsedContent !== originalUserInput ? parsedContent : undefined
+				parsedContent: parsedContent !== originalUserInput ? parsedContent : undefined,
+				// 存储选中文本，用于UI显示和发送给AI
+				selectedText: this.state.selectedText
 			}
 		});
 		
@@ -511,40 +559,44 @@ export class ChatService {
 		this.state.selectedImages = [];
 		this.state.selectedFiles = [];
 		this.state.selectedFolders = [];
+		this.state.selectedText = undefined; // 清除选中的文本
 		this.state.selectedPromptTemplate = undefined; // 清除选中的模板
 		this.emitState();
 
-		// 如果这是第一条消息，创建历史文件并包含第一条用户消息
-		if (session.messages.length === 1 || (systemPrompt && session.messages.length === 2)) {
-			try {
-				// 获取第一条消息（可能是系统消息或用户消息）
-				const firstMessage = session.messages[0];
-				session.filePath = await this.historyService.createNewSessionFileWithFirstMessage(
-					session, 
-					firstMessage, 
-					currentSelectedFiles, 
-					currentSelectedFolders
-				);
-			} catch (error) {
-				console.error('[ChatService] 创建会话文件失败:', error);
-				new Notice('创建会话文件失败，但消息已发送');
-			}
-		} else {
-			// 如果不是第一条消息，追加到现有文件
-			try {
-				// 获取最后一条消息（可能是用户消息或系统消息）
-				const lastMessage = session.messages.last();
-				if (lastMessage) {
-					await this.historyService.appendMessageToFile(
-						session.filePath ?? '', 
-						lastMessage, 
-						currentSelectedFiles, 
+		// 只有在应该保存历史记录时才保存
+		if (this.state.shouldSaveHistory) {
+			// 如果这是第一条消息，创建历史文件并包含第一条用户消息
+			if (session.messages.length === 1 || (systemPrompt && session.messages.length === 2)) {
+				try {
+					// 获取第一条消息（可能是系统消息或用户消息）
+					const firstMessage = session.messages[0];
+					session.filePath = await this.historyService.createNewSessionFileWithFirstMessage(
+						session,
+						firstMessage,
+						currentSelectedFiles,
 						currentSelectedFolders
 					);
+				} catch (error) {
+					console.error('[ChatService] 创建会话文件失败:', error);
+					new Notice('创建会话文件失败，但消息已发送');
 				}
-			} catch (error) {
-				console.error('[ChatService] 追加用户消息失败:', error);
-				// 不显示错误通知，避免干扰用户
+			} else {
+				// 如果不是第一条消息，追加到现有文件
+				try {
+					// 获取最后一条消息（可能是用户消息或系统消息）
+					const lastMessage = session.messages.last();
+					if (lastMessage) {
+						await this.historyService.appendMessageToFile(
+							session.filePath ?? '',
+							lastMessage,
+							currentSelectedFiles,
+							currentSelectedFolders
+						);
+					}
+				} catch (error) {
+					console.error('[ChatService] 追加用户消息失败:', error);
+					// 不显示错误通知，避免干扰用户
+				}
 			}
 		}
 
@@ -1021,15 +1073,16 @@ export class ChatService {
 			this.emitState();
 
 			// 追加AI回复到文件，而不是重写整个文件
-			if (session.filePath) {
+			// 只有在应该保存历史记录且有文件路径时才保存
+			if (this.state.shouldSaveHistory && session.filePath) {
 				try {
 					await this.historyService.appendMessageToFile(session.filePath, assistantMessage);
 				} catch (error) {
 					console.error('[ChatService] 追加AI回复失败:', error);
 					// 不显示错误通知，避免干扰用户
 				}
-			} else {
-				// 如果没有文件路径（不应该发生），回退到完整保存
+			} else if (this.state.shouldSaveHistory) {
+				// 如果没有文件路径但应该保存历史（不应该发生），回退到完整保存
 				console.warn('[ChatService] 会话没有文件路径，回退到完整保存');
 				try {
 					await this.saveActiveSession();
@@ -1037,6 +1090,7 @@ export class ChatService {
 					console.error('[ChatService] 保存AI回复失败:', error);
 				}
 			}
+			// 如果 shouldSaveHistory 为 false，不保存任何历史文件
 		} catch (error) {
 			console.error('[Chat][ChatService] generateAssistantResponse error', error);
 			this.state.isGenerating = false;

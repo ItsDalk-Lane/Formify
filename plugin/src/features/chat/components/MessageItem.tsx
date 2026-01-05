@@ -1,4 +1,4 @@
-import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download } from 'lucide-react';
+import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download, Highlighter } from 'lucide-react';
 import { Component, Platform } from 'obsidian';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
@@ -192,7 +192,21 @@ export const MessageItem = ({ message, service, isGenerating }: MessageItemProps
 					// 这里可以添加对消息内容中图片的处理逻辑
 					<div></div>
 				)}
-				
+
+				{/* 显示选中文本标签 */}
+				{message.metadata?.selectedText && typeof message.metadata.selectedText === 'string' && (
+					<div className="message-selected-text tw-mb-2">
+						<div className="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-orange-100 tw-text-orange-700 tw-rounded tw-text-xs">
+							<Highlighter className="tw-size-3 tw-flex-shrink-0" />
+							<span className="tw-max-w-60 tw-truncate" title={message.metadata.selectedText}>
+								{message.metadata.selectedText.length > 50
+									? message.metadata.selectedText.substring(0, 50) + '...'
+									: message.metadata.selectedText}
+							</span>
+						</div>
+					</div>
+				)}
+
 				<div className="chat-message__content tw-break-words">
 					{editing ? (
 						<textarea

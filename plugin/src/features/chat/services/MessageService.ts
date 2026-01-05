@@ -85,14 +85,21 @@ export class MessageService {
 
 		messages.forEach((message) => {
 			const embeds = this.createEmbedsFromImages(message.images ?? []);
-			
+
 			// 如果消息的 metadata 中包含 parsedContent，使用解析后的内容
 			// 否则使用原始内容
 			let messageContent = message.content;
 			if (message.metadata?.parsedContent && typeof message.metadata.parsedContent === 'string') {
 				messageContent = message.metadata.parsedContent;
 			}
-			
+
+			// 如果消息的 metadata 中包含 selectedText，添加选中文本到消息内容
+			// 这样AI可以看到选中的文本，但UI中会作为标签显示
+			if (message.metadata?.selectedText && typeof message.metadata.selectedText === 'string') {
+				const selectedText = message.metadata.selectedText;
+				messageContent += `\n\n> 选中文本:\n> ${selectedText.split('\n').join('\n> ')}`;
+			}
+
 			providerMessages.push({
 				role: message.role,
 				content: messageContent,
@@ -106,52 +113,58 @@ export class MessageService {
 	serializeMessage(message: ChatMessage, selectedFiles?: SelectedFile[], selectedFolders?: SelectedFolder[]): string {
 		const timestamp = this.formatTimestamp(message.timestamp);
 		const roleLabel = this.mapRoleToLabel(message.role);
-		
+
 		// 处理图片引用
 		const images = (message.images ?? []).map((image, index) => `![Image ${index + 1}](${image})`).join('\n');
-		
+
 		// 确保消息内容完整，不进行任何截断或压缩
 		let content = message.content;
-		
+
 		// 如果有错误标记，在内容前添加错误标识
 		if (message.isError) {
 			content = `[错误] ${content}`;
 		}
-		
+
 		// 构建完整消息，确保内容不被截断
 		let fullMessage = `# ${roleLabel} (${timestamp})\n${content}`;
-		
+
+		// 如果有选中文本，添加到消息中
+		if (message.metadata?.selectedText && typeof message.metadata.selectedText === 'string') {
+			const selectedText = message.metadata.selectedText;
+			fullMessage += `\n\n> 选中文本:\n> ${selectedText.split('\n').join('\n> ')}`;
+		}
+
 		// 如果是用户消息且有选中的文件或文件夹，添加文件和文件夹信息
 		if (message.role === 'user' && (selectedFiles || selectedFolders)) {
 			const fileTags = [];
 			const folderTags = [];
-			
+
 			// 处理文件标签
 			if (selectedFiles && selectedFiles.length > 0) {
 				for (const file of selectedFiles) {
 					fileTags.push(`[[${file.path}]]`);
 				}
 			}
-			
+
 			// 处理文件夹标签
 			if (selectedFolders && selectedFolders.length > 0) {
 				for (const folder of selectedFolders) {
 					folderTags.push(`#${folder.path}`);
 				}
 			}
-			
+
 			// 添加文件和文件夹标签到消息中
 			if (fileTags.length > 0 || folderTags.length > 0) {
 				const allTags = [...fileTags, ...folderTags].join(' ');
 				fullMessage += `\n\n**附件:** ${allTags}`;
 			}
 		}
-		
+
 		// 如果有图片，添加到消息末尾
 		if (images) {
 			fullMessage += `\n\n${images}`;
 		}
-		
+
 		return fullMessage;
 	}
 

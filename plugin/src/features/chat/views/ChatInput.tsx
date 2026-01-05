@@ -1,4 +1,4 @@
-import { CornerDownLeft, StopCircle, X, FileText, Folder, Palette, Zap } from 'lucide-react';
+import { CornerDownLeft, StopCircle, X, FileText, Folder, Palette, Zap, Highlighter } from 'lucide-react';
 import { FormEvent, useEffect, useState, useRef, Fragment } from 'react';
 import { ChatService } from '../services/ChatService';
 import type { ChatState, SelectedFile, SelectedFolder } from '../types/chat';
@@ -102,6 +102,10 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 		service.removeSelectedFolder(folderId);
 	};
 
+	const handleClearSelectedText = () => {
+		service.clearSelectedText();
+	};
+
 	// 模板选择相关处理函数
 	const handleTemplateSelect = async (templatePath: string) => {
 		await service.selectPromptTemplate(templatePath);
@@ -160,7 +164,28 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 						</button>
 					</div>
 				)}
-				
+
+				{/* 显示选中文本标签 */}
+				{state.selectedText && (
+					<div className="selected-text tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-orange-100 tw-text-orange-700 tw-rounded tw-text-xs tw-mb-2">
+						<Highlighter className="tw-size-3 tw-flex-shrink-0" />
+						<span className="tw-max-w-60 tw-truncate" title={state.selectedText}>
+							{state.selectedText.length > 50 ? state.selectedText.substring(0, 50) + '...' : state.selectedText}
+						</span>
+						<button
+							type="button"
+							className="tw-ml-1 tw-p-0 tw-text-orange-700 hover:tw-text-orange-900 tw-cursor-pointer"
+							onClick={(e) => {
+								e.stopPropagation();
+								handleClearSelectedText();
+							}}
+							title="清除选中文本"
+						>
+							<X className="tw-size-4" />
+						</button>
+					</div>
+				)}
+
 				{!state.isGenerating ? (
 					<>
 								<textarea
@@ -312,7 +337,28 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 								</button>
 							</div>
 						)}
-						
+
+						{/* 显示选中文本标签 */}
+						{state.selectedText && (
+							<div className="selected-text tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-orange-100 tw-text-orange-700 tw-rounded tw-text-xs tw-mb-2">
+								<Highlighter className="tw-size-3 tw-flex-shrink-0" />
+								<span className="tw-max-w-60 tw-truncate" title={state.selectedText}>
+									{state.selectedText.length > 50 ? state.selectedText.substring(0, 50) + '...' : state.selectedText}
+								</span>
+								<button
+									type="button"
+									className="tw-ml-1 tw-p-0 tw-text-orange-700 hover:tw-text-orange-900 tw-cursor-pointer"
+									onClick={(e) => {
+										e.stopPropagation();
+										handleClearSelectedText();
+									}}
+									title="清除选中文本"
+								>
+									<X className="tw-size-4" />
+								</button>
+							</div>
+						)}
+
 								<textarea
 							ref={textareaRef}
 							className="tw-w-full tw-resize-none tw-p-3 tw-text-sm"

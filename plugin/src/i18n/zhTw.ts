@@ -703,4 +703,46 @@ export class ZhTw implements Local {
 	chat_modal_title = "AI Chat";
 	chat_trigger_no_active_file = "請先開啟一個 Markdown 檔案";
 	chat_trigger_settings_section = "編輯器觸發設定";
+	// AI 劃詞功能
+	selection_toolbar_ai_chat = "AI Chat";
+	selection_toolbar_more = "更多";
+	selection_toolbar_no_more_skills = "暫無更多技能";
+	selection_toolbar_enable = "啟用 AI 劃詞功能";
+	selection_toolbar_enable_desc = "關閉後，編輯器選取文字時不再顯示懸浮工具列";
+	selection_toolbar_max_buttons = "工具列按鈕數量";
+	selection_toolbar_max_buttons_desc = "工具列最多顯示的技能按鈕數量（超過的技能顯示在下拉選單中）";
+	selection_toolbar_settings_section = "AI 劃詞";
+	// 技能管理
+	skill_management = "技能管理";
+	skill_management_hint = "前 {0} 個技能將顯示在工具列上，其他的將隱藏在下拉選單中";
+	skill_add = "添加技能";
+	skill_edit = "編輯";
+	skill_delete = "刪除";
+	skill_empty = "暫無技能，點擊上方「添加技能」按鈕建立";
+	skill_drag_hint = "拖曳排序";
+	// 技能編輯模態框
+	skill_edit_title_add = "添加技能";
+	skill_edit_title_edit = "編輯技能";
+	skill_edit_name_label = "技能名稱和圖示";
+	skill_edit_name_placeholder = "在這裡命名你的技能...";
+	skill_edit_name_required = "技能名稱不能為空";
+	skill_edit_name_too_long = "技能名稱不能超過20個字元";
+	skill_edit_name_duplicate = "技能名稱已存在";
+	skill_edit_prompt_label = "提示詞內容";
+	skill_edit_prompt_placeholder = "在此輸入或貼上你的提示詞。";
+	skill_edit_prompt_hint = "使用特殊字串 {selection}代表劃詞選取的文字。";
+	skill_edit_prompt_required = "提示詞內容不能為空";
+	skill_edit_show_example = "示例";
+	skill_edit_select_icon = "選擇圖示";
+	skill_edit_created = "技能已建立";
+	skill_edit_updated = "技能已更新";
+	skill_edit_deleted = "技能已刪除";
+	// 技能結果模態框
+	skill_result_regenerate = "重新生成";
+	skill_result_replace = "替換";
+	skill_result_append = "追加";
+	skill_result_insert = "插入";
+	skill_result_replaced = "已替換選取文字";
+	skill_result_appended = "已追加到選取內容";
+	skill_result_inserted = "已插入到游標位置";
 }

@@ -626,4 +626,46 @@ export interface Local {
 	chat_modal_title: string;
 	chat_trigger_no_active_file: string;
 	chat_trigger_settings_section: string;
+	// AI Selection Toolbar
+	selection_toolbar_ai_chat: string;
+	selection_toolbar_more: string;
+	selection_toolbar_no_more_skills: string;
+	selection_toolbar_enable: string;
+	selection_toolbar_enable_desc: string;
+	selection_toolbar_max_buttons: string;
+	selection_toolbar_max_buttons_desc: string;
+	selection_toolbar_settings_section: string;
+	// Skill Management
+	skill_management: string;
+	skill_management_hint: string;
+	skill_add: string;
+	skill_edit: string;
+	skill_delete: string;
+	skill_empty: string;
+	skill_drag_hint: string;
+	// Skill Edit Modal
+	skill_edit_title_add: string;
+	skill_edit_title_edit: string;
+	skill_edit_name_label: string;
+	skill_edit_name_placeholder: string;
+	skill_edit_name_required: string;
+	skill_edit_name_too_long: string;
+	skill_edit_name_duplicate: string;
+	skill_edit_prompt_label: string;
+	skill_edit_prompt_placeholder: string;
+	skill_edit_prompt_hint: string;
+	skill_edit_prompt_required: string;
+	skill_edit_show_example: string;
+	skill_edit_select_icon: string;
+	skill_edit_created: string;
+	skill_edit_updated: string;
+	skill_edit_deleted: string;
+	// Skill Result Modal
+	skill_result_regenerate: string;
+	skill_result_replace: string;
+	skill_result_append: string;
+	skill_result_insert: string;
+	skill_result_replaced: string;
+	skill_result_appended: string;
+	skill_result_inserted: string;
 }

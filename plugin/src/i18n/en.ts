@@ -678,4 +678,46 @@ export class En implements Local {
 	chat_modal_title = "AI Chat";
 	chat_trigger_no_active_file = "Please open a Markdown file first";
 	chat_trigger_settings_section = "Editor Trigger Settings";
+	// AI Selection Toolbar
+	selection_toolbar_ai_chat = "AI Chat";
+	selection_toolbar_more = "More";
+	selection_toolbar_no_more_skills = "No more skills";
+	selection_toolbar_enable = "Enable AI Selection Toolbar";
+	selection_toolbar_enable_desc = "When disabled, floating toolbar will not appear when selecting text";
+	selection_toolbar_max_buttons = "Toolbar Button Count";
+	selection_toolbar_max_buttons_desc = "Maximum number of skill buttons on toolbar (rest shown in dropdown)";
+	selection_toolbar_settings_section = "AI Selection";
+	// Skill Management
+	skill_management = "Skill Management";
+	skill_management_hint = "First {0} skills will be shown on toolbar, others in dropdown";
+	skill_add = "Add Skill";
+	skill_edit = "Edit";
+	skill_delete = "Delete";
+	skill_empty = "No skills yet, click \"Add Skill\" button above to create";
+	skill_drag_hint = "Drag to reorder";
+	// Skill Edit Modal
+	skill_edit_title_add = "Add Skill";
+	skill_edit_title_edit = "Edit Skill";
+	skill_edit_name_label = "Skill Name and Icon";
+	skill_edit_name_placeholder = "Name your skill here...";
+	skill_edit_name_required = "Skill name is required";
+	skill_edit_name_too_long = "Skill name cannot exceed 20 characters";
+	skill_edit_name_duplicate = "Skill name already exists";
+	skill_edit_prompt_label = "Prompt Content";
+	skill_edit_prompt_placeholder = "Enter or paste your prompt here.";
+	skill_edit_prompt_hint = "Use {selection} to represent selected text.";
+	skill_edit_prompt_required = "Prompt content is required";
+	skill_edit_show_example = "Example";
+	skill_edit_select_icon = "Select Icon";
+	skill_edit_created = "Skill created";
+	skill_edit_updated = "Skill updated";
+	skill_edit_deleted = "Skill deleted";
+	// Skill Result Modal
+	skill_result_regenerate = "Regenerate";
+	skill_result_replace = "Replace";
+	skill_result_append = "Append";
+	skill_result_insert = "Insert";
+	skill_result_replaced = "Selected text replaced";
+	skill_result_appended = "Appended to selection";
+	skill_result_inserted = "Inserted at cursor";
 }

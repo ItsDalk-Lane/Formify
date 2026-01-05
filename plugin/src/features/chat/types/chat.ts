@@ -47,6 +47,20 @@ export interface ChatSession {
 
 export type ChatOpenMode = 'sidebar' | 'left-sidebar' | 'tab' | 'window';
 
+/**
+ * AI 技能接口
+ * 用于定义划词工具栏中的自定义技能
+ */
+export interface Skill {
+	id: string;                // 技能唯一标识符
+	name: string;              // 技能名称
+	prompt: string;            // 提示词内容（可能包含模板引用和占位符）
+	showInToolbar: boolean;    // 是否在工具栏显示
+	order: number;             // 排序顺序
+	createdAt: number;         // 创建时间戳
+	updatedAt: number;         // 更新时间戳
+}
+
 export interface ChatSettings {
 	chatFolder: string;
 	defaultModel: string;
@@ -68,6 +82,10 @@ export interface ChatSettings {
 	chatTriggerSymbol: string; // 触发符号，默认 "@"
 	chatModalWidth: number; // 模态框宽度
 	chatModalHeight: number; // 模态框高度
+	// AI 划词功能配置
+	enableSelectionToolbar: boolean; // 是否启用划词功能
+	maxToolbarButtons: number; // 工具栏最多显示的按钮数量
+	skills: Skill[]; // 技能列表
 }
 
 export interface ChatState {
@@ -79,6 +97,7 @@ export interface ChatState {
 	selectedImages: string[];
 	selectedFiles: SelectedFile[];
 	selectedFolders: SelectedFolder[];
+	selectedText?: string; // 划词选中的文本内容
 	error?: string;
 	// 添加模板选择相关状态
 	selectedPromptTemplate?: {
@@ -87,6 +106,8 @@ export interface ChatState {
 		content: string;
 	};
 	showTemplateSelector: boolean;
+	// 是否应该保存历史记录（用于模态框模式，模态框中的对话不需要保存历史）
+	shouldSaveHistory: boolean;
 }
 
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
@@ -110,5 +131,9 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	chatTriggerSymbol: '@', // 默认触发符号 "@"
 	chatModalWidth: 700, // 默认模态框宽度
 	chatModalHeight: 500, // 默认模态框高度
+	// AI 划词功能默认配置
+	enableSelectionToolbar: true, // 默认启用划词功能
+	maxToolbarButtons: 4, // 默认显示4个按钮
+	skills: [], // 默认无技能
 };
 

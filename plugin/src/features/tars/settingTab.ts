@@ -47,6 +47,7 @@ export class TarsSettingTab {
 	private isProvidersCollapsed = true // 默认折叠列表
 	private isMessageCollapsed = true // 默认折叠消息设置
 	private isChatCollapsed = true // 默认折叠AI Chat设置
+	private isSelectionToolbarCollapsed = true // 默认折叠AI划词设置
 	private isTabCompletionCollapsed = true // 默认折叠Tab补全设置
 	private isAdvancedCollapsed = true // 默认折叠高级设置
 	private doubaoRenderers = new Map<any, () => void>()
@@ -753,6 +754,9 @@ export class TarsSettingTab {
 					});
 			});
 
+		// AI 划词设置区域
+		this.renderSelectionToolbarSettings(containerEl);
+
 		// AI Tab 补全设置区域（使用 Setting 组件，与上方保持一致）
 		const tabCompletionHeaderSetting = new Setting(containerEl)
 			.setName('AI Tab 补全')
@@ -1082,6 +1086,649 @@ export class TarsSettingTab {
 						DebugLogger.setDebugLevel(value)
 					})
 			)
+	}
+
+	/**
+	 * 渲染 AI 划词设置区域
+	 */
+	private renderSelectionToolbarSettings(containerEl: HTMLElement): void {
+		// AI 划词设置标题行
+		const selectionToolbarHeaderSetting = new Setting(containerEl)
+			.setName('AI 划词')
+			.setDesc('选中文本时显示悬浮工具栏，快速执行AI技能')
+
+		// 创建一个包装器来容纳按钮和图标
+		const selectionToolbarButtonWrapper = selectionToolbarHeaderSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
+		selectionToolbarButtonWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
+
+		// 添加技能按钮
+		const addSkillButton = selectionToolbarButtonWrapper.createEl('button', { cls: 'mod-cta' })
+		addSkillButton.textContent = '+ 添加技能'
+		addSkillButton.style.cssText = 'font-size: var(--font-ui-smaller); padding: 4px 12px;'
+		addSkillButton.onclick = () => {
+			this.openSkillEditModal()
+		}
+
+		// 添加Chevron图标
+		const selectionToolbarChevronIcon = selectionToolbarButtonWrapper.createEl('div', { cls: 'ai-provider-chevron' })
+		selectionToolbarChevronIcon.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="6 9 12 15 18 9"></polyline>
+			</svg>
+		`
+		selectionToolbarChevronIcon.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			color: var(--text-muted);
+			cursor: pointer;
+			transition: transform 0.2s ease;
+			transform: ${this.isSelectionToolbarCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};
+			width: 16px;
+			height: 16px;
+		`
+
+		// 扩大整行的点击区域
+		const selectionToolbarHeaderEl = selectionToolbarHeaderSetting.settingEl
+		selectionToolbarHeaderEl.style.cursor = 'pointer'
+		selectionToolbarHeaderEl.style.borderRadius = '0px'
+		selectionToolbarHeaderEl.style.border = '1px solid var(--background-modifier-border)'
+		selectionToolbarHeaderEl.style.marginBottom = '0px'
+		selectionToolbarHeaderEl.style.padding = '12px 12px'
+
+		// 创建划词设置容器
+		const selectionToolbarSection = containerEl.createDiv({ cls: 'selection-toolbar-settings-container' })
+		selectionToolbarSection.style.padding = '0 8px 8px 8px'
+		selectionToolbarSection.style.backgroundColor = 'var(--background-secondary)'
+		selectionToolbarSection.style.borderRadius = '0px'
+		selectionToolbarSection.style.border = '1px solid var(--background-modifier-border)'
+		selectionToolbarSection.style.borderTop = 'none'
+		selectionToolbarSection.style.display = this.isSelectionToolbarCollapsed ? 'none' : 'block'
+
+		// 添加折叠/展开功能
+		const toggleSelectionToolbarSection = () => {
+			this.isSelectionToolbarCollapsed = !this.isSelectionToolbarCollapsed
+			selectionToolbarChevronIcon.style.transform = this.isSelectionToolbarCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'
+			selectionToolbarSection.style.display = this.isSelectionToolbarCollapsed ? 'none' : 'block'
+		}
+
+		selectionToolbarHeaderEl.addEventListener('click', (e) => {
+			// 避免点击按钮时触发折叠
+			if ((e.target as HTMLElement).closest('button')) {
+				return
+			}
+			if ((e.target as HTMLElement).closest('.ai-provider-chevron')) {
+				return
+			}
+			toggleSelectionToolbarSection()
+		})
+
+		selectionToolbarChevronIcon.addEventListener('click', (e) => {
+			e.stopPropagation()
+			toggleSelectionToolbarSection()
+		})
+
+		// 启用划词功能开关
+		new Setting(selectionToolbarSection)
+			.setName('启用 AI 划词功能')
+			.setDesc('关闭后，编辑器选中文本时不再显示悬浮工具栏')
+			.addToggle((toggle) => {
+				toggle.setValue(this.chatSettings.enableSelectionToolbar ?? true)
+				toggle.onChange(async (value) => {
+					await this.updateChatSettings({ enableSelectionToolbar: value })
+				})
+			})
+
+		// 最多显示按钮数
+		new Setting(selectionToolbarSection)
+			.setName('工具栏按钮数量')
+			.setDesc('工具栏最多显示的技能按钮数量（超过的技能显示在下拉菜单中）')
+			.addSlider((slider) => {
+				slider
+					.setLimits(2, 8, 1)
+					.setValue(this.chatSettings.maxToolbarButtons ?? 4)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						await this.updateChatSettings({ maxToolbarButtons: value })
+					})
+			})
+
+		// 技能列表管理区域
+		const skillsListContainer = selectionToolbarSection.createDiv({ cls: 'skills-list-container' })
+		skillsListContainer.style.cssText = `
+			margin-top: 12px;
+			padding: 12px;
+			background: var(--background-primary);
+			border-radius: 8px;
+			border: 1px solid var(--background-modifier-border);
+		`
+
+		// 技能列表标题
+		const skillsListHeader = skillsListContainer.createDiv({ cls: 'skills-list-header' })
+		skillsListHeader.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			margin-bottom: 8px;
+			padding-bottom: 8px;
+			border-bottom: 1px solid var(--background-modifier-border);
+		`
+
+		const skillsListTitle = skillsListHeader.createEl('div')
+		skillsListTitle.style.cssText = `
+			font-size: var(--font-ui-small);
+			font-weight: 500;
+			color: var(--text-normal);
+		`
+		skillsListTitle.textContent = '技能管理'
+
+		const skillsListHint = skillsListHeader.createEl('div')
+		skillsListHint.style.cssText = `
+			font-size: var(--font-ui-smaller);
+			color: var(--text-muted);
+		`
+		skillsListHint.textContent = '前 ' + (this.chatSettings.maxToolbarButtons ?? 4) + ' 个技能将显示在工具栏上，其他的将隐藏在下拉菜单中'
+
+		// 技能列表内容
+		const skillsListContent = skillsListContainer.createDiv({ cls: 'skills-list-content' })
+		this.renderSkillsList(skillsListContent)
+	}
+
+	/**
+	 * 渲染技能列表
+	 */
+	private renderSkillsList(container: HTMLElement): void {
+		container.empty()
+
+		const skills = this.chatSettings.skills || []
+
+		if (skills.length === 0) {
+			const emptyTip = container.createEl('div', { cls: 'skills-list-empty' })
+			emptyTip.style.cssText = `
+				padding: 24px;
+				color: var(--text-muted);
+				font-size: var(--font-ui-small);
+				text-align: center;
+				font-style: italic;
+			`
+			emptyTip.textContent = '暂无技能，点击上方"添加技能"按钮创建'
+			return
+		}
+
+		// 按 order 排序
+		const sortedSkills = [...skills].sort((a, b) => a.order - b.order)
+
+		sortedSkills.forEach((skill, index) => {
+			const skillItem = container.createDiv({ cls: 'skill-item' })
+			skillItem.style.cssText = `
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				padding: 10px 12px;
+				margin-bottom: 4px;
+				background: var(--background-secondary);
+				border-radius: 6px;
+				border: 1px solid transparent;
+				transition: border-color 0.15s ease;
+			`
+
+			// 添加 hover 效果
+			skillItem.addEventListener('mouseenter', () => {
+				skillItem.style.borderColor = 'var(--background-modifier-border)'
+			})
+			skillItem.addEventListener('mouseleave', () => {
+				skillItem.style.borderColor = 'transparent'
+			})
+
+			// 左侧：拖拽手柄和技能名称
+			const leftSection = skillItem.createDiv()
+			leftSection.style.cssText = `
+				display: flex;
+				align-items: center;
+				gap: 12px;
+			`
+
+			// 拖拽手柄
+			const dragHandle = leftSection.createEl('div', { cls: 'skill-drag-handle' })
+			dragHandle.innerHTML = `
+				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/>
+					<circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>
+				</svg>
+			`
+			dragHandle.style.cssText = `
+				display: flex;
+				color: var(--text-muted);
+				cursor: grab;
+			`
+			dragHandle.title = '拖拽排序'
+
+			// 技能名称
+			const skillName = leftSection.createEl('span')
+			skillName.style.cssText = `
+				font-size: var(--font-ui-small);
+				color: ${skill.showInToolbar ? 'var(--interactive-accent)' : 'var(--text-normal)'};
+				font-weight: ${skill.showInToolbar ? '500' : 'normal'};
+			`
+			skillName.textContent = skill.name
+
+			// 右侧：操作按钮
+			const rightSection = skillItem.createDiv()
+			rightSection.style.cssText = `
+				display: flex;
+				align-items: center;
+				gap: 8px;
+			`
+
+			// 编辑按钮 (使用文字而不是图标)
+			const editBtn = rightSection.createEl('button')
+			editBtn.style.cssText = `
+				padding: 4px 8px;
+				border: none;
+				border-radius: 4px;
+				background: transparent;
+				color: var(--text-muted);
+				font-size: var(--font-ui-smaller);
+				cursor: pointer;
+				transition: background-color 0.15s ease, color 0.15s ease;
+			`
+			editBtn.textContent = '编辑'
+			editBtn.addEventListener('mouseenter', () => {
+				editBtn.style.backgroundColor = 'var(--background-modifier-hover)'
+				editBtn.style.color = 'var(--text-normal)'
+			})
+			editBtn.addEventListener('mouseleave', () => {
+				editBtn.style.backgroundColor = 'transparent'
+				editBtn.style.color = 'var(--text-muted)'
+			})
+			editBtn.onclick = (e) => {
+				e.stopPropagation()
+				this.openSkillEditModal(skill)
+			}
+
+			// 删除按钮
+			const deleteBtn = rightSection.createEl('button')
+			deleteBtn.style.cssText = `
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				width: 24px;
+				height: 24px;
+				border: none;
+				border-radius: 4px;
+				background: transparent;
+				color: var(--text-muted);
+				cursor: pointer;
+				transition: background-color 0.15s ease, color 0.15s ease;
+			`
+			deleteBtn.innerHTML = `
+				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<polyline points="3 6 5 6 21 6"></polyline>
+					<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+				</svg>
+			`
+			deleteBtn.title = '删除'
+			deleteBtn.addEventListener('mouseenter', () => {
+				deleteBtn.style.backgroundColor = 'var(--background-modifier-error)'
+				deleteBtn.style.color = 'var(--text-on-accent)'
+			})
+			deleteBtn.addEventListener('mouseleave', () => {
+				deleteBtn.style.backgroundColor = 'transparent'
+				deleteBtn.style.color = 'var(--text-muted)'
+			})
+			deleteBtn.onclick = async (e) => {
+				e.stopPropagation()
+				await this.deleteSkill(skill.id)
+				this.renderSkillsList(container)
+			}
+		})
+	}
+
+	/**
+	 * 打开技能编辑模态框
+	 */
+	private openSkillEditModal(skill?: import('../chat/types/chat').Skill): void {
+		// 使用原生 DOM 创建简单的模态框
+		const overlay = document.createElement('div')
+		overlay.className = 'skill-edit-modal-overlay'
+		overlay.style.cssText = `
+			position: fixed;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background: rgba(0, 0, 0, 0.5);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			z-index: 1100;
+			padding: 20px;
+		`
+
+		const modal = document.createElement('div')
+		modal.className = 'skill-edit-modal'
+		modal.style.cssText = `
+			display: flex;
+			flex-direction: column;
+			width: 100%;
+			max-width: 520px;
+			max-height: 90vh;
+			background: var(--background-primary);
+			border-radius: 12px;
+			box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+			overflow: hidden;
+		`
+
+		const isEditMode = !!skill
+		const existingNames = (this.chatSettings.skills || [])
+			.filter(s => s.id !== skill?.id)
+			.map(s => s.name)
+
+		// 头部
+		const header = document.createElement('div')
+		header.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 20px 24px;
+			border-bottom: 1px solid var(--background-modifier-border);
+		`
+
+		const title = document.createElement('span')
+		title.style.cssText = `
+			font-size: var(--font-ui-medium);
+			font-weight: 600;
+			color: var(--text-normal);
+		`
+		title.textContent = isEditMode ? '编辑技能' : '添加技能'
+
+		const closeBtn = document.createElement('button')
+		closeBtn.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 32px;
+			height: 32px;
+			border: none;
+			border-radius: 6px;
+			background: transparent;
+			color: var(--text-muted);
+			cursor: pointer;
+		`
+		closeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
+		closeBtn.onclick = () => overlay.remove()
+
+		header.appendChild(title)
+		header.appendChild(closeBtn)
+
+		// 表单内容
+		const body = document.createElement('div')
+		body.style.cssText = `
+			flex: 1;
+			overflow-y: auto;
+			padding: 20px 24px;
+		`
+
+		// 技能名称字段
+		const nameField = document.createElement('div')
+		nameField.style.cssText = 'margin-bottom: 20px;'
+
+		const nameLabel = document.createElement('label')
+		nameLabel.style.cssText = `
+			display: block;
+			margin-bottom: 8px;
+			font-size: var(--font-ui-small);
+			font-weight: 500;
+			color: var(--text-normal);
+		`
+		nameLabel.innerHTML = '技能名称和图标 <span style="color: var(--text-error);">*</span>'
+
+		const nameRow = document.createElement('div')
+		nameRow.style.cssText = 'display: flex; align-items: center; gap: 8px;'
+
+		const nameInput = document.createElement('input')
+		nameInput.type = 'text'
+		nameInput.style.cssText = `
+			flex: 1;
+			padding: 10px 12px;
+			border: 1px solid var(--background-modifier-border);
+			border-radius: 8px;
+			background: var(--background-primary);
+			color: var(--text-normal);
+			font-size: var(--font-ui-small);
+		`
+		nameInput.placeholder = '在这里命名你的技能...'
+		nameInput.maxLength = 20
+		nameInput.value = skill?.name || ''
+
+		const nameCounter = document.createElement('span')
+		nameCounter.style.cssText = `
+			font-size: var(--font-ui-smaller);
+			color: var(--text-muted);
+			white-space: nowrap;
+		`
+		nameCounter.textContent = `${nameInput.value.length}/20`
+		nameInput.addEventListener('input', () => {
+			nameCounter.textContent = `${nameInput.value.length}/20`
+		})
+
+		const iconBtn = document.createElement('button')
+		iconBtn.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 40px;
+			height: 40px;
+			border: 1px solid var(--background-modifier-border);
+			border-radius: 8px;
+			background: var(--background-primary);
+			color: var(--text-muted);
+			cursor: pointer;
+		`
+		iconBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>`
+
+		nameRow.appendChild(nameInput)
+		nameRow.appendChild(nameCounter)
+		nameRow.appendChild(iconBtn)
+
+		const nameError = document.createElement('span')
+		nameError.style.cssText = `
+			display: none;
+			margin-top: 4px;
+			font-size: var(--font-ui-smaller);
+			color: var(--text-error);
+		`
+
+		nameField.appendChild(nameLabel)
+		nameField.appendChild(nameRow)
+		nameField.appendChild(nameError)
+
+		// 提示词内容字段
+		const promptField = document.createElement('div')
+		promptField.style.cssText = 'margin-bottom: 20px;'
+
+		const promptLabel = document.createElement('label')
+		promptLabel.style.cssText = `
+			display: block;
+			margin-bottom: 8px;
+			font-size: var(--font-ui-small);
+			font-weight: 500;
+			color: var(--text-normal);
+		`
+		promptLabel.innerHTML = '提示词内容 <span style="color: var(--text-error);">*</span>'
+
+		const promptHint = document.createElement('div')
+		promptHint.style.cssText = `
+			margin-bottom: 8px;
+			font-size: var(--font-ui-smaller);
+			color: var(--text-muted);
+		`
+		promptHint.innerHTML = '使用特殊符串 {selection}代表划词选中的文字。 <button style="padding: 0; margin-left: 8px; border: none; background: transparent; color: var(--interactive-accent); font-size: var(--font-ui-smaller); cursor: pointer; text-decoration: underline;">示例</button>'
+
+		const promptTextarea = document.createElement('textarea')
+		promptTextarea.style.cssText = `
+			width: 100%;
+			padding: 12px;
+			border: 1px solid var(--background-modifier-border);
+			border-radius: 8px;
+			background: var(--background-primary);
+			color: var(--text-normal);
+			font-size: var(--font-ui-small);
+			font-family: var(--font-text);
+			line-height: 1.5;
+			resize: vertical;
+			min-height: 150px;
+			box-sizing: border-box;
+		`
+		promptTextarea.placeholder = '在此输入或粘贴你的提示词。'
+		promptTextarea.value = skill?.prompt || ''
+
+		const promptError = document.createElement('span')
+		promptError.style.cssText = `
+			display: none;
+			margin-top: 4px;
+			font-size: var(--font-ui-smaller);
+			color: var(--text-error);
+		`
+
+		promptField.appendChild(promptLabel)
+		promptField.appendChild(promptHint)
+		promptField.appendChild(promptTextarea)
+		promptField.appendChild(promptError)
+
+		body.appendChild(nameField)
+		body.appendChild(promptField)
+
+		// 底部操作栏
+		const footer = document.createElement('div')
+		footer.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: flex-end;
+			gap: 12px;
+			padding: 16px 24px;
+			border-top: 1px solid var(--background-modifier-border);
+		`
+
+		const cancelBtn = document.createElement('button')
+		cancelBtn.style.cssText = `
+			padding: 10px 20px;
+			border: none;
+			border-radius: 8px;
+			background: var(--background-modifier-hover);
+			color: var(--text-normal);
+			font-size: var(--font-ui-small);
+			font-weight: 500;
+			cursor: pointer;
+		`
+		cancelBtn.textContent = '取消'
+		cancelBtn.onclick = () => overlay.remove()
+
+		const saveBtn = document.createElement('button')
+		saveBtn.style.cssText = `
+			padding: 10px 20px;
+			border: none;
+			border-radius: 8px;
+			background: var(--interactive-accent);
+			color: var(--text-on-accent);
+			font-size: var(--font-ui-small);
+			font-weight: 500;
+			cursor: pointer;
+		`
+		saveBtn.textContent = '保存'
+		saveBtn.onclick = async () => {
+			// 验证
+			let hasError = false
+			
+			if (!nameInput.value.trim()) {
+				nameError.textContent = '技能名称不能为空'
+				nameError.style.display = 'block'
+				nameInput.style.borderColor = 'var(--text-error)'
+				hasError = true
+			} else if (existingNames.includes(nameInput.value.trim())) {
+				nameError.textContent = '技能名称已存在'
+				nameError.style.display = 'block'
+				nameInput.style.borderColor = 'var(--text-error)'
+				hasError = true
+			} else {
+				nameError.style.display = 'none'
+				nameInput.style.borderColor = 'var(--background-modifier-border)'
+			}
+
+			if (!promptTextarea.value.trim()) {
+				promptError.textContent = '提示词内容不能为空'
+				promptError.style.display = 'block'
+				promptTextarea.style.borderColor = 'var(--text-error)'
+				hasError = true
+			} else {
+				promptError.style.display = 'none'
+				promptTextarea.style.borderColor = 'var(--background-modifier-border)'
+			}
+
+			if (hasError) return
+
+			// 保存技能
+			const now = Date.now()
+			const savedSkill: import('../chat/types/chat').Skill = {
+				id: skill?.id || crypto.randomUUID(),
+				name: nameInput.value.trim(),
+				prompt: promptTextarea.value.trim(),
+				showInToolbar: skill?.showInToolbar ?? true,
+				order: skill?.order ?? (this.chatSettings.skills || []).length,
+				createdAt: skill?.createdAt || now,
+				updatedAt: now
+			}
+
+			await this.saveSkill(savedSkill)
+			overlay.remove()
+			
+			// 重新渲染整个设置页面以更新技能列表
+			this.render(this.containerEl)
+		}
+
+		footer.appendChild(cancelBtn)
+		footer.appendChild(saveBtn)
+
+		modal.appendChild(header)
+		modal.appendChild(body)
+		modal.appendChild(footer)
+		overlay.appendChild(modal)
+
+		// 点击遮罩关闭
+		overlay.addEventListener('click', (e) => {
+			if (e.target === overlay) {
+				overlay.remove()
+			}
+		})
+
+		document.body.appendChild(overlay)
+		nameInput.focus()
+	}
+
+	/**
+	 * 保存技能
+	 */
+	private async saveSkill(skill: import('../chat/types/chat').Skill): Promise<void> {
+		const skills = [...(this.chatSettings.skills || [])]
+		const existingIndex = skills.findIndex(s => s.id === skill.id)
+		
+		if (existingIndex >= 0) {
+			skills[existingIndex] = skill
+		} else {
+			skills.push(skill)
+		}
+
+		await this.updateChatSettings({ skills })
+		new Notice(existingIndex >= 0 ? '技能已更新' : '技能已创建')
+	}
+
+	/**
+	 * 删除技能
+	 */
+	private async deleteSkill(skillId: string): Promise<void> {
+		const skills = (this.chatSettings.skills || []).filter(s => s.id !== skillId)
+		await this.updateChatSettings({ skills })
+		new Notice('技能已删除')
 	}
 
 	/**
