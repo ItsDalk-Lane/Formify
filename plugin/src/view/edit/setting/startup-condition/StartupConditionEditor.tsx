@@ -449,8 +449,10 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
   }, [currentConfig, onChange]);
 
   const handleAddCondition = useCallback(
-    (subType: UnifiedConditionSubType) => {
-      const newCondition = createNewCondition(subType);
+    (category: string) => {
+      // 创建默认的时间条件（用户可以在条件行里切换子类型）
+      const newCondition = createNewCondition(UnifiedConditionSubType.TimeRange);
+      newCondition.category = category as any;
       onChange({
         ...currentConfig,
         enabled: true,
@@ -460,8 +462,9 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
     [currentConfig, onChange]
   );
 
-  const handleAddGroup = useCallback(() => {
+  const handleAddGroup = useCallback((category: string) => {
     const newGroup = createNewConditionGroup();
+    newGroup.category = category as any;
     onChange({
       ...currentConfig,
       enabled: true,
@@ -664,23 +667,24 @@ export function StartupConditionEditor(props: StartupConditionEditorProps) {
  * 添加条件下拉菜单
  */
 function StartupConditionAddDropdown(props: {
-  onAddCondition: (subType: UnifiedConditionSubType) => void;
-  onAddGroup: () => void;
+  onAddCondition: (category: string) => void;
+  onAddGroup: (category: string) => void;
 }) {
   const { onAddCondition, onAddGroup } = props;
   const [open, setOpen] = useState(false);
-  const allSubTypes = getAllSubTypeOptions();
 
-  const groupedOptions = useMemo(() => {
-    const groups: Record<string, typeof allSubTypes> = {};
-    allSubTypes.forEach((opt) => {
-      if (!groups[opt.group]) {
-        groups[opt.group] = [];
-      }
-      groups[opt.group].push(opt);
-    });
-    return groups;
-  }, []);
+  const categoryOptions = [
+    {
+      value: "startup",
+      label: localInstance.startup_condition_category_startup,
+      icon: <Clock size={16} />,
+    },
+    {
+      value: "autoTrigger",
+      label: localInstance.startup_condition_category_auto_trigger,
+      icon: <Play size={16} />,
+    },
+  ];
 
   return (
     <RadixDropdownMenu.Root onOpenChange={setOpen} open={open}>
@@ -699,40 +703,45 @@ function StartupConditionAddDropdown(props: {
             align="start"
             side="bottom"
           >
-            {Object.entries(groupedOptions).map(([groupName, options]) => (
-              <div key={groupName}>
-                <div className="form--StartupConditionAddMenuGroup">
-                  {groupName}
-                </div>
-                {options.map((opt) => (
-                  <RadixDropdownMenu.Item
-                    key={opt.value}
-                    className="form--FilterDropdownMenuItem"
-                    onClick={() => {
-                      onAddCondition(opt.value);
-                      setOpen(false);
-                    }}
-                  >
-                    <span className="form--FilterDropdownMenuItemIcon">
-                      {opt.icon}
-                    </span>
-                    {opt.label}
-                  </RadixDropdownMenu.Item>
-                ))}
-              </div>
+            {categoryOptions.map((opt) => (
+              <RadixDropdownMenu.Item
+                key={opt.value}
+                className="form--FilterDropdownMenuItem"
+                onClick={() => {
+                  onAddCondition(opt.value);
+                  setOpen(false);
+                }}
+              >
+                <span className="form--FilterDropdownMenuItemIcon">
+                  {opt.icon}
+                </span>
+                {opt.label}
+              </RadixDropdownMenu.Item>
             ))}
             <div className="form--StartupConditionAddMenuDivider" />
             <RadixDropdownMenu.Item
               className="form--FilterDropdownMenuItem"
               onClick={() => {
-                onAddGroup();
+                onAddGroup("startup");
                 setOpen(false);
               }}
             >
               <span className="form--FilterDropdownMenuItemIcon">
                 <CopyPlus size={16} />
               </span>
-              {localInstance.add_condition_group}
+              {localInstance.add_condition_group} ({localInstance.startup_condition_category_startup})
+            </RadixDropdownMenu.Item>
+            <RadixDropdownMenu.Item
+              className="form--FilterDropdownMenuItem"
+              onClick={() => {
+                onAddGroup("autoTrigger");
+                setOpen(false);
+              }}
+            >
+              <span className="form--FilterDropdownMenuItemIcon">
+                <CopyPlus size={16} />
+              </span>
+              {localInstance.add_condition_group} ({localInstance.startup_condition_category_auto_trigger})
             </RadixDropdownMenu.Item>
             <RadixDropdownMenu.Arrow className="form--FilterDropdownMenuArrow" />
           </RadixDropdownMenu.Content>
@@ -783,10 +792,21 @@ function UnifiedConditionItem(props: {
   // 判断是否为脚本类型条件
   const isScriptCondition = condition.type === StartupConditionType.Script;
 
+  // 获取类别标签
+  const categoryLabel = useMemo(() => {
+    const category = condition.category || "startup";
+    return category === "startup"
+      ? localInstance.startup_condition_category_startup
+      : localInstance.startup_condition_category_auto_trigger;
+  }, [condition.category]);
+
   return (
     <div className={`form--Filter ${isScriptCondition ? "form--FilterScript" : ""}`}>
       <div className="form--FilterRelation">{relationEl}</div>
       <div className="form--FilterContent">
+        <div className="form--StartupConditionCategoryBadge">
+          {categoryLabel}
+        </div>
         {condition.type === "group" ? (
           <UnifiedConditionGroup
             condition={condition}

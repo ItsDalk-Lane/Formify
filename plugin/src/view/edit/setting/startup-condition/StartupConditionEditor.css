@@ -403,3 +403,16 @@
   width: 100%;
 }
 
+/* 类别标签样式 */
+.form--StartupConditionCategoryBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+  margin-right: 8px;
+  white-space: nowrap;
+}

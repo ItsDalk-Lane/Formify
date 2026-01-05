@@ -81,7 +81,8 @@ export class FormService {
                         formFilePath: formConfig.filePath,
                         lastExecutionTime: formConfig.lastExecutionTime,
                         pluginVersion: app.plugins.getPlugin('obsidian-formify')?.manifest.version || '0.0.0'
-                    }
+                    },
+                    "startup"
                 );
                 
                 if (!evaluationResult.satisfied) {

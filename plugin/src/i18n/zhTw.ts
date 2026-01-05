@@ -611,6 +611,8 @@ export class ZhTw implements Local {
 	execution_condition_not_met = "表單執行條件未滿足，已跳過執行";
 	// 執行條件
 	startup_conditions = "執行條件";
+	startup_condition_category_startup = "啟動條件";
+	startup_condition_category_auto_trigger = "自動觸發器條件";
 	startup_condition_mode_simple = "簡單模式";
 	startup_condition_mode_advanced = "進階模式";
 	startup_condition_type_time = "時間條件";

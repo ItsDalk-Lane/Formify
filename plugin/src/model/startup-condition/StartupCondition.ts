@@ -196,6 +196,16 @@ export interface ScriptConditionConfig {
 }
 
 /**
+ * 条件类别枚举
+ */
+export enum ConditionCategory {
+  /** 启动条件（手动执行时检查） */
+  Startup = "startup",
+  /** 自动触发器条件（自动触发时检查） */
+  AutoTrigger = "autoTrigger",
+}
+
+/**
  * 单个启动条件
  */
 export interface StartupCondition {
@@ -203,6 +213,8 @@ export interface StartupCondition {
   id: string;
   /** 条件类型 */
   type: StartupConditionType | "group";
+  /** 条件类别（启动条件/自动触发器条件），默认为启动条件 */
+  category?: ConditionCategory;
   /** 条件名称（用于显示） */
   name?: string;
   /** 条件配置 */

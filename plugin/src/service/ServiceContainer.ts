@@ -6,6 +6,7 @@ import { ApplicationFileViewService } from './file-view/ApplicationFileViewServi
 import { ContextMenuService } from './command/ContextMenuService';
 import { FormIntegrationService } from './command/FormIntegrationService';
 import { InternalLinkParserService } from './InternalLinkParserService';
+import { AutoTriggerService } from './startup-condition/AutoTriggerService';
 
 /**
  * 全局服务容器实例
@@ -36,6 +37,7 @@ export class ServiceContainer {
     readonly applicationFileViewService: ApplicationFileViewService;
     readonly contextMenuService: ContextMenuService;
     readonly formIntegrationService: FormIntegrationService;
+    readonly autoTriggerService: AutoTriggerService;
 
     // 可选服务（需要 App 实例初始化）
     private _internalLinkParserService: InternalLinkParserService | null = null;
@@ -51,6 +53,7 @@ export class ServiceContainer {
         this.applicationFileViewService = new ApplicationFileViewService();
         this.contextMenuService = new ContextMenuService();
         this.formIntegrationService = new FormIntegrationService();
+        this.autoTriggerService = new AutoTriggerService();
 
         // 设置服务间的回调关系
         this.formIntegrationService.setMenuRefreshCallback(() => {
@@ -96,6 +99,8 @@ export class ServiceContainer {
      * 清理所有服务资源
      */
     dispose(): void {
+        this.autoTriggerService.cleanup();
+
         // 清理需要显式销毁的服务
         this.formScriptService.unload();
         this.formIntegrationService.cleanup();

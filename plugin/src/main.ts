@@ -45,6 +45,7 @@ export default class FormPlugin extends Plugin {
 			this.featureCoordinator.initializeChat(this.settings);
 			await this.services.formScriptService.initialize(this.app, this.settings.scriptFolder);
 			await this.executeStartupForms();
+			await this.services.autoTriggerService.initialize(this, this.services.formService);
 		});
 	}
 

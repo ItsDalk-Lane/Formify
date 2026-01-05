@@ -72,14 +72,51 @@ export interface DoubaoOptions extends BaseOptions {
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp']
 
 /**
+ * 已知的动态图片服务域名列表
+ * 这些服务通常不使用文件扩展名，而是通过 URL 参数来获取图片
+ */
+const KNOWN_IMAGE_SERVICE_DOMAINS = [
+	'tse1.mm.bing.net', 'tse2.mm.bing.net', 'tse3.mm.bing.net', 'tse4.mm.bing.net', // Bing 图片搜索
+	'th.bing.com', // Bing 缩略图
+	'images.unsplash.com', 'source.unsplash.com', // Unsplash
+	'pbs.twimg.com', // Twitter 图片
+	'i.imgur.com', // Imgur
+	'cdn.discordapp.com', 'media.discordapp.net', // Discord
+	'lh3.googleusercontent.com', 'lh4.googleusercontent.com', 'lh5.googleusercontent.com', // Google 用户内容
+	'graph.facebook.com', // Facebook Graph API
+	'avatars.githubusercontent.com', 'raw.githubusercontent.com', 'user-images.githubusercontent.com', // GitHub
+	'i.ytimg.com', // YouTube 缩略图
+	'img.shields.io', // Shields.io 徽章
+	'via.placeholder.com', 'placekitten.com', 'placehold.co', // 占位图服务
+	'api.qrserver.com', // QR Code 生成
+	'chart.googleapis.com', // Google Charts
+	'image.tmdb.org', // TMDB 电影数据库
+	'a.ppy.sh', // osu! 头像
+	'cdn.shopify.com', // Shopify CDN
+	'res.cloudinary.com', // Cloudinary
+	'imagedelivery.net', // Cloudflare Images
+]
+
+/**
+ * 检查 URL 是否来自已知的动态图片服务
+ */
+const isKnownImageService = (url: string): boolean => {
+	try {
+		const urlObj = new URL(url)
+		const hostname = urlObj.hostname.toLowerCase()
+		return KNOWN_IMAGE_SERVICE_DOMAINS.some(domain => hostname === domain || hostname.endsWith('.' + domain))
+	} catch {
+		return false
+	}
+}
+
+/**
  * 从文本中提取图片 URL
- * 支持 http:// 和 https:// 开头的链接
  * 
- * 改进的 URL 提取逻辑：
- * 1. 提取所有 http/https URL
- * 2. 清理 URL 末尾的特殊字符（括号、中文等）
- * 3. 保留合法的查询参数和锚点
- * 4. 不强制要求 URL 包含图片扩展名（支持动态图片服务）
+ * 提取逻辑：
+ * 1. 只提取带有图片扩展名（.png, .jpg, .jpeg, .gif, .webp）的 URL
+ * 2. 或者来自已知动态图片服务（如 Bing、Unsplash 等）的 URL
+ * 3. 过滤掉普通网页链接（如 .htm, .html, .php 等）
  * 
  * 支持的 URL 格式：
  * - 带扩展名：https://example.com/image.jpg
@@ -95,28 +132,38 @@ const extractImageUrls = (text: string | undefined): string[] => {
 	
 	const imageUrls: string[] = []
 	
+	// 明确的非图片文件扩展名（网页、脚本等）
+	const NON_IMAGE_EXTENSIONS = ['.htm', '.html', '.php', '.asp', '.aspx', '.jsp', '.js', '.css', '.json', '.xml', '.txt', '.md', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.rar', '.tar', '.gz', '.7z', '.exe', '.msi', '.dmg', '.apk', '.mp3', '.mp4', '.avi', '.mov', '.wav', '.flac']
+	
 	for (const match of matches) {
 		let url = match.trim()
 		
 		// 清理 URL 末尾的特殊字符
 		// 移除常见的中文标点、括号等非 URL 字符
-		// 但保留合法的 URL 字符（包括查询参数和锚点）
 		url = url.replace(/[)）\]】>'"]+$/, '')
 		
-		// 如果 URL 包含图片扩展名，截断到扩展名之后
 		const lowerUrl = url.toLowerCase()
-		let foundExt = false
 		
+		// 检查是否是明确的非图片文件
+		const hasNonImageExt = NON_IMAGE_EXTENSIONS.some(ext => {
+			const pathPart = lowerUrl.split('?')[0].split('#')[0] // 去掉查询参数和锚点
+			return pathPart.endsWith(ext)
+		})
+		if (hasNonImageExt) {
+			continue // 跳过非图片文件
+		}
+		
+		// 检查是否包含图片扩展名
+		let foundImageExt = false
 		for (const ext of IMAGE_EXTENSIONS) {
 			const extIndex = lowerUrl.lastIndexOf(ext)
 			if (extIndex !== -1) {
-				foundExt = true
+				foundImageExt = true
 				// 截取到扩展名结束的位置
 				const afterExt = url.substring(extIndex + ext.length)
 				
 				// 如果扩展名后面是查询参数或锚点，保留它们
 				if (afterExt.startsWith('?') || afterExt.startsWith('#')) {
-					// 查找查询参数或锚点的结束位置（遇到非 URL 字符为止）
 					const endMatch = afterExt.match(/^[?#][^\s)）\]】>'"]*/)
 					if (endMatch) {
 						url = url.substring(0, extIndex + ext.length + endMatch[0].length)
@@ -131,10 +178,12 @@ const extractImageUrls = (text: string | undefined): string[] => {
 			}
 		}
 		
-		// 即使没有找到扩展名，也保留 URL（支持动态图片服务）
-		if (!foundExt) {
-			// 对于没有扩展名的 URL，确保末尾没有多余的特殊字符
-			// 但保留查询参数和锚点
+		// 如果没有图片扩展名，检查是否是已知的动态图片服务
+		if (!foundImageExt) {
+			if (!isKnownImageService(url)) {
+				continue // 既没有图片扩展名，也不是已知图片服务，跳过
+			}
+			// 对于动态图片服务，清理 URL 末尾的特殊字符
 			url = url.replace(/[)）\]】>'"]+$/, '')
 		}
 		

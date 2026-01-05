@@ -18,6 +18,7 @@ import { useState, useEffect } from "react";
 import { FormConfigContext } from "src/hooks/useFormConfig";
 import { FormImportDialog } from "./import/FormImportDialog";
 import { StartupConditionEditor } from "./startup-condition/StartupConditionEditor";
+import ToggleControl from "src/view/shared/control/ToggleControl";
 import { StartupConditionsConfig } from "src/model/startup-condition/StartupCondition";
 
 export default function CpsFormSetting(props: {

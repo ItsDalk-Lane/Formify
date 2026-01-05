@@ -533,6 +533,8 @@ export interface Local {
 	execution_condition_not_met: string;
 	// Startup conditions
 	startup_conditions: string;
+	startup_condition_category_startup: string;
+	startup_condition_category_auto_trigger: string;
 	startup_condition_mode_simple: string;
 	startup_condition_mode_advanced: string;
 	startup_condition_type_time: string;

@@ -597,6 +597,8 @@ export class Zh implements Local {
 	execution_condition_not_met = "表单执行条件未满足，已跳过执行";
 	// Execution conditions
 	startup_conditions = "执行条件";
+	startup_condition_category_startup = "启动条件";
+	startup_condition_category_auto_trigger = "自动触发器条件";
 	startup_condition_mode_simple = "简单模式";
 	startup_condition_mode_advanced = "高级模式";
 	startup_condition_type_time = "时间条件";

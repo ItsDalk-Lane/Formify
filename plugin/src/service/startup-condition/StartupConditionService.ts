@@ -134,10 +134,14 @@ export class StartupConditionService {
 
   /**
    * 评估启动条件配置
+   * @param config 启动条件配置
+   * @param context 评估上下文
+   * @param category 条件类别过滤（可选，不传则评估所有条件）
    */
   async evaluateConditions(
     config: StartupConditionsConfig | undefined,
-    context: ConditionEvaluationContext
+    context: ConditionEvaluationContext,
+    category?: string
   ): Promise<ConditionEvaluationResult> {
     // 如果没有配置条件或条件未启用，则默认满足
     if (!config || !config.enabled || config.conditions.length === 0) {
@@ -147,10 +151,24 @@ export class StartupConditionService {
       };
     }
 
+    // 如果指定了类别，则过滤出对应类别的条件（没有 category 字段的默认为 startup）
+    let conditionsToEvaluate = config.conditions;
+    if (category) {
+      conditionsToEvaluate = config.conditions.filter(
+        (c) => (c.category || "startup") === category
+      );
+      if (conditionsToEvaluate.length === 0) {
+        return {
+          satisfied: true,
+          details: `未配置 ${category} 类别的条件，默认满足`,
+        };
+      }
+    }
+
     try {
       const results: ConditionEvaluationResult[] = [];
 
-      for (const condition of config.conditions) {
+      for (const condition of conditionsToEvaluate) {
         const result = await this.evaluateCondition(condition, context);
         results.push(result);
 

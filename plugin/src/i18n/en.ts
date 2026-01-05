@@ -585,6 +585,8 @@ export class En implements Local {
 	execution_condition_not_met = "Form execution conditions not met, execution skipped";
 	// Execution conditions
 	startup_conditions = "Execution Conditions";
+	startup_condition_category_startup = "Startup Condition";
+	startup_condition_category_auto_trigger = "Auto Trigger Condition";
 	startup_condition_mode_simple = "Simple";
 	startup_condition_mode_advanced = "Advanced";
 	startup_condition_type_time = "Time Condition";

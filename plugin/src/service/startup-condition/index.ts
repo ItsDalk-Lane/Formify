@@ -6,6 +6,8 @@ export {
   getStartupConditionService,
 } from "./StartupConditionService";
 
+export { AutoTriggerService } from "./AutoTriggerService";
+
 export type {
   ConditionEvaluationContext,
   ConditionEvaluationResult,
