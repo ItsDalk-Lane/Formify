@@ -33,6 +33,7 @@ import type { ChatSettings } from '../chat/types/chat'
 export interface TarsSettingsContext {
 	getSettings: () => TarsSettings
 	getChatSettings: () => ChatSettings
+	getPromptTemplateFolder: () => string
 	saveSettings: () => Promise<void>
 	updateChatSettings: (partial: Partial<ChatSettings>) => Promise<void>
 }
@@ -1193,6 +1194,17 @@ export class TarsSettingTab {
 					})
 			})
 
+		// 流式输出设置
+		new Setting(selectionToolbarSection)
+			.setName('流式输出')
+			.setDesc('启用后 AI 将逐字输出结果，关闭则等待完整响应后一次性显示')
+			.addToggle((toggle) => {
+				toggle.setValue(this.chatSettings.selectionToolbarStreamOutput ?? true)
+				toggle.onChange(async (value) => {
+					await this.updateChatSettings({ selectionToolbarStreamOutput: value })
+				})
+			})
+
 		// 技能列表管理区域
 		const skillsListContainer = selectionToolbarSection.createDiv({ cls: 'skills-list-container' })
 		skillsListContainer.style.cssText = `
@@ -1212,9 +1224,26 @@ export class TarsSettingTab {
 			margin-bottom: 8px;
 			padding-bottom: 8px;
 			border-bottom: 1px solid var(--background-modifier-border);
+			cursor: pointer;
 		`
 
-		const skillsListTitle = skillsListHeader.createEl('div')
+		const leftHeader = skillsListHeader.createDiv()
+		leftHeader.style.cssText = `
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		`
+
+		const chevron = leftHeader.createDiv()
+		chevron.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon"><polyline points="9 18 15 12 9 6"></polyline></svg>`
+		chevron.style.cssText = `
+			display: flex;
+			align-items: center;
+			transition: transform 0.2s ease;
+			color: var(--text-muted);
+		`
+
+		const skillsListTitle = leftHeader.createEl('div')
 		skillsListTitle.style.cssText = `
 			font-size: var(--font-ui-small);
 			font-weight: 500;
@@ -1231,7 +1260,15 @@ export class TarsSettingTab {
 
 		// 技能列表内容
 		const skillsListContent = skillsListContainer.createDiv({ cls: 'skills-list-content' })
+		skillsListContent.style.display = 'none' // 默认折叠
 		this.renderSkillsList(skillsListContent)
+
+		// 点击切换折叠状态
+		skillsListHeader.onclick = () => {
+			const isCollapsed = skillsListContent.style.display === 'none'
+			skillsListContent.style.display = isCollapsed ? 'block' : 'none'
+			chevron.style.transform = isCollapsed ? 'rotate(90deg)' : 'rotate(0deg)'
+		}
 	}
 
 	/**
@@ -1260,6 +1297,8 @@ export class TarsSettingTab {
 
 		sortedSkills.forEach((skill, index) => {
 			const skillItem = container.createDiv({ cls: 'skill-item' })
+			skillItem.dataset.skillId = skill.id
+			skillItem.draggable = true
 			skillItem.style.cssText = `
 				display: flex;
 				align-items: center;
@@ -1269,7 +1308,8 @@ export class TarsSettingTab {
 				background: var(--background-secondary);
 				border-radius: 6px;
 				border: 1px solid transparent;
-				transition: border-color 0.15s ease;
+				transition: border-color 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+				cursor: grab;
 			`
 
 			// 添加 hover 效果
@@ -1278,6 +1318,41 @@ export class TarsSettingTab {
 			})
 			skillItem.addEventListener('mouseleave', () => {
 				skillItem.style.borderColor = 'transparent'
+			})
+
+			// 拖拽排序事件
+			skillItem.addEventListener('dragstart', (e) => {
+				skillItem.style.opacity = '0.5'
+				e.dataTransfer?.setData('text/plain', skill.id)
+			})
+
+			skillItem.addEventListener('dragend', () => {
+				skillItem.style.opacity = '1'
+				// 移除所有拖拽指示器
+				container.querySelectorAll('.skill-item').forEach(item => {
+					const el = item as HTMLElement
+					el.style.borderTop = ''
+					el.style.borderBottom = ''
+				})
+			})
+
+			skillItem.addEventListener('dragover', (e) => {
+				e.preventDefault()
+				skillItem.style.borderTop = '2px solid var(--interactive-accent)'
+			})
+
+			skillItem.addEventListener('dragleave', () => {
+				skillItem.style.borderTop = ''
+			})
+
+			skillItem.addEventListener('drop', async (e) => {
+				e.preventDefault()
+				skillItem.style.borderTop = ''
+				const draggedId = e.dataTransfer?.getData('text/plain')
+				if (draggedId && draggedId !== skill.id) {
+					await this.reorderSkills(draggedId, skill.id)
+					this.renderSkillsList(container)
+				}
 			})
 
 			// 左侧：拖拽手柄和技能名称
@@ -1302,6 +1377,20 @@ export class TarsSettingTab {
 				cursor: grab;
 			`
 			dragHandle.title = '拖拽排序'
+
+			// 显示在工具栏上的复选框
+			const showInToolbarCheckbox = leftSection.createEl('input', { type: 'checkbox' }) as HTMLInputElement
+			showInToolbarCheckbox.checked = skill.showInToolbar
+			showInToolbarCheckbox.style.cssText = `
+				cursor: pointer;
+				accent-color: var(--interactive-accent);
+			`
+			showInToolbarCheckbox.title = skill.showInToolbar ? '已显示在工具栏' : '未显示在工具栏'
+			showInToolbarCheckbox.onclick = (e) => e.stopPropagation()
+			showInToolbarCheckbox.onchange = async () => {
+				await this.updateSkillShowInToolbar(skill.id, showInToolbarCheckbox.checked)
+				this.renderSkillsList(container)
+			}
 
 			// 技能名称
 			const skillName = leftSection.createEl('span')
@@ -1349,24 +1438,16 @@ export class TarsSettingTab {
 			// 删除按钮
 			const deleteBtn = rightSection.createEl('button')
 			deleteBtn.style.cssText = `
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				width: 24px;
-				height: 24px;
+				padding: 4px 8px;
 				border: none;
 				border-radius: 4px;
 				background: transparent;
 				color: var(--text-muted);
+				font-size: var(--font-ui-smaller);
 				cursor: pointer;
 				transition: background-color 0.15s ease, color 0.15s ease;
 			`
-			deleteBtn.innerHTML = `
-				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-					<polyline points="3 6 5 6 21 6"></polyline>
-					<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-				</svg>
-			`
+			deleteBtn.textContent = '删除'
 			deleteBtn.title = '删除'
 			deleteBtn.addEventListener('mouseenter', () => {
 				deleteBtn.style.backgroundColor = 'var(--background-modifier-error)'
@@ -1388,6 +1469,11 @@ export class TarsSettingTab {
 	 * 打开技能编辑模态框
 	 */
 	private openSkillEditModal(skill?: import('../chat/types/chat').Skill): void {
+		// 阻止所有事件冒泡的辅助函数
+		const stopAllPropagation = (e: Event) => {
+			e.stopPropagation()
+		}
+
 		// 使用原生 DOM 创建简单的模态框
 		const overlay = document.createElement('div')
 		overlay.className = 'skill-edit-modal-overlay'
@@ -1401,9 +1487,17 @@ export class TarsSettingTab {
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			z-index: 1100;
+			z-index: 9999;
 			padding: 20px;
+			pointer-events: auto;
 		`
+
+		// 阻止 overlay 上的所有事件冒泡
+		overlay.addEventListener('mousedown', stopAllPropagation)
+		overlay.addEventListener('mouseup', stopAllPropagation)
+		overlay.addEventListener('click', stopAllPropagation)
+		overlay.addEventListener('focusin', stopAllPropagation)
+		overlay.addEventListener('focusout', stopAllPropagation)
 
 		const modal = document.createElement('div')
 		modal.className = 'skill-edit-modal'
@@ -1417,7 +1511,19 @@ export class TarsSettingTab {
 			border-radius: 12px;
 			box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 			overflow: hidden;
+			pointer-events: auto;
 		`
+
+		// 阻止模态框内的所有事件冒泡到 Obsidian
+		modal.addEventListener('keydown', stopAllPropagation)
+		modal.addEventListener('keyup', stopAllPropagation)
+		modal.addEventListener('keypress', stopAllPropagation)
+		modal.addEventListener('mousedown', stopAllPropagation)
+		modal.addEventListener('mouseup', stopAllPropagation)
+		modal.addEventListener('click', stopAllPropagation)
+		modal.addEventListener('focusin', stopAllPropagation)
+		modal.addEventListener('focusout', stopAllPropagation)
+		modal.addEventListener('input', stopAllPropagation)
 
 		const isEditMode = !!skill
 		const existingNames = (this.chatSettings.skills || [])
@@ -1467,11 +1573,12 @@ export class TarsSettingTab {
 			flex: 1;
 			overflow-y: auto;
 			padding: 20px 24px;
+			pointer-events: auto;
 		`
 
 		// 技能名称字段
 		const nameField = document.createElement('div')
-		nameField.style.cssText = 'margin-bottom: 20px;'
+		nameField.style.cssText = 'margin-bottom: 20px; pointer-events: auto;'
 
 		const nameLabel = document.createElement('label')
 		nameLabel.style.cssText = `
@@ -1484,10 +1591,13 @@ export class TarsSettingTab {
 		nameLabel.innerHTML = '技能名称和图标 <span style="color: var(--text-error);">*</span>'
 
 		const nameRow = document.createElement('div')
-		nameRow.style.cssText = 'display: flex; align-items: center; gap: 8px;'
+		nameRow.style.cssText = 'display: flex; align-items: center; gap: 8px; pointer-events: auto;'
 
 		const nameInput = document.createElement('input')
 		nameInput.type = 'text'
+		nameInput.autocomplete = 'off'
+		nameInput.autocapitalize = 'off'
+		nameInput.spellcheck = false
 		nameInput.style.cssText = `
 			flex: 1;
 			padding: 10px 12px;
@@ -1496,6 +1606,8 @@ export class TarsSettingTab {
 			background: var(--background-primary);
 			color: var(--text-normal);
 			font-size: var(--font-ui-small);
+			pointer-events: auto;
+			user-select: text;
 		`
 		nameInput.placeholder = '在这里命名你的技能...'
 		nameInput.maxLength = 20
@@ -1543,29 +1655,133 @@ export class TarsSettingTab {
 		nameField.appendChild(nameRow)
 		nameField.appendChild(nameError)
 
-		// 提示词内容字段
-		const promptField = document.createElement('div')
-		promptField.style.cssText = 'margin-bottom: 20px;'
+		// AI 模型选择字段
+		const modelField = document.createElement('div')
+		modelField.style.cssText = 'margin-bottom: 20px; pointer-events: auto;'
 
-		const promptLabel = document.createElement('label')
-		promptLabel.style.cssText = `
+		const modelLabel = document.createElement('label')
+		modelLabel.style.cssText = `
 			display: block;
 			margin-bottom: 8px;
 			font-size: var(--font-ui-small);
 			font-weight: 500;
 			color: var(--text-normal);
 		`
-		promptLabel.innerHTML = '提示词内容 <span style="color: var(--text-error);">*</span>'
+		modelLabel.textContent = 'AI 模型'
+
+		const modelHint = document.createElement('div')
+		modelHint.style.cssText = `
+			margin-bottom: 8px;
+			font-size: var(--font-ui-smaller);
+			color: var(--text-muted);
+		`
+		modelHint.textContent = '选择执行此技能时使用的 AI 模型，留空则使用默认模型'
+
+		const modelSelect = document.createElement('select')
+		modelSelect.style.cssText = `
+			width: 100%;
+			padding: 10px 12px;
+			height: 42px;
+			border: 1px solid var(--background-modifier-border);
+			border-radius: 8px;
+			background: var(--background-primary);
+			color: var(--text-normal);
+			font-size: var(--font-ui-small);
+			cursor: pointer;
+			pointer-events: auto;
+		`
+
+		// 添加默认选项
+		const defaultOption = document.createElement('option')
+		defaultOption.value = ''
+		defaultOption.textContent = '使用默认模型'
+		modelSelect.appendChild(defaultOption)
+
+		// 添加所有可用的 AI 模型
+		const providers = this.settings.providers || []
+		providers.forEach(provider => {
+			const option = document.createElement('option')
+			option.value = provider.tag
+			option.textContent = provider.tag
+			if (skill?.modelTag === provider.tag) {
+				option.selected = true
+			}
+			modelSelect.appendChild(option)
+		})
+
+		modelField.appendChild(modelLabel)
+		modelField.appendChild(modelHint)
+		modelField.appendChild(modelSelect)
+
+		// 提示词来源选择字段
+		const promptSourceField = document.createElement('div')
+		promptSourceField.style.cssText = 'margin-bottom: 20px; pointer-events: auto;'
+
+		const promptSourceLabel = document.createElement('label')
+		promptSourceLabel.style.cssText = `
+			display: block;
+			margin-bottom: 8px;
+			font-size: var(--font-ui-small);
+			font-weight: 500;
+			color: var(--text-normal);
+		`
+		promptSourceLabel.innerHTML = '提示词来源 <span style="color: var(--text-error);">*</span>'
+
+		const promptSourceRow = document.createElement('div')
+		promptSourceRow.style.cssText = 'display: flex; gap: 16px; margin-bottom: 12px;'
+
+		// 自定义提示词单选按钮
+		const customRadioWrapper = document.createElement('label')
+		customRadioWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;'
+		const customRadio = document.createElement('input')
+		customRadio.type = 'radio'
+		customRadio.name = 'promptSource'
+		customRadio.value = 'custom'
+		customRadio.checked = (skill?.promptSource || 'custom') === 'custom'
+		customRadio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
+		const customLabel = document.createElement('span')
+		customLabel.textContent = '自定义'
+		customLabel.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal);'
+		customRadioWrapper.appendChild(customRadio)
+		customRadioWrapper.appendChild(customLabel)
+
+		// 内置模板单选按钮
+		const templateRadioWrapper = document.createElement('label')
+		templateRadioWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;'
+		const templateRadio = document.createElement('input')
+		templateRadio.type = 'radio'
+		templateRadio.name = 'promptSource'
+		templateRadio.value = 'template'
+		templateRadio.checked = skill?.promptSource === 'template'
+		templateRadio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
+		const templateLabel = document.createElement('span')
+		templateLabel.textContent = '内置模板'
+		templateLabel.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal);'
+		templateRadioWrapper.appendChild(templateRadio)
+		templateRadioWrapper.appendChild(templateLabel)
+
+		promptSourceRow.appendChild(customRadioWrapper)
+		promptSourceRow.appendChild(templateRadioWrapper)
+
+		promptSourceField.appendChild(promptSourceLabel)
+		promptSourceField.appendChild(promptSourceRow)
+
+		// 自定义提示词内容区域
+		const customPromptSection = document.createElement('div')
+		customPromptSection.style.cssText = 'pointer-events: auto;'
+		customPromptSection.style.display = (skill?.promptSource || 'custom') === 'custom' ? 'block' : 'none'
 
 		const promptHint = document.createElement('div')
 		promptHint.style.cssText = `
 			margin-bottom: 8px;
 			font-size: var(--font-ui-smaller);
 			color: var(--text-muted);
+			pointer-events: auto;
 		`
-		promptHint.innerHTML = '使用特殊符串 {selection}代表划词选中的文字。 <button style="padding: 0; margin-left: 8px; border: none; background: transparent; color: var(--interactive-accent); font-size: var(--font-ui-smaller); cursor: pointer; text-decoration: underline;">示例</button>'
+		promptHint.innerHTML = '使用 <code style="background: var(--background-modifier-hover); padding: 2px 4px; border-radius: 3px;">{{}}</code> 或 <code style="background: var(--background-modifier-hover); padding: 2px 4px; border-radius: 3px;">{{@描述文字}}</code> 作为占位符代表选中的文本，系统执行时会自动替换为实际选中的内容。'
 
 		const promptTextarea = document.createElement('textarea')
+		promptTextarea.spellcheck = false
 		promptTextarea.style.cssText = `
 			width: 100%;
 			padding: 12px;
@@ -1579,10 +1795,71 @@ export class TarsSettingTab {
 			resize: vertical;
 			min-height: 150px;
 			box-sizing: border-box;
+			pointer-events: auto;
+			user-select: text;
 		`
-		promptTextarea.placeholder = '在此输入或粘贴你的提示词。'
-		promptTextarea.value = skill?.prompt || ''
+		promptTextarea.placeholder = '在此输入提示词，例如：将<user_text>{{}}</user_text>翻译成英文。'
+		promptTextarea.value = skill?.promptSource === 'custom' || !skill?.promptSource ? (skill?.prompt || '') : ''
 
+		customPromptSection.appendChild(promptHint)
+		customPromptSection.appendChild(promptTextarea)
+
+		// 内置模板选择区域
+		const templateSection = document.createElement('div')
+		templateSection.style.cssText = 'pointer-events: auto;'
+		templateSection.style.display = skill?.promptSource === 'template' ? 'block' : 'none'
+
+		const templateHint = document.createElement('div')
+		templateHint.style.cssText = `
+			margin-bottom: 8px;
+			font-size: var(--font-ui-smaller);
+			color: var(--text-muted);
+		`
+		templateHint.innerHTML = '从 AI 提示词模板目录中选择模板文件，模板中同样支持使用 <code style="background: var(--background-modifier-hover); padding: 2px 4px; border-radius: 3px;">{{}}</code> 或 <code style="background: var(--background-modifier-hover); padding: 2px 4px; border-radius: 3px;">{{@描述文字}}</code> 占位符。'
+
+		const templateSelect = document.createElement('select')
+		templateSelect.style.cssText = `
+			width: 100%;
+			padding: 10px 12px;
+			height: 42px;
+			border: 1px solid var(--background-modifier-border);
+			border-radius: 8px;
+			background: var(--background-primary);
+			color: var(--text-normal);
+			font-size: var(--font-ui-small);
+			cursor: pointer;
+			pointer-events: auto;
+		`
+
+		// 获取模板文件列表
+		const promptTemplateFolder = this.settingsContext.getPromptTemplateFolder()
+		const templateFiles = this.app.vault.getMarkdownFiles().filter(f => 
+			f.path.startsWith(promptTemplateFolder + '/') || f.path.startsWith(promptTemplateFolder)
+		)
+
+		const defaultTemplateOption = document.createElement('option')
+		defaultTemplateOption.value = ''
+		defaultTemplateOption.textContent = '请选择模板文件...'
+		templateSelect.appendChild(defaultTemplateOption)
+
+		templateFiles.forEach(file => {
+			const option = document.createElement('option')
+			option.value = file.path
+			// 显示相对于模板目录的路径
+			const displayName = file.path.startsWith(promptTemplateFolder + '/') 
+				? file.path.substring(promptTemplateFolder.length + 1) 
+				: file.name
+			option.textContent = displayName
+			if (skill?.templateFile === file.path) {
+				option.selected = true
+			}
+			templateSelect.appendChild(option)
+		})
+
+		templateSection.appendChild(templateHint)
+		templateSection.appendChild(templateSelect)
+
+		// 提示词错误提示
 		const promptError = document.createElement('span')
 		promptError.style.cssText = `
 			display: none;
@@ -1591,13 +1868,23 @@ export class TarsSettingTab {
 			color: var(--text-error);
 		`
 
-		promptField.appendChild(promptLabel)
-		promptField.appendChild(promptHint)
-		promptField.appendChild(promptTextarea)
-		promptField.appendChild(promptError)
+		promptSourceField.appendChild(customPromptSection)
+		promptSourceField.appendChild(templateSection)
+		promptSourceField.appendChild(promptError)
+
+		// 切换提示词来源时更新显示
+		const updatePromptSourceDisplay = () => {
+			const isCustom = customRadio.checked
+			customPromptSection.style.display = isCustom ? 'block' : 'none'
+			templateSection.style.display = isCustom ? 'none' : 'block'
+		}
+
+		customRadio.addEventListener('change', updatePromptSourceDisplay)
+		templateRadio.addEventListener('change', updatePromptSourceDisplay)
 
 		body.appendChild(nameField)
-		body.appendChild(promptField)
+		body.appendChild(modelField)
+		body.appendChild(promptSourceField)
 
 		// 底部操作栏
 		const footer = document.createElement('div')
@@ -1655,14 +1942,28 @@ export class TarsSettingTab {
 				nameInput.style.borderColor = 'var(--background-modifier-border)'
 			}
 
-			if (!promptTextarea.value.trim()) {
-				promptError.textContent = '提示词内容不能为空'
-				promptError.style.display = 'block'
-				promptTextarea.style.borderColor = 'var(--text-error)'
-				hasError = true
+			// 根据提示词来源验证
+			const isCustomPrompt = customRadio.checked
+			if (isCustomPrompt) {
+				if (!promptTextarea.value.trim()) {
+					promptError.textContent = '提示词内容不能为空'
+					promptError.style.display = 'block'
+					promptTextarea.style.borderColor = 'var(--text-error)'
+					hasError = true
+				} else {
+					promptError.style.display = 'none'
+					promptTextarea.style.borderColor = 'var(--background-modifier-border)'
+				}
 			} else {
-				promptError.style.display = 'none'
-				promptTextarea.style.borderColor = 'var(--background-modifier-border)'
+				if (!templateSelect.value) {
+					promptError.textContent = '请选择一个模板文件'
+					promptError.style.display = 'block'
+					templateSelect.style.borderColor = 'var(--text-error)'
+					hasError = true
+				} else {
+					promptError.style.display = 'none'
+					templateSelect.style.borderColor = 'var(--background-modifier-border)'
+				}
 			}
 
 			if (hasError) return
@@ -1672,7 +1973,10 @@ export class TarsSettingTab {
 			const savedSkill: import('../chat/types/chat').Skill = {
 				id: skill?.id || crypto.randomUUID(),
 				name: nameInput.value.trim(),
-				prompt: promptTextarea.value.trim(),
+				prompt: isCustomPrompt ? promptTextarea.value.trim() : '',
+				promptSource: isCustomPrompt ? 'custom' : 'template',
+				templateFile: isCustomPrompt ? undefined : templateSelect.value,
+				modelTag: modelSelect.value || undefined,
 				showInToolbar: skill?.showInToolbar ?? true,
 				order: skill?.order ?? (this.chatSettings.skills || []).length,
 				createdAt: skill?.createdAt || now,
@@ -1692,17 +1996,24 @@ export class TarsSettingTab {
 		modal.appendChild(header)
 		modal.appendChild(body)
 		modal.appendChild(footer)
+
 		overlay.appendChild(modal)
 
-		// 点击遮罩关闭
-		overlay.addEventListener('click', (e) => {
+		// 点击遮罩关闭 - 使用 mousedown 而不是 click，在事件冒泡被阻止前处理
+		overlay.onmousedown = (e) => {
 			if (e.target === overlay) {
 				overlay.remove()
 			}
-		})
+		}
 
 		document.body.appendChild(overlay)
-		nameInput.focus()
+
+		// 延迟聚焦，确保DOM完全渲染
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				nameInput.focus()
+			})
+		})
 	}
 
 	/**
@@ -1729,6 +2040,44 @@ export class TarsSettingTab {
 		const skills = (this.chatSettings.skills || []).filter(s => s.id !== skillId)
 		await this.updateChatSettings({ skills })
 		new Notice('技能已删除')
+	}
+
+	/**
+	 * 更新技能显示在工具栏状态
+	 */
+	private async updateSkillShowInToolbar(skillId: string, showInToolbar: boolean): Promise<void> {
+		const skills = [...(this.chatSettings.skills || [])]
+		const skill = skills.find(s => s.id === skillId)
+		if (skill) {
+			skill.showInToolbar = showInToolbar
+			skill.updatedAt = Date.now()
+			await this.updateChatSettings({ skills })
+		}
+	}
+
+	/**
+	 * 重新排序技能
+	 */
+	private async reorderSkills(draggedId: string, targetId: string): Promise<void> {
+		const skills = [...(this.chatSettings.skills || [])]
+		const sortedSkills = skills.sort((a, b) => a.order - b.order)
+		
+		const draggedIndex = sortedSkills.findIndex(s => s.id === draggedId)
+		const targetIndex = sortedSkills.findIndex(s => s.id === targetId)
+		
+		if (draggedIndex === -1 || targetIndex === -1) return
+
+		// 移动技能
+		const [draggedSkill] = sortedSkills.splice(draggedIndex, 1)
+		sortedSkills.splice(targetIndex, 0, draggedSkill)
+
+		// 更新所有技能的 order
+		sortedSkills.forEach((skill, index) => {
+			skill.order = index
+			skill.updatedAt = Date.now()
+		})
+
+		await this.updateChatSettings({ skills: sortedSkills })
 	}
 
 	/**

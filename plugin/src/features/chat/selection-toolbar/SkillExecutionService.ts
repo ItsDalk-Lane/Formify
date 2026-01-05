@@ -28,7 +28,7 @@ export class SkillExecutionService {
 	 * 执行技能
 	 * @param skill 要执行的技能
 	 * @param selection 选中的文本
-	 * @param modelTag 可选的模型标签，不提供则使用默认模型
+	 * @param modelTag 可选的模型标签，不提供则使用技能配置的模型或默认模型
 	 * @returns 执行结果
 	 */
 	async executeSkill(
@@ -37,12 +37,23 @@ export class SkillExecutionService {
 		modelTag?: string
 	): Promise<SkillExecutionResult> {
 		try {
-			// 1. 解析提示词（处理模板引用和占位符）
-			const resolvedPrompt = await this.resolvePrompt(skill.prompt, selection);
+			// 1. 获取提示词内容
+			let promptContent = '';
+			if (skill.promptSource === 'template' && skill.templateFile) {
+				// 从模板文件加载提示词
+				promptContent = await this.loadTemplateFile(skill.templateFile);
+			} else {
+				// 使用自定义提示词
+				promptContent = skill.prompt;
+			}
 
-			// 2. 获取AI模型配置
+			// 2. 解析提示词（处理模板引用和占位符）
+			const resolvedPrompt = await this.resolvePrompt(promptContent, selection);
+
+			// 3. 获取AI模型配置（优先使用传入的 modelTag，其次使用技能配置的 modelTag）
 			const tarsSettings = this.getTarsSettings();
-			const providerSettings = this.getProviderSettings(tarsSettings, modelTag);
+			const effectiveModelTag = modelTag || skill.modelTag;
+			const providerSettings = this.getProviderSettings(tarsSettings, effectiveModelTag);
 
 			if (!providerSettings) {
 				return {
@@ -52,7 +63,7 @@ export class SkillExecutionService {
 				};
 			}
 
-			// 3. 调用AI模型
+			// 4. 调用AI模型
 			const result = await this.callAI(providerSettings, resolvedPrompt);
 
 			return {
@@ -70,8 +81,30 @@ export class SkillExecutionService {
 	}
 
 	/**
+	 * 加载模板文件内容
+	 */
+	private async loadTemplateFile(filePath: string): Promise<string> {
+		const file = this.app.vault.getAbstractFileByPath(filePath);
+		if (file instanceof TFile) {
+			try {
+				return await this.app.vault.read(file);
+			} catch (e) {
+				console.warn(`[SkillExecutionService] 读取模板文件失败: ${filePath}`, e);
+				throw new Error(`无法读取模板文件: ${filePath}`);
+			}
+		}
+		throw new Error(`模板文件不存在: ${filePath}`);
+	}
+
+	/**
 	 * 解析提示词
-	 * 处理模板引用 {{template:文件名}} 和占位符 {{selection}}
+	 * 处理模板引用 {{template:文件名}} 和占位符
+	 * 
+	 * 占位符规则：
+	 * - {{}} - 空的双大括号，会被替换为选中的文本
+	 * - {{@xxx}} - @ 符号在第一个字符位置时，整个占位符会被替换为选中的文本
+	 * - 例如：{{@用户输入}}、{{@选中内容}}、{{@}} 都会被替换
+	 * - {{xxx}} - 如果 {{ 后面不是 @ 符号且不为空，则不会被替换
 	 */
 	async resolvePrompt(prompt: string, selection: string): Promise<string> {
 		let resolvedPrompt = prompt;
@@ -86,8 +119,11 @@ export class SkillExecutionService {
 			resolvedPrompt = resolvedPrompt.replace(match[0], templateContent);
 		}
 
-		// 2. 替换 {{selection}} 占位符
-		resolvedPrompt = resolvedPrompt.replace(/\{\{selection\}\}/gi, selection);
+		// 2. 替换占位符
+		// 空的双大括号 {{}} - 会被替换
+		resolvedPrompt = resolvedPrompt.replace(/\{\{\}\}/g, selection);
+		// {{@xxx}} 格式 - @ 符号在 {{ 之后的第一个位置，会被替换
+		resolvedPrompt = resolvedPrompt.replace(/\{\{@[^}]*\}\}/g, selection);
 
 		return resolvedPrompt;
 	}
@@ -201,18 +237,29 @@ export class SkillExecutionService {
 		modelTag?: string
 	): AsyncGenerator<string, void, unknown> {
 		try {
-			// 1. 解析提示词
-			const resolvedPrompt = await this.resolvePrompt(skill.prompt, selection);
+			// 1. 获取提示词内容
+			let promptContent = '';
+			if (skill.promptSource === 'template' && skill.templateFile) {
+				// 从模板文件加载提示词
+				promptContent = await this.loadTemplateFile(skill.templateFile);
+			} else {
+				// 使用自定义提示词
+				promptContent = skill.prompt;
+			}
 
-			// 2. 获取AI模型配置
+			// 2. 解析提示词
+			const resolvedPrompt = await this.resolvePrompt(promptContent, selection);
+
+			// 3. 获取AI模型配置（优先使用传入的 modelTag，其次使用技能配置的 modelTag）
 			const tarsSettings = this.getTarsSettings();
-			const providerSettings = this.getProviderSettings(tarsSettings, modelTag);
+			const effectiveModelTag = modelTag || skill.modelTag;
+			const providerSettings = this.getProviderSettings(tarsSettings, effectiveModelTag);
 
 			if (!providerSettings) {
 				throw new Error('未找到可用的AI模型配置');
 			}
 
-			// 3. 流式调用AI
+			// 4. 流式调用AI
 			const vendor = this.getVendor(providerSettings.vendor);
 			
 			if (!vendor) {

@@ -67,7 +67,7 @@ export class ChatFeatureManager {
 		
 		// 如果设置了功能区图标显示状态，则更新图标
 		if ('showRibbonIcon' in settings) {
-			this.updateRibbonIcon(settings.showRibbonIcon);
+			this.updateRibbonIcon(settings.showRibbonIcon ?? false);
 		}
 
 		// 如果触发设置变化，更新编辑器扩展
@@ -410,22 +410,55 @@ export class ChatFeatureManager {
 		// 初始渲染（加载状态）
 		renderModal();
 
-		// 执行技能并流式更新结果
-		this.executeSkillAndStream(skill, selection, {
-			onChunk: (chunk) => {
-				result += chunk;
-				renderModal();
-			},
-			onComplete: () => {
+		// 根据设置决定使用流式输出还是非流式输出
+		const useStreamOutput = this.plugin.settings.chat.selectionToolbarStreamOutput ?? true;
+
+		if (useStreamOutput) {
+			// 执行技能并流式更新结果
+			this.executeSkillAndStream(skill, selection, {
+				onChunk: (chunk) => {
+					result += chunk;
+					renderModal();
+				},
+				onComplete: () => {
+					isLoading = false;
+					renderModal();
+				},
+				onError: (err) => {
+					isLoading = false;
+					error = err;
+					renderModal();
+				}
+			});
+		} else {
+			// 非流式输出：等待完整响应
+			this.executeSkillNonStream(skill, selection).then((response) => {
+				result = response;
 				isLoading = false;
 				renderModal();
-			},
-			onError: (err) => {
+			}).catch((err) => {
 				isLoading = false;
-				error = err;
+				error = err instanceof Error ? err.message : String(err);
 				renderModal();
-			}
-		});
+			});
+		}
+	}
+
+	/**
+	 * 非流式执行技能
+	 */
+	private async executeSkillNonStream(skill: Skill, selection: string): Promise<string> {
+		if (!this.skillExecutionService) {
+			throw new Error('技能执行服务未初始化');
+		}
+
+		const result = await this.skillExecutionService.executeSkill(skill, selection);
+		
+		if (!result.success) {
+			throw new Error(result.error || '执行失败');
+		}
+
+		return result.content;
 	}
 
 	/**
@@ -509,7 +542,7 @@ export class ChatFeatureManager {
 					<SkillResultModal
 						app={this.plugin.app}
 						visible={false}
-						skill={{ id: '', name: '', prompt: '', showInToolbar: false, order: 0, createdAt: 0, updatedAt: 0 }}
+						skill={{ id: '', name: '', prompt: '', promptSource: 'custom', showInToolbar: false, order: 0, createdAt: 0, updatedAt: 0 }}
 						selection=""
 						result=""
 						isLoading={false}

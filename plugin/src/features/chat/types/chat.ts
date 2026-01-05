@@ -48,6 +48,11 @@ export interface ChatSession {
 export type ChatOpenMode = 'sidebar' | 'left-sidebar' | 'tab' | 'window';
 
 /**
+ * 技能提示词来源类型
+ */
+export type SkillPromptSource = 'custom' | 'template';
+
+/**
  * AI 技能接口
  * 用于定义划词工具栏中的自定义技能
  */
@@ -55,6 +60,9 @@ export interface Skill {
 	id: string;                // 技能唯一标识符
 	name: string;              // 技能名称
 	prompt: string;            // 提示词内容（可能包含模板引用和占位符）
+	promptSource: SkillPromptSource; // 提示词来源类型：自定义或内置模板
+	templateFile?: string;     // 当 promptSource 为 'template' 时，使用的模板文件路径
+	modelTag?: string;         // 指定使用的 AI 模型标签，留空则使用默认模型
 	showInToolbar: boolean;    // 是否在工具栏显示
 	order: number;             // 排序顺序
 	createdAt: number;         // 创建时间戳
@@ -85,7 +93,8 @@ export interface ChatSettings {
 	// AI 划词功能配置
 	enableSelectionToolbar: boolean; // 是否启用划词功能
 	maxToolbarButtons: number; // 工具栏最多显示的按钮数量
-	skills: Skill[]; // 技能列表
+	selectionToolbarStreamOutput: boolean; // AI 划词是否使用流式输出
+	skills: Skill[]; // 技能列表（注：技能数据单独存储在 skills.json 文件中）
 }
 
 export interface ChatState {
@@ -134,6 +143,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	// AI 划词功能默认配置
 	enableSelectionToolbar: true, // 默认启用划词功能
 	maxToolbarButtons: 4, // 默认显示4个按钮
-	skills: [], // 默认无技能
+	selectionToolbarStreamOutput: true, // 默认启用流式输出
+	skills: [], // 默认无技能（注：技能数据单独存储在 skills.json 文件中）
 };
 

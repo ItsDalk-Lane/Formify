@@ -37,6 +37,13 @@ export const SelectionToolbar = ({
 	const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 
+	// 每次工具栏重新显示时，重置下拉菜单为折叠状态
+	useEffect(() => {
+		if (visible) {
+			setIsDropdownOpen(false);
+		}
+	}, [visible, selectionInfo]);
+
 	// 获取要显示的技能
 	const { toolbarSkills, dropdownSkills } = useMemo(() => {
 		const enabledSkills = (settings.skills || [])
@@ -190,7 +197,6 @@ export const SelectionToolbar = ({
 				title={localInstance.selection_toolbar_ai_chat || 'AI Chat'}
 			>
 				<MessageSquare size={14} />
-				<span>{localInstance.selection_toolbar_ai_chat || 'AI Chat'}</span>
 			</button>
 
 			{/* 技能按钮 */}

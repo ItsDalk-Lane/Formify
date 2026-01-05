@@ -589,8 +589,6 @@ export class Zh implements Local {
 	start_import = "开始导入";
 	previous_step = "上一步";
 	next_step = "下一步";
-	cancel = "取消";
-	close = "关闭";
 	complete_import = "完成导入";
 	modified_at = "修改于";
 	data_independence_enabled = "已启用数据独立性";
@@ -643,7 +641,6 @@ export class Zh implements Local {
 	startup_condition_file_is_open = "文件已在编辑器中打开";
 	startup_condition_file_is_active = "文件是当前激活文件";
 	startup_condition_search_text = "搜索文本";
-	startup_condition_search_text_placeholder = "输入要搜索的文本";
 	startup_condition_properties = "属性列表";
 	startup_condition_add_property = "添加属性";
 	startup_condition_not_met_detail = "表单执行条件未满足：{0}";
@@ -732,4 +729,19 @@ export class Zh implements Local {
 	skill_result_replaced = "已替换选中文本";
 	skill_result_appended = "已追加到选中内容";
 	skill_result_inserted = "已插入到光标位置";
+	// AI 划词增强功能
+	skill_edit_model_label = "AI 模型";
+	skill_edit_model_hint = "选择执行此技能时使用的 AI 模型，留空则使用默认模型";
+	skill_edit_model_default = "使用默认模型";
+	skill_edit_prompt_source_label = "提示词来源";
+	skill_edit_prompt_source_custom = "自定义";
+	skill_edit_prompt_source_template = "内置模板";
+	skill_edit_custom_prompt_hint = "使用 {{}} 作为占位符代表选中的文本，系统执行时会自动替换为实际选中的内容。";
+	skill_edit_template_hint = "从 AI 提示词模板目录中选择模板文件，模板中同样支持使用 {{}} 占位符。";
+	skill_edit_template_select_placeholder = "请选择模板文件...";
+	skill_edit_template_required = "请选择一个模板文件";
+	selection_toolbar_stream_output = "流式输出";
+	selection_toolbar_stream_output_desc = "启用后 AI 将逐字输出结果，关闭则等待完整响应后一次性显示";
+	skill_show_in_toolbar = "显示在工具栏";
+	skill_not_show_in_toolbar = "未显示在工具栏";
 }

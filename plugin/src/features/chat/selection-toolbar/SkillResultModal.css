@@ -125,6 +125,36 @@
 	}
 }
 
+/* 流式输出指示器 */
+.skill-result-modal-streaming-indicator {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 0;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.skill-result-modal-streaming-dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	background: var(--interactive-accent);
+	border-radius: 50%;
+	animation: skill-result-streaming-pulse 1s ease-in-out infinite;
+}
+
+@keyframes skill-result-streaming-pulse {
+	0%, 100% {
+		opacity: 0.4;
+		transform: scale(0.8);
+	}
+	50% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
 /* 底部操作栏 */
 .skill-result-modal-footer {
 	display: flex;

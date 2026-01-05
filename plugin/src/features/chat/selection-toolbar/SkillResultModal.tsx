@@ -65,9 +65,9 @@ export const SkillResultModal = ({
 		onInsert('insert');
 	}, [onInsert]);
 
-	// 渲染 Markdown 内容
+	// 渲染 Markdown 内容（流式输出时也实时渲染）
 	useEffect(() => {
-		if (!contentRef.current || !result || isLoading) {
+		if (!contentRef.current || !result) {
 			return;
 		}
 
@@ -89,14 +89,18 @@ export const SkillResultModal = ({
 			componentRef.current
 		);
 
+		// 仅在组件卸载时清理
+	}, [app, result]);
+
+	// 组件卸载时清理
+	useEffect(() => {
 		return () => {
-			// 清理时卸载组件
 			if (componentRef.current) {
 				componentRef.current.unload();
 				componentRef.current = null;
 			}
 		};
-	}, [app, result, isLoading]);
+	}, []);
 
 	// 处理 ESC 键关闭
 	useEffect(() => {
@@ -145,16 +149,24 @@ export const SkillResultModal = ({
 							<span className="skill-result-modal-error-icon">⚠️</span>
 							<span>{error}</span>
 						</div>
-					) : isLoading ? (
+					) : (isLoading && !result) ? (
 						<div className="skill-result-modal-loading-content">
 							<div className="skill-result-modal-spinner" />
 							<span>{localInstance.ai_executing || 'AI处理中...'}</span>
 						</div>
 					) : (
-						<div
-							ref={contentRef}
-							className="skill-result-modal-content markdown-preview-view"
-						/>
+						<>
+							<div
+								ref={contentRef}
+								className="skill-result-modal-content markdown-preview-view"
+							/>
+							{isLoading && (
+								<div className="skill-result-modal-streaming-indicator">
+									<span className="skill-result-modal-streaming-dot" />
+									<span>{localInstance.ai_streaming_generating || '生成中...'}</span>
+								</div>
+							)}
+						</>
 					)}
 				</div>
 
