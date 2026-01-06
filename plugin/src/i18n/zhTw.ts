@@ -703,15 +703,15 @@ export class ZhTw implements Local {
 	chat_modal_title = "AI Chat";
 	chat_trigger_no_active_file = "請先開啟一個 Markdown 檔案";
 	chat_trigger_settings_section = "編輯器觸發設定";
-	// AI 劃詞功能
+	// 快捷技能
 	selection_toolbar_ai_chat = "AI Chat";
 	selection_toolbar_more = "更多";
 	selection_toolbar_no_more_skills = "暫無更多技能";
-	selection_toolbar_enable = "啟用 AI 劃詞功能";
+	selection_toolbar_enable = "啟用快捷技能";
 	selection_toolbar_enable_desc = "關閉後，編輯器選取文字時不再顯示懸浮工具列";
 	selection_toolbar_max_buttons = "工具列按鈕數量";
 	selection_toolbar_max_buttons_desc = "工具列最多顯示的技能按鈕數量（超過的技能顯示在下拉選單中）";
-	selection_toolbar_settings_section = "AI 劃詞";
+	selection_toolbar_settings_section = "快捷技能";
 	// 技能管理
 	skill_management = "技能管理";
 	skill_management_hint = "前 {0} 個技能將顯示在工具列上，其他的將隱藏在下拉選單中";

@@ -757,7 +757,7 @@ export class TarsSettingTab {
 					});
 			});
 
-		// AI 划词设置区域
+		// 快捷技能设置区域
 		this.renderSelectionToolbarSettings(containerEl);
 
 		// AI Tab 补全设置区域（使用 Setting 组件，与上方保持一致）
@@ -1092,12 +1092,12 @@ export class TarsSettingTab {
 	}
 
 	/**
-	 * 渲染 AI 划词设置区域
+	 * 渲染快捷技能设置区域
 	 */
 	private renderSelectionToolbarSettings(containerEl: HTMLElement): void {
-		// AI 划词设置标题行
+		// 快捷技能设置标题行
 		const selectionToolbarHeaderSetting = new Setting(containerEl)
-			.setName('AI 划词')
+			.setName('快捷技能')
 			.setDesc('选中文本时显示悬浮工具栏，快速执行AI技能')
 
 		// 创建一个包装器来容纳按钮和图标
@@ -1171,9 +1171,9 @@ export class TarsSettingTab {
 			toggleSelectionToolbarSection()
 		})
 
-		// 启用划词功能开关
+		// 启用快捷技能开关
 		new Setting(selectionToolbarSection)
-			.setName('启用 AI 划词功能')
+			.setName('启用快捷技能')
 			.setDesc('关闭后，编辑器选中文本时不再显示悬浮工具栏')
 			.addToggle((toggle) => {
 				toggle.setValue(this.chatSettings.enableSelectionToolbar ?? true)

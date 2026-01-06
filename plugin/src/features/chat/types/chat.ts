@@ -90,10 +90,10 @@ export interface ChatSettings {
 	chatTriggerSymbol: string; // 触发符号，默认 "@"
 	chatModalWidth: number; // 模态框宽度
 	chatModalHeight: number; // 模态框高度
-	// AI 划词功能配置
-	enableSelectionToolbar: boolean; // 是否启用划词功能
+	// 快捷技能配置
+	enableSelectionToolbar: boolean; // 是否启用快捷技能
 	maxToolbarButtons: number; // 工具栏最多显示的按钮数量
-	selectionToolbarStreamOutput: boolean; // AI 划词是否使用流式输出
+	selectionToolbarStreamOutput: boolean; // 快捷技能是否使用流式输出
 	skills?: Skill[]; // 技能列表（已废弃，技能数据现在独立存储在 .obsidian/plugins/formify/skills.json 中）
 }
 
@@ -140,8 +140,8 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	chatTriggerSymbol: '@', // 默认触发符号 "@"
 	chatModalWidth: 700, // 默认模态框宽度
 	chatModalHeight: 500, // 默认模态框高度
-	// AI 划词功能默认配置
-	enableSelectionToolbar: true, // 默认启用划词功能
+	// 快捷技能默认配置
+	enableSelectionToolbar: true, // 默认启用快捷技能
 	maxToolbarButtons: 4, // 默认显示4个按钮
 	selectionToolbarStreamOutput: true, // 默认启用流式输出
 	skills: [], // 默认无技能（已废弃，仅用于向后兼容和数据迁移）

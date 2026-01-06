@@ -678,15 +678,15 @@ export class En implements Local {
 	chat_modal_title = "AI Chat";
 	chat_trigger_no_active_file = "Please open a Markdown file first";
 	chat_trigger_settings_section = "Editor Trigger Settings";
-	// AI Selection Toolbar
+	// Quick Skills
 	selection_toolbar_ai_chat = "AI Chat";
 	selection_toolbar_more = "More";
 	selection_toolbar_no_more_skills = "No more skills";
-	selection_toolbar_enable = "Enable AI Selection Toolbar";
+	selection_toolbar_enable = "Enable Quick Skills";
 	selection_toolbar_enable_desc = "When disabled, floating toolbar will not appear when selecting text";
 	selection_toolbar_max_buttons = "Toolbar Button Count";
 	selection_toolbar_max_buttons_desc = "Maximum number of skill buttons on toolbar (rest shown in dropdown)";
-	selection_toolbar_settings_section = "AI Selection";
+	selection_toolbar_settings_section = "Quick Skills";
 	// Skill Management
 	skill_management = "Skill Management";
 	skill_management_hint = "First {0} skills will be shown on toolbar, others in dropdown";

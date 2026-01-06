@@ -687,15 +687,15 @@ export class Zh implements Local {
 	chat_modal_title = "AI Chat";
 	chat_trigger_no_active_file = "请先打开一个 Markdown 文件";
 	chat_trigger_settings_section = "编辑器触发设置";
-	// AI 划词功能
+	// 快捷技能
 	selection_toolbar_ai_chat = "AI Chat";
 	selection_toolbar_more = "更多";
 	selection_toolbar_no_more_skills = "暂无更多技能";
-	selection_toolbar_enable = "启用 AI 划词功能";
+	selection_toolbar_enable = "启用快捷技能";
 	selection_toolbar_enable_desc = "关闭后，编辑器选中文本时不再显示悬浮工具栏";
 	selection_toolbar_max_buttons = "工具栏按钮数量";
 	selection_toolbar_max_buttons_desc = "工具栏最多显示的技能按钮数量（超过的技能显示在下拉菜单中）";
-	selection_toolbar_settings_section = "AI 划词";
+	selection_toolbar_settings_section = "快捷技能";
 	// 技能管理
 	skill_management = "技能管理";
 	skill_management_hint = "前 {0} 个技能将显示在工具栏上，其他的将隐藏在下拉菜单中";
@@ -729,7 +729,7 @@ export class Zh implements Local {
 	skill_result_replaced = "已替换选中文本";
 	skill_result_appended = "已追加到选中内容";
 	skill_result_inserted = "已插入到光标位置";
-	// AI 划词增强功能
+	// 快捷技能增强功能
 	skill_edit_model_label = "AI 模型";
 	skill_edit_model_hint = "选择执行此技能时使用的 AI 模型，留空则使用默认模型";
 	skill_edit_model_default = "使用默认模型";
