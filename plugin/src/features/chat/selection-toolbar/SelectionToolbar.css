@@ -2,7 +2,7 @@
 .selection-toolbar {
 	display: flex;
 	align-items: center;
-	gap: 2px;
+	gap: 0;
 	padding: 4px;
 	background: var(--background-primary);
 	border: none;
@@ -18,7 +18,7 @@ button.selection-toolbar-btn {
 	align-items: center;
 	justify-content: center;
 	gap: 4px;
-	padding: 6px 10px;
+	padding: 6px 3px;
 	border: none !important;
 	border-radius: 6px;
 	background: transparent !important;
@@ -71,7 +71,7 @@ button.selection-toolbar-btn-more {
 	width: 1px;
 	height: 20px;
 	background: transparent;
-	margin: 0 4px;
+	margin: 0 1px;
 }
 
 /* 下拉菜单容器 */
@@ -125,7 +125,7 @@ button.selection-toolbar-btn-more {
 /* 响应式调整 */
 @media (max-width: 600px) {
 	.selection-toolbar {
-		gap: 1px;
+		gap: 0.5px;
 		padding: 3px;
 	}
 	

@@ -26,6 +26,10 @@ export const TarsSettingTabItem = ({ plugin }: Props) => {
 				};
 				await plugin.saveSettings();
 			},
+			refreshSkillsCache: async () => {
+				// 通过插件实例访问 FeatureCoordinator 来刷新技能缓存
+				await plugin.featureCoordinator.refreshSkillsCache();
+			},
 		});
 
 		panel.render(containerRef.current);

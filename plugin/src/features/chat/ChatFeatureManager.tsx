@@ -12,6 +12,7 @@ import {
 	SelectionInfo
 } from './selection-toolbar/SelectionToolbarExtension';
 import { SkillExecutionService } from './selection-toolbar/SkillExecutionService';
+import { SkillDataService } from './selection-toolbar/SkillDataService';
 import type { ChatSettings, ChatOpenMode, Skill } from './types/chat';
 import type { TarsSettings } from '../tars/settings';
 import { localInstance } from 'src/i18n/locals';
@@ -19,6 +20,7 @@ import { createRoot, Root } from 'react-dom/client';
 import { StrictMode } from 'react';
 import { SelectionToolbar } from './selection-toolbar/SelectionToolbar';
 import { SkillResultModal } from './selection-toolbar/SkillResultModal';
+import { DebugLogger } from 'src/utils/DebugLogger';
 
 export class ChatFeatureManager {
 	private readonly service: ChatService;
@@ -26,14 +28,16 @@ export class ChatFeatureManager {
 	private chatTriggerExtension: Extension | null = null;
 	private selectionToolbarExtension: Extension | null = null;
 	private skillExecutionService: SkillExecutionService | null = null;
-	
+	private skillDataService: SkillDataService | null = null;
+	private cachedSkills: Skill[] = []; // 缓存的技能列表
+
 	// 选区工具栏 React 组件容器
 	private toolbarContainer: HTMLElement | null = null;
 	private toolbarRoot: Root | null = null;
 	private currentSelectionInfo: SelectionInfo | null = null;
 	private currentEditorView: EditorView | null = null;
 	private isToolbarVisible = false;
-	
+
 	// 技能结果模态框状态
 	private resultModalContainer: HTMLElement | null = null;
 	private resultModalRoot: Root | null = null;
@@ -42,7 +46,7 @@ export class ChatFeatureManager {
 		this.service = new ChatService(plugin);
 	}
 
-	initialize(initialSettings?: Partial<ChatSettings>) {
+	async initialize(initialSettings?: Partial<ChatSettings>) {
 		this.service.initialize(initialSettings);
 		this.registerViews();
 		this.registerCommands();
@@ -50,6 +54,7 @@ export class ChatFeatureManager {
 		this.registerChatTriggerExtension();
 		this.registerSelectionToolbarExtension();
 		this.initializeSkillExecutionService();
+		await this.initializeSkillDataService(initialSettings);
 
 		// 延迟自动打开聊天界面，确保工作区完全准备好
 		const shouldAutoOpen = initialSettings?.showSidebarByDefault ?? this.plugin.settings.chat.showSidebarByDefault;
@@ -87,6 +92,16 @@ export class ChatFeatureManager {
 
 	getService(): ChatService {
 		return this.service;
+	}
+
+	/**
+	 * 刷新技能缓存
+	 */
+	async refreshSkillsCache(): Promise<void> {
+		if (this.skillDataService) {
+			this.cachedSkills = await this.skillDataService.getSortedSkills();
+			DebugLogger.debug('[ChatFeatureManager] 技能缓存已刷新，共', this.cachedSkills.length, '个技能');
+		}
 	}
 
 	async activateChatView(mode: ChatOpenMode) {
@@ -221,6 +236,27 @@ export class ChatFeatureManager {
 	}
 
 	/**
+	 * 初始化技能数据服务并执行数据迁移
+	 */
+	private async initializeSkillDataService(initialSettings?: Partial<ChatSettings>) {
+		try {
+			this.skillDataService = SkillDataService.getInstance(this.plugin.app);
+			await this.skillDataService.initialize();
+
+			// 执行数据迁移：从旧设置迁移技能数据到独立文件
+			const legacySkills = initialSettings?.skills ?? this.plugin.settings.chat.skills ?? [];
+			await this.skillDataService.migrateFromSettings(legacySkills);
+
+			// 加载技能到缓存
+			this.cachedSkills = await this.skillDataService.getSortedSkills();
+
+			DebugLogger.debug('[ChatFeatureManager] 技能数据服务初始化完成，已加载', this.cachedSkills.length, '个技能');
+		} catch (error) {
+			DebugLogger.error('[ChatFeatureManager] 技能数据服务初始化失败', error);
+		}
+	}
+
+	/**
 	 * 注册选区工具栏编辑器扩展
 	 */
 	private registerSelectionToolbarExtension() {
@@ -293,13 +329,15 @@ export class ChatFeatureManager {
 		}
 
 		const settings = this.plugin.settings.chat;
+		// 使用缓存的技能列表，不从 settings 中获取
+		const settingsWithCachedSkills = { ...settings, skills: this.cachedSkills };
 
 		this.toolbarRoot.render(
 			<StrictMode>
 				<SelectionToolbar
 					visible={this.isToolbarVisible}
 					selectionInfo={this.currentSelectionInfo}
-					settings={settings}
+					settings={settingsWithCachedSkills}
 					onOpenChat={(selection) => this.openChatWithSelection(selection)}
 					onExecuteSkill={(skill, selection) => this.executeSkill(skill, selection)}
 					onClose={() => this.hideSelectionToolbar()}
@@ -316,12 +354,15 @@ export class ChatFeatureManager {
 		this.currentSelectionInfo = null;
 
 		if (this.toolbarRoot) {
+			const settings = this.plugin.settings.chat;
+			const settingsWithCachedSkills = { ...settings, skills: this.cachedSkills };
+
 			this.toolbarRoot.render(
 				<StrictMode>
 					<SelectionToolbar
 						visible={false}
 						selectionInfo={null}
-						settings={this.plugin.settings.chat}
+						settings={settingsWithCachedSkills}
 						onOpenChat={() => {}}
 						onExecuteSkill={() => {}}
 						onClose={() => {}}

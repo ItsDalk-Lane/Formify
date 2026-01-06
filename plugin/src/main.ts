@@ -18,7 +18,7 @@ export default class FormPlugin extends Plugin {
 	api!: FormFlowApi;
 
 	private settingsManager = new SettingsManager(this);
-	private featureCoordinator = new FeatureCoordinator(this);
+	featureCoordinator = new FeatureCoordinator(this);
 	private services = new ServiceContainer();
 	private conflictMonitor: ConflictMonitor | null = null;
 

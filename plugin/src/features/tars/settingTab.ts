@@ -4,6 +4,7 @@ import { SelectModelModal, SelectVendorModal, ProviderSettingModal } from './mod
 import { BaseOptions, Message, Optional, ProviderSettings, ResolveEmbedAsBinary, Vendor } from './providers'
 import { ClaudeOptions, claudeVendor } from './providers/claude'
 import { DebugLogger } from '../../utils/DebugLogger'
+import { SkillDataService } from '../chat/selection-toolbar/SkillDataService'
 import {
 	DoubaoOptions,
 	doubaoVendor,
@@ -36,6 +37,7 @@ export interface TarsSettingsContext {
 	getPromptTemplateFolder: () => string
 	saveSettings: () => Promise<void>
 	updateChatSettings: (partial: Partial<ChatSettings>) => Promise<void>
+	refreshSkillsCache?: () => Promise<void>
 }
 
 export class TarsSettingTab {
@@ -1106,8 +1108,8 @@ export class TarsSettingTab {
 		const addSkillButton = selectionToolbarButtonWrapper.createEl('button', { cls: 'mod-cta' })
 		addSkillButton.textContent = '+ 添加技能'
 		addSkillButton.style.cssText = 'font-size: var(--font-ui-smaller); padding: 4px 12px;'
-		addSkillButton.onclick = () => {
-			this.openSkillEditModal()
+		addSkillButton.onclick = async () => {
+			await this.openSkillEditModal()
 		}
 
 		// 添加Chevron图标
@@ -1261,7 +1263,7 @@ export class TarsSettingTab {
 		// 技能列表内容
 		const skillsListContent = skillsListContainer.createDiv({ cls: 'skills-list-content' })
 		skillsListContent.style.display = 'none' // 默认折叠
-		this.renderSkillsList(skillsListContent)
+		void this.renderSkillsList(skillsListContent)
 
 		// 点击切换折叠状态
 		skillsListHeader.onclick = () => {
@@ -1274,10 +1276,10 @@ export class TarsSettingTab {
 	/**
 	 * 渲染技能列表
 	 */
-	private renderSkillsList(container: HTMLElement): void {
+	private async renderSkillsList(container: HTMLElement): Promise<void> {
 		container.empty()
 
-		const skills = this.chatSettings.skills || []
+		const skills = await this.getSkillsFromService()
 
 		if (skills.length === 0) {
 			const emptyTip = container.createEl('div', { cls: 'skills-list-empty' })
@@ -1351,7 +1353,7 @@ export class TarsSettingTab {
 				const draggedId = e.dataTransfer?.getData('text/plain')
 				if (draggedId && draggedId !== skill.id) {
 					await this.reorderSkills(draggedId, skill.id)
-					this.renderSkillsList(container)
+					await this.renderSkillsList(container)
 				}
 			})
 
@@ -1389,7 +1391,7 @@ export class TarsSettingTab {
 			showInToolbarCheckbox.onclick = (e) => e.stopPropagation()
 			showInToolbarCheckbox.onchange = async () => {
 				await this.updateSkillShowInToolbar(skill.id, showInToolbarCheckbox.checked)
-				this.renderSkillsList(container)
+				await this.renderSkillsList(container)
 			}
 
 			// 技能名称
@@ -1430,9 +1432,9 @@ export class TarsSettingTab {
 				editBtn.style.backgroundColor = 'transparent'
 				editBtn.style.color = 'var(--text-muted)'
 			})
-			editBtn.onclick = (e) => {
+			editBtn.onclick = async (e) => {
 				e.stopPropagation()
-				this.openSkillEditModal(skill)
+				await this.openSkillEditModal(skill)
 			}
 
 			// 删除按钮
@@ -1460,7 +1462,7 @@ export class TarsSettingTab {
 			deleteBtn.onclick = async (e) => {
 				e.stopPropagation()
 				await this.deleteSkill(skill.id)
-				this.renderSkillsList(container)
+				await this.renderSkillsList(container)
 			}
 		})
 	}
@@ -1468,7 +1470,7 @@ export class TarsSettingTab {
 	/**
 	 * 打开技能编辑模态框
 	 */
-	private openSkillEditModal(skill?: import('../chat/types/chat').Skill): void {
+	private async openSkillEditModal(skill?: import('../chat/types/chat').Skill): Promise<void> {
 		// 阻止所有事件冒泡的辅助函数
 		const stopAllPropagation = (e: Event) => {
 			e.stopPropagation()
@@ -1526,7 +1528,8 @@ export class TarsSettingTab {
 		modal.addEventListener('input', stopAllPropagation)
 
 		const isEditMode = !!skill
-		const existingNames = (this.chatSettings.skills || [])
+		const allSkills = await this.getSkillsFromService()
+		const existingNames = allSkills
 			.filter(s => s.id !== skill?.id)
 			.map(s => s.name)
 
@@ -1978,16 +1981,20 @@ export class TarsSettingTab {
 				templateFile: isCustomPrompt ? undefined : templateSelect.value,
 				modelTag: modelSelect.value || undefined,
 				showInToolbar: skill?.showInToolbar ?? true,
-				order: skill?.order ?? (this.chatSettings.skills || []).length,
+				order: skill?.order ?? allSkills.length,
 				createdAt: skill?.createdAt || now,
 				updatedAt: now
 			}
 
 			await this.saveSkill(savedSkill)
 			overlay.remove()
-			
-			// 重新渲染整个设置页面以更新技能列表
-			this.render(this.containerEl)
+
+			// 只重新渲染技能列表部分，而不是整个设置页面
+			// 找到技能列表容器并重新渲染
+			const skillsListContainer = this.containerEl.querySelector('.skills-list-content') as HTMLElement
+			if (skillsListContainer) {
+				await this.renderSkillsList(skillsListContainer)
+			}
 		}
 
 		footer.appendChild(cancelBtn)
@@ -2017,19 +2024,37 @@ export class TarsSettingTab {
 	}
 
 	/**
+	 * 获取技能列表（从 SkillDataService）
+	 */
+	private async getSkillsFromService(): Promise<import('../chat/types/chat').Skill[]> {
+		const skillDataService = SkillDataService.getInstance(this.app)
+		await skillDataService.initialize()
+		return await skillDataService.getSortedSkills()
+	}
+
+	/**
 	 * 保存技能
 	 */
 	private async saveSkill(skill: import('../chat/types/chat').Skill): Promise<void> {
-		const skills = [...(this.chatSettings.skills || [])]
-		const existingIndex = skills.findIndex(s => s.id === skill.id)
-		
-		if (existingIndex >= 0) {
-			skills[existingIndex] = skill
-		} else {
-			skills.push(skill)
-		}
+		DebugLogger.debug('[TarsSettingTab] 开始保存技能:', skill.name, 'ID:', skill.id)
 
-		await this.updateChatSettings({ skills })
+		const skillDataService = SkillDataService.getInstance(this.app)
+		await skillDataService.initialize()
+
+		const existingSkills = await skillDataService.getSkills()
+		const existingIndex = existingSkills.findIndex(s => s.id === skill.id)
+
+		DebugLogger.debug('[TarsSettingTab] 当前技能数量:', existingSkills.length, '是否为更新:', existingIndex >= 0)
+
+		await skillDataService.saveSkill(skill)
+
+		// 刷新 ChatFeatureManager 中的技能缓存
+		await this.settingsContext.refreshSkillsCache?.()
+
+		// 验证保存是否成功
+		const savedSkills = await skillDataService.getSkills()
+		DebugLogger.debug('[TarsSettingTab] 保存后技能数量:', savedSkills.length)
+
 		new Notice(existingIndex >= 0 ? '技能已更新' : '技能已创建')
 	}
 
@@ -2037,8 +2062,14 @@ export class TarsSettingTab {
 	 * 删除技能
 	 */
 	private async deleteSkill(skillId: string): Promise<void> {
-		const skills = (this.chatSettings.skills || []).filter(s => s.id !== skillId)
-		await this.updateChatSettings({ skills })
+		const skillDataService = SkillDataService.getInstance(this.app)
+		await skillDataService.initialize()
+
+		await skillDataService.deleteSkill(skillId)
+
+		// 刷新 ChatFeatureManager 中的技能缓存
+		await this.settingsContext.refreshSkillsCache?.()
+
 		new Notice('技能已删除')
 	}
 
@@ -2046,25 +2077,28 @@ export class TarsSettingTab {
 	 * 更新技能显示在工具栏状态
 	 */
 	private async updateSkillShowInToolbar(skillId: string, showInToolbar: boolean): Promise<void> {
-		const skills = [...(this.chatSettings.skills || [])]
-		const skill = skills.find(s => s.id === skillId)
-		if (skill) {
-			skill.showInToolbar = showInToolbar
-			skill.updatedAt = Date.now()
-			await this.updateChatSettings({ skills })
-		}
+		const skillDataService = SkillDataService.getInstance(this.app)
+		await skillDataService.initialize()
+
+		await skillDataService.updateSkillShowInToolbar(skillId, showInToolbar)
+
+		// 刷新 ChatFeatureManager 中的技能缓存
+		await this.settingsContext.refreshSkillsCache?.()
 	}
 
 	/**
 	 * 重新排序技能
 	 */
 	private async reorderSkills(draggedId: string, targetId: string): Promise<void> {
-		const skills = [...(this.chatSettings.skills || [])]
+		const skillDataService = SkillDataService.getInstance(this.app)
+		await skillDataService.initialize()
+
+		const skills = await skillDataService.getSkills()
 		const sortedSkills = skills.sort((a, b) => a.order - b.order)
-		
+
 		const draggedIndex = sortedSkills.findIndex(s => s.id === draggedId)
 		const targetIndex = sortedSkills.findIndex(s => s.id === targetId)
-		
+
 		if (draggedIndex === -1 || targetIndex === -1) return
 
 		// 移动技能
@@ -2072,12 +2106,16 @@ export class TarsSettingTab {
 		sortedSkills.splice(targetIndex, 0, draggedSkill)
 
 		// 更新所有技能的 order
-		sortedSkills.forEach((skill, index) => {
-			skill.order = index
-			skill.updatedAt = Date.now()
+		const orderedIds = sortedSkills.map((s, index) => {
+			s.order = index
+			s.updatedAt = Date.now()
+			return s.id
 		})
 
-		await this.updateChatSettings({ skills: sortedSkills })
+		await skillDataService.updateSkillsOrder(orderedIds)
+
+		// 刷新 ChatFeatureManager 中的技能缓存
+		await this.settingsContext.refreshSkillsCache?.()
 	}
 
 	/**

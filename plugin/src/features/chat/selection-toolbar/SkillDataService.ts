@@ -1,11 +1,11 @@
-import { App, TFile, TFolder } from 'obsidian';
+import { App } from 'obsidian';
 import type { Skill } from '../types/chat';
 import { DebugLogger } from 'src/utils/DebugLogger';
 
 /**
  * 技能数据文件名
  */
-const SKILLS_DATA_FILE = '.obsidian/plugins/form-flow/skills.json';
+const SKILLS_DATA_FILE = '.obsidian/plugins/formify/skills.json';
 
 /**
  * 技能数据结构
@@ -32,7 +32,7 @@ const DEFAULT_SKILLS_DATA: SkillsData = {
 export class SkillDataService {
 	private static instance: SkillDataService | null = null;
 	private skillsCache: Skill[] | null = null;
-	private isInitialized = false;
+	private initializePromise: Promise<void> | null = null;
 
 	private constructor(private readonly app: App) {}
 
@@ -57,29 +57,39 @@ export class SkillDataService {
 	 * 初始化服务
 	 */
 	async initialize(): Promise<void> {
-		if (this.isInitialized) {
+		// 如果正在初始化，等待初始化完成
+		if (this.initializePromise) {
+			return this.initializePromise;
+		}
+
+		// 如果缓存已有数据，说明已初始化过
+		if (this.skillsCache !== null) {
 			return;
 		}
 
-		try {
-			// 尝试加载现有数据
-			await this.loadSkills();
-			this.isInitialized = true;
-			DebugLogger.debug('[SkillDataService] 初始化完成');
-		} catch (error) {
-			DebugLogger.error('[SkillDataService] 初始化失败', error);
-			this.skillsCache = [];
-			this.isInitialized = true;
-		}
+		// 开始初始化
+		this.initializePromise = (async () => {
+			try {
+				// 尝试加载现有数据
+				await this.loadSkills();
+				DebugLogger.debug('[SkillDataService] 初始化完成，共', this.skillsCache?.length || 0, '个技能');
+			} catch (error) {
+				DebugLogger.error('[SkillDataService] 初始化失败', error);
+				this.skillsCache = [];
+			} finally {
+				// 初始化完成，清空 promise
+				this.initializePromise = null;
+			}
+		})();
+
+		return this.initializePromise;
 	}
 
 	/**
 	 * 获取所有技能
 	 */
 	async getSkills(): Promise<Skill[]> {
-		if (!this.isInitialized) {
-			await this.initialize();
-		}
+		await this.initialize();
 		return this.skillsCache || [];
 	}
 
@@ -176,12 +186,16 @@ export class SkillDataService {
 	 * 用于将 data.json 中的技能数据迁移到独立文件
 	 */
 	async migrateFromSettings(legacySkills: Skill[]): Promise<void> {
+		DebugLogger.debug('[SkillDataService] 开始检查数据迁移，旧技能数量:', legacySkills?.length || 0);
+
 		if (!legacySkills || legacySkills.length === 0) {
+			DebugLogger.debug('[SkillDataService] 没有旧数据需要迁移');
 			return;
 		}
 
 		const existingSkills = await this.getSkills();
-		
+		DebugLogger.debug('[SkillDataService] 当前已加载的技能数量:', existingSkills.length);
+
 		// 如果已有技能数据，跳过迁移
 		if (existingSkills.length > 0) {
 			DebugLogger.debug('[SkillDataService] 已存在技能数据，跳过迁移');
@@ -207,10 +221,11 @@ export class SkillDataService {
 	 */
 	private async loadSkills(): Promise<void> {
 		try {
-			const file = this.app.vault.getAbstractFileByPath(SKILLS_DATA_FILE);
-			
-			if (file instanceof TFile) {
-				const content = await this.app.vault.read(file);
+			// 使用 vault.adapter 检查文件是否存在
+			const fileExists = await this.app.vault.adapter.exists(SKILLS_DATA_FILE);
+
+			if (fileExists) {
+				const content = await this.app.vault.adapter.read(SKILLS_DATA_FILE);
 				const data: SkillsData = JSON.parse(content);
 				this.skillsCache = data.skills || [];
 				DebugLogger.debug('[SkillDataService] 加载技能数据成功，共', this.skillsCache.length, '个技能');
@@ -237,14 +252,27 @@ export class SkillDataService {
 			};
 
 			const content = JSON.stringify(data, null, 2);
-			const file = this.app.vault.getAbstractFileByPath(SKILLS_DATA_FILE);
 
-			if (file instanceof TFile) {
-				await this.app.vault.modify(file, content);
+			// 使用 vault.adapter 检查文件是否存在（更可靠）
+			const fileExists = await this.app.vault.adapter.exists(SKILLS_DATA_FILE);
+
+			if (fileExists) {
+				// 文件已存在，修改内容
+				await this.app.vault.adapter.write(SKILLS_DATA_FILE, content);
+				DebugLogger.debug('[SkillDataService] 更新技能数据文件成功');
 			} else {
+				// 文件不存在，创建新文件
 				// 确保目录存在
 				await this.ensureDirectoryExists();
-				await this.app.vault.create(SKILLS_DATA_FILE, content);
+
+				// 再次检查文件是否已被创建
+				const fileExistsNow = await this.app.vault.adapter.exists(SKILLS_DATA_FILE);
+				if (fileExistsNow) {
+					await this.app.vault.adapter.write(SKILLS_DATA_FILE, content);
+				} else {
+					await this.app.vault.adapter.write(SKILLS_DATA_FILE, content);
+				}
+				DebugLogger.debug('[SkillDataService] 创建技能数据文件成功');
 			}
 
 			DebugLogger.debug('[SkillDataService] 保存技能数据成功');
@@ -258,25 +286,19 @@ export class SkillDataService {
 	 * 确保目录存在
 	 */
 	private async ensureDirectoryExists(): Promise<void> {
-		const dir = '.obsidian/plugins/form-flow';
-		const folder = this.app.vault.getAbstractFileByPath(dir);
-		
-		if (!folder) {
+		const dir = '.obsidian/plugins/formify';
+
+		// 使用 vault.adapter 检查目录是否存在
+		const dirExists = await this.app.vault.adapter.exists(dir);
+
+		if (!dirExists) {
 			// 递归创建目录
-			const parts = dir.split('/');
-			let currentPath = '';
-			
-			for (const part of parts) {
-				currentPath = currentPath ? `${currentPath}/${part}` : part;
-				const existing = this.app.vault.getAbstractFileByPath(currentPath);
-				
-				if (!existing) {
-					try {
-						await this.app.vault.createFolder(currentPath);
-					} catch (e) {
-						// 文件夹可能已存在，忽略错误
-					}
-				}
+			try {
+				await this.app.vault.adapter.mkdir(dir);
+				DebugLogger.debug('[SkillDataService] 创建目录', dir);
+			} catch (error) {
+				// 目录可能已被创建，忽略错误
+				DebugLogger.debug('[SkillDataService] 创建目录失败或已存在', error);
 			}
 		}
 	}
@@ -286,7 +308,7 @@ export class SkillDataService {
 	 */
 	dispose(): void {
 		this.skillsCache = null;
-		this.isInitialized = false;
+		this.initializePromise = null;
 		SkillDataService.instance = null;
 	}
 }

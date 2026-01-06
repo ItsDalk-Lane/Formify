@@ -41,6 +41,15 @@ export class FeatureCoordinator {
         return this.chatFeatureManager;
     }
 
+    /**
+     * 刷新技能缓存
+     */
+    async refreshSkillsCache(): Promise<void> {
+        if (this.chatFeatureManager) {
+            await this.chatFeatureManager.refreshSkillsCache();
+        }
+    }
+
     dispose() {
         this.tarsFeatureManager?.dispose();
         this.tarsFeatureManager = null;

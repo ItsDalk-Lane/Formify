@@ -187,7 +187,7 @@ export const SelectionToolbar = ({
 		<div
 			ref={refs.setFloating}
 			className="selection-toolbar"
-			style={floatingStyles}
+			style={{ ...floatingStyles, gap: '1px' }}
 			{...getFloatingProps()}
 		>
 			{/* AI Chat 按钮（固定） */}

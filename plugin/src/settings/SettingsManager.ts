@@ -46,7 +46,12 @@ export class SettingsManager {
             tars: {
                 settings: this.encryptTarsSettings(settings.tars.settings),
             },
-            chat: { ...settings.chat },
+            chat: {
+                ...settings.chat,
+                // 移除 skills 字段，避免重复存储到 data.json
+                // skills 数据现在独立存储在 .obsidian/plugins/formify/skills.json
+                skills: undefined
+            },
         };
         await this.plugin.saveData(settingsToPersist);
     }
