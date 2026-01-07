@@ -20,10 +20,18 @@ interface SkillsData {
  * 默认技能数据
  */
 const DEFAULT_SKILLS_DATA: SkillsData = {
-	version: 1,
+	version: 2,
 	skills: [],
 	lastModified: Date.now()
 };
+
+const SKILLS_DATA_VERSION = 2;
+
+const normalizeSkill = (skill: Skill): Skill => ({
+	...skill,
+	isSkillGroup: skill.isSkillGroup ?? false,
+	children: skill.children ?? [],
+});
 
 /**
  * 技能数据服务
@@ -110,6 +118,288 @@ export class SkillDataService {
 	}
 
 	/**
+	 * 获取指定技能组的直接子技能列表
+	 */
+	async getSkillChildren(id: string): Promise<Skill[]> {
+		const skills = await this.getSkills();
+		const group = skills.find(s => s.id === id);
+		if (!group || !group.isSkillGroup) {
+			return [];
+		}
+
+		const childrenIds = group.children ?? [];
+		const byId = new Map(skills.map(s => [s.id, s] as const));
+		return childrenIds.map(childId => byId.get(childId)).filter(Boolean) as Skill[];
+	}
+
+	/**
+	 * 递归获取所有后代技能（按展示顺序平铺）
+	 */
+	async getAllDescendants(id: string): Promise<Skill[]> {
+		await this.initialize();
+		const skills = this.skillsCache || [];
+		const byId = new Map(skills.map(s => [s.id, s] as const));
+		const visited = new Set<string>();
+		const result: Skill[] = [];
+
+		const walk = (groupId: string): void => {
+			const group = byId.get(groupId);
+			if (!group || !group.isSkillGroup) {
+				return;
+			}
+			if (visited.has(groupId)) {
+				return;
+			}
+			visited.add(groupId);
+
+			const children = group.children ?? [];
+			for (const childId of children) {
+				const child = byId.get(childId);
+				if (!child) {
+					continue;
+				}
+				result.push(child);
+				if (child.isSkillGroup) {
+					walk(child.id);
+				}
+			}
+		};
+
+		walk(id);
+		return result;
+	}
+
+	/**
+	 * 将技能移动到指定技能组或主列表
+	 * @param targetGroupId 目标技能组 ID；为 null 表示主列表
+	 * @param position 插入位置（不传则追加到末尾）
+	 */
+	async moveSkillToGroup(skillId: string, targetGroupId: string | null, position?: number): Promise<void> {
+		await this.initialize();
+		const skills = this.skillsCache || [];
+		const byId = new Map(skills.map(s => [s.id, s] as const));
+		const skill = byId.get(skillId);
+		if (!skill) {
+			return;
+		}
+
+		const subtreeDepth = this.getSubtreeMaxRelativeDepthSync(skillId, skills);
+
+		if (targetGroupId !== null) {
+			const targetGroup = byId.get(targetGroupId);
+			if (!targetGroup || !targetGroup.isSkillGroup) {
+				throw new Error('目标不是有效的技能组');
+			}
+
+			// 禁止移动到自身或后代，避免循环引用
+			if (targetGroupId === skillId) {
+				throw new Error('不能将技能组移动到自身内部');
+			}
+			const descendants = await this.getAllDescendants(skillId);
+			if (descendants.some(d => d.id === targetGroupId)) {
+				throw new Error('不能将技能组移动到其后代内部');
+			}
+
+			// 限制最多 3 层（顶层=0），并考虑被移动技能的子树深度
+			const targetLevel = this.getNestingLevelSync(targetGroupId, skills) + 1;
+			if (targetLevel + subtreeDepth > 2) {
+				throw new Error('最多支持 3 层嵌套');
+			}
+		}
+
+		// 从所有技能组中移除，确保技能只属于一个位置
+		this.removeFromAllGroupsSync(skillId, skills);
+
+		if (targetGroupId === null) {
+			// 移动到主列表：只需确保不再被任何组引用，然后重排主列表 order
+			this.removeFromAllGroupsSync(skillId, skills);
+			await this.reorderTopLevelSkillsSync(skills, skillId, position);
+			this.skillsCache = skills;
+			await this.persistSkills();
+			return;
+		}
+
+		const targetGroup = byId.get(targetGroupId);
+		if (!targetGroup || !targetGroup.isSkillGroup) {
+			throw new Error('目标不是有效的技能组');
+		}
+
+		// 目标组 children 插入
+		const children = [...(targetGroup.children ?? [])].filter(id => id !== skillId);
+		const insertAt = position === undefined ? children.length : Math.max(0, Math.min(position, children.length));
+		children.splice(insertAt, 0, skillId);
+		targetGroup.children = children;
+		targetGroup.updatedAt = Date.now();
+
+		// 移入组后需要确保主列表不再包含该技能：membership 本就通过 children 引用判断，这里只需重排主列表 order
+		await this.reorderTopLevelSkillsSync(skills);
+
+		this.skillsCache = skills;
+		await this.persistSkills();
+	}
+
+	/**
+	 * 更新技能组的子技能列表
+	 */
+	async updateSkillGroupChildren(groupId: string, childrenIds: string[]): Promise<void> {
+		await this.initialize();
+		const skills = this.skillsCache || [];
+		const group = skills.find(s => s.id === groupId);
+		if (!group || !group.isSkillGroup) {
+			throw new Error('目标不是有效的技能组');
+		}
+
+		// 去重 & 过滤不存在的 id
+		const byId = new Map(skills.map(s => [s.id, s] as const));
+		const seen = new Set<string>();
+		const normalized: string[] = [];
+		for (const id of childrenIds) {
+			if (!byId.has(id)) {
+				continue;
+			}
+			if (id === groupId) {
+				continue;
+			}
+			if (seen.has(id)) {
+				continue;
+			}
+			seen.add(id);
+			normalized.push(id);
+		}
+
+		// 循环引用 & 嵌套层级校验
+		const groupLevel = this.getNestingLevelSync(groupId, skills);
+		for (const childId of normalized) {
+			if (childId === groupId) {
+				throw new Error('技能组不能包含自身');
+			}
+
+			// 防止把某个祖先塞回子列表，形成环
+			const childDescendants = await this.getAllDescendants(childId);
+			if (childDescendants.some(s => s.id === groupId)) {
+				throw new Error('技能组 children 存在循环引用');
+			}
+
+			// 限制最多 3 层（顶层=0）；child 最终层级=groupLevel+1，并考虑 child 的子树深度
+			const childSubtreeDepth = this.getSubtreeMaxRelativeDepthSync(childId, skills);
+			if (groupLevel + 1 + childSubtreeDepth > 2) {
+				throw new Error('最多支持 3 层嵌套');
+			}
+		}
+
+		group.children = normalized;
+		group.updatedAt = Date.now();
+		this.skillsCache = skills;
+		await this.persistSkills();
+	}
+
+	/**
+	 * 计算技能嵌套层级（顶层=0）
+	 */
+	async getNestingLevel(skillId: string): Promise<number> {
+		await this.initialize();
+		return this.getNestingLevelSync(skillId, this.skillsCache || []);
+	}
+
+	private getNestingLevelSync(skillId: string, skills: Skill[]): number {
+		let level = 0;
+		let currentId: string | null = skillId;
+		const seen = new Set<string>();
+		while (currentId) {
+			if (seen.has(currentId)) {
+				break;
+			}
+			seen.add(currentId);
+			const parent = this.findParentGroupSync(currentId, skills);
+			if (!parent) {
+				break;
+			}
+			level += 1;
+			currentId = parent.id;
+		}
+		return level;
+	}
+
+	private findParentGroupSync(skillId: string, skills: Skill[]): Skill | null {
+		for (const s of skills) {
+			if (s.isSkillGroup && (s.children ?? []).includes(skillId)) {
+				return s;
+			}
+		}
+		return null;
+	}
+
+	private removeFromAllGroupsSync(skillId: string, skills: Skill[]): void {
+		for (const s of skills) {
+			if (!s.isSkillGroup) {
+				continue;
+			}
+			const before = s.children ?? [];
+			const after = before.filter(id => id !== skillId);
+			if (after.length !== before.length) {
+				s.children = after;
+				s.updatedAt = Date.now();
+			}
+		}
+	}
+
+	/**
+	 * 获取以 skillId 为根的子树最大相对深度（根=0）。用于校验移动后是否会超过最大嵌套层级。
+	 */
+	private getSubtreeMaxRelativeDepthSync(skillId: string, skills: Skill[]): number {
+		const byId = new Map(skills.map(s => [s.id, s] as const));
+		const seen = new Set<string>();
+
+		const dfs = (currentId: string): number => {
+			if (seen.has(currentId)) {
+				return 0;
+			}
+			seen.add(currentId);
+			const current = byId.get(currentId);
+			if (!current || !current.isSkillGroup) {
+				return 0;
+			}
+			let maxChild = 0;
+			for (const childId of (current.children ?? [])) {
+				maxChild = Math.max(maxChild, 1 + dfs(childId));
+			}
+			return maxChild;
+		};
+
+		return dfs(skillId);
+	}
+
+	private async reorderTopLevelSkillsSync(skills: Skill[], movingSkillId?: string, position?: number): Promise<void> {
+		// 顶层技能定义：未被任何技能组 children 引用的技能
+		const referenced = new Set<string>();
+		for (const s of skills) {
+			if (s.isSkillGroup) {
+				for (const id of (s.children ?? [])) {
+					referenced.add(id);
+				}
+			}
+		}
+
+		const topLevel = skills
+			.filter(s => !referenced.has(s.id))
+			.sort((a, b) => a.order - b.order);
+
+		if (movingSkillId) {
+			const movingIndex = topLevel.findIndex(s => s.id === movingSkillId);
+			if (movingIndex >= 0) {
+				const [moving] = topLevel.splice(movingIndex, 1);
+				const insertAt = position === undefined ? topLevel.length : Math.max(0, Math.min(position, topLevel.length));
+				topLevel.splice(insertAt, 0, moving);
+			}
+		}
+
+		topLevel.forEach((s, index) => {
+			s.order = index;
+			s.updatedAt = Date.now();
+		});
+	}
+
+	/**
 	 * 保存技能（新增或更新）
 	 */
 	async saveSkill(skill: Skill): Promise<void> {
@@ -138,6 +428,8 @@ export class SkillDataService {
 		const index = skills.findIndex(s => s.id === id);
 
 		if (index >= 0) {
+			// 清理所有技能组对该技能的引用，避免留下悬空 children
+			this.removeFromAllGroupsSync(id, skills);
 			const deletedSkill = skills.splice(index, 1)[0];
 			DebugLogger.debug('[SkillDataService] 删除技能', deletedSkill.name);
 			this.skillsCache = skills;
@@ -205,7 +497,7 @@ export class SkillDataService {
 		// 迁移旧数据
 		// 确保所有技能都有新增的字段
 		const migratedSkills = legacySkills.map(skill => ({
-			...skill,
+			...normalizeSkill(skill),
 			promptSource: skill.promptSource || 'custom' as const,
 			templateFile: skill.templateFile,
 			modelTag: skill.modelTag
@@ -227,7 +519,8 @@ export class SkillDataService {
 			if (fileExists) {
 				const content = await this.app.vault.adapter.read(SKILLS_DATA_FILE);
 				const data: SkillsData = JSON.parse(content);
-				this.skillsCache = data.skills || [];
+				const rawSkills = data.skills || [];
+				this.skillsCache = rawSkills.map(normalizeSkill);
 				DebugLogger.debug('[SkillDataService] 加载技能数据成功，共', this.skillsCache.length, '个技能');
 			} else {
 				// 文件不存在，使用空数组
@@ -246,7 +539,7 @@ export class SkillDataService {
 	private async persistSkills(): Promise<void> {
 		try {
 			const data: SkillsData = {
-				version: 1,
+				version: SKILLS_DATA_VERSION,
 				skills: this.skillsCache || [],
 				lastModified: Date.now()
 			};

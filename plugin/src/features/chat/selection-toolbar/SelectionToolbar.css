@@ -66,6 +66,25 @@ button.selection-toolbar-btn-more {
 	padding: 6px 8px;
 }
 
+/* 技能组按钮样式（纯文字 + 右下角小三角） */
+button.selection-toolbar-btn-group {
+	position: relative;
+	padding-right: 12px;
+}
+
+.selection-toolbar-btn-group-triangle {
+	position: absolute;
+	right: 3px;
+	bottom: 2px;
+	font-size: 0.5em;
+	line-height: 1;
+	color: var(--text-muted);
+}
+
+button.selection-toolbar-btn-group:hover .selection-toolbar-btn-group-triangle {
+	color: var(--text-normal);
+}
+
 /* 分隔线 */
 .selection-toolbar-divider {
 	width: 1px;
@@ -97,6 +116,15 @@ button.selection-toolbar-btn-more {
 	z-index: 1001;
 }
 
+/* 技能组级联子菜单：独立浮层（不嵌在父菜单内容流里） */
+.selection-toolbar-dropdown-menu-submenu {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: auto;
+	margin-top: 0;
+}
+
 /* 下拉菜单项 */
 .selection-toolbar-dropdown-item {
 	padding: 8px 12px;
@@ -112,6 +140,28 @@ button.selection-toolbar-btn-more {
 
 .selection-toolbar-dropdown-item:hover {
 	background: var(--background-modifier-hover);
+}
+
+/* 技能组列表项：右侧折叠箭头 */
+.selection-toolbar-dropdown-item-group {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.selection-toolbar-dropdown-item-submenu-arrow {
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+	transform: rotate(-90deg);
+}
+
+.selection-toolbar-dropdown-item-group-arrow {
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+	transition: transform 0.15s ease;
 }
 
 /* 下拉菜单空状态 */

@@ -52,9 +52,11 @@ export class TarsSettingTab {
 	private isMessageCollapsed = true // 默认折叠消息设置
 	private isChatCollapsed = true // 默认折叠AI Chat设置
 	private isSelectionToolbarCollapsed = true // 默认折叠AI划词设置
+	private isSkillManagementCollapsed = true // 默认折叠技能管理
 	private isTabCompletionCollapsed = true // 默认折叠Tab补全设置
 	private isAdvancedCollapsed = true // 默认折叠高级设置
 	private doubaoRenderers = new Map<any, () => void>()
+	private skillGroupExpandedState = new Map<string, boolean>()
 
 	constructor(private readonly app: App, private readonly settingsContext: TarsSettingsContext) {}
 
@@ -731,6 +733,9 @@ export class TarsSettingTab {
 		// 快捷技能设置区域
 		this.renderSelectionToolbarSettings(containerEl);
 
+		// 技能管理设置区域（独立分组）
+		this.renderSkillManagementSettings(containerEl);
+
 		// AI Tab 补全设置区域（使用 Setting 组件，与上方保持一致）
 		const tabCompletionHeaderSetting = new Setting(containerEl)
 			.setName('AI Tab 补全')
@@ -1075,14 +1080,6 @@ export class TarsSettingTab {
 		const selectionToolbarButtonWrapper = selectionToolbarHeaderSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
 		selectionToolbarButtonWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
 
-		// 添加技能按钮
-		const addSkillButton = selectionToolbarButtonWrapper.createEl('button', { cls: 'mod-cta' })
-		addSkillButton.textContent = '+ 添加技能'
-		addSkillButton.style.cssText = 'font-size: var(--font-ui-smaller); padding: 4px 12px;'
-		addSkillButton.onclick = async () => {
-			await this.openSkillEditModal()
-		}
-
 		// 添加Chevron图标
 		const selectionToolbarChevronIcon = selectionToolbarButtonWrapper.createEl('div', { cls: 'ai-provider-chevron' })
 		selectionToolbarChevronIcon.innerHTML = `
@@ -1234,70 +1231,86 @@ export class TarsSettingTab {
 				});
 			});
 
-		// 技能列表管理区域
-		const skillsListContainer = selectionToolbarSection.createDiv({ cls: 'skills-list-container' })
-		skillsListContainer.style.cssText = `
-			margin-top: 12px;
-			padding: 12px;
-			background: var(--background-primary);
-			border-radius: 8px;
-			border: 1px solid var(--background-modifier-border);
-		`
+		// 技能管理已拆分到独立设置组
+	}
 
-		// 技能列表标题
-		const skillsListHeader = skillsListContainer.createDiv({ cls: 'skills-list-header' })
-		skillsListHeader.style.cssText = `
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			margin-bottom: 8px;
-			padding-bottom: 8px;
-			border-bottom: 1px solid var(--background-modifier-border);
-			cursor: pointer;
-		`
+	/**
+	 * 渲染技能管理设置区域（独立于“快捷技能”）
+	 */
+	private renderSkillManagementSettings(containerEl: HTMLElement): void {
+		const headerSetting = new Setting(containerEl)
+			.setName('技能管理')
+			.setDesc('管理快捷技能与技能组（拖拽排序、拖拽入组）')
 
-		const leftHeader = skillsListHeader.createDiv()
-		leftHeader.style.cssText = `
-			display: flex;
-			align-items: center;
-			gap: 8px;
-		`
+		const buttonWrapper = headerSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
+		buttonWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
 
-		const chevron = leftHeader.createDiv()
-		chevron.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon"><polyline points="9 18 15 12 9 6"></polyline></svg>`
-		chevron.style.cssText = `
-			display: flex;
-			align-items: center;
-			transition: transform 0.2s ease;
-			color: var(--text-muted);
-		`
-
-		const skillsListTitle = leftHeader.createEl('div')
-		skillsListTitle.style.cssText = `
-			font-size: var(--font-ui-small);
-			font-weight: 500;
-			color: var(--text-normal);
-		`
-		skillsListTitle.textContent = '技能管理'
-
-		const skillsListHint = skillsListHeader.createEl('div')
-		skillsListHint.style.cssText = `
-			font-size: var(--font-ui-smaller);
-			color: var(--text-muted);
-		`
-		skillsListHint.textContent = '前 ' + (this.chatSettings.maxToolbarButtons ?? 4) + ' 个技能将显示在工具栏上，其他的将隐藏在下拉菜单中'
-
-		// 技能列表内容
-		const skillsListContent = skillsListContainer.createDiv({ cls: 'skills-list-content' })
-		skillsListContent.style.display = 'none' // 默认折叠
-		void this.renderSkillsList(skillsListContent)
-
-		// 点击切换折叠状态
-		skillsListHeader.onclick = () => {
-			const isCollapsed = skillsListContent.style.display === 'none'
-			skillsListContent.style.display = isCollapsed ? 'block' : 'none'
-			chevron.style.transform = isCollapsed ? 'rotate(90deg)' : 'rotate(0deg)'
+		const addSkillButton = buttonWrapper.createEl('button', { cls: 'mod-cta' })
+		addSkillButton.textContent = '+ 添加技能'
+		addSkillButton.style.cssText = 'font-size: var(--font-ui-smaller); padding: 4px 12px;'
+		addSkillButton.onclick = async () => {
+			await this.openSkillEditModal()
 		}
+
+		const chevronIcon = buttonWrapper.createEl('div', { cls: 'ai-provider-chevron' })
+		chevronIcon.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="6 9 12 15 18 9"></polyline>
+			</svg>
+		`
+		chevronIcon.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			color: var(--text-muted);
+			cursor: pointer;
+			transition: transform 0.2s ease;
+			transform: ${this.isSkillManagementCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};
+			width: 16px;
+			height: 16px;
+		`
+
+		const headerEl = headerSetting.settingEl
+		headerEl.style.cursor = 'pointer'
+		headerEl.style.borderRadius = '0px'
+		headerEl.style.border = '1px solid var(--background-modifier-border)'
+		headerEl.style.marginBottom = '0px'
+		headerEl.style.padding = '12px 12px'
+
+		const section = containerEl.createDiv({ cls: 'skill-management-settings-container' })
+		section.style.padding = '0 8px 8px 8px'
+		section.style.backgroundColor = 'var(--background-secondary)'
+		section.style.borderRadius = '0px'
+		section.style.border = '1px solid var(--background-modifier-border)'
+		section.style.borderTop = 'none'
+		section.style.display = this.isSkillManagementCollapsed ? 'none' : 'block'
+
+		const hint = section.createEl('div')
+		hint.style.cssText = 'padding: 10px 4px 6px; color: var(--text-muted); font-size: var(--font-ui-smaller);'
+		hint.textContent = '前 ' + (this.chatSettings.maxToolbarButtons ?? 4) + ' 个技能将显示在工具栏上，其他的将隐藏在“更多”中'
+
+		const listContainer = section.createDiv({ cls: 'skills-list-content' })
+		void this.renderSkillsList(listContainer)
+
+		const toggle = () => {
+			this.isSkillManagementCollapsed = !this.isSkillManagementCollapsed
+			chevronIcon.style.transform = this.isSkillManagementCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'
+			section.style.display = this.isSkillManagementCollapsed ? 'none' : 'block'
+		}
+
+		headerEl.addEventListener('click', (e) => {
+			if ((e.target as HTMLElement).closest('button')) {
+				return
+			}
+			if ((e.target as HTMLElement).closest('.ai-provider-chevron')) {
+				return
+			}
+			toggle()
+		})
+		chevronIcon.addEventListener('click', (e) => {
+			e.stopPropagation()
+			toggle()
+		})
 	}
 
 	/**
@@ -1321,12 +1334,84 @@ export class TarsSettingTab {
 			return
 		}
 
-		// 按 order 排序
-		const sortedSkills = [...skills].sort((a, b) => a.order - b.order)
+		const byId = new Map(skills.map(s => [s.id, s] as const))
+		const referenced = new Set<string>()
+		for (const s of skills) {
+			if (s.isSkillGroup) {
+				for (const childId of (s.children ?? [])) {
+					referenced.add(childId)
+				}
+			}
+		}
 
-		sortedSkills.forEach((skill, index) => {
-			const skillItem = container.createDiv({ cls: 'skill-item' })
+		const topLevel = skills
+			.filter(s => !referenced.has(s.id))
+			.sort((a, b) => a.order - b.order)
+
+		const parentMap = new Map<string, string | null>()
+		const indexMap = new Map<string, number>()
+		for (const s of skills) {
+			if (!s.isSkillGroup) {
+				continue
+			}
+			for (let i = 0; i < (s.children ?? []).length; i += 1) {
+				const childId = (s.children ?? [])[i]
+				if (!byId.has(childId)) {
+					continue
+				}
+				parentMap.set(childId, s.id)
+				indexMap.set(childId, i)
+			}
+		}
+		for (let i = 0; i < topLevel.length; i += 1) {
+			parentMap.set(topLevel[i].id, null)
+			indexMap.set(topLevel[i].id, i)
+		}
+
+		const skillDataService = SkillDataService.getInstance(this.app)
+		await skillDataService.initialize()
+
+		let draggingId: string | null = null
+		let activeIndicatorEl: HTMLElement | null = null
+		const clearIndicators = () => {
+			container.querySelectorAll('.skill-item').forEach(item => {
+				const el = item as HTMLElement
+				el.style.borderTop = ''
+				el.style.borderBottom = ''
+				el.style.outline = ''
+			})
+			activeIndicatorEl = null
+		}
+
+		const getDropZone = (e: DragEvent, el: HTMLElement, isGroup: boolean) => {
+			const rect = el.getBoundingClientRect()
+			const y = e.clientY - rect.top
+			const h = rect.height || 1
+			if (y < h * 0.25) return 'before' as const
+			if (y > h * 0.75) return 'after' as const
+			if (isGroup) return 'into' as const
+			return 'after' as const
+		}
+
+		const performMove = async (movedId: string, targetParentId: string | null, insertAt: number) => {
+			try {
+				await skillDataService.moveSkillToGroup(movedId, targetParentId, insertAt)
+				await this.settingsContext.refreshSkillsCache?.()
+			} catch (error) {
+				new Notice(error instanceof Error ? error.message : String(error))
+			}
+		}
+
+		// 拖拽浮动预览元素
+		let dragPreviewEl: HTMLElement | null = null
+
+		const renderSkillNode = (skill: import('../chat/types/chat').Skill, level: number, parentId: string | null, siblingIndex: number, parentContainer: HTMLElement) => {
+			const skillItem = parentContainer.createDiv({ cls: 'skill-item' })
 			skillItem.dataset.skillId = skill.id
+			skillItem.dataset.parentId = parentId ?? ''
+			skillItem.dataset.level = String(level)
+			skillItem.dataset.siblingIndex = String(siblingIndex)
+			skillItem.dataset.isSkillGroup = String(!!skill.isSkillGroup)
 			skillItem.draggable = true
 			skillItem.style.cssText = `
 				display: flex;
@@ -1334,6 +1419,7 @@ export class TarsSettingTab {
 				justify-content: space-between;
 				padding: 10px 12px;
 				margin-bottom: 4px;
+				margin-left: ${level * 24}px;
 				background: var(--background-secondary);
 				border-radius: 6px;
 				border: 1px solid transparent;
@@ -1341,7 +1427,7 @@ export class TarsSettingTab {
 				cursor: grab;
 			`
 
-			// 添加 hover 效果
+			// hover
 			skillItem.addEventListener('mouseenter', () => {
 				skillItem.style.borderColor = 'var(--background-modifier-border)'
 			})
@@ -1349,50 +1435,139 @@ export class TarsSettingTab {
 				skillItem.style.borderColor = 'transparent'
 			})
 
-			// 拖拽排序事件
+			// drag events
 			skillItem.addEventListener('dragstart', (e) => {
+				draggingId = skill.id
 				skillItem.style.opacity = '0.5'
 				e.dataTransfer?.setData('text/plain', skill.id)
-			})
 
+				// 创建拖拽浮动预览
+				if (dragPreviewEl) {
+					dragPreviewEl.remove()
+				}
+				dragPreviewEl = document.createElement('div')
+				dragPreviewEl.style.cssText = `
+					position: fixed;
+					pointer-events: none;
+					z-index: 10000;
+					padding: 8px 14px;
+					background: var(--background-primary);
+					border: 1px solid var(--interactive-accent);
+					border-radius: 6px;
+					box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+					font-size: var(--font-ui-small);
+					color: var(--text-normal);
+					display: flex;
+					align-items: center;
+					gap: 8px;
+					opacity: 0.95;
+				`
+				dragPreviewEl.innerHTML = `
+					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);">
+						<circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/>
+						<circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>
+					</svg>
+					<span>${skill.name}</span>
+				`
+				document.body.appendChild(dragPreviewEl)
+
+				// 设置自定义拖拽图像（透明 1x1 像素，实际预览由我们自己的元素显示）
+				const emptyImg = new Image()
+				emptyImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+				e.dataTransfer?.setDragImage(emptyImg, 0, 0)
+
+				// 监听鼠标移动更新预览位置
+				const onDrag = (ev: DragEvent) => {
+					if (dragPreviewEl && ev.clientX > 0 && ev.clientY > 0) {
+						dragPreviewEl.style.left = `${ev.clientX + 12}px`
+						dragPreviewEl.style.top = `${ev.clientY + 12}px`
+					}
+				}
+				document.addEventListener('drag', onDrag)
+				skillItem.addEventListener('dragend', () => {
+					document.removeEventListener('drag', onDrag)
+				}, { once: true })
+			})
 			skillItem.addEventListener('dragend', () => {
+				draggingId = null
 				skillItem.style.opacity = '1'
-				// 移除所有拖拽指示器
-				container.querySelectorAll('.skill-item').forEach(item => {
-					const el = item as HTMLElement
-					el.style.borderTop = ''
-					el.style.borderBottom = ''
-				})
-			})
-
-			skillItem.addEventListener('dragover', (e) => {
-				e.preventDefault()
-				skillItem.style.borderTop = '2px solid var(--interactive-accent)'
-			})
-
-			skillItem.addEventListener('dragleave', () => {
-				skillItem.style.borderTop = ''
-			})
-
-			skillItem.addEventListener('drop', async (e) => {
-				e.preventDefault()
-				skillItem.style.borderTop = ''
-				const draggedId = e.dataTransfer?.getData('text/plain')
-				if (draggedId && draggedId !== skill.id) {
-					await this.reorderSkills(draggedId, skill.id)
-					await this.renderSkillsList(container)
+				clearIndicators()
+				if (dragPreviewEl) {
+					dragPreviewEl.remove()
+					dragPreviewEl = null
 				}
 			})
+			skillItem.addEventListener('dragover', (e) => {
+				e.preventDefault()
+				if (!draggingId || draggingId === skill.id) {
+					return
+				}
+				clearIndicators()
+				activeIndicatorEl = skillItem
+				const zone = getDropZone(e as DragEvent, skillItem, !!skill.isSkillGroup)
+				if (zone === 'before') {
+					skillItem.style.borderTop = '2px solid var(--interactive-accent)'
+				} else if (zone === 'after') {
+					skillItem.style.borderBottom = '2px solid var(--interactive-accent)'
+				} else {
+					skillItem.style.outline = '2px solid var(--interactive-accent)'
+					// 拖入技能组时自动展开
+					if (skill.isSkillGroup) {
+						const expanded = this.skillGroupExpandedState.get(skill.id) ?? false
+						if (!expanded) {
+							this.skillGroupExpandedState.set(skill.id, true)
+							const childrenEl = skillItem.nextElementSibling as HTMLElement | null
+							if (childrenEl && childrenEl.classList.contains('skill-children-container')) {
+								childrenEl.style.display = 'block'
+							}
+						}
+					}
+				}
+			})
+			skillItem.addEventListener('dragleave', () => {
+				if (activeIndicatorEl === skillItem) {
+					clearIndicators()
+				}
+			})
+			skillItem.addEventListener('drop', async (e) => {
+				e.preventDefault()
+					e.stopPropagation()
+				const draggedId = e.dataTransfer?.getData('text/plain')
+				clearIndicators()
+				if (!draggedId || draggedId === skill.id) {
+					return
+				}
 
-			// 左侧：拖拽手柄和技能名称
+				const zone = getDropZone(e as DragEvent, skillItem, !!skill.isSkillGroup)
+				if (zone === 'into' && skill.isSkillGroup) {
+					const children = skill.children ?? []
+					await performMove(draggedId, skill.id, children.length)
+					await this.renderSkillsList(container)
+					return
+				}
+
+				const targetParentId = (skillItem.dataset.parentId || '') || null
+				const targetIndex = Number(skillItem.dataset.siblingIndex || '0')
+				let insertAt = zone === 'before' ? targetIndex : targetIndex + 1
+
+				const sourceParentId = parentMap.get(draggedId) ?? null
+				const sourceIndex = indexMap.get(draggedId) ?? -1
+				if (sourceParentId === targetParentId && sourceIndex >= 0 && sourceIndex < insertAt) {
+					insertAt -= 1
+				}
+
+				await performMove(draggedId, targetParentId, insertAt)
+				await this.renderSkillsList(container)
+			})
+
+			// 左侧：拖拽手柄固定对齐；层级缩进仅作用于内容区（更紧凑）
 			const leftSection = skillItem.createDiv()
 			leftSection.style.cssText = `
 				display: flex;
 				align-items: center;
-				gap: 12px;
+				gap: 10px;
 			`
 
-			// 拖拽手柄
 			const dragHandle = leftSection.createEl('div', { cls: 'skill-drag-handle' })
 			dragHandle.innerHTML = `
 				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1407,8 +1582,45 @@ export class TarsSettingTab {
 			`
 			dragHandle.title = '拖拽排序'
 
-			// 显示在工具栏上的复选框
-			const showInToolbarCheckbox = leftSection.createEl('input', { type: 'checkbox' }) as HTMLInputElement
+			const contentSection = leftSection.createDiv()
+			contentSection.style.cssText = `
+				display: flex;
+				align-items: center;
+				gap: 12px;
+			`
+
+			if (skill.isSkillGroup) {
+				const toggle = contentSection.createEl('div')
+				const expanded = this.skillGroupExpandedState.get(skill.id) ?? false
+				toggle.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`
+				toggle.style.cssText = `
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					width: 14px;
+					height: 14px;
+					color: var(--text-muted);
+					cursor: pointer;
+					transform: ${expanded ? 'rotate(0deg)' : 'rotate(-90deg)'};
+					transition: transform 0.15s ease;
+				`
+				toggle.onclick = (e) => {
+					e.stopPropagation()
+					const next = !(this.skillGroupExpandedState.get(skill.id) ?? false)
+					this.skillGroupExpandedState.set(skill.id, next)
+					const childrenEl = skillItem.nextElementSibling as HTMLElement | null
+					if (childrenEl && childrenEl.classList.contains('skill-children-container')) {
+						childrenEl.style.display = next ? 'block' : 'none'
+					}
+					toggle.style.transform = next ? 'rotate(0deg)' : 'rotate(-90deg)'
+				}
+			} else {
+				// 占位，让对齐更稳定
+				const spacer = contentSection.createEl('div')
+				spacer.style.cssText = 'width: 14px; height: 14px;'
+			}
+
+			const showInToolbarCheckbox = contentSection.createEl('input', { type: 'checkbox' }) as HTMLInputElement
 			showInToolbarCheckbox.checked = skill.showInToolbar
 			showInToolbarCheckbox.style.cssText = `
 				cursor: pointer;
@@ -1421,8 +1633,7 @@ export class TarsSettingTab {
 				await this.renderSkillsList(container)
 			}
 
-			// 技能名称
-			const skillName = leftSection.createEl('span')
+			const skillName = contentSection.createEl('span')
 			skillName.style.cssText = `
 				font-size: var(--font-ui-small);
 				color: ${skill.showInToolbar ? 'var(--interactive-accent)' : 'var(--text-normal)'};
@@ -1438,7 +1649,6 @@ export class TarsSettingTab {
 				gap: 8px;
 			`
 
-			// 编辑按钮 (使用文字而不是图标)
 			const editBtn = rightSection.createEl('button')
 			editBtn.style.cssText = `
 				padding: 4px 8px;
@@ -1464,7 +1674,6 @@ export class TarsSettingTab {
 				await this.openSkillEditModal(skill)
 			}
 
-			// 删除按钮
 			const deleteBtn = rightSection.createEl('button')
 			deleteBtn.style.cssText = `
 				padding: 4px 8px;
@@ -1488,16 +1697,143 @@ export class TarsSettingTab {
 			})
 			deleteBtn.onclick = async (e) => {
 				e.stopPropagation()
+				if (skill.isSkillGroup) {
+					const descendants = await skillDataService.getAllDescendants(skill.id)
+					const count = descendants.length
+					const overlay = document.createElement('div')
+					overlay.style.cssText = `
+						position: fixed;
+						top: 0;
+						left: 0;
+						right: 0;
+						bottom: 0;
+						background: rgba(0, 0, 0, 0.5);
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						z-index: 9999;
+						padding: 20px;
+					`
+					const modal = document.createElement('div')
+					modal.style.cssText = `
+						width: 100%;
+						max-width: 420px;
+						background: var(--background-primary);
+						border-radius: 12px;
+						box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+						overflow: hidden;
+					`
+					const header = document.createElement('div')
+					header.style.cssText = 'padding: 18px 20px; border-bottom: 1px solid var(--background-modifier-border); font-weight: 600;'
+					header.textContent = '删除技能组确认'
+					const body = document.createElement('div')
+					body.style.cssText = 'padding: 16px 20px; color: var(--text-normal); font-size: var(--font-ui-small); line-height: 1.6;'
+					body.textContent = `该技能组包含 ${count} 个子技能（含嵌套）。请选择删除方式：`
+					const footer = document.createElement('div')
+					footer.style.cssText = 'display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--background-modifier-border);'
+					const cancel = document.createElement('button')
+					cancel.textContent = '取消'
+					cancel.style.cssText = 'padding: 8px 14px; border: none; border-radius: 8px; background: var(--background-modifier-hover); cursor: pointer;'
+					cancel.onclick = () => overlay.remove()
+					const keepChildren = document.createElement('button')
+					keepChildren.textContent = '保留子技能（释放到主列表）'
+					keepChildren.style.cssText = 'padding: 8px 14px; border: none; border-radius: 8px; background: var(--interactive-accent); color: var(--text-on-accent); cursor: pointer;'
+					keepChildren.onclick = async () => {
+						try {
+							for (const d of descendants) {
+								await skillDataService.moveSkillToGroup(d.id, null)
+							}
+							await this.deleteSkill(skill.id)
+							overlay.remove()
+							await this.renderSkillsList(container)
+						} catch (error) {
+							new Notice(error instanceof Error ? error.message : String(error))
+						}
+					}
+					const deleteChildren = document.createElement('button')
+					deleteChildren.textContent = '删除子技能'
+					deleteChildren.style.cssText = 'padding: 8px 14px; border: none; border-radius: 8px; background: var(--background-modifier-error); color: var(--text-on-accent); cursor: pointer;'
+					deleteChildren.onclick = async () => {
+						try {
+							for (let i = descendants.length - 1; i >= 0; i -= 1) {
+								await this.deleteSkill(descendants[i].id)
+							}
+							await this.deleteSkill(skill.id)
+							overlay.remove()
+							await this.renderSkillsList(container)
+						} catch (error) {
+							new Notice(error instanceof Error ? error.message : String(error))
+						}
+					}
+					footer.appendChild(cancel)
+					footer.appendChild(deleteChildren)
+					footer.appendChild(keepChildren)
+					modal.appendChild(header)
+					modal.appendChild(body)
+					modal.appendChild(footer)
+					overlay.appendChild(modal)
+					overlay.onmousedown = (ev) => {
+						if (ev.target === overlay) {
+							overlay.remove()
+						}
+					}
+					document.body.appendChild(overlay)
+					return
+				}
 				await this.deleteSkill(skill.id)
 				await this.renderSkillsList(container)
 			}
+
+			// 子技能容器（仅对技能组生效）
+			if (skill.isSkillGroup) {
+				const childrenContainer = parentContainer.createDiv({ cls: 'skill-children-container' })
+				childrenContainer.style.cssText = 'margin-left: 0; padding-left: 0;'
+				const expanded = this.skillGroupExpandedState.get(skill.id) ?? false
+				childrenContainer.style.display = expanded ? 'block' : 'none'
+				const childrenIds = (skill.children ?? []).filter(id => byId.has(id))
+				childrenIds.forEach((childId, idx) => {
+					const child = byId.get(childId)
+					if (!child) return
+					renderSkillNode(child, level + 1, skill.id, idx, childrenContainer)
+				})
+			}
+		}
+
+		// 顶层容器支持拖到末尾（覆盖式绑定，避免重复监听）
+		container.ondragover = (e) => {
+			e.preventDefault()
+		}
+		container.ondrop = async (e) => {
+			e.preventDefault()
+			const target = e.target as HTMLElement | null
+			// 如果落点在某个 skill-item 上，交由该项自己的 drop 处理
+			if (target?.closest('.skill-item')) {
+				return
+			}
+			const draggedId = e.dataTransfer?.getData('text/plain')
+			clearIndicators()
+			if (!draggedId) {
+				return
+			}
+			await performMove(draggedId, null, topLevel.length)
+			await this.renderSkillsList(container)
+		}
+
+		topLevel.forEach((skill, idx) => {
+			renderSkillNode(skill, 0, null, idx, container)
 		})
 	}
 
 	/**
 	 * 打开技能编辑模态框
 	 */
-	private async openSkillEditModal(skill?: import('../chat/types/chat').Skill): Promise<void> {
+	private async openSkillEditModal(
+		skill?: import('../chat/types/chat').Skill,
+		options?: {
+			initialIsSkillGroup?: boolean
+			onSaved?: (savedSkill: import('../chat/types/chat').Skill) => Promise<void> | void
+		}
+	): Promise<void> {
 		// 阻止所有事件冒泡的辅助函数
 		const stopAllPropagation = (e: Event) => {
 			e.stopPropagation()
@@ -1555,7 +1891,9 @@ export class TarsSettingTab {
 		modal.addEventListener('input', stopAllPropagation)
 
 		const isEditMode = !!skill
-		const allSkills = await this.getSkillsFromService()
+		const skillDataService = SkillDataService.getInstance(this.app)
+		await skillDataService.initialize()
+		const allSkills = await skillDataService.getSortedSkills()
 		const existingNames = allSkills
 			.filter(s => s.id !== skill?.id)
 			.map(s => s.name)
@@ -1684,6 +2022,331 @@ export class TarsSettingTab {
 		nameField.appendChild(nameLabel)
 		nameField.appendChild(nameRow)
 		nameField.appendChild(nameError)
+
+		// 技能组开关
+		const isSkillGroupField = document.createElement('div')
+		isSkillGroupField.style.cssText = 'margin-bottom: 20px; pointer-events: auto;'
+
+		const isSkillGroupLabel = document.createElement('label')
+		isSkillGroupLabel.style.cssText = `
+			display: block;
+			margin-bottom: 8px;
+			font-size: var(--font-ui-small);
+			font-weight: 500;
+			color: var(--text-normal);
+		`
+		isSkillGroupLabel.textContent = '技能组'
+
+		const isSkillGroupRow = document.createElement('div')
+		isSkillGroupRow.style.cssText = 'display: flex; align-items: center; gap: 10px;'
+
+		const isSkillGroupToggle = document.createElement('input') as HTMLInputElement
+		isSkillGroupToggle.type = 'checkbox'
+		isSkillGroupToggle.checked = skill?.isSkillGroup ?? (options?.initialIsSkillGroup ?? false)
+		isSkillGroupToggle.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
+
+		const isSkillGroupText = document.createElement('div')
+		isSkillGroupText.style.cssText = `
+			font-size: var(--font-ui-smaller);
+			color: var(--text-muted);
+			line-height: 1.4;
+		`
+		isSkillGroupText.textContent = '开启后将创建技能组（仅用于组织子技能），可为空。'
+
+		isSkillGroupRow.appendChild(isSkillGroupToggle)
+		isSkillGroupRow.appendChild(isSkillGroupText)
+		isSkillGroupField.appendChild(isSkillGroupLabel)
+		isSkillGroupField.appendChild(isSkillGroupRow)
+
+		// 技能组成员管理（仅技能组显示）
+		const originalGroupChildrenIds = (skill?.isSkillGroup ? (skill?.children ?? []) : []).slice()
+		let pendingGroupChildrenIds = originalGroupChildrenIds.slice()
+
+		const excludedAddIds = new Set<string>()
+		if (skill?.id) {
+			excludedAddIds.add(skill.id)
+			if (skill?.isSkillGroup) {
+				try {
+					const descendants = await skillDataService.getAllDescendants(skill.id)
+					for (const d of descendants) {
+						excludedAddIds.add(d.id)
+					}
+				} catch {
+					// 忽略，后续保存时仍会有循环/层级校验兜底
+				}
+			}
+		}
+
+		const groupMembersSection = document.createElement('div')
+		groupMembersSection.style.cssText = `
+			margin-bottom: 20px;
+			padding: 12px;
+			border: 1px solid var(--background-modifier-border);
+			border-radius: 8px;
+			background: var(--background-primary);
+			pointer-events: auto;
+		`
+
+		const groupMembersHeader = document.createElement('div')
+		groupMembersHeader.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;'
+		const groupMembersTitle = document.createElement('div')
+		groupMembersTitle.style.cssText = 'font-size: var(--font-ui-small); font-weight: 600; color: var(--text-normal);'
+		groupMembersTitle.textContent = '技能组成员'
+		const groupMembersHint = document.createElement('div')
+		groupMembersHint.style.cssText = 'font-size: var(--font-ui-smaller); color: var(--text-muted);'
+		groupMembersHint.textContent = '可添加已有技能/技能组，或在此新建并加入'
+		groupMembersHeader.appendChild(groupMembersTitle)
+		groupMembersHeader.appendChild(groupMembersHint)
+
+		const membersList = document.createElement('div')
+		membersList.style.cssText = 'display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;'
+
+		const addExistingRow = document.createElement('div')
+		addExistingRow.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-bottom: 10px;'
+		const addExistingSelect = document.createElement('select')
+		addExistingSelect.style.cssText = `
+			flex: 1;
+			padding: 10px 12px;
+			height: 40px;
+			border: 1px solid var(--background-modifier-border);
+			border-radius: 8px;
+			background: var(--background-primary);
+			color: var(--text-normal);
+			font-size: var(--font-ui-small);
+			cursor: pointer;
+			pointer-events: auto;
+		`
+		const addExistingBtn = document.createElement('button')
+		addExistingBtn.style.cssText = `
+			padding: 10px 12px;
+			border: none;
+			border-radius: 8px;
+			background: var(--background-modifier-hover);
+			color: var(--text-normal);
+			font-size: var(--font-ui-small);
+			cursor: pointer;
+		`
+		addExistingBtn.textContent = '加入'
+		addExistingRow.appendChild(addExistingSelect)
+		addExistingRow.appendChild(addExistingBtn)
+
+		const createRow = document.createElement('div')
+		createRow.style.cssText = 'display: flex; gap: 8px; align-items: center;'
+		const createSkillBtn = document.createElement('button')
+		createSkillBtn.style.cssText = `
+			flex: 1;
+			padding: 10px 12px;
+			border: none;
+			border-radius: 8px;
+			background: var(--background-modifier-hover);
+			color: var(--text-normal);
+			font-size: var(--font-ui-small);
+			cursor: pointer;
+		`
+		createSkillBtn.textContent = '+ 新建技能'
+		const createGroupBtn = document.createElement('button')
+		createGroupBtn.style.cssText = createSkillBtn.style.cssText
+		createGroupBtn.textContent = '+ 新建技能组'
+		createRow.appendChild(createSkillBtn)
+		createRow.appendChild(createGroupBtn)
+
+		const byId = new Map(allSkills.map(s => [s.id, s] as const))
+		let draggingMemberId: string | null = null
+		const refreshMembersList = () => {
+			membersList.innerHTML = ''
+			const validIds = pendingGroupChildrenIds.filter(id => byId.has(id))
+			pendingGroupChildrenIds = validIds
+			if (pendingGroupChildrenIds.length === 0) {
+				const empty = document.createElement('div')
+				empty.style.cssText = 'padding: 8px 10px; color: var(--text-muted); font-size: var(--font-ui-smaller); background: var(--background-secondary); border-radius: 6px;'
+				empty.textContent = '暂无成员（可为空）'
+				membersList.appendChild(empty)
+				return
+			}
+			for (const childId of pendingGroupChildrenIds) {
+				const child = byId.get(childId)
+				if (!child) continue
+				const row = document.createElement('div')
+				row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; background: var(--background-secondary); border-radius: 6px; cursor: grab;'
+				row.draggable = true
+				const left = document.createElement('div')
+				left.style.cssText = 'display: flex; align-items: center; gap: 8px; min-width: 0;'
+				const tag = document.createElement('span')
+				tag.style.cssText = 'flex: 0 0 auto; font-size: var(--font-ui-smaller); color: var(--text-muted);'
+				tag.textContent = child.isSkillGroup ? '组' : '技'
+				const name = document.createElement('span')
+				name.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+				name.textContent = child.name
+				left.appendChild(tag)
+				left.appendChild(name)
+
+				const removeBtn = document.createElement('button')
+				removeBtn.style.cssText = 'flex: 0 0 auto; padding: 6px 10px; border: none; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer;'
+				removeBtn.textContent = '移除'
+				removeBtn.onmouseenter = () => {
+					removeBtn.style.background = 'var(--background-modifier-hover)'
+					removeBtn.style.color = 'var(--text-normal)'
+				}
+				removeBtn.onmouseleave = () => {
+					removeBtn.style.background = 'transparent'
+					removeBtn.style.color = 'var(--text-muted)'
+				}
+				removeBtn.onclick = (e) => {
+					e.stopPropagation()
+					pendingGroupChildrenIds = pendingGroupChildrenIds.filter(id => id !== childId)
+					refreshMembersList()
+					refreshAddExistingOptions()
+				}
+
+				row.ondragstart = (e) => {
+					e.stopPropagation()
+					draggingMemberId = childId
+					if (e.dataTransfer) {
+						e.dataTransfer.effectAllowed = 'move'
+						e.dataTransfer.setData('text/plain', childId)
+					}
+					row.style.opacity = '0.6'
+				}
+
+				row.ondragend = (e) => {
+					e.stopPropagation()
+					draggingMemberId = null
+					row.style.opacity = ''
+					row.style.borderTop = ''
+					row.style.borderBottom = ''
+				}
+
+				row.ondragover = (e) => {
+					e.preventDefault()
+					e.stopPropagation()
+					const fromId = draggingMemberId || e.dataTransfer?.getData('text/plain')
+					if (!fromId || fromId === childId) return
+					const rect = row.getBoundingClientRect()
+					const insertBefore = e.clientY < rect.top + rect.height / 2
+					row.style.borderTop = insertBefore ? '2px solid var(--interactive-accent)' : ''
+					row.style.borderBottom = insertBefore ? '' : '2px solid var(--interactive-accent)'
+					if (e.dataTransfer) {
+						e.dataTransfer.dropEffect = 'move'
+					}
+				}
+
+				row.ondragleave = (e) => {
+					e.stopPropagation()
+					row.style.borderTop = ''
+					row.style.borderBottom = ''
+				}
+
+				row.ondrop = (e) => {
+					e.preventDefault()
+					e.stopPropagation()
+					const fromId = draggingMemberId || e.dataTransfer?.getData('text/plain')
+					if (!fromId || fromId === childId) return
+
+					const rect = row.getBoundingClientRect()
+					const insertBefore = e.clientY < rect.top + rect.height / 2
+					const fromIndex = pendingGroupChildrenIds.indexOf(fromId)
+					const targetIndexRaw = pendingGroupChildrenIds.indexOf(childId)
+					if (fromIndex < 0 || targetIndexRaw < 0) return
+
+					pendingGroupChildrenIds.splice(fromIndex, 1)
+					let targetIndex = pendingGroupChildrenIds.indexOf(childId)
+					if (targetIndex < 0) {
+						targetIndex = pendingGroupChildrenIds.length
+					}
+					if (!insertBefore) targetIndex += 1
+					if (targetIndex < 0) targetIndex = 0
+					if (targetIndex > pendingGroupChildrenIds.length) targetIndex = pendingGroupChildrenIds.length
+					pendingGroupChildrenIds.splice(targetIndex, 0, fromId)
+					row.style.borderTop = ''
+					row.style.borderBottom = ''
+					refreshMembersList()
+				}
+
+				row.appendChild(left)
+				row.appendChild(removeBtn)
+				membersList.appendChild(row)
+			}
+		}
+
+		membersList.ondragover = (e) => {
+			e.preventDefault()
+		}
+
+		membersList.ondrop = (e) => {
+			e.preventDefault()
+			const fromId = draggingMemberId || e.dataTransfer?.getData('text/plain')
+			if (!fromId) return
+			const fromIndex = pendingGroupChildrenIds.indexOf(fromId)
+			if (fromIndex < 0) return
+			pendingGroupChildrenIds.splice(fromIndex, 1)
+			pendingGroupChildrenIds.push(fromId)
+			refreshMembersList()
+		}
+
+		const refreshAddExistingOptions = () => {
+			addExistingSelect.innerHTML = ''
+			const placeholder = document.createElement('option')
+			placeholder.value = ''
+			placeholder.textContent = '选择要加入的技能/技能组...'
+			addExistingSelect.appendChild(placeholder)
+
+			const candidates = allSkills
+				.filter(s => !excludedAddIds.has(s.id))
+				.filter(s => !pendingGroupChildrenIds.includes(s.id))
+				.sort((a, b) => a.order - b.order)
+			for (const c of candidates) {
+				const opt = document.createElement('option')
+				opt.value = c.id
+				opt.textContent = (c.isSkillGroup ? '【技能组】' : '【技能】') + c.name
+				addExistingSelect.appendChild(opt)
+			}
+		}
+
+		addExistingBtn.onclick = (e) => {
+			e.stopPropagation()
+			const pickedId = addExistingSelect.value
+			if (!pickedId) {
+				new Notice('请选择要加入的技能/技能组')
+				return
+			}
+			if (!pendingGroupChildrenIds.includes(pickedId)) {
+				pendingGroupChildrenIds.push(pickedId)
+				refreshMembersList()
+				refreshAddExistingOptions()
+			}
+		}
+
+		createSkillBtn.onclick = (e) => {
+			e.stopPropagation()
+			void this.openSkillEditModal(undefined, {
+				initialIsSkillGroup: false,
+				onSaved: async (created) => {
+					pendingGroupChildrenIds.push(created.id)
+					refreshMembersList()
+					refreshAddExistingOptions()
+				}
+			})
+		}
+
+		createGroupBtn.onclick = (e) => {
+			e.stopPropagation()
+			void this.openSkillEditModal(undefined, {
+				initialIsSkillGroup: true,
+				onSaved: async (created) => {
+					pendingGroupChildrenIds.push(created.id)
+					refreshMembersList()
+					refreshAddExistingOptions()
+				}
+			})
+		}
+
+		groupMembersSection.appendChild(groupMembersHeader)
+		groupMembersSection.appendChild(membersList)
+		groupMembersSection.appendChild(addExistingRow)
+		groupMembersSection.appendChild(createRow)
+
+		refreshMembersList()
+		refreshAddExistingOptions()
 
 		// AI 模型选择字段
 		const modelField = document.createElement('div')
@@ -1913,8 +2576,29 @@ export class TarsSettingTab {
 		templateRadio.addEventListener('change', updatePromptSourceDisplay)
 
 		body.appendChild(nameField)
+		body.appendChild(isSkillGroupField)
+		body.appendChild(groupMembersSection)
 		body.appendChild(modelField)
 		body.appendChild(promptSourceField)
+
+		// 根据“技能组”开关更新显示
+		const updateSkillGroupDisplay = () => {
+			const isGroup = isSkillGroupToggle.checked
+			groupMembersSection.style.display = isGroup ? 'block' : 'none'
+			modelField.style.display = isGroup ? 'none' : 'block'
+			promptSourceField.style.display = isGroup ? 'none' : 'block'
+			// 清理提示词错误显示，避免切换后残留
+			if (isGroup) {
+				promptError.style.display = 'none'
+				promptTextarea.style.borderColor = 'var(--background-modifier-border)'
+				templateSelect.style.borderColor = 'var(--background-modifier-border)'
+			}
+		}
+
+		updateSkillGroupDisplay()
+		isSkillGroupToggle.addEventListener('change', () => {
+			updateSkillGroupDisplay()
+		})
 
 		// 底部操作栏
 		const footer = document.createElement('div')
@@ -1972,28 +2656,34 @@ export class TarsSettingTab {
 				nameInput.style.borderColor = 'var(--background-modifier-border)'
 			}
 
-			// 根据提示词来源验证
+			const isGroup = isSkillGroupToggle.checked
 			const isCustomPrompt = customRadio.checked
-			if (isCustomPrompt) {
-				if (!promptTextarea.value.trim()) {
-					promptError.textContent = '提示词内容不能为空'
-					promptError.style.display = 'block'
-					promptTextarea.style.borderColor = 'var(--text-error)'
-					hasError = true
+			if (!isGroup) {
+				// 根据提示词来源验证
+				if (isCustomPrompt) {
+					if (!promptTextarea.value.trim()) {
+						promptError.textContent = '提示词内容不能为空'
+						promptError.style.display = 'block'
+						promptTextarea.style.borderColor = 'var(--text-error)'
+						hasError = true
+					} else {
+						promptError.style.display = 'none'
+						promptTextarea.style.borderColor = 'var(--background-modifier-border)'
+					}
 				} else {
-					promptError.style.display = 'none'
-					promptTextarea.style.borderColor = 'var(--background-modifier-border)'
+					if (!templateSelect.value) {
+						promptError.textContent = '请选择一个模板文件'
+						promptError.style.display = 'block'
+						templateSelect.style.borderColor = 'var(--text-error)'
+						hasError = true
+					} else {
+						promptError.style.display = 'none'
+						templateSelect.style.borderColor = 'var(--background-modifier-border)'
+					}
 				}
 			} else {
-				if (!templateSelect.value) {
-					promptError.textContent = '请选择一个模板文件'
-					promptError.style.display = 'block'
-					templateSelect.style.borderColor = 'var(--text-error)'
-					hasError = true
-				} else {
-					promptError.style.display = 'none'
-					templateSelect.style.borderColor = 'var(--background-modifier-border)'
-				}
+				// 技能组允许为空，不校验提示词/模板
+				promptError.style.display = 'none'
 			}
 
 			if (hasError) return
@@ -2003,10 +2693,20 @@ export class TarsSettingTab {
 			const savedSkill: import('../chat/types/chat').Skill = {
 				id: skill?.id || crypto.randomUUID(),
 				name: nameInput.value.trim(),
-				prompt: isCustomPrompt ? promptTextarea.value.trim() : '',
-				promptSource: isCustomPrompt ? 'custom' : 'template',
-				templateFile: isCustomPrompt ? undefined : templateSelect.value,
-				modelTag: modelSelect.value || undefined,
+				prompt: isGroup
+					? (skill?.prompt ?? '')
+					: (isCustomPrompt ? promptTextarea.value.trim() : ''),
+				promptSource: isGroup
+					? (skill?.promptSource || 'custom')
+					: (isCustomPrompt ? 'custom' : 'template'),
+				templateFile: isGroup
+					? skill?.templateFile
+					: (isCustomPrompt ? undefined : templateSelect.value),
+				modelTag: isGroup
+					? skill?.modelTag
+					: (modelSelect.value || undefined),
+				isSkillGroup: isGroup,
+				children: isGroup ? pendingGroupChildrenIds.slice() : [],
 				showInToolbar: skill?.showInToolbar ?? true,
 				order: skill?.order ?? allSkills.length,
 				createdAt: skill?.createdAt || now,
@@ -2014,6 +2714,50 @@ export class TarsSettingTab {
 			}
 
 			await this.saveSkill(savedSkill)
+
+			// 若为技能组：同步成员关系（加入/移除/重排），并刷新缓存
+			if (isGroup) {
+				try {
+					await skillDataService.initialize()
+					const desired = pendingGroupChildrenIds.slice().filter(id => id !== savedSkill.id)
+					const previous = (skill?.isSkillGroup ? (skill.children ?? []) : []).slice()
+					const removed = previous.filter(id => !desired.includes(id))
+
+					// 先清空该组 children，再按顺序逐个 move（确保唯一归属 + 复用校验逻辑）
+					await skillDataService.updateSkillGroupChildren(savedSkill.id, [])
+					for (const removedId of removed) {
+						await skillDataService.moveSkillToGroup(removedId, null)
+					}
+					for (let i = 0; i < desired.length; i += 1) {
+						await skillDataService.moveSkillToGroup(desired[i], savedSkill.id, i)
+					}
+					await this.settingsContext.refreshSkillsCache?.()
+				} catch (error) {
+					new Notice('保存技能组成员失败：' + (error instanceof Error ? error.message : String(error)))
+					return
+				}
+			}
+
+			// 从技能组转换为普通技能时：将其所有后代释放到主列表末尾，避免数据丢失
+			if ((skill?.isSkillGroup ?? false) && !isGroup) {
+				try {
+					const skillDataService = SkillDataService.getInstance(this.app)
+					await skillDataService.initialize()
+					const descendants = await skillDataService.getAllDescendants(savedSkill.id)
+					for (const d of descendants) {
+						await skillDataService.moveSkillToGroup(d.id, null)
+					}
+				} catch (error) {
+					// 不阻断保存流程，仅提示
+					new Notice('释放技能组子技能失败：' + (error instanceof Error ? error.message : String(error)))
+				}
+			}
+			try {
+				await options?.onSaved?.(savedSkill)
+			} catch (error) {
+				new Notice('回调处理失败：' + (error instanceof Error ? error.message : String(error)))
+			}
+
 			overlay.remove()
 
 			// 只重新渲染技能列表部分，而不是整个设置页面

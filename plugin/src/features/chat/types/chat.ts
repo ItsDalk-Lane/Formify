@@ -63,6 +63,16 @@ export interface Skill {
 	promptSource: SkillPromptSource; // 提示词来源类型：自定义或内置模板
 	templateFile?: string;     // 当 promptSource 为 'template' 时，使用的模板文件路径
 	modelTag?: string;         // 指定使用的 AI 模型标签，留空则使用默认模型
+	/**
+	 * 是否为技能组（技能组本身不执行提示词，仅用于组织子技能）
+	 * @default false
+	 */
+	isSkillGroup?: boolean;
+	/**
+	 * 子技能 ID 列表（可包含普通技能或嵌套技能组）
+	 * @default []
+	 */
+	children?: string[];
 	showInToolbar: boolean;    // 是否在工具栏显示
 	order: number;             // 排序顺序
 	createdAt: number;         // 创建时间戳
