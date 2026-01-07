@@ -30,6 +30,7 @@ import { availableVendors, DEFAULT_TARS_SETTINGS } from './settings'
 import type { TarsSettings } from './settings'
 import FolderSuggest from '../../component/combobox/FolderSuggest'
 import type { ChatSettings } from '../chat/types/chat'
+import { localInstance } from '../../i18n/locals'
 
 export interface TarsSettingsContext {
 	getSettings: () => TarsSettings
@@ -699,36 +700,6 @@ export class TarsSettingTab {
 				});
 			});
 
-		// 启用编辑器触发
-		new Setting(chatSection)
-			.setName("启用编辑器触发")
-			.setDesc("开启后在编辑器中输入触发符号时会自动打开 AI Chat 模态框")
-			.addToggle((toggle) => {
-				toggle.setValue(this.chatSettings.enableChatTrigger ?? true);
-				toggle.onChange(async (value) => {
-					await this.updateChatSettings({ enableChatTrigger: value });
-				});
-			});
-
-		// 触发符号
-		new Setting(chatSection)
-			.setName("触发符号")
-			.setDesc("输入此符号时打开 AI Chat（仅支持单个字符）")
-			.addText((text) => {
-				text
-					.setPlaceholder("@")
-					.setValue(this.chatSettings.chatTriggerSymbol ?? "@")
-					.onChange(async (value) => {
-						// 只取第一个字符
-						const symbol = value.charAt(0) || "@";
-						await this.updateChatSettings({ chatTriggerSymbol: symbol });
-						text.setValue(symbol);
-					});
-				text.inputEl.maxLength = 1;
-				text.inputEl.style.width = "60px";
-				text.inputEl.style.textAlign = "center";
-			});
-
 		// 模态框宽度
 		new Setting(chatSection)
 			.setName("模态框宽度")
@@ -1184,8 +1155,8 @@ export class TarsSettingTab {
 
 		// 最多显示按钮数
 		new Setting(selectionToolbarSection)
-			.setName('工具栏按钮数量')
-			.setDesc('工具栏最多显示的技能按钮数量（超过的技能显示在下拉菜单中）')
+			.setName(localInstance.selection_toolbar_max_buttons)
+			.setDesc(localInstance.selection_toolbar_max_buttons_desc)
 			.addSlider((slider) => {
 				slider
 					.setLimits(2, 8, 1)
@@ -1198,14 +1169,70 @@ export class TarsSettingTab {
 
 		// 流式输出设置
 		new Setting(selectionToolbarSection)
-			.setName('流式输出')
-			.setDesc('启用后 AI 将逐字输出结果，关闭则等待完整响应后一次性显示')
+			.setName(localInstance.selection_toolbar_stream_output)
+			.setDesc(localInstance.selection_toolbar_stream_output_desc)
 			.addToggle((toggle) => {
 				toggle.setValue(this.chatSettings.selectionToolbarStreamOutput ?? true)
 				toggle.onChange(async (value) => {
 					await this.updateChatSettings({ selectionToolbarStreamOutput: value })
 				})
 			})
+
+		// 分隔线
+		const separator = selectionToolbarSection.createEl('hr')
+		separator.style.cssText = `
+			margin: 16px 0;
+			border: none;
+			border-top: 1px solid var(--background-modifier-border);
+		`
+
+		// 编辑器触发符号设置
+		new Setting(selectionToolbarSection)
+			.setName(localInstance.chat_trigger_symbol)
+			.setDesc(localInstance.chat_trigger_symbol_desc)
+			.addText((text) => {
+				// 兼容旧数据：确保 chatTriggerSymbol 始终是数组
+				let symbolsArray = this.chatSettings.chatTriggerSymbol ?? ['@'];
+
+				// 如果是字符串（旧数据），转换为数组
+				if (typeof symbolsArray === 'string') {
+					symbolsArray = [symbolsArray];
+				}
+
+				// 将数组转换为逗号分隔的字符串显示
+				let currentValue = Array.isArray(symbolsArray) ? symbolsArray.join(',') : '@';
+
+				text
+					.setPlaceholder('@,/,#')
+					.setValue(currentValue)
+					.onChange(async (value) => {
+						// 更新当前显示的值
+						currentValue = value;
+
+						// 将输入的字符串分割成数组，过滤空字符串
+						const symbols = value
+							.split(',')
+							.map(s => s.trim())
+							.filter(s => s.length > 0);
+
+						// 如果为空数组，使用默认值 ['@']
+						const symbolsToSave = symbols.length > 0 ? symbols : ['@'];
+
+						await this.updateChatSettings({ chatTriggerSymbol: symbolsToSave });
+					});
+				text.inputEl.style.width = '200px';
+			});
+
+		// 启用编辑器触发
+		new Setting(selectionToolbarSection)
+			.setName(localInstance.chat_trigger_enable)
+			.setDesc(localInstance.chat_trigger_enable_desc)
+			.addToggle((toggle) => {
+				toggle.setValue(this.chatSettings.enableChatTrigger ?? true);
+				toggle.onChange(async (value) => {
+					await this.updateChatSettings({ enableChatTrigger: value });
+				});
+			});
 
 		// 技能列表管理区域
 		const skillsListContainer = selectionToolbarSection.createDiv({ cls: 'skills-list-container' })

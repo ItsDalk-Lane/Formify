@@ -192,16 +192,16 @@ export class TabCompletionService {
         // 生成请求 ID
         const requestId = `req_${++this.requestCounter}_${Date.now()}`
 
-        // 设置加载状态
-        view.dispatch({
-            effects: setLoadingEffect.of({ isLoading: true, requestId })
-        })
-
         try {
             // 构建上下文
             const context = buildEditorContext(view.state, {
                 maxCharsBefore: this.settings.contextLengthBefore,
                 maxCharsAfter: this.settings.contextLengthAfter
+            })
+
+            // 设置加载状态（记录触发位置，后续仅在该位置编辑才中断）
+            view.dispatch({
+                effects: setLoadingEffect.of({ isLoading: true, requestId, pos: context.cursorPos })
             })
 
             // 发送 AI 请求

@@ -1,13 +1,38 @@
 import { Extension, StateField, StateEffect } from '@codemirror/state';
 import { EditorView, ViewPlugin, ViewUpdate, Decoration, DecorationSet } from '@codemirror/view';
-import { App, TFile } from 'obsidian';
+import { App, TFile, MarkdownView } from 'obsidian';
 import type { ChatSettings, Skill } from '../types/chat';
+
+/**
+ * 获取文件内容（不包括 frontmatter）
+ */
+export function getContentWithoutFrontmatter(app: App): string {
+	const activeView = app.workspace.getActiveViewOfType(MarkdownView);
+	if (!activeView) {
+		return '';
+	}
+
+	// 获取编辑器内容
+	const content = activeView.editor.getValue();
+
+	// 检查是否有 frontmatter
+	const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/;
+	const match = content.match(frontmatterRegex);
+
+	if (match) {
+		// 移除 frontmatter
+		return content.slice(match[0].length);
+	}
+
+	return content;
+}
 
 /**
  * 选区信息接口
  */
 export interface SelectionInfo {
 	text: string;
+	fullText?: string; // 完整文本（不包括 frontmatter），用于符号触发
 	from: number;
 	to: number;
 	coords: {
@@ -16,6 +41,8 @@ export interface SelectionInfo {
 		right: number;
 		bottom: number;
 	};
+	triggerSource: 'selection' | 'symbol'; // 触发来源：选中文本 或 输入符号
+	triggerSymbolRange?: { from: number; to: number }; // 触发符号的位置范围（用于符号触发后删除）
 }
 
 /**
@@ -24,12 +51,50 @@ export interface SelectionInfo {
 export interface SelectionToolbarCallbacks {
 	onShowToolbar: (info: SelectionInfo, view: EditorView, activeFile: TFile | null) => void;
 	onHideToolbar: () => void;
+	/** 通过符号触发显示工具栏 */
+	onShowToolbarBySymbol?: (view: EditorView, activeFile: TFile | null) => void;
 }
 
 /**
  * 全局设置引用
  */
 let globalSelectionToolbarSettings: ChatSettings | null = null;
+/**
+ * 全局触发来源
+ */
+let globalTriggerSource: 'selection' | 'symbol' | null = null;
+/**
+ * 全局工具栏可见状态
+ */
+let globalIsToolbarVisible = false;
+
+/**
+ * 设置当前触发来源
+ */
+export function setTriggerSource(source: 'selection' | 'symbol' | null): void {
+	globalTriggerSource = source;
+}
+
+/**
+ * 获取当前触发来源
+ */
+export function getTriggerSource(): 'selection' | 'symbol' | null {
+	return globalTriggerSource;
+}
+
+/**
+ * 设置工具栏可见状态
+ */
+export function setToolbarVisible(visible: boolean): void {
+	globalIsToolbarVisible = visible;
+}
+
+/**
+ * 获取工具栏可见状态
+ */
+export function isToolbarVisibleGlobally(): boolean {
+	return globalIsToolbarVisible;
+}
 
 /**
  * 更新选区工具栏设置
@@ -80,15 +145,29 @@ export function createSelectionToolbarExtension(
 			update(update: ViewUpdate) {
 				// 检查是否启用选区工具栏
 				if (!isSelectionToolbarEnabled()) {
-					if (isToolbarVisible) {
+					if (globalIsToolbarVisible) {
 						callbacks.onHideToolbar();
-						isToolbarVisible = false;
+						globalIsToolbarVisible = false;
+						setTriggerSource(null); // 清除触发来源
 					}
 					return;
 				}
 
 				// 检查选区是否变化
 				if (!update.selectionSet && !update.docChanged) {
+					return;
+				}
+
+				// 如果是通过符号触发的，任何文档变化都应该隐藏工具栏
+				if (globalTriggerSource === 'symbol' && update.docChanged) {
+					if (globalIsToolbarVisible) {
+						callbacks.onHideToolbar();
+						globalIsToolbarVisible = false;
+						isToolbarVisible = false; // 同步本地状态
+						setTriggerSource(null); // 清除触发来源
+						setToolbarVisible(false); // 清除全局状态
+						lastSelectionText = '';
+					}
 					return;
 				}
 
@@ -101,16 +180,19 @@ export function createSelectionToolbarExtension(
 
 				// 如果没有选区或选区为空，隐藏工具栏
 				if (!hasSelection || selectedText.trim().length === 0) {
-					if (isToolbarVisible) {
+					if (globalIsToolbarVisible) {
 						callbacks.onHideToolbar();
-						isToolbarVisible = false;
+						globalIsToolbarVisible = false;
+						isToolbarVisible = false; // 同步本地状态
+						setTriggerSource(null); // 清除触发来源
+						setToolbarVisible(false); // 清除全局状态
 						lastSelectionText = '';
 					}
 					return;
 				}
 
 				// 如果选区文本与上次相同，不重复处理
-				if (selectedText === lastSelectionText && isToolbarVisible) {
+				if (selectedText === lastSelectionText && globalIsToolbarVisible) {
 					return;
 				}
 
@@ -125,9 +207,12 @@ export function createSelectionToolbarExtension(
 					// 再次检查选区是否仍然有效
 					const currentSelection = this.view.state.selection.main;
 					if (currentSelection.empty) {
-						if (isToolbarVisible) {
+						if (globalIsToolbarVisible) {
 							callbacks.onHideToolbar();
-							isToolbarVisible = false;
+							globalIsToolbarVisible = false;
+							isToolbarVisible = false; // 同步本地状态
+							setTriggerSource(null); // 清除触发来源
+							setToolbarVisible(false); // 清除全局状态
 						}
 						return;
 					}
@@ -146,11 +231,17 @@ export function createSelectionToolbarExtension(
 						text: selectedText,
 						from: currentSelection.from,
 						to: currentSelection.to,
-						coords
+						coords,
+						triggerSource: 'selection' // 通过选中文本触发
 					};
 
+					// 设置触发来源和全局状态
+					setTriggerSource('selection');
+					setToolbarVisible(true);
+
 					callbacks.onShowToolbar(selectionInfo, this.view, activeFile);
-					isToolbarVisible = true;
+					globalIsToolbarVisible = true;
+					isToolbarVisible = true; // 同步本地状态
 				}, DEBOUNCE_DELAY);
 			}
 

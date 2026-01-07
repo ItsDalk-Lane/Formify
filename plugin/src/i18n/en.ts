@@ -666,11 +666,11 @@ export class En implements Local {
 	add_script_condition = "Add Script Condition";
 	filter_script_placeholder = "return true; // Return true to match, false to not match";
 	filter_script_help = "Available variables: app, currentFile, formFilePath, formValues";
-	// AI Chat trigger settings
+	// AI Chat trigger settings (Quick Skills)
 	chat_trigger_enable = "Enable Editor Trigger";
-	chat_trigger_enable_desc = "Open AI Chat modal when typing trigger symbol in editor";
+	chat_trigger_enable_desc = "When enabled, typing the trigger symbol in the editor will show the Quick Skills toolbar";
 	chat_trigger_symbol = "Trigger Symbol";
-	chat_trigger_symbol_desc = "Open AI Chat when this symbol is typed (single character only)";
+	chat_trigger_symbol_desc = "Typing this symbol in the editor shows the Quick Skills toolbar (placeholder represents full content, excluding frontmatter). Separate multiple symbols with commas, e.g.: @,/,#";
 	chat_modal_width = "Modal Width";
 	chat_modal_width_desc = "Width of the AI Chat modal (pixels)";
 	chat_modal_height = "Modal Height";
@@ -683,7 +683,7 @@ export class En implements Local {
 	selection_toolbar_more = "More";
 	selection_toolbar_no_more_skills = "No more skills";
 	selection_toolbar_enable = "Enable Quick Skills";
-	selection_toolbar_enable_desc = "When disabled, floating toolbar will not appear when selecting text";
+	selection_toolbar_enable_desc = "When disabled, floating toolbar will not appear when selecting text or typing trigger symbol";
 	selection_toolbar_max_buttons = "Toolbar Button Count";
 	selection_toolbar_max_buttons_desc = "Maximum number of skill buttons on toolbar (rest shown in dropdown)";
 	selection_toolbar_settings_section = "Quick Skills";
@@ -705,7 +705,7 @@ export class En implements Local {
 	skill_edit_name_duplicate = "Skill name already exists";
 	skill_edit_prompt_label = "Prompt Content";
 	skill_edit_prompt_placeholder = "Enter or paste your prompt here.";
-	skill_edit_prompt_hint = "Use {selection} to represent selected text.";
+	skill_edit_prompt_hint = "Placeholder usage:\n- Triggered by text selection: {{}} represents selected text\n- Triggered by symbol: {{}} represents full content (excluding frontmatter)\n- {{@xxx}} format is also supported and will be replaced accordingly";
 	skill_edit_prompt_required = "Prompt content is required";
 	skill_edit_show_example = "Example";
 	skill_edit_select_icon = "Select Icon";
@@ -720,4 +720,19 @@ export class En implements Local {
 	skill_result_replaced = "Selected text replaced";
 	skill_result_appended = "Appended to selection";
 	skill_result_inserted = "Inserted at cursor";
+	// Quick Skills Enhancement
+	skill_edit_model_label = "AI Model";
+	skill_edit_model_hint = "Select the AI model to use when executing this skill, leave empty to use default model";
+	skill_edit_model_default = "Use Default Model";
+	skill_edit_prompt_source_label = "Prompt Source";
+	skill_edit_prompt_source_custom = "Custom";
+	skill_edit_prompt_source_template = "Built-in Template";
+	skill_edit_custom_prompt_hint = "Use {{}} as placeholder, which will be automatically replaced with actual content during execution.";
+	skill_edit_template_hint = "Select template file from AI prompt template directory, {{}} placeholder is also supported.";
+	skill_edit_template_select_placeholder = "Please select template file...";
+	skill_edit_template_required = "Please select a template file";
+	selection_toolbar_stream_output = "Stream Output";
+	selection_toolbar_stream_output_desc = "When enabled, AI will output results word by word, otherwise waits for complete response";
+	skill_show_in_toolbar = "Shown in toolbar";
+	skill_not_show_in_toolbar = "Not shown in toolbar";
 }

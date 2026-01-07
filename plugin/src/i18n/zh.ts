@@ -675,11 +675,11 @@ export class Zh implements Local {
 	add_script_condition = "添加脚本条件";
 	filter_script_placeholder = "return true; // 返回 true 满足条件，返回 false 不满足条件";
 	filter_script_help = "可用变量: app, currentFile, formFilePath, formValues";
-	// AI Chat 触发配置
+	// AI Chat 触发配置（快捷技能）
 	chat_trigger_enable = "启用编辑器触发";
-	chat_trigger_enable_desc = "在编辑器中输入触发符号时打开 AI Chat 模态框";
+	chat_trigger_enable_desc = "开启后在编辑器中输入触发符号时会自动显示快捷技能工具栏";
 	chat_trigger_symbol = "触发符号";
-	chat_trigger_symbol_desc = "输入此符号时打开 AI Chat（仅支持单个字符）";
+	chat_trigger_symbol_desc = "在编辑器中输入此符号时显示快捷技能工具栏（占位符代表全文内容，不包括 frontmatter）。多个符号用逗号分隔，如：@,/,#";
 	chat_modal_width = "模态框宽度";
 	chat_modal_width_desc = "AI Chat 模态框的宽度（像素）";
 	chat_modal_height = "模态框高度";
@@ -692,7 +692,7 @@ export class Zh implements Local {
 	selection_toolbar_more = "更多";
 	selection_toolbar_no_more_skills = "暂无更多技能";
 	selection_toolbar_enable = "启用快捷技能";
-	selection_toolbar_enable_desc = "关闭后，编辑器选中文本时不再显示悬浮工具栏";
+	selection_toolbar_enable_desc = "关闭后，编辑器选中文本或输入触发符号时不再显示悬浮工具栏";
 	selection_toolbar_max_buttons = "工具栏按钮数量";
 	selection_toolbar_max_buttons_desc = "工具栏最多显示的技能按钮数量（超过的技能显示在下拉菜单中）";
 	selection_toolbar_settings_section = "快捷技能";
@@ -714,7 +714,7 @@ export class Zh implements Local {
 	skill_edit_name_duplicate = "技能名称已存在";
 	skill_edit_prompt_label = "提示词内容";
 	skill_edit_prompt_placeholder = "在此输入或粘贴你的提示词。";
-	skill_edit_prompt_hint = "使用特殊符串 {selection}代表划词选中的文字。";
+	skill_edit_prompt_hint = "占位符说明：\n- 通过选中文本触发：{{}} 代表选中的文本\n- 通过触发符号触发：{{}} 代表整个文本内容（不包括 frontmatter）\n- {{@xxx}} 格式同样支持，会被替换为相应内容";
 	skill_edit_prompt_required = "提示词内容不能为空";
 	skill_edit_show_example = "示例";
 	skill_edit_select_icon = "选择图标";
@@ -736,7 +736,7 @@ export class Zh implements Local {
 	skill_edit_prompt_source_label = "提示词来源";
 	skill_edit_prompt_source_custom = "自定义";
 	skill_edit_prompt_source_template = "内置模板";
-	skill_edit_custom_prompt_hint = "使用 {{}} 作为占位符代表选中的文本，系统执行时会自动替换为实际选中的内容。";
+	skill_edit_custom_prompt_hint = "使用 {{}} 作为占位符，系统执行时会自动替换为实际内容。";
 	skill_edit_template_hint = "从 AI 提示词模板目录中选择模板文件，模板中同样支持使用 {{}} 占位符。";
 	skill_edit_template_select_placeholder = "请选择模板文件...";
 	skill_edit_template_required = "请选择一个模板文件";

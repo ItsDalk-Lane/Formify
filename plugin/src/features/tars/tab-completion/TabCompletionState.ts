@@ -47,6 +47,7 @@ export const clearSuggestionEffect = StateEffect.define<void>()
 export const setLoadingEffect = StateEffect.define<{
     isLoading: boolean
     requestId: string | null
+    pos?: number
 }>()
 
 /**
@@ -83,7 +84,8 @@ export const tabCompletionStateField = StateField.define<TabCompletionStateValue
                 return {
                     ...state,
                     isLoading: effect.value.isLoading,
-                    requestId: effect.value.requestId
+                    requestId: effect.value.requestId,
+                    suggestionPos: typeof effect.value.pos === 'number' ? effect.value.pos : state.suggestionPos
                 }
             }
 
@@ -93,17 +95,25 @@ export const tabCompletionStateField = StateField.define<TabCompletionStateValue
             }
         }
 
-        // 如果文档发生变化且当前有显示建议，则清除建议
-        if (tr.docChanged && state.isShowing) {
-            return { ...defaultTabCompletionState }
-        }
+        // 文档变化时：
+        // - 若变化触及触发位置，则清除（表示用户在触发位置输入，按需求中断补全）
+        // - 若变化发生在其他位置，则保留并映射 suggestionPos，避免因其他编辑行为中断
+        if (tr.docChanged && (state.isShowing || state.isLoading)) {
+            const anchorPos = state.suggestionPos
+            let touchedAnchor = false
+            tr.changes.iterChanges((fromA, toA) => {
+                if (fromA <= anchorPos && anchorPos <= toA) {
+                    touchedAnchor = true
+                }
+            })
 
-        // 如果光标位置发生变化且当前有显示建议，则清除建议
-        if (tr.selection && state.isShowing) {
-            const newPos = tr.selection.main.head
-            // 允许光标在建议位置不变
-            if (newPos !== state.suggestionPos) {
+            if (touchedAnchor) {
                 return { ...defaultTabCompletionState }
+            }
+
+            return {
+                ...state,
+                suggestionPos: tr.changes.mapPos(state.suggestionPos)
             }
         }
 

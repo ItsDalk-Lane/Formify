@@ -6,6 +6,7 @@ import { createTabCompletionKeymap, createTriggerKeyHandler, createCancelHandler
 import { TabCompletionService, TabCompletionSettings } from './TabCompletionService'
 import { App } from 'obsidian'
 import { ProviderSettings } from '../providers'
+import { getTabCompletionState } from './TabCompletionState'
 
 /**
  * 创建 Tab 补全 CodeMirror 6 扩展
@@ -67,6 +68,35 @@ export function createTabCompletionExtension(
         service.cancel()
     })
 
+    // 监听文档变化，仅当用户在触发位置输入/编辑时才中断补全过程
+    const cancelOnAnchorEdit = EditorView.updateListener.of((update) => {
+        if (!update.docChanged) return
+
+        const startState = getTabCompletionState(update.startState)
+        if (!(startState.isLoading || startState.isShowing)) return
+
+        let anchorPos = startState.suggestionPos
+
+        for (const tr of update.transactions) {
+            if (!tr.docChanged) continue
+
+            let touchedAnchor = false
+            tr.changes.iterChanges((fromA, toA) => {
+                if (fromA <= anchorPos && anchorPos <= toA) {
+                    touchedAnchor = true
+                }
+            })
+
+            if (touchedAnchor) {
+                service.cancel()
+                update.view.dispatch({ effects: clearSuggestionEffect.of(undefined) })
+                return
+            }
+
+            anchorPos = tr.changes.mapPos(anchorPos)
+        }
+    })
+
     // 返回完整的扩展集合
     return [
         // 状态字段
@@ -78,7 +108,9 @@ export function createTabCompletionExtension(
         // 快捷键绑定（优先级高于默认绑定）
         Prec.high(keymap.of(keymapBindings)),
         // 取消处理器（鼠标/焦点）
-        cancelHandlers
+		cancelHandlers,
+		// 仅触发位置编辑才取消
+		Prec.highest(cancelOnAnchorEdit)
     ]
 }
 

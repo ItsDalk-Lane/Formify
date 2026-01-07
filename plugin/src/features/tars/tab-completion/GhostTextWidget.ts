@@ -100,7 +100,7 @@ export const ghostTextPlugin = ViewPlugin.fromClass(
 
             if (state.isLoading) {
                 // 显示加载提示
-                const pos = view.state.selection.main.head
+                const pos = state.suggestionPos
                 const widget = Decoration.widget({
                     widget: new LoadingWidgetType(),
                     side: 1 // 显示在光标后面

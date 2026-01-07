@@ -691,11 +691,11 @@ export class ZhTw implements Local {
 	add_script_condition = "添加腳本條件";
 	filter_script_placeholder = "return true; // 返回 true 滿足條件，返回 false 不滿足條件";
 	filter_script_help = "可用變量: app, currentFile, formFilePath, formValues";
-	// AI Chat 觸發設定
+	// AI Chat 觸發設定（快捷技能）
 	chat_trigger_enable = "啟用編輯器觸發";
-	chat_trigger_enable_desc = "在編輯器中輸入觸發符號時開啟 AI Chat 模態框";
+	chat_trigger_enable_desc = "開啟後在編輯器中輸入觸發符號時會自動顯示快捷技能工具列";
 	chat_trigger_symbol = "觸發符號";
-	chat_trigger_symbol_desc = "輸入此符號時開啟 AI Chat（僅支援單個字元）";
+	chat_trigger_symbol_desc = "在編輯器中輸入此符號時顯示快捷技能工具列（占位符代表全文內容，不包括 frontmatter）。多個符號用逗號分隔，如：@,/,#";
 	chat_modal_width = "模態框寬度";
 	chat_modal_width_desc = "AI Chat 模態框的寬度（像素）";
 	chat_modal_height = "模態框高度";
@@ -708,7 +708,7 @@ export class ZhTw implements Local {
 	selection_toolbar_more = "更多";
 	selection_toolbar_no_more_skills = "暫無更多技能";
 	selection_toolbar_enable = "啟用快捷技能";
-	selection_toolbar_enable_desc = "關閉後，編輯器選取文字時不再顯示懸浮工具列";
+	selection_toolbar_enable_desc = "關閉後，編輯器選取文字或輸入觸發符號時不再顯示懸浮工具列";
 	selection_toolbar_max_buttons = "工具列按鈕數量";
 	selection_toolbar_max_buttons_desc = "工具列最多顯示的技能按鈕數量（超過的技能顯示在下拉選單中）";
 	selection_toolbar_settings_section = "快捷技能";
@@ -730,7 +730,7 @@ export class ZhTw implements Local {
 	skill_edit_name_duplicate = "技能名稱已存在";
 	skill_edit_prompt_label = "提示詞內容";
 	skill_edit_prompt_placeholder = "在此輸入或貼上你的提示詞。";
-	skill_edit_prompt_hint = "使用特殊字串 {selection}代表劃詞選取的文字。";
+	skill_edit_prompt_hint = "占位符說明：\n- 通過選取文字觸發：{{}} 代表選取的文字\n- 通過觸發符號觸發：{{}} 代表整個文字內容（不包括 frontmatter）\n- {{@xxx}} 格式同樣支援，會被替換為相應內容";
 	skill_edit_prompt_required = "提示詞內容不能為空";
 	skill_edit_show_example = "示例";
 	skill_edit_select_icon = "選擇圖示";
@@ -745,4 +745,19 @@ export class ZhTw implements Local {
 	skill_result_replaced = "已替換選取文字";
 	skill_result_appended = "已追加到選取內容";
 	skill_result_inserted = "已插入到游標位置";
+	// 快捷技能增強功能
+	skill_edit_model_label = "AI 模型";
+	skill_edit_model_hint = "選擇執行此技能時使用的 AI 模型，留空則使用預設模型";
+	skill_edit_model_default = "使用預設模型";
+	skill_edit_prompt_source_label = "提示詞來源";
+	skill_edit_prompt_source_custom = "自訂";
+	skill_edit_prompt_source_template = "內建模板";
+	skill_edit_custom_prompt_hint = "使用 {{}} 作為占位符，系統執行時會自動替換為實際內容。";
+	skill_edit_template_hint = "從 AI 提示詞模板目錄中選擇模板文件，模板中同樣支援使用 {{}} 占位符。";
+	skill_edit_template_select_placeholder = "請選擇模板文件...";
+	skill_edit_template_required = "請選擇一個模板文件";
+	selection_toolbar_stream_output = "流式輸出";
+	selection_toolbar_stream_output_desc = "啟用後 AI 將逐字輸出結果，關閉則等待完整響應後一次性顯示";
+	skill_show_in_toolbar = "顯示在工具列";
+	skill_not_show_in_toolbar = "未顯示在工具列";
 }

@@ -168,17 +168,8 @@ export function createTriggerKeyHandler(options: {
                 return true
             }
             
-            // 如果有建议显示，其他按键（除了 Enter/Escape）会取消建议
-            const state = getTabCompletionState(view.state)
-            if (state.isShowing && !['Enter', 'Escape', 'Alt', 'Control', 'Shift', 'Meta'].includes(event.key)) {
-                console.debug('[TabCompletion] 其他按键，取消建议:', event.key)
-                onCancel(view)
-                view.dispatch({
-                    effects: clearSuggestionEffect.of(undefined)
-                })
-                // 不阻止默认行为，让用户继续输入
-            }
-            
+            // 其他按键不在此处取消建议/中断请求。
+            // 中断逻辑由“触发位置发生编辑”统一控制，避免普通操作打断补全过程。
             return false
         },
         
@@ -198,31 +189,9 @@ export function createTriggerKeyHandler(options: {
  */
 export function createCancelHandlers(onCancel: CancelCallback) {
     return EditorView.domEventHandlers({
-        // 任何键盘输入（除了已处理的快捷键）都会触发文档变化
-        // 文档变化会通过 StateField 自动清除建议
-        
-        // 点击时取消建议
-        mousedown: (event, view) => {
-            const state = getTabCompletionState(view.state)
-            if (state.isShowing || state.isLoading) {
-                onCancel(view)
-                view.dispatch({
-                    effects: clearSuggestionEffect.of(undefined)
-                })
-            }
-            return false // 不阻止默认行为
-        },
-
-        // 失去焦点时取消建议
-        blur: (event, view) => {
-            const state = getTabCompletionState(view.state)
-            if (state.isShowing || state.isLoading) {
-                onCancel(view)
-                view.dispatch({
-                    effects: clearSuggestionEffect.of(undefined)
-                })
-            }
-            return false
-        }
+        // 保持默认行为：鼠标点击/失焦不再自动取消。
+        // 仅当用户在触发位置输入内容、或显式按 Escape 取消、或 AI 请求失败时才会中断。
+        mousedown: () => false,
+        blur: () => false
     })
 }

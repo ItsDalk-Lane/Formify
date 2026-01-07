@@ -9,7 +9,10 @@ import { createChatTriggerExtension, updateChatTriggerSettings } from './trigger
 import {
 	createSelectionToolbarExtension,
 	updateSelectionToolbarSettings,
-	SelectionInfo
+	SelectionInfo,
+	getContentWithoutFrontmatter,
+	setTriggerSource,
+	setToolbarVisible
 } from './selection-toolbar/SelectionToolbarExtension';
 import { SkillExecutionService } from './selection-toolbar/SkillExecutionService';
 import { SkillDataService } from './selection-toolbar/SkillDataService';
@@ -37,6 +40,7 @@ export class ChatFeatureManager {
 	private currentSelectionInfo: SelectionInfo | null = null;
 	private currentEditorView: EditorView | null = null;
 	private isToolbarVisible = false;
+	private currentTriggerSymbolRange: { from: number; to: number } | null = null; // 记录触发符号位置
 
 	// 技能结果模态框状态
 	private resultModalContainer: HTMLElement | null = null;
@@ -201,8 +205,8 @@ export class ChatFeatureManager {
 			this.plugin.app,
 			settings,
 			{
-				onTrigger: (activeFile) => {
-					this.openChatInModal(activeFile);
+				onShowToolbar: (view, activeFile, symbolRange) => {
+					this.showToolbarBySymbol(view, activeFile, symbolRange);
 				}
 			}
 		);
@@ -309,6 +313,9 @@ export class ChatFeatureManager {
 		this.currentEditorView = view;
 		this.isToolbarVisible = true;
 
+		// 设置全局状态
+		setToolbarVisible(true);
+
 		// 创建工具栏容器（如果不存在）
 		if (!this.toolbarContainer) {
 			this.toolbarContainer = document.createElement('div');
@@ -318,6 +325,51 @@ export class ChatFeatureManager {
 		}
 
 		this.renderToolbar();
+	}
+
+	/**
+	 * 通过符号触发显示工具栏
+	 */
+	private showToolbarBySymbol(view: EditorView, activeFile: TFile | null, symbolRange?: { from: number; to: number }) {
+		// 记录触发符号位置和 EditorView
+		if (symbolRange) {
+			this.currentTriggerSymbolRange = symbolRange;
+		}
+		this.currentEditorView = view;
+
+		// 设置全局触发来源和可见状态
+		setTriggerSource('symbol');
+		setToolbarVisible(true);
+
+		// 获取完整文本（不包括 frontmatter）
+		const fullText = getContentWithoutFrontmatter(this.plugin.app);
+
+		// 获取光标位置
+		const cursorPos = view.state.selection.main.head;
+
+		// 获取光标位置的屏幕坐标
+		const coords = view.coordsAtPos(cursorPos);
+		if (!coords) {
+			return;
+		}
+
+		// 创建 SelectionInfo
+		const selectionInfo: SelectionInfo = {
+			text: '', // 符号触发时没有选中文本
+			fullText: fullText, // 完整文本（不包括 frontmatter）
+			from: cursorPos,
+			to: cursorPos,
+			coords: {
+				top: coords.top,
+				left: coords.left,
+				right: coords.right,
+				bottom: coords.bottom
+			},
+			triggerSource: 'symbol', // 通过符号触发
+			triggerSymbolRange: symbolRange // 记录触发符号位置
+		};
+
+		this.showSelectionToolbar(selectionInfo, view, activeFile);
 	}
 
 	/**
@@ -332,14 +384,16 @@ export class ChatFeatureManager {
 		// 使用缓存的技能列表，不从 settings 中获取
 		const settingsWithCachedSkills = { ...settings, skills: this.cachedSkills };
 
+		const { triggerSource, fullText } = this.currentSelectionInfo;
+
 		this.toolbarRoot.render(
 			<StrictMode>
 				<SelectionToolbar
 					visible={this.isToolbarVisible}
 					selectionInfo={this.currentSelectionInfo}
 					settings={settingsWithCachedSkills}
-					onOpenChat={(selection) => this.openChatWithSelection(selection)}
-					onExecuteSkill={(skill, selection) => this.executeSkill(skill, selection)}
+					onOpenChat={(selection) => this.openChatWithSelection(selection, triggerSource, fullText)}
+					onExecuteSkill={(skill, selection) => this.executeSkill(skill, selection, triggerSource, fullText)}
 					onClose={() => this.hideSelectionToolbar()}
 				/>
 			</StrictMode>
@@ -352,6 +406,12 @@ export class ChatFeatureManager {
 	private hideSelectionToolbar() {
 		this.isToolbarVisible = false;
 		this.currentSelectionInfo = null;
+		this.currentTriggerSymbolRange = null; // 清除触发符号位置
+		this.currentEditorView = null; // 清除 EditorView 引用
+
+		// 清除全局状态
+		setToolbarVisible(false);
+		setTriggerSource(null);
 
 		if (this.toolbarRoot) {
 			const settings = this.plugin.settings.chat;
@@ -373,15 +433,48 @@ export class ChatFeatureManager {
 	}
 
 	/**
+	 * 删除触发符号
+	 */
+	private deleteTriggerSymbol() {
+		if (!this.currentTriggerSymbolRange || !this.currentEditorView) {
+			return;
+		}
+
+		const { from, to } = this.currentTriggerSymbolRange;
+
+		// 删除触发符号
+		this.currentEditorView.dispatch({
+			changes: {
+				from,
+				to,
+				insert: ''
+			}
+		});
+
+		// 清除触发符号位置
+		this.currentTriggerSymbolRange = null;
+	}
+
+	/**
 	 * 携带选中文本打开 AI Chat
 	 */
-	private openChatWithSelection(selection: string) {
+	private openChatWithSelection(selection: string, triggerSource?: 'selection' | 'symbol', fullText?: string) {
+		// 如果是符号触发，删除触发符号
+		if (triggerSource === 'symbol' && this.currentTriggerSymbolRange && this.currentEditorView) {
+			this.deleteTriggerSymbol();
+		}
+
 		this.hideSelectionToolbar();
-		
+
 		const settings = this.plugin.settings.chat;
 		const activeFile = this.plugin.app.workspace.getActiveFile();
 
-		// 创建并打开模态框，同时将选中文本添加到上下文
+		// 根据触发来源决定传递给 ChatModal 的内容
+		// 符号触发：传递完整文本（不包括 frontmatter）
+		// 选中文本触发：传递选中的文本
+		const initialSelection = triggerSource === 'symbol' ? (fullText || selection) : selection;
+
+		// 创建并打开模态框
 		const modal = new ChatModal(
 			this.plugin.app,
 			this.service,
@@ -389,7 +482,7 @@ export class ChatFeatureManager {
 				width: settings.chatModalWidth ?? 700,
 				height: settings.chatModalHeight ?? 500,
 				activeFile: activeFile,
-				initialSelection: selection
+				initialSelection: initialSelection
 			}
 		);
 		modal.open();
@@ -398,22 +491,30 @@ export class ChatFeatureManager {
 	/**
 	 * 执行技能
 	 */
-	private async executeSkill(skill: Skill, selection: string) {
+	private async executeSkill(skill: Skill, selection: string, triggerSource?: 'selection' | 'symbol', fullText?: string) {
+		// 如果是符号触发，删除触发符号
+		if (triggerSource === 'symbol' && this.currentTriggerSymbolRange && this.currentEditorView) {
+			this.deleteTriggerSymbol();
+		}
+
 		this.hideSelectionToolbar();
-		
+
 		if (!this.skillExecutionService) {
 			new Notice('技能执行服务未初始化');
 			return;
 		}
 
+		// 根据触发来源决定实际使用的文本
+		const actualSelection = triggerSource === 'symbol' ? (fullText || '') : selection;
+
 		// 显示结果模态框
-		this.showResultModal(skill, selection);
+		this.showResultModal(skill, selection, triggerSource, fullText);
 	}
 
 	/**
 	 * 显示技能结果模态框
 	 */
-	private showResultModal(skill: Skill, selection: string) {
+	private showResultModal(skill: Skill, selection: string, triggerSource?: 'selection' | 'symbol', fullText?: string) {
 		// 创建结果模态框容器
 		if (!this.resultModalContainer) {
 			this.resultModalContainer = document.createElement('div');
@@ -422,13 +523,16 @@ export class ChatFeatureManager {
 			this.resultModalRoot = createRoot(this.resultModalContainer);
 		}
 
+		// 根据触发来源决定实际使用的文本
+		const actualSelection = triggerSource === 'symbol' ? (fullText || '') : selection;
+
 		let result = '';
 		let isLoading = true;
 		let error: string | undefined;
 
 		const renderModal = () => {
 			if (!this.resultModalRoot) return;
-			
+
 			this.resultModalRoot.render(
 				<StrictMode>
 					<SkillResultModal
@@ -440,8 +544,8 @@ export class ChatFeatureManager {
 						isLoading={isLoading}
 						error={error}
 						onClose={() => this.hideResultModal()}
-						onRegenerate={() => this.regenerateSkillResult(skill, selection)}
-						onInsert={(mode) => this.insertSkillResult(result, mode)}
+						onRegenerate={() => this.regenerateSkillResult(skill, selection, triggerSource, fullText)}
+						onInsert={(mode) => this.insertSkillResult(result, mode, triggerSource, fullText)}
 						onCopy={() => {}}
 					/>
 				</StrictMode>
@@ -456,7 +560,7 @@ export class ChatFeatureManager {
 
 		if (useStreamOutput) {
 			// 执行技能并流式更新结果
-			this.executeSkillAndStream(skill, selection, {
+			this.executeSkillAndStream(skill, actualSelection, {
 				onChunk: (chunk) => {
 					result += chunk;
 					renderModal();
@@ -473,7 +577,7 @@ export class ChatFeatureManager {
 			});
 		} else {
 			// 非流式输出：等待完整响应
-			this.executeSkillNonStream(skill, selection).then((response) => {
+			this.executeSkillNonStream(skill, actualSelection).then((response) => {
 				result = response;
 				isLoading = false;
 				renderModal();
@@ -533,15 +637,15 @@ export class ChatFeatureManager {
 	/**
 	 * 重新生成技能结果
 	 */
-	private regenerateSkillResult(skill: Skill, selection: string) {
+	private regenerateSkillResult(skill: Skill, selection: string, triggerSource?: 'selection' | 'symbol', fullText?: string) {
 		this.hideResultModal();
-		this.showResultModal(skill, selection);
+		this.showResultModal(skill, selection, triggerSource, fullText);
 	}
 
 	/**
 	 * 插入技能结果到编辑器
 	 */
-	private insertSkillResult(result: string, mode: 'replace' | 'append' | 'insert') {
+	private insertSkillResult(result: string, mode: 'replace' | 'append' | 'insert', triggerSource?: 'selection' | 'symbol', fullText?: string) {
 		this.hideResultModal();
 
 		const activeView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
@@ -554,9 +658,28 @@ export class ChatFeatureManager {
 
 		switch (mode) {
 			case 'replace':
-				// 替换当前选中文本
-				editor.replaceSelection(result);
-				new Notice('已替换选中文本');
+				// 根据触发来源决定替换行为
+				if (triggerSource === 'symbol') {
+					// 符号触发：替换整个文件内容（不包括 frontmatter）
+					const fullContent = editor.getValue();
+					const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/;
+					const match = fullContent.match(frontmatterRegex);
+
+					if (match) {
+						// 有 frontmatter：只替换正文部分
+						const frontmatterEnd = match[0].length;
+						const frontmatter = fullContent.slice(0, frontmatterEnd);
+						editor.setValue(frontmatter + result);
+					} else {
+						// 没有 frontmatter：替换整个文件
+						editor.setValue(result);
+					}
+					new Notice('已替换文件内容');
+				} else {
+					// 选中文本触发：替换当前选中文本
+					editor.replaceSelection(result);
+					new Notice('已替换选中文本');
+				}
 				break;
 			case 'append':
 				// 在选中文本后追加
