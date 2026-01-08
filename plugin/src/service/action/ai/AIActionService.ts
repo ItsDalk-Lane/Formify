@@ -294,7 +294,7 @@ export default class AIActionService implements IActionService {
 
     /**
      * 处理模板中的变量
-     * 支持：{{@fieldName}} 和 {{output:variableName}}
+     * 支持：{{@fieldName}}、{{output:variableName}}、{{@output:variableName}}
      */
     private async processTemplate(template: string, context: ActionContext): Promise<string> {
         const engine = new FormTemplateProcessEngine();
@@ -304,11 +304,24 @@ export default class AIActionService implements IActionService {
         // 这种格式用于引用之前动作输出的变量
         const outputPattern = /\{\{output:([^}]+)\}\}/g;
         result = result.replace(outputPattern, (_match: string, variableName: string) => {
-            const value = context.state.values[variableName];
+            const name = String(variableName).trim();
+            const value = context.state.values[name];
             if (value !== undefined && value !== null) {
                 return String(value);
             }
-            DebugLogger.warn(`[AIAction] 输出变量未找到: ${variableName}`);
+            DebugLogger.warn(`[AIAction] 输出变量未找到: ${name}`);
+            return "";
+        });
+
+        // 处理 {{@output:variableName}} 格式的变量
+        const atOutputPattern = /\{\{@output:([^}]+)\}\}/g;
+        result = result.replace(atOutputPattern, (_match: string, variableName: string) => {
+            const name = String(variableName).trim();
+            const value = context.state.values[name];
+            if (value !== undefined && value !== null) {
+                return String(value);
+            }
+            DebugLogger.warn(`[AIAction] 输出变量未找到: ${name}`);
             return "";
         });
 

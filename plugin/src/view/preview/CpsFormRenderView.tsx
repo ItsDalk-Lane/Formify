@@ -21,7 +21,14 @@ import { FormExecutionManager } from "src/service/FormExecutionManager";
 
 type Props = {
 	fields: IFormField[];
-	onSubmit: (values: FormIdValues, abortSignal?: AbortSignal) => Promise<void>;
+	onSubmit: (
+		values: FormIdValues,
+		abortSignal?: AbortSignal,
+		hooks?: {
+			onBackgroundExecutionStart?: () => void;
+			onBackgroundExecutionFinish?: () => void;
+		}
+	) => Promise<void>;
 	afterSubmit?: (values: FormIdValues) => void;
 	showSubmitSuccessToast?: boolean;  // 是否显示提交成功提示
 	formConfig?: FormConfig;  // 表单配置，用于获取超时控制设置
@@ -84,6 +91,13 @@ export function CpsFormRenderView(props: Props) {
 			formConfig?.enableExecutionTimeout ?? false,
 			formConfig?.executionTimeoutThreshold ?? 30
 		);
+		const backgroundStartedRef = { current: false };
+		const onBackgroundExecutionStart = () => {
+			backgroundStartedRef.current = true;
+		};
+		const onBackgroundExecutionFinish = () => {
+			executionManager.finishExecution();
+		};
 	
 		setSubmitState({
 			submitting: true,
@@ -98,7 +112,10 @@ export function CpsFormRenderView(props: Props) {
 		}
 
 		try {
-			await onSubmit(formIdValues, abortController.signal);
+			await onSubmit(formIdValues, abortController.signal, {
+				onBackgroundExecutionStart,
+				onBackgroundExecutionFinish,
+			});
 			
 			// 检查是否被中断
 			if (abortController.signal.aborted) {
@@ -111,8 +128,8 @@ export function CpsFormRenderView(props: Props) {
 				error: false,
 				errorMessage: "",
 			});
-			// 根据配置决定是否显示提交成功提示
-			if (showSubmitSuccessToast) {
+			// 后台执行时不提前显示“成功”提示（动作链还未真正完成）
+			if (showSubmitSuccessToast && !backgroundStartedRef.current) {
 				ToastManager.success(localInstance.submit_success);
 			}
 		} catch (e) {
@@ -130,7 +147,9 @@ export function CpsFormRenderView(props: Props) {
 			ToastManager.error(e.message || localInstance.unknown_error, 3000);
 			return;
 		} finally {
-			executionManager.finishExecution();
+			if (!backgroundStartedRef.current) {
+				executionManager.finishExecution();
+			}
 			if (shouldDeferAfterSubmit && !aborted) {
 				afterSubmit?.(submittedValues);
 			}

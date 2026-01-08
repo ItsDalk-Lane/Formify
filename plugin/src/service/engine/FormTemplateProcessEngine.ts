@@ -22,16 +22,29 @@ export class FormTemplateProcessEngine {
             // Continue processing but log warnings for debugging
         }
 
-        // if exactly matches {{@variableName}}, return the value as string for consistency
+        // if exactly matches {{@variableName}} OR {{@output:variableName}}, return the value as string for consistency
         const pureVariableMatch = text.match(/^{{\@([^}]+)}}$/);
         if (pureVariableMatch) {
-            const variableName = pureVariableMatch[1];
-            const value = state.values[variableName];
+            const rawName = pureVariableMatch[1]?.trim();
+            if (!rawName) {
+                return "";
+            }
+
+            // 支持 {{@output:variableName}}
+            if (rawName.startsWith("output:")) {
+                const outputName = rawName.slice("output:".length).trim();
+                const outputValue = state.values[outputName];
+                return outputValue !== undefined && outputValue !== null
+                    ? convertVariableToString(outputValue)
+                    : "";
+            }
+
+            const value = state.values[rawName];
             if (value !== undefined && value !== null) {
                 const stringValue = convertVariableToString(value);
                 logTypeConversion(
                     {
-                        fieldName: variableName,
+                        fieldName: rawName,
                         usage: 'pure variable reference',
                         location: 'FormTemplateProcessEngine.process'
                     },
@@ -69,7 +82,15 @@ export class FormTemplateProcessEngine {
 
         // handle {{output:variableName}} - 支持AI动作输出变量引用
         res = res.replace(/\{\{output:([^}]+)\}\}/g, (match, variableName) => {
-            const value = state.values[variableName];
+            const name = String(variableName).trim();
+            const value = state.values[name];
+            return value !== undefined && value !== null ? String(value) : match;
+        });
+
+        // handle {{@output:variableName}} - 与文档/界面提示保持一致
+        res = res.replace(/\{\{@output:([^}]+)\}\}/g, (match, variableName) => {
+            const name = String(variableName).trim();
+            const value = state.values[name];
             return value !== undefined && value !== null ? String(value) : match;
         });
 

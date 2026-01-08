@@ -56,10 +56,20 @@ export default function CpsFormActionView(props: Props) {
 	
 	const formService = new FormService();
 	
-	const submit = async (idValues: FormIdValues, abortSignal?: AbortSignal) => {
+	const submit = async (
+		idValues: FormIdValues,
+		abortSignal?: AbortSignal,
+		hooks?: {
+			onBackgroundExecutionStart?: () => void;
+			onBackgroundExecutionFinish?: () => void;
+		}
+	) => {
 		await formService.submit(idValues, formConfig, {
 			app: app,
 			abortSignal: abortSignal,
+			enableBackgroundExecutionOnAI: true,
+			onBackgroundExecutionStart: hooks?.onBackgroundExecutionStart,
+			onBackgroundExecutionFinish: hooks?.onBackgroundExecutionFinish,
 		});
 	};
 

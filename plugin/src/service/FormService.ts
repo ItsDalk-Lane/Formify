@@ -21,6 +21,17 @@ import { FormDisplayRules } from "../utils/FormDisplayRules";
 export interface FormSubmitOptions {
     app: App;
     abortSignal?: AbortSignal;  // 用于中断表单执行的信号
+    /**
+     * 当表单启用执行超时控制且包含 AI 动作时：
+     * 允许从首个 AI 动作开始将后续动作链放到后台执行，并让 submit 提前返回。
+     * 仅用于“表单界面提交”场景，避免影响 submitDirectly 等无界面执行路径。
+     */
+    enableBackgroundExecutionOnAI?: boolean;
+
+    /** 当动作链切到后台执行时触发（用于让表单视图避免提前 finishExecution） */
+    onBackgroundExecutionStart?: () => void;
+    /** 当后台动作链真正结束时触发（用于 finishExecution / 收尾） */
+    onBackgroundExecutionFinish?: () => void;
 }
 
 export class FormService {
@@ -52,6 +63,11 @@ export class FormService {
         const chain = new ActionChain(actions);
         const visibleIdValues = FormVisibilies.getVisibleIdValues(config.fields, processedIdValues, options.app);
         const formLabelValues = FormVisibilies.toFormLabelValues(config.fields, processedIdValues, options.app);
+        const shouldBackgroundOnAI =
+            options.enableBackgroundExecutionOnAI === true &&
+            (config.enableExecutionTimeout ?? false) &&
+            actions.some((a) => a.type === "ai");
+
         const actionContext: ActionContext = {
             app: options.app,
             config: config,
@@ -59,7 +75,10 @@ export class FormService {
                 idValues: visibleIdValues,
                 values: formLabelValues,
             },
-            abortSignal: options.abortSignal  // 传递中断信号
+            abortSignal: options.abortSignal,  // 传递中断信号
+            runInBackgroundOnFirstAIAction: shouldBackgroundOnAI,
+			onBackgroundExecutionStart: options.onBackgroundExecutionStart,
+			onBackgroundExecutionFinish: options.onBackgroundExecutionFinish,
         }
         chain.validate(actionContext);
         // run all action sequentially
