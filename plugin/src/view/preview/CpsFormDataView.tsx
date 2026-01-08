@@ -6,8 +6,12 @@ import "./CpsFormDataView.css";
 type Props = {
 	formConfig: FormConfig;
 	options?: {
+		onUserSubmit?: (state: Record<string, any>) => void;
 		afterSubmit?: (state: Record<string, any>) => void;
 		showOnlyFieldsNeedingInput?: boolean;
+		deferAfterSubmitUntilFinish?: boolean;
+		nestedExecution?: boolean;
+		disableBackgroundExecutionOnAI?: boolean;
 	};
 } & React.HTMLAttributes<HTMLDivElement>;
 

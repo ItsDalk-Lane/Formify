@@ -17,6 +17,12 @@ export class FormExecutionManager {
     private stopButtonEl: HTMLElement | null = null;
     private isExecuting = false;
     private timeoutThreshold = 30; // 默认30秒
+    /**
+     * 嵌套执行深度：用于“表单动作调用表单”等复用 AbortController 的场景。
+     * - startExecution(allowNestedReuse) 时若复用则 +1
+     * - finishExecution() 时 -1，归零才真正清理
+     */
+    private executionDepth = 0;
     
     private constructor(app: App) {
         this.app = app;
@@ -32,7 +38,25 @@ export class FormExecutionManager {
     /**
      * 开始执行并启动超时监控
      */
-    startExecution(enableTimeout: boolean, thresholdSeconds: number = 30): AbortController {
+    startExecution(
+        enableTimeout: boolean,
+        thresholdSeconds: number = 30,
+        options?: {
+            /**
+             * 允许嵌套执行：如果当前已经在执行中，则复用现有 AbortController，避免中断父级执行。
+             * 主要用于“表单动作调用表单”这类嵌套场景。
+             */
+            allowNestedReuse?: boolean;
+        }
+    ): AbortController {
+        const allowNestedReuse = options?.allowNestedReuse === true;
+        
+        // 嵌套执行：复用现有 abortController，避免 stopExecution 导致父级执行被中断
+        if (allowNestedReuse && this.isExecuting && this.abortController) {
+			this.executionDepth += 1;
+            return this.abortController;
+        }
+
         // 清理之前的执行
         this.stopExecution(false);
         
@@ -41,6 +65,7 @@ export class FormExecutionManager {
         this.isExecuting = true;
         this.executionStartTime = Date.now();
         this.timeoutThreshold = thresholdSeconds;
+		this.executionDepth = 1;
         
         if (enableTimeout) {
             this.startTimeoutMonitor();
@@ -177,13 +202,29 @@ export class FormExecutionManager {
         this.isExecuting = false;
         this.executionStartTime = null;
         this.abortController = null;
+		this.executionDepth = 0;
     }
     
     /**
      * 完成执行（成功或失败）
      */
     finishExecution() {
-        this.stopExecution(false);
+        // 嵌套执行：仅在最外层完成时清理。
+        if (!this.isExecuting) {
+            this.executionDepth = 0;
+            return;
+        }
+        this.executionDepth = Math.max(0, this.executionDepth - 1);
+        if (this.executionDepth > 0) {
+            return;
+        }
+
+        // 正常完成：不 abort，只做清理
+        this.clearTimers();
+        this.hideStopButton();
+        this.isExecuting = false;
+        this.executionStartTime = null;
+        this.abortController = null;
     }
     
     /**

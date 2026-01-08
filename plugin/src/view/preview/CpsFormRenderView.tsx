@@ -21,6 +21,11 @@ import { FormExecutionManager } from "src/service/FormExecutionManager";
 
 type Props = {
 	fields: IFormField[];
+	/**
+	 * 用户点击提交的瞬间触发（不等待动作链执行完成）。
+	 * 用于在“调用表单/严格串行”场景中立即关闭 UI，但仍可在动作链完成后再继续后续流程。
+	 */
+	onUserSubmit?: (values: FormIdValues) => void;
 	onSubmit: (
 		values: FormIdValues,
 		abortSignal?: AbortSignal,
@@ -30,12 +35,21 @@ type Props = {
 		}
 	) => Promise<void>;
 	afterSubmit?: (values: FormIdValues) => void;
+	/**
+	 * 强制将 afterSubmit 延迟到 onSubmit 完成后再触发（即：动作链执行完成后再关闭模态框）
+	 * 用于“调用表单”这类需要严格串行的场景。
+	 */
+	deferAfterSubmitUntilFinish?: boolean;
+	/**
+	 * 嵌套执行：复用全局执行管理器的 AbortController，避免中断父级执行。
+	 */
+	nestedExecution?: boolean;
 	showSubmitSuccessToast?: boolean;  // 是否显示提交成功提示
 	formConfig?: FormConfig;  // 表单配置，用于获取超时控制设置
 } & Omit<HTMLAttributes<HTMLDivElement>, "defaultValue">;
 
 export function CpsFormRenderView(props: Props) {
-	const { fields, onSubmit, afterSubmit, showSubmitSuccessToast = true, formConfig, className, ...rest } = props;
+	const { fields, onUserSubmit, onSubmit, afterSubmit, deferAfterSubmitUntilFinish, nestedExecution, showSubmitSuccessToast = true, formConfig, className, ...rest } = props;
 	const app = useObsidianApp();
 	const [formIdValues, setFormIdValues] = useState<FormIdValues>(
 		resolveDefaultFormIdValues(fields)
@@ -81,15 +95,21 @@ export function CpsFormRenderView(props: Props) {
 			return;
 		}
 
-		const shouldDeferAfterSubmit = !!formConfig?.enableExecutionTimeout;
+		const shouldDeferAfterSubmit =
+			!!formConfig?.enableExecutionTimeout ||
+			deferAfterSubmitUntilFinish === true;
 		const submittedValues = { ...formIdValues };
 		let aborted = false;
+
+		// 提交瞬间回调（用于立即关闭 UI 等）
+		onUserSubmit?.(submittedValues);
 
 		// 使用全局执行管理器
 		const executionManager = FormExecutionManager.getInstance(app);
 		const abortController = executionManager.startExecution(
 			formConfig?.enableExecutionTimeout ?? false,
-			formConfig?.executionTimeoutThreshold ?? 30
+			formConfig?.executionTimeoutThreshold ?? 30,
+			{ allowNestedReuse: nestedExecution === true }
 		);
 		const backgroundStartedRef = { current: false };
 		const onBackgroundExecutionStart = () => {

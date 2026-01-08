@@ -95,3 +95,9 @@ button.form--Select2Trigger:focus-visible {
 	align-items: center;
 	color: var(--text-muted);
 }
+
+button.form--Select2TriggerDisabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+	pointer-events: none;
+}

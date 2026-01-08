@@ -12,8 +12,22 @@ import { FormDisplayRules } from "src/utils/FormDisplayRules";
 type Props = {
 	formConfig: FormConfig;
 	options?: {
+		onUserSubmit?: (state: Record<string, any>) => void;
 		afterSubmit?: (state: Record<string, any>) => void;
 		showOnlyFieldsNeedingInput?: boolean;  // 是否只显示需要用户输入的字段
+		/**
+		 * 强制将 afterSubmit 延迟到动作链完成后触发。
+		 */
+		deferAfterSubmitUntilFinish?: boolean;
+		/**
+		 * 嵌套执行：复用父级执行的 AbortController。
+		 */
+		nestedExecution?: boolean;
+		/**
+		 * 禁用“首个 AI 动作后台执行”优化。
+		 * 在多表单严格串行场景下需要禁用，否则会导致动作链未完成就继续执行下一个表单。
+		 */
+		disableBackgroundExecutionOnAI?: boolean;
 	};
 } & React.HTMLAttributes<HTMLDivElement>;
 
@@ -67,7 +81,7 @@ export default function CpsFormActionView(props: Props) {
 		await formService.submit(idValues, formConfig, {
 			app: app,
 			abortSignal: abortSignal,
-			enableBackgroundExecutionOnAI: true,
+			enableBackgroundExecutionOnAI: viewOptions.disableBackgroundExecutionOnAI !== true,
 			onBackgroundExecutionStart: hooks?.onBackgroundExecutionStart,
 			onBackgroundExecutionFinish: hooks?.onBackgroundExecutionFinish,
 		});
@@ -76,10 +90,15 @@ export default function CpsFormActionView(props: Props) {
 	return (
 		<CpsFormRenderView
 			fields={displayFields}
+			onUserSubmit={(state) => {
+				viewOptions.onUserSubmit?.(state);
+			}}
 			onSubmit={submit}
 			afterSubmit={(state) => {
 				viewOptions.afterSubmit?.(state);
 			}}
+			deferAfterSubmitUntilFinish={viewOptions.deferAfterSubmitUntilFinish}
+			nestedExecution={viewOptions.nestedExecution}
 			showSubmitSuccessToast={formConfig.showSubmitSuccessToast}
 			formConfig={formConfig}
 		/>

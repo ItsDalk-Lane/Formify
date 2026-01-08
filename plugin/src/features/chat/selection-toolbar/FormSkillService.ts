@@ -4,7 +4,7 @@ import { FormService } from 'src/service/FormService';
 import FormViewModal2 from 'src/component/modal/FormViewModal2';
 import { FormDisplayRules } from 'src/utils/FormDisplayRules';
 import { localInstance } from 'src/i18n/locals';
-import type { Skill, FormExecutionMode } from '../types/chat';
+import type { Skill } from '../types/chat';
 
 /**
  * 表单信息接口
@@ -148,10 +148,13 @@ export class FormSkillService {
 			return result;
 		}
 
-		const executionMode = skill.formExecutionMode || 'serial';
+		if (formCommandIds.length > 1) {
+			new Notice('表单技能仅支持配置一个表单，将只执行第一个表单')
+		}
+
 		const formService = new FormService();
 
-		const runOneForm = async (commandId: string, mode: FormExecutionMode): Promise<void> => {
+		const runOneForm = async (commandId: string): Promise<void> => {
 			const formConfig = await this.getFormConfigByCommandId(commandId);
 			if (!formConfig) {
 				const errorMsg = localInstance.skill_form_not_found.replace('{0}', commandId);
@@ -161,74 +164,48 @@ export class FormSkillService {
 				return;
 			}
 
-			const shouldShowForm = FormDisplayRules.shouldShowForm(formConfig)
+			const shouldShowForm = FormDisplayRules.shouldShowForm(formConfig);
 			if (!shouldShowForm) {
 				// 不需要用户输入：直接执行
-				await formService.submitDirectly(formConfig, this.app)
-				result.executedForms.push(commandId)
-				return
+				await formService.submitDirectly(formConfig, this.app);
+				result.executedForms.push(commandId);
+				return;
 			}
 
-			// 需要用户输入：打开表单 UI
-			if (mode === 'parallel') {
-				// 并行：只负责打开，不等待
-				const modal = new FormViewModal2(this.app, {
-					formConfig,
-					options: { showOnlyFieldsNeedingInput: true }
-				})
-				void modal.open()
-				result.executedForms.push(commandId)
-				return
-			}
-
-			// 串行：等待当前表单关闭/提交后继续下一个
+			// 需要用户输入：打开表单 UI，并等待关闭/提交后返回
 			await new Promise<void>((resolve) => {
 				const modal = new FormViewModal2(this.app, {
 					formConfig,
 					options: { showOnlyFieldsNeedingInput: true }
-				})
-				const originalClose = modal.close.bind(modal)
+				});
+				const originalClose = modal.close.bind(modal);
 				modal.close = () => {
 					try {
-						originalClose()
+						originalClose();
 					} finally {
-						resolve()
+						resolve();
 					}
-				}
-				void modal.open()
-			})
-			result.executedForms.push(commandId)
+				};
+				void modal.open();
+			});
+			result.executedForms.push(commandId);
 		}
 
-		if (executionMode === 'serial') {
-			for (const commandId of formCommandIds) {
-				try {
-					await runOneForm(commandId, 'serial')
-				} catch (error) {
-					const errorMsg = `执行表单 ${commandId} 失败: ${error instanceof Error ? error.message : String(error)}`;
-					console.error(`[FormSkillService] ${errorMsg}`);
-					result.errors.push(errorMsg);
-					result.skippedForms.push(commandId);
-				}
-			}
-		} else {
-			await Promise.all(formCommandIds.map(async (commandId) => {
-				try {
-					await runOneForm(commandId, 'parallel')
-				} catch (error) {
-					const errorMsg = `执行表单 ${commandId} 失败: ${error instanceof Error ? error.message : String(error)}`;
-					console.error(`[FormSkillService] ${errorMsg}`);
-					result.errors.push(errorMsg);
-					result.skippedForms.push(commandId);
-				}
-			}))
+		const commandId = formCommandIds[0];
+		try {
+			await runOneForm(commandId);
+		} catch (error) {
+			const errorMsg = `执行表单 ${commandId} 失败: ${error instanceof Error ? error.message : String(error)}`;
+			console.error(`[FormSkillService] ${errorMsg}`);
+			result.errors.push(errorMsg);
+			result.skippedForms.push(commandId);
 		}
 
 		result.success = result.errors.length === 0;
 		return result;
 	}
 
-	// 注意：串行执行必须等待表单关闭，否则会被后一个覆盖导致只看到最后一个。
+	// 注意：表单技能目前只允许配置 1 个表单。
 
 	/**
 	 * 验证表单配置是否有效

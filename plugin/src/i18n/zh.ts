@@ -757,4 +757,16 @@ export class Zh implements Local {
 	skill_form_not_found = "表单 {0} 不存在";
 	skill_form_no_forms_configured = "此表单技能未配置任何表单";
 	skill_form_select_placeholder = "选择要添加的表单...";
+	// 多表单执行设置
+	form_execution_mode = "执行模式";
+	form_execution_mode_sequential = "依次执行";
+	form_execution_mode_sequential_desc = "每个表单的动作链完整执行完成后才执行下一个";
+	form_execution_mode_parallel = "同时执行";
+	form_execution_mode_parallel_desc = "所有表单的动作链同时并行执行";
+	form_display_mode = "界面模式";
+	form_display_mode_single = "逐个打开";
+	form_display_mode_single_desc = "表单依次显示，每个表单关闭后显示下一个";
+	form_display_mode_merged = "合并显示";
+	form_display_mode_merged_desc = "所有表单字段合并到一个模态框中";
+	form_display_mode_locked_hint = "同时执行模式下强制使用合并显示";
 }

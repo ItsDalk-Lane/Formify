@@ -1,5 +1,5 @@
 import { App, TFile } from "obsidian";
-import FormViewModal2 from "src/component/modal/FormViewModal2";
+import FormViewModal2, { FormModalResult } from "src/component/modal/FormViewModal2";
 import { localInstance } from "src/i18n/locals";
 import { showPromiseToast } from "../component/toast/PromiseToast";
 import { ToastManager } from "../component/toast/ToastManager";
@@ -171,21 +171,43 @@ export class FormService {
         }
     }
 
-    async openForm(formConfig: FormConfig, app: App) {
+    async openForm(
+        formConfig: FormConfig,
+        app: App,
+        options?: {
+            /**
+             * 严格串行：延迟关闭表单界面，直到动作链执行完成。
+             */
+            deferAfterSubmitUntilFinish?: boolean;
+            /**
+             * 嵌套执行：复用父级 AbortController，避免中断父级执行。
+             */
+            nestedExecution?: boolean;
+            /**
+             * 禁用“首个 AI 动作后台执行”优化（严格串行时需要）。
+             */
+            disableBackgroundExecutionOnAI?: boolean;
+        }
+    ): Promise<FormModalResult> {
         // 检查是否需要显示表单界面
         if (FormDisplayRules.shouldShowForm(formConfig)) {
             // 需要用户输入，显示表单界面，并且只显示需要输入的字段
             const m = new FormViewModal2(app, {
                 formConfig: formConfig,
                 options: {
-                    showOnlyFieldsNeedingInput: true
+                    showOnlyFieldsNeedingInput: true,
+                    deferAfterSubmitUntilFinish: options?.deferAfterSubmitUntilFinish,
+                    nestedExecution: options?.nestedExecution,
+                    disableBackgroundExecutionOnAI: options?.disableBackgroundExecutionOnAI,
                 }
             });
-            m.open();
+            // 等待用户操作完成
+            return await m.open();
         } else {
             // 不需要用户输入，直接提交
             const formService = new FormService();
             await formService.submitDirectly(formConfig, app);
+            return { submitted: true };
         }
     }
 

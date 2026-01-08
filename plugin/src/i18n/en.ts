@@ -748,4 +748,16 @@ export class En implements Local {
 	skill_form_not_found = "Form {0} not found";
 	skill_form_no_forms_configured = "No forms configured for this form skill";
 	skill_form_select_placeholder = "Select a form to add...";
+	// Multi-form execution settings
+	form_execution_mode = "Execution Mode";
+	form_execution_mode_sequential = "Sequential";
+	form_execution_mode_sequential_desc = "Each form's action chain completes before the next one starts";
+	form_execution_mode_parallel = "Parallel";
+	form_execution_mode_parallel_desc = "All form action chains execute simultaneously";
+	form_display_mode = "Display Mode";
+	form_display_mode_single = "One at a Time";
+	form_display_mode_single_desc = "Forms display sequentially, each closes before the next opens";
+	form_display_mode_merged = "Merged View";
+	form_display_mode_merged_desc = "All form fields merged into a single modal";
+	form_display_mode_locked_hint = "Parallel execution requires Merged View";
 }

@@ -30,7 +30,7 @@ import { getCapabilityEmoji, getCapabilityDisplayText } from './providers/utils'
 import { availableVendors, DEFAULT_TARS_SETTINGS } from './settings'
 import type { TarsSettings } from './settings'
 import FolderSuggest from '../../component/combobox/FolderSuggest'
-import type { ChatSettings, SkillType, FormExecutionMode } from '../chat/types/chat'
+import type { ChatSettings, SkillType } from '../chat/types/chat'
 import { localInstance } from '../../i18n/locals'
 
 export interface TarsSettingsContext {
@@ -2140,63 +2140,6 @@ export class TarsSettingTab {
 			display: ${currentSkillType === 'form' ? 'block' : 'none'};
 		`
 
-		// 执行模式选择
-		const executionModeSection = document.createElement('div')
-		executionModeSection.style.cssText = 'margin-bottom: 16px;'
-		const executionModeLabel = document.createElement('div')
-		executionModeLabel.style.cssText = 'font-size: var(--font-ui-small); font-weight: 600; color: var(--text-normal); margin-bottom: 8px;'
-		executionModeLabel.textContent = localInstance.skill_form_execution_mode_label
-		const executionModeRow = document.createElement('div')
-		executionModeRow.style.cssText = 'display: flex; gap: 16px;'
-
-		let currentExecutionMode: FormExecutionMode = skill?.formExecutionMode || 'serial'
-
-		// 串行执行单选按钮
-		const serialRadioWrapper = document.createElement('label')
-		serialRadioWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;'
-		const serialRadio = document.createElement('input')
-		serialRadio.type = 'radio'
-		serialRadio.name = 'executionMode'
-		serialRadio.value = 'serial'
-		serialRadio.checked = currentExecutionMode === 'serial'
-		serialRadio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
-		const serialLabel = document.createElement('span')
-		serialLabel.textContent = localInstance.skill_form_execution_mode_serial
-		serialLabel.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal);'
-		serialRadioWrapper.appendChild(serialRadio)
-		serialRadioWrapper.appendChild(serialLabel)
-
-		// 并行执行单选按钮
-		const parallelRadioWrapper = document.createElement('label')
-		parallelRadioWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;'
-		const parallelRadio = document.createElement('input')
-		parallelRadio.type = 'radio'
-		parallelRadio.name = 'executionMode'
-		parallelRadio.value = 'parallel'
-		parallelRadio.checked = currentExecutionMode === 'parallel'
-		parallelRadio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
-		const parallelLabel = document.createElement('span')
-		parallelLabel.textContent = localInstance.skill_form_execution_mode_parallel
-		parallelLabel.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal);'
-		parallelRadioWrapper.appendChild(parallelRadio)
-		parallelRadioWrapper.appendChild(parallelLabel)
-
-		executionModeRow.appendChild(serialRadioWrapper)
-		executionModeRow.appendChild(parallelRadioWrapper)
-		executionModeSection.appendChild(executionModeLabel)
-		executionModeSection.appendChild(executionModeRow)
-
-		serialRadio.addEventListener('change', () => {
-			if (serialRadio.checked) {
-				currentExecutionMode = 'serial'
-			}
-		})
-		parallelRadio.addEventListener('change', () => {
-			if (parallelRadio.checked) {
-				currentExecutionMode = 'parallel'
-			}
-		})
-
 		// 表单列表区域
 		const formListSection = document.createElement('div')
 		const formListLabel = document.createElement('div')
@@ -2205,8 +2148,8 @@ export class TarsSettingTab {
 		const formListContainer = document.createElement('div')
 		formListContainer.style.cssText = 'display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;'
 
-		// 表单 commandIds 列表
-		let pendingFormCommandIds: string[] = (skill?.formCommandIds || []).slice()
+		// 表单 commandIds 列表（表单技能只允许配置 1 个表单）
+		let pendingFormCommandIds: string[] = (skill?.formCommandIds || []).slice(0, 1)
 		let availableForms: FormInfo[] = []
 
 		// 加载可用表单列表
@@ -2377,6 +2320,10 @@ export class TarsSettingTab {
 				new Notice(localInstance.skill_form_already_added)
 				return
 			}
+			if (pendingFormCommandIds.length >= 1) {
+				new Notice('表单技能只能添加一个表单，请先删除已添加的表单')
+				return
+			}
 			pendingFormCommandIds.push(pickedId)
 			refreshFormList()
 			addFormSelect.value = ''
@@ -2389,7 +2336,6 @@ export class TarsSettingTab {
 		formListSection.appendChild(formListContainer)
 		formListSection.appendChild(addFormRow)
 
-		formSkillSection.appendChild(executionModeSection)
 		formSkillSection.appendChild(formListSection)
 
 		// 延迟刷新表单列表（等待 availableForms 加载完成）
@@ -3076,8 +3022,7 @@ export class TarsSettingTab {
 				isSkillGroup: isGroup,
 				children: isGroup ? pendingGroupChildrenIds.slice() : [],
 				// 表单技能相关
-				formCommandIds: isForm ? pendingFormCommandIds.slice() : undefined,
-				formExecutionMode: isForm ? currentExecutionMode : undefined,
+				formCommandIds: isForm ? pendingFormCommandIds.slice(0, 1) : undefined,
 				// 通用字段
 				showInToolbar: skill?.showInToolbar ?? true,
 				order: skill?.order ?? allSkills.length,

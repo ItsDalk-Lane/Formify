@@ -19,6 +19,9 @@ import { FormImportDialog } from "./import/FormImportDialog";
 import { StartupConditionEditor } from "./startup-condition/StartupConditionEditor";
 import ToggleControl from "src/view/shared/control/ToggleControl";
 import { StartupConditionsConfig } from "src/model/startup-condition/StartupCondition";
+import { FormExecutionMode } from "src/model/enums/FormExecutionMode";
+import { FormDisplayMode } from "src/model/enums/FormDisplayMode";
+import { Select2 } from "src/component/select2/Select";
 
 export default function CpsFormSetting(props: {
 	filePath: string;
@@ -461,6 +464,84 @@ export default function CpsFormSetting(props: {
 										/>
 									</CpsFormItem>
 								)}
+
+								<CpsFormItem label={localInstance.form_execution_mode}>
+									<span className="form--FormFieldLabelDescription">
+										{localInstance.form_execution_mode_sequential_desc}
+									</span>
+									<Select2
+										value={formConfig.multiSubmitFormExecutionMode || FormExecutionMode.SEQUENTIAL}
+										options={[
+											{
+												value: FormExecutionMode.SEQUENTIAL,
+												label: localInstance.form_execution_mode_sequential,
+												description: localInstance.form_execution_mode_sequential_desc,
+											},
+											{
+												value: FormExecutionMode.PARALLEL,
+												label: localInstance.form_execution_mode_parallel,
+												description: localInstance.form_execution_mode_parallel_desc,
+											},
+										]}
+										onChange={(mode) => {
+											const newConfig = new FormConfig(formConfig.id);
+											Object.assign(newConfig, {
+												...formConfig,
+												multiSubmitFormExecutionMode: mode as FormExecutionMode,
+												// 并行执行时强制合并界面（逐个打开无法并行）
+												multiSubmitFormDisplayMode:
+													mode === FormExecutionMode.PARALLEL
+														? FormDisplayMode.MERGED
+														: formConfig.multiSubmitFormDisplayMode,
+											});
+											onChange(newConfig);
+										}}
+									/>
+								</CpsFormItem>
+
+								<CpsFormItem label={localInstance.form_display_mode}>
+									<span className="form--FormFieldLabelDescription">
+										{(formConfig.multiSubmitFormExecutionMode || FormExecutionMode.SEQUENTIAL) ===
+										FormExecutionMode.PARALLEL
+											? localInstance.form_display_mode_locked_hint
+											: (formConfig.multiSubmitFormDisplayMode || FormDisplayMode.SINGLE) ===
+												FormDisplayMode.MERGED
+												? localInstance.form_display_mode_merged_desc
+												: localInstance.form_display_mode_single_desc}
+									</span>
+									<Select2
+										value={
+											(formConfig.multiSubmitFormExecutionMode || FormExecutionMode.SEQUENTIAL) ===
+											FormExecutionMode.PARALLEL
+												? FormDisplayMode.MERGED
+												: (formConfig.multiSubmitFormDisplayMode || FormDisplayMode.SINGLE)
+										}
+										options={[
+											{
+												value: FormDisplayMode.SINGLE,
+												label: localInstance.form_display_mode_single,
+												description: localInstance.form_display_mode_single_desc,
+											},
+											{
+												value: FormDisplayMode.MERGED,
+												label: localInstance.form_display_mode_merged,
+												description: localInstance.form_display_mode_merged_desc,
+											},
+										]}
+										disabled={
+											(formConfig.multiSubmitFormExecutionMode || FormExecutionMode.SEQUENTIAL) ===
+											FormExecutionMode.PARALLEL
+										}
+										onChange={(mode) => {
+											const newConfig = new FormConfig(formConfig.id);
+											Object.assign(newConfig, {
+												...formConfig,
+												multiSubmitFormDisplayMode: mode as FormDisplayMode,
+											});
+											onChange(newConfig);
+										}}
+									/>
+								</CpsFormItem>
 							</CpsFormSettingGroup>
 						</CpsForm>
 					),

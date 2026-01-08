@@ -773,4 +773,16 @@ export class ZhTw implements Local {
 	skill_form_not_found = "表單 {0} 不存在";
 	skill_form_no_forms_configured = "此表單技能未配置任何表單";
 	skill_form_select_placeholder = "選擇要添加的表單...";
+	// 多表單執行設置
+	form_execution_mode = "執行模式";
+	form_execution_mode_sequential = "依次執行";
+	form_execution_mode_sequential_desc = "每個表單的動作鏈完整執行完成後才執行下一個";
+	form_execution_mode_parallel = "同時執行";
+	form_execution_mode_parallel_desc = "所有表單的動作鏈同時並行執行";
+	form_display_mode = "界面模式";
+	form_display_mode_single = "逐個打開";
+	form_display_mode_single_desc = "表單依次顯示，每個表單關閉後顯示下一個";
+	form_display_mode_merged = "合併顯示";
+	form_display_mode_merged_desc = "所有表單欄位合併到一個模態框中";
+	form_display_mode_locked_hint = "同時執行模式下強制使用合併顯示";
 }

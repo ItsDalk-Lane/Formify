@@ -12,22 +12,24 @@ export type SelectOption2 = {
 	label: string;
 	value: string;
 	icon?: React.ReactNode;
+	description?: string;
 };
 
 type Props = {
 	value: string;
 	onChange: (value: string) => void;
 	options: SelectOption2[];
+	disabled?: boolean;
 };
 
 export function Select2(props: Props) {
-	const { value, onChange, options } = props;
+	const { value, onChange, options, disabled } = props;
 	const valueLabel =
 		options.find((option) => option.value === value)?.label ??
 		localInstance.please_select_option;
 	return (
-		<Select.Root value={value} onValueChange={onChange}>
-			<Select.Trigger className="form--Select2Trigger">
+		<Select.Root value={value} onValueChange={onChange} disabled={disabled}>
+			<Select.Trigger className={`form--Select2Trigger ${disabled ? 'form--Select2TriggerDisabled' : ''}`}>
 				<Select.Value placeholder={valueLabel}></Select.Value>
 				<Select.Icon className="form--Select2TriggerIcon">
 					<ChevronsUpDownIcon size={16} />

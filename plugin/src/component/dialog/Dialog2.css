@@ -66,18 +66,32 @@
 	scrollbar-color: var(--scrollbar-thumb-bg) var(--scrollbar-bg);
 }
 
+.form--DialogHeader {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: var(--size-4-2) var(--size-4-4) var(--size-4-1) var(--size-4-4);
+	padding-right: 44px;
+	flex-shrink: 0;
+	min-height: 36px;
+}
+
 .form--DialogTitle {
 	margin: 0;
-	padding: var(--size-4-2) var(--size-4-4) var(--size-4-1) var(--size-4-4);
 	font-size: var(--font-ui-medium);
 	color: var(--text-normal);
 	font-weight: 500;
-	flex-shrink: 0;
+	flex: 1;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	padding-right: 44px;
-	min-height: 36px;
+}
+
+.form--DialogTitleRight {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	flex-shrink: 0;
 }
 
 .form--DialogDescription {

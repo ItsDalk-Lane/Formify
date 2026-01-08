@@ -1,12 +1,18 @@
 import { X } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import React from "react";
 import "./Dialog2.css";
 import { Strings } from "src/utils/Strings";
 import { localInstance } from "src/i18n/locals";
 
 export default function Dialog2(props: {
+	/** 兼容：原有字符串标题 */
 	title?: string;
+	/** 可选：自定义标题节点（优先于 title） */
+	titleNode?: React.ReactNode;
+	/** 可选：标题行右侧内容（如按钮） */
+	titleRight?: React.ReactNode;
 	description?: string;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
@@ -14,8 +20,8 @@ export default function Dialog2(props: {
 	modal?: boolean;
 	children?: (close: () => void) => JSX.Element;
 }) {
-	const { title, open, onOpenChange, description } = props;
-	const showTitle = Strings.isNotBlank(title);
+	const { title, titleNode, titleRight, open, onOpenChange, description } = props;
+	const showTitle = titleNode != null || Strings.isNotBlank(title);
 	return (
 		<DialogPrimitive.Root
 			open={open}
@@ -31,9 +37,16 @@ export default function Dialog2(props: {
 						}`}
 					>
 						{showTitle ? (
-							<DialogPrimitive.Title className="form--DialogTitle">
-								{title}
-							</DialogPrimitive.Title>
+							<div className="form--DialogHeader">
+								<DialogPrimitive.Title className="form--DialogTitle">
+									{titleNode ?? title}
+								</DialogPrimitive.Title>
+								{titleRight ? (
+									<div className="form--DialogTitleRight">
+										{titleRight}
+									</div>
+								) : null}
+							</div>
 						) : (
 							<VisuallyHidden asChild>
 								<DialogPrimitive.Title>

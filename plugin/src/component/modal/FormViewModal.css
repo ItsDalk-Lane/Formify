@@ -50,3 +50,11 @@
 	max-height: calc(80vh - 96px);
 	padding: 4px 8px;
 }
+
+/**
+ * 严格串行模式：提交后隐藏 Dialog（但保持组件存活），等动作链完成后再真正关闭。
+ */
+.form--CpsFormModal--hidden {
+	visibility: hidden;
+	pointer-events: none;
+}

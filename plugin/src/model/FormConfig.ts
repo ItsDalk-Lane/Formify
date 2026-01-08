@@ -2,6 +2,8 @@ import { v4 } from "uuid";
 import { IFormAction } from "./action/IFormAction";
 import { ActionGroup } from "./ActionGroup";
 import { FormActionType } from "./enums/FormActionType";
+import { FormDisplayMode } from "./enums/FormDisplayMode";
+import { FormExecutionMode } from "./enums/FormExecutionMode";
 import { IFormField } from "./field/IFormField";
 import { StartupConditionsConfig, createEmptyStartupConditionsConfig } from "./startup-condition/StartupCondition";
 
@@ -23,6 +25,19 @@ export class FormConfig {
     runOnStartup?: boolean;  // 是否在Obsidian启动时自动运行
     startupConditions?: StartupConditionsConfig;  // 启动条件配置
     lastExecutionTime?: number;  // 上次执行时间（毫秒时间戳）
+
+    /**
+     * 多表单调用（同一表单内存在多段“按钮动作 -> 提交表单”）的执行模式。
+     * 表单级配置：对该表单内的多个 SUBMIT_FORM 按钮动作组生效。
+     */
+    multiSubmitFormExecutionMode?: FormExecutionMode;
+
+    /**
+     * 多表单调用的界面模式。
+     * - SINGLE: 逐个打开
+     * - MERGED: 合并在一个界面中提交
+     */
+    multiSubmitFormDisplayMode?: FormDisplayMode;
 
     constructor(id: string) {
         this.id = id;

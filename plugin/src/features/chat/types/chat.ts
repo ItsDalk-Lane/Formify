@@ -61,13 +61,6 @@ export type SkillPromptSource = 'custom' | 'template';
 export type SkillType = 'normal' | 'group' | 'form';
 
 /**
- * 表单技能执行模式
- * - serial: 串行执行（按顺序依次执行每个表单）
- * - parallel: 并行执行（同时显示所有表单界面）
- */
-export type FormExecutionMode = 'serial' | 'parallel';
-
-/**
  * AI 技能接口
  * 用于定义划词工具栏中的自定义技能
  */
@@ -102,13 +95,6 @@ export interface Skill {
 	 * 仅当 skillType === 'form' 时有效
 	 */
 	formCommandIds?: string[];
-	/**
-	 * 表单技能的执行模式
-	 * - 'serial': 串行执行（按顺序依次执行每个表单）
-	 * - 'parallel': 并行执行（同时显示所有表单界面）
-	 * @default 'serial'
-	 */
-	formExecutionMode?: FormExecutionMode;
 	showInToolbar: boolean;    // 是否在工具栏显示
 	order: number;             // 排序顺序
 	createdAt: number;         // 创建时间戳

@@ -683,4 +683,16 @@ export interface Local {
 	skill_form_not_found: string;
 	skill_form_no_forms_configured: string;
 	skill_form_select_placeholder: string;
+	// Multi-form execution settings
+	form_execution_mode: string;
+	form_execution_mode_sequential: string;
+	form_execution_mode_sequential_desc: string;
+	form_execution_mode_parallel: string;
+	form_execution_mode_parallel_desc: string;
+	form_display_mode: string;
+	form_display_mode_single: string;
+	form_display_mode_single_desc: string;
+	form_display_mode_merged: string;
+	form_display_mode_merged_desc: string;
+	form_display_mode_locked_hint: string;
 }
