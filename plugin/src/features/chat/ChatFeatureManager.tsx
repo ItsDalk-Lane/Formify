@@ -507,7 +507,21 @@ export class ChatFeatureManager {
 		// 根据触发来源决定实际使用的文本
 		const actualSelection = triggerSource === 'symbol' ? (fullText || '') : selection;
 
-		// 显示结果模态框
+		// 表单技能：只执行表单，不显示输出模态框
+		const isFormSkill = (skill.skillType === 'form') || ((skill.formCommandIds?.length ?? 0) > 0)
+		if (isFormSkill) {
+			try {
+				const result = await this.skillExecutionService.executeSkill(skill, actualSelection)
+				if (!result.success) {
+					new Notice(result.error || '执行表单技能失败')
+				}
+			} catch (e) {
+				new Notice(e instanceof Error ? e.message : String(e))
+			}
+			return
+		}
+
+		// 普通技能/技能组：显示结果模态框
 		this.showResultModal(skill, selection, triggerSource, fullText);
 	}
 

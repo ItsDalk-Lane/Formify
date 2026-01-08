@@ -668,4 +668,19 @@ export interface Local {
 	skill_result_replaced: string;
 	skill_result_appended: string;
 	skill_result_inserted: string;
+	// Form Skill
+	skill_type_label: string;
+	skill_type_normal: string;
+	skill_type_group: string;
+	skill_type_form: string;
+	skill_form_execution_mode_label: string;
+	skill_form_execution_mode_serial: string;
+	skill_form_execution_mode_parallel: string;
+	skill_form_list_label: string;
+	skill_form_add_button: string;
+	skill_form_list_empty: string;
+	skill_form_already_added: string;
+	skill_form_not_found: string;
+	skill_form_no_forms_configured: string;
+	skill_form_select_placeholder: string;
 }

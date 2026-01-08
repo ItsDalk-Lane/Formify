@@ -53,6 +53,21 @@ export type ChatOpenMode = 'sidebar' | 'left-sidebar' | 'tab' | 'window';
 export type SkillPromptSource = 'custom' | 'template';
 
 /**
+ * 技能类型
+ * - normal: 普通技能（调用 AI 大模型处理提示词）
+ * - group: 技能组（用于组织其他技能）
+ * - form: 表单技能（引用并执行 .cform 表单）
+ */
+export type SkillType = 'normal' | 'group' | 'form';
+
+/**
+ * 表单技能执行模式
+ * - serial: 串行执行（按顺序依次执行每个表单）
+ * - parallel: 并行执行（同时显示所有表单界面）
+ */
+export type FormExecutionMode = 'serial' | 'parallel';
+
+/**
  * AI 技能接口
  * 用于定义划词工具栏中的自定义技能
  */
@@ -64,7 +79,16 @@ export interface Skill {
 	templateFile?: string;     // 当 promptSource 为 'template' 时，使用的模板文件路径
 	modelTag?: string;         // 指定使用的 AI 模型标签，留空则使用默认模型
 	/**
+	 * 技能类型标识
+	 * - 'normal': 普通技能
+	 * - 'group': 技能组
+	 * - 'form': 表单技能
+	 * @default 'normal'（未设置时默认为普通技能，保持向下兼容）
+	 */
+	skillType?: SkillType;
+	/**
 	 * 是否为技能组（技能组本身不执行提示词，仅用于组织子技能）
+	 * @deprecated 请使用 skillType === 'group' 替代，此字段保留用于向下兼容
 	 * @default false
 	 */
 	isSkillGroup?: boolean;
@@ -73,6 +97,18 @@ export interface Skill {
 	 * @default []
 	 */
 	children?: string[];
+	/**
+	 * 表单技能引用的表单 commandId 数组
+	 * 仅当 skillType === 'form' 时有效
+	 */
+	formCommandIds?: string[];
+	/**
+	 * 表单技能的执行模式
+	 * - 'serial': 串行执行（按顺序依次执行每个表单）
+	 * - 'parallel': 并行执行（同时显示所有表单界面）
+	 * @default 'serial'
+	 */
+	formExecutionMode?: FormExecutionMode;
 	showInToolbar: boolean;    // 是否在工具栏显示
 	order: number;             // 排序顺序
 	createdAt: number;         // 创建时间戳

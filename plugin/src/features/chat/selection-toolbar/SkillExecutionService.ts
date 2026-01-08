@@ -3,6 +3,8 @@ import type { Skill } from '../types/chat';
 import type { TarsSettings } from '../../tars/settings';
 import { availableVendors } from '../../tars/settings';
 import type { ProviderSettings, Message, Vendor } from '../../tars/providers';
+import { getFormSkillService } from './FormSkillService';
+import { localInstance } from 'src/i18n/locals';
 
 /**
  * 技能执行结果接口
@@ -11,6 +13,27 @@ export interface SkillExecutionResult {
 	success: boolean;
 	content: string;
 	error?: string;
+}
+
+/**
+ * 判断技能的实际类型
+ * 用于兼容旧数据结构
+ */
+function getSkillType(skill: Skill): 'normal' | 'group' | 'form' {
+	// 优先使用 skillType 字段
+	if (skill.skillType) {
+		return skill.skillType;
+	}
+	// 兼容旧数据：检查 isSkillGroup 字段
+	if (skill.isSkillGroup) {
+		return 'group';
+	}
+	// 兼容旧数据：检查 formCommandIds 字段
+	if (skill.formCommandIds && skill.formCommandIds.length > 0) {
+		return 'form';
+	}
+	// 默认为普通技能
+	return 'normal';
 }
 
 /**
@@ -32,6 +55,65 @@ export class SkillExecutionService {
 	 * @returns 执行结果
 	 */
 	async executeSkill(
+		skill: Skill,
+		selection: string,
+		modelTag?: string
+	): Promise<SkillExecutionResult> {
+		try {
+			// 判断技能类型
+			const skillType = getSkillType(skill);
+
+			// 表单技能：执行表单，忽略 selection 参数
+			if (skillType === 'form') {
+				return await this.executeFormSkill(skill);
+			}
+
+			// 技能组不应该直接执行
+			if (skillType === 'group') {
+				return {
+					success: false,
+					content: '',
+					error: '技能组不能直接执行'
+				};
+			}
+
+			// 普通技能：执行 AI 调用
+			return await this.executeNormalSkill(skill, selection, modelTag);
+		} catch (error) {
+			console.error('[SkillExecutionService] 执行技能失败:', error);
+			return {
+				success: false,
+				content: '',
+				error: error instanceof Error ? error.message : String(error)
+			};
+		}
+	}
+
+	/**
+	 * 执行表单技能
+	 */
+	private async executeFormSkill(skill: Skill): Promise<SkillExecutionResult> {
+		const formSkillService = getFormSkillService(this.app);
+		const result = await formSkillService.executeFormSkill(skill);
+
+		if (result.success) {
+			return {
+				success: true,
+				content: ''  // 表单技能不返回文本内容
+			};
+		} else {
+			return {
+				success: false,
+				content: '',
+				error: result.errors.join('; ')
+			};
+		}
+	}
+
+	/**
+	 * 执行普通技能（AI 调用）
+	 */
+	private async executeNormalSkill(
 		skill: Skill,
 		selection: string,
 		modelTag?: string
@@ -236,6 +318,22 @@ export class SkillExecutionService {
 		selection: string,
 		modelTag?: string
 	): AsyncGenerator<string, void, unknown> {
+		// 判断技能类型
+		const skillType = getSkillType(skill);
+
+		// 表单技能不支持流式执行，直接执行并返回空
+		if (skillType === 'form') {
+			const formSkillService = getFormSkillService(this.app);
+			await formSkillService.executeFormSkill(skill);
+			return;
+		}
+
+		// 技能组不应该直接执行
+		if (skillType === 'group') {
+			throw new Error('技能组不能直接执行');
+		}
+
+		// 普通技能：流式执行 AI 调用
 		try {
 			// 1. 获取提示词内容
 			let promptContent = '';

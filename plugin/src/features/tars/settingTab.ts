@@ -5,6 +5,7 @@ import { BaseOptions, Message, Optional, ProviderSettings, ResolveEmbedAsBinary,
 import { ClaudeOptions, claudeVendor } from './providers/claude'
 import { DebugLogger } from '../../utils/DebugLogger'
 import { SkillDataService } from '../chat/selection-toolbar/SkillDataService'
+import { getFormSkillService, type FormInfo } from '../chat/selection-toolbar/FormSkillService'
 import {
 	DoubaoOptions,
 	doubaoVendor,
@@ -29,7 +30,7 @@ import { getCapabilityEmoji, getCapabilityDisplayText } from './providers/utils'
 import { availableVendors, DEFAULT_TARS_SETTINGS } from './settings'
 import type { TarsSettings } from './settings'
 import FolderSuggest from '../../component/combobox/FolderSuggest'
-import type { ChatSettings } from '../chat/types/chat'
+import type { ChatSettings, SkillType, FormExecutionMode } from '../chat/types/chat'
 import { localInstance } from '../../i18n/locals'
 
 export interface TarsSettingsContext {
@@ -1633,6 +1634,32 @@ export class TarsSettingTab {
 				await this.renderSkillsList(container)
 			}
 
+			// 技能类型图标
+			const skillTypeIcon = contentSection.createEl('div')
+			skillTypeIcon.style.cssText = `
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				width: 16px;
+				height: 16px;
+				color: var(--text-muted);
+			`
+			// 根据技能类型显示不同图标
+			const skillType = skill.skillType || (skill.isSkillGroup ? 'group' : 'normal')
+			if (skillType === 'form') {
+				// FileText 图标 - 表单技能
+				skillTypeIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>`
+				skillTypeIcon.title = '表单技能'
+			} else if (skillType === 'group') {
+				// FolderOpen 图标 - 技能组
+				skillTypeIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></svg>`
+				skillTypeIcon.title = '技能组'
+			} else {
+				// Sparkles 图标 - 普通 AI 技能
+				skillTypeIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>`
+				skillTypeIcon.title = 'AI 技能'
+			}
+
 			const skillName = contentSection.createEl('span')
 			skillName.style.cssText = `
 				font-size: var(--font-ui-small);
@@ -2023,43 +2050,356 @@ export class TarsSettingTab {
 		nameField.appendChild(nameRow)
 		nameField.appendChild(nameError)
 
-		// 技能组开关
-		const isSkillGroupField = document.createElement('div')
-		isSkillGroupField.style.cssText = 'margin-bottom: 20px; pointer-events: auto;'
+		// 技能类型选择
+		const skillTypeField = document.createElement('div')
+		skillTypeField.style.cssText = 'margin-bottom: 20px; pointer-events: auto;'
 
-		const isSkillGroupLabel = document.createElement('label')
-		isSkillGroupLabel.style.cssText = `
+		const skillTypeLabel = document.createElement('label')
+		skillTypeLabel.style.cssText = `
 			display: block;
 			margin-bottom: 8px;
 			font-size: var(--font-ui-small);
 			font-weight: 500;
 			color: var(--text-normal);
 		`
-		isSkillGroupLabel.textContent = '技能组'
+		skillTypeLabel.textContent = localInstance.skill_type_label
 
-		const isSkillGroupRow = document.createElement('div')
-		isSkillGroupRow.style.cssText = 'display: flex; align-items: center; gap: 10px;'
+		const skillTypeRow = document.createElement('div')
+		skillTypeRow.style.cssText = 'display: flex; gap: 16px; margin-bottom: 12px;'
 
-		const isSkillGroupToggle = document.createElement('input') as HTMLInputElement
-		isSkillGroupToggle.type = 'checkbox'
-		isSkillGroupToggle.checked = skill?.isSkillGroup ?? (options?.initialIsSkillGroup ?? false)
-		isSkillGroupToggle.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
+		// 确定初始技能类型
+		const getInitialSkillType = (): SkillType => {
+			if (skill?.skillType) return skill.skillType
+			if (skill?.isSkillGroup) return 'group'
+			if (skill?.formCommandIds && skill.formCommandIds.length > 0) return 'form'
+			if (options?.initialIsSkillGroup) return 'group'
+			return 'normal'
+		}
+		let currentSkillType: SkillType = getInitialSkillType()
 
-		const isSkillGroupText = document.createElement('div')
-		isSkillGroupText.style.cssText = `
-			font-size: var(--font-ui-smaller);
-			color: var(--text-muted);
-			line-height: 1.4;
+		// 普通技能单选按钮
+		const normalRadioWrapper = document.createElement('label')
+		normalRadioWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;'
+		const normalRadio = document.createElement('input')
+		normalRadio.type = 'radio'
+		normalRadio.name = 'skillType'
+		normalRadio.value = 'normal'
+		normalRadio.checked = currentSkillType === 'normal'
+		normalRadio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
+		const normalLabel = document.createElement('span')
+		normalLabel.textContent = localInstance.skill_type_normal
+		normalLabel.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal);'
+		normalRadioWrapper.appendChild(normalRadio)
+		normalRadioWrapper.appendChild(normalLabel)
+
+		// 技能组单选按钮
+		const groupRadioWrapper = document.createElement('label')
+		groupRadioWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;'
+		const groupRadio = document.createElement('input')
+		groupRadio.type = 'radio'
+		groupRadio.name = 'skillType'
+		groupRadio.value = 'group'
+		groupRadio.checked = currentSkillType === 'group'
+		groupRadio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
+		const groupLabel = document.createElement('span')
+		groupLabel.textContent = localInstance.skill_type_group
+		groupLabel.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal);'
+		groupRadioWrapper.appendChild(groupRadio)
+		groupRadioWrapper.appendChild(groupLabel)
+
+		// 表单技能单选按钮
+		const formRadioWrapper = document.createElement('label')
+		formRadioWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;'
+		const formRadio = document.createElement('input')
+		formRadio.type = 'radio'
+		formRadio.name = 'skillType'
+		formRadio.value = 'form'
+		formRadio.checked = currentSkillType === 'form'
+		formRadio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
+		const formLabel = document.createElement('span')
+		formLabel.textContent = localInstance.skill_type_form
+		formLabel.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal);'
+		formRadioWrapper.appendChild(formRadio)
+		formRadioWrapper.appendChild(formLabel)
+
+		skillTypeRow.appendChild(normalRadioWrapper)
+		skillTypeRow.appendChild(groupRadioWrapper)
+		skillTypeRow.appendChild(formRadioWrapper)
+		skillTypeField.appendChild(skillTypeLabel)
+		skillTypeField.appendChild(skillTypeRow)
+
+		// 表单技能配置区域
+		const formSkillSection = document.createElement('div')
+		formSkillSection.style.cssText = `
+			margin-bottom: 20px;
+			padding: 12px;
+			border: 1px solid var(--background-modifier-border);
+			border-radius: 8px;
+			background: var(--background-primary);
+			pointer-events: auto;
+			display: ${currentSkillType === 'form' ? 'block' : 'none'};
 		`
-		isSkillGroupText.textContent = '开启后将创建技能组（仅用于组织子技能），可为空。'
 
-		isSkillGroupRow.appendChild(isSkillGroupToggle)
-		isSkillGroupRow.appendChild(isSkillGroupText)
-		isSkillGroupField.appendChild(isSkillGroupLabel)
-		isSkillGroupField.appendChild(isSkillGroupRow)
+		// 执行模式选择
+		const executionModeSection = document.createElement('div')
+		executionModeSection.style.cssText = 'margin-bottom: 16px;'
+		const executionModeLabel = document.createElement('div')
+		executionModeLabel.style.cssText = 'font-size: var(--font-ui-small); font-weight: 600; color: var(--text-normal); margin-bottom: 8px;'
+		executionModeLabel.textContent = localInstance.skill_form_execution_mode_label
+		const executionModeRow = document.createElement('div')
+		executionModeRow.style.cssText = 'display: flex; gap: 16px;'
+
+		let currentExecutionMode: FormExecutionMode = skill?.formExecutionMode || 'serial'
+
+		// 串行执行单选按钮
+		const serialRadioWrapper = document.createElement('label')
+		serialRadioWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;'
+		const serialRadio = document.createElement('input')
+		serialRadio.type = 'radio'
+		serialRadio.name = 'executionMode'
+		serialRadio.value = 'serial'
+		serialRadio.checked = currentExecutionMode === 'serial'
+		serialRadio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
+		const serialLabel = document.createElement('span')
+		serialLabel.textContent = localInstance.skill_form_execution_mode_serial
+		serialLabel.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal);'
+		serialRadioWrapper.appendChild(serialRadio)
+		serialRadioWrapper.appendChild(serialLabel)
+
+		// 并行执行单选按钮
+		const parallelRadioWrapper = document.createElement('label')
+		parallelRadioWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;'
+		const parallelRadio = document.createElement('input')
+		parallelRadio.type = 'radio'
+		parallelRadio.name = 'executionMode'
+		parallelRadio.value = 'parallel'
+		parallelRadio.checked = currentExecutionMode === 'parallel'
+		parallelRadio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
+		const parallelLabel = document.createElement('span')
+		parallelLabel.textContent = localInstance.skill_form_execution_mode_parallel
+		parallelLabel.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal);'
+		parallelRadioWrapper.appendChild(parallelRadio)
+		parallelRadioWrapper.appendChild(parallelLabel)
+
+		executionModeRow.appendChild(serialRadioWrapper)
+		executionModeRow.appendChild(parallelRadioWrapper)
+		executionModeSection.appendChild(executionModeLabel)
+		executionModeSection.appendChild(executionModeRow)
+
+		serialRadio.addEventListener('change', () => {
+			if (serialRadio.checked) {
+				currentExecutionMode = 'serial'
+			}
+		})
+		parallelRadio.addEventListener('change', () => {
+			if (parallelRadio.checked) {
+				currentExecutionMode = 'parallel'
+			}
+		})
+
+		// 表单列表区域
+		const formListSection = document.createElement('div')
+		const formListLabel = document.createElement('div')
+		formListLabel.style.cssText = 'font-size: var(--font-ui-small); font-weight: 600; color: var(--text-normal); margin-bottom: 8px;'
+		formListLabel.textContent = localInstance.skill_form_list_label
+		const formListContainer = document.createElement('div')
+		formListContainer.style.cssText = 'display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;'
+
+		// 表单 commandIds 列表
+		let pendingFormCommandIds: string[] = (skill?.formCommandIds || []).slice()
+		let availableForms: FormInfo[] = []
+
+		// 加载可用表单列表
+		const loadAvailableForms = async () => {
+			const formSkillService = getFormSkillService(this.app)
+			availableForms = await formSkillService.scanForms()
+		}
+		void loadAvailableForms()
+
+		// 根据 commandId 获取表单名称
+		const getFormName = (commandId: string): string => {
+			const form = availableForms.find(f => f.commandId === commandId)
+			return form?.fileName || commandId
+		}
+
+		// 渲染表单列表
+		let draggingFormId: string | null = null
+		const refreshFormList = () => {
+			formListContainer.innerHTML = ''
+			if (pendingFormCommandIds.length === 0) {
+				const empty = document.createElement('div')
+				empty.style.cssText = 'padding: 8px 10px; color: var(--text-muted); font-size: var(--font-ui-smaller); background: var(--background-secondary); border-radius: 6px;'
+				empty.textContent = localInstance.skill_form_list_empty
+				formListContainer.appendChild(empty)
+				return
+			}
+			for (let i = 0; i < pendingFormCommandIds.length; i++) {
+				const commandId = pendingFormCommandIds[i]
+				const row = document.createElement('div')
+				row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; background: var(--background-secondary); border-radius: 6px; cursor: grab;'
+				row.draggable = true
+				const left = document.createElement('div')
+				left.style.cssText = 'display: flex; align-items: center; gap: 8px; min-width: 0;'
+				// 拖拽手柄
+				const dragHandle = document.createElement('div')
+				dragHandle.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>`
+				dragHandle.style.cssText = 'display: flex; color: var(--text-muted); cursor: grab;'
+				// 表单图标
+				const formIcon = document.createElement('span')
+				formIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`
+				formIcon.style.cssText = 'display: flex; color: var(--text-muted);'
+				const name = document.createElement('span')
+				name.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+				name.textContent = getFormName(commandId)
+				left.appendChild(dragHandle)
+				left.appendChild(formIcon)
+				left.appendChild(name)
+
+				const removeBtn = document.createElement('button')
+				removeBtn.style.cssText = 'flex: 0 0 auto; padding: 6px 10px; border: none; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer;'
+				removeBtn.textContent = '删除'
+				removeBtn.onmouseenter = () => {
+					removeBtn.style.background = 'var(--background-modifier-error)'
+					removeBtn.style.color = 'var(--text-on-accent)'
+				}
+				removeBtn.onmouseleave = () => {
+					removeBtn.style.background = 'transparent'
+					removeBtn.style.color = 'var(--text-muted)'
+				}
+				removeBtn.onclick = (e) => {
+					e.stopPropagation()
+					pendingFormCommandIds.splice(i, 1)
+					refreshFormList()
+				}
+
+				// 拖拽事件
+				row.ondragstart = (e) => {
+					e.stopPropagation()
+					draggingFormId = commandId
+					if (e.dataTransfer) {
+						e.dataTransfer.effectAllowed = 'move'
+						e.dataTransfer.setData('text/plain', commandId)
+					}
+					row.style.opacity = '0.6'
+				}
+				row.ondragend = () => {
+					draggingFormId = null
+					row.style.opacity = ''
+					row.style.borderTop = ''
+					row.style.borderBottom = ''
+				}
+				row.ondragover = (e) => {
+					e.preventDefault()
+					e.stopPropagation()
+					if (!draggingFormId || draggingFormId === commandId) return
+					const rect = row.getBoundingClientRect()
+					const insertBefore = e.clientY < rect.top + rect.height / 2
+					row.style.borderTop = insertBefore ? '2px solid var(--interactive-accent)' : ''
+					row.style.borderBottom = insertBefore ? '' : '2px solid var(--interactive-accent)'
+				}
+				row.ondragleave = () => {
+					row.style.borderTop = ''
+					row.style.borderBottom = ''
+				}
+				row.ondrop = (e) => {
+					e.preventDefault()
+					e.stopPropagation()
+					if (!draggingFormId || draggingFormId === commandId) return
+					const rect = row.getBoundingClientRect()
+					const insertBefore = e.clientY < rect.top + rect.height / 2
+					const fromIndex = pendingFormCommandIds.indexOf(draggingFormId)
+					if (fromIndex < 0) return
+					pendingFormCommandIds.splice(fromIndex, 1)
+					let targetIndex = pendingFormCommandIds.indexOf(commandId)
+					if (targetIndex < 0) targetIndex = pendingFormCommandIds.length
+					if (!insertBefore) targetIndex += 1
+					pendingFormCommandIds.splice(targetIndex, 0, draggingFormId)
+					row.style.borderTop = ''
+					row.style.borderBottom = ''
+					refreshFormList()
+				}
+
+				row.appendChild(left)
+				row.appendChild(removeBtn)
+				formListContainer.appendChild(row)
+			}
+		}
+
+		// 添加表单按钮和下拉选择
+		const addFormRow = document.createElement('div')
+		addFormRow.style.cssText = 'display: flex; gap: 8px; align-items: center;'
+		const addFormSelect = document.createElement('select')
+		addFormSelect.style.cssText = `
+			flex: 1;
+			padding: 10px 12px;
+			height: 40px;
+			border: 1px solid var(--background-modifier-border);
+			border-radius: 8px;
+			background: var(--background-primary);
+			color: var(--text-normal);
+			font-size: var(--font-ui-small);
+			cursor: pointer;
+			pointer-events: auto;
+		`
+		const refreshFormSelect = () => {
+			addFormSelect.innerHTML = ''
+			const placeholder = document.createElement('option')
+			placeholder.value = ''
+			placeholder.textContent = localInstance.skill_form_select_placeholder
+			addFormSelect.appendChild(placeholder)
+			for (const form of availableForms) {
+				const opt = document.createElement('option')
+				opt.value = form.commandId
+				opt.textContent = form.fileName
+				addFormSelect.appendChild(opt)
+			}
+		}
+
+		const addFormBtn = document.createElement('button')
+		addFormBtn.style.cssText = `
+			padding: 10px 12px;
+			border: none;
+			border-radius: 8px;
+			background: var(--interactive-accent);
+			color: var(--text-on-accent);
+			font-size: var(--font-ui-small);
+			cursor: pointer;
+		`
+		addFormBtn.textContent = localInstance.skill_form_add_button
+		addFormBtn.onclick = (e) => {
+			e.stopPropagation()
+			const pickedId = addFormSelect.value
+			if (!pickedId) {
+				new Notice(localInstance.skill_form_select_placeholder)
+				return
+			}
+			if (pendingFormCommandIds.includes(pickedId)) {
+				new Notice(localInstance.skill_form_already_added)
+				return
+			}
+			pendingFormCommandIds.push(pickedId)
+			refreshFormList()
+			addFormSelect.value = ''
+		}
+
+		addFormRow.appendChild(addFormSelect)
+		addFormRow.appendChild(addFormBtn)
+
+		formListSection.appendChild(formListLabel)
+		formListSection.appendChild(formListContainer)
+		formListSection.appendChild(addFormRow)
+
+		formSkillSection.appendChild(executionModeSection)
+		formSkillSection.appendChild(formListSection)
+
+		// 延迟刷新表单列表（等待 availableForms 加载完成）
+		setTimeout(() => {
+			refreshFormSelect()
+			refreshFormList()
+		}, 100)
 
 		// 技能组成员管理（仅技能组显示）
-		const originalGroupChildrenIds = (skill?.isSkillGroup ? (skill?.children ?? []) : []).slice()
+		const originalGroupChildrenIds = (currentSkillType === 'group' ? (skill?.children ?? []) : []).slice()
 		let pendingGroupChildrenIds = originalGroupChildrenIds.slice()
 
 		const excludedAddIds = new Set<string>()
@@ -2576,30 +2916,52 @@ export class TarsSettingTab {
 		templateRadio.addEventListener('change', updatePromptSourceDisplay)
 
 		body.appendChild(nameField)
-		body.appendChild(isSkillGroupField)
+		body.appendChild(skillTypeField)
+		body.appendChild(formSkillSection)
 		body.appendChild(groupMembersSection)
 		body.appendChild(modelField)
 		body.appendChild(promptSourceField)
 
-		// 根据“技能组”开关更新显示
-		const updateSkillGroupDisplay = () => {
-			const isGroup = isSkillGroupToggle.checked
+		// 根据技能类型更新显示
+		const updateSkillTypeDisplay = () => {
+			const isGroup = currentSkillType === 'group'
+			const isForm = currentSkillType === 'form'
+			const isNormal = currentSkillType === 'normal'
+			
+			formSkillSection.style.display = isForm ? 'block' : 'none'
 			groupMembersSection.style.display = isGroup ? 'block' : 'none'
-			modelField.style.display = isGroup ? 'none' : 'block'
-			promptSourceField.style.display = isGroup ? 'none' : 'block'
+			modelField.style.display = isNormal ? 'block' : 'none'
+			promptSourceField.style.display = isNormal ? 'block' : 'none'
+			
 			// 清理提示词错误显示，避免切换后残留
-			if (isGroup) {
+			if (!isNormal) {
 				promptError.style.display = 'none'
 				promptTextarea.style.borderColor = 'var(--background-modifier-border)'
 				templateSelect.style.borderColor = 'var(--background-modifier-border)'
 			}
 		}
 
-		updateSkillGroupDisplay()
-		isSkillGroupToggle.addEventListener('change', () => {
-			updateSkillGroupDisplay()
-		})
+		updateSkillTypeDisplay()
 
+		// 技能类型切换事件
+		normalRadio.addEventListener('change', () => {
+			if (normalRadio.checked) {
+				currentSkillType = 'normal'
+				updateSkillTypeDisplay()
+			}
+		})
+		groupRadio.addEventListener('change', () => {
+			if (groupRadio.checked) {
+				currentSkillType = 'group'
+				updateSkillTypeDisplay()
+			}
+		})
+		formRadio.addEventListener('change', () => {
+			if (formRadio.checked) {
+				currentSkillType = 'form'
+				updateSkillTypeDisplay()
+			}
+		})
 		// 底部操作栏
 		const footer = document.createElement('div')
 		footer.style.cssText = `
@@ -2656,9 +3018,11 @@ export class TarsSettingTab {
 				nameInput.style.borderColor = 'var(--background-modifier-border)'
 			}
 
-			const isGroup = isSkillGroupToggle.checked
+			const isGroup = currentSkillType === 'group'
+			const isForm = currentSkillType === 'form'
+			const isNormal = currentSkillType === 'normal'
 			const isCustomPrompt = customRadio.checked
-			if (!isGroup) {
+			if (isNormal) {
 				// 根据提示词来源验证
 				if (isCustomPrompt) {
 					if (!promptTextarea.value.trim()) {
@@ -2682,7 +3046,7 @@ export class TarsSettingTab {
 					}
 				}
 			} else {
-				// 技能组允许为空，不校验提示词/模板
+				// 技能组和表单技能允许为空，不校验提示词/模板
 				promptError.style.display = 'none'
 			}
 
@@ -2693,20 +3057,28 @@ export class TarsSettingTab {
 			const savedSkill: import('../chat/types/chat').Skill = {
 				id: skill?.id || crypto.randomUUID(),
 				name: nameInput.value.trim(),
-				prompt: isGroup
-					? (skill?.prompt ?? '')
-					: (isCustomPrompt ? promptTextarea.value.trim() : ''),
-				promptSource: isGroup
-					? (skill?.promptSource || 'custom')
-					: (isCustomPrompt ? 'custom' : 'template'),
-				templateFile: isGroup
-					? skill?.templateFile
-					: (isCustomPrompt ? undefined : templateSelect.value),
-				modelTag: isGroup
-					? skill?.modelTag
-					: (modelSelect.value || undefined),
+				// 技能类型
+				skillType: currentSkillType,
+				// 普通技能的提示词
+				prompt: isNormal
+					? (isCustomPrompt ? promptTextarea.value.trim() : '')
+					: (skill?.prompt ?? ''),
+				promptSource: isNormal
+					? (isCustomPrompt ? 'custom' : 'template')
+					: (skill?.promptSource || 'custom'),
+				templateFile: isNormal
+					? (isCustomPrompt ? undefined : templateSelect.value)
+					: skill?.templateFile,
+				modelTag: isNormal
+					? (modelSelect.value || undefined)
+					: skill?.modelTag,
+				// 技能组相关
 				isSkillGroup: isGroup,
 				children: isGroup ? pendingGroupChildrenIds.slice() : [],
+				// 表单技能相关
+				formCommandIds: isForm ? pendingFormCommandIds.slice() : undefined,
+				formExecutionMode: isForm ? currentExecutionMode : undefined,
+				// 通用字段
 				showInToolbar: skill?.showInToolbar ?? true,
 				order: skill?.order ?? allSkills.length,
 				createdAt: skill?.createdAt || now,

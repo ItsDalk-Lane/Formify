@@ -735,4 +735,19 @@ export class En implements Local {
 	selection_toolbar_stream_output_desc = "When enabled, AI will output results word by word, otherwise waits for complete response";
 	skill_show_in_toolbar = "Shown in toolbar";
 	skill_not_show_in_toolbar = "Not shown in toolbar";
+	// Form Skill
+	skill_type_label = "Skill Type";
+	skill_type_normal = "Normal Skill";
+	skill_type_group = "Skill Group";
+	skill_type_form = "Form Skill";
+	skill_form_execution_mode_label = "Execution Mode";
+	skill_form_execution_mode_serial = "Serial Execution";
+	skill_form_execution_mode_parallel = "Parallel Execution";
+	skill_form_list_label = "Form List";
+	skill_form_add_button = "+ Add Form";
+	skill_form_list_empty = "No forms yet, click button below to add";
+	skill_form_already_added = "This form has already been added";
+	skill_form_not_found = "Form {0} not found";
+	skill_form_no_forms_configured = "No forms configured for this form skill";
+	skill_form_select_placeholder = "Select a form to add...";
 }

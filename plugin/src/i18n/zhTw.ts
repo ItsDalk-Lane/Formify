@@ -760,4 +760,19 @@ export class ZhTw implements Local {
 	selection_toolbar_stream_output_desc = "啟用後 AI 將逐字輸出結果，關閉則等待完整響應後一次性顯示";
 	skill_show_in_toolbar = "顯示在工具列";
 	skill_not_show_in_toolbar = "未顯示在工具列";
+	// 表單技能相關
+	skill_type_label = "技能類型";
+	skill_type_normal = "普通技能";
+	skill_type_group = "技能組";
+	skill_type_form = "表單技能";
+	skill_form_execution_mode_label = "執行模式";
+	skill_form_execution_mode_serial = "串行執行";
+	skill_form_execution_mode_parallel = "並行執行";
+	skill_form_list_label = "表單列表";
+	skill_form_add_button = "+ 添加表單";
+	skill_form_list_empty = "暫無表單，點擊下方按鈕添加";
+	skill_form_already_added = "該表單已添加";
+	skill_form_not_found = "表單 {0} 不存在";
+	skill_form_no_forms_configured = "此表單技能未配置任何表單";
+	skill_form_select_placeholder = "選擇要添加的表單...";
 }

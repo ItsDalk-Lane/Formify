@@ -744,4 +744,19 @@ export class Zh implements Local {
 	selection_toolbar_stream_output_desc = "启用后 AI 将逐字输出结果，关闭则等待完整响应后一次性显示";
 	skill_show_in_toolbar = "显示在工具栏";
 	skill_not_show_in_toolbar = "未显示在工具栏";
+	// 表单技能相关
+	skill_type_label = "技能类型";
+	skill_type_normal = "普通技能";
+	skill_type_group = "技能组";
+	skill_type_form = "表单技能";
+	skill_form_execution_mode_label = "执行模式";
+	skill_form_execution_mode_serial = "串行执行";
+	skill_form_execution_mode_parallel = "并行执行";
+	skill_form_list_label = "表单列表";
+	skill_form_add_button = "+ 添加表单";
+	skill_form_list_empty = "暂无表单，点击下方按钮添加";
+	skill_form_already_added = "该表单已添加";
+	skill_form_not_found = "表单 {0} 不存在";
+	skill_form_no_forms_configured = "此表单技能未配置任何表单";
+	skill_form_select_placeholder = "选择要添加的表单...";
 }
