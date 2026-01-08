@@ -85,3 +85,31 @@ summary.tars-setting-h4 {
         border-top: 1px solid var(--background-modifier-border);
         margin: 16px 0;
 }
+
+/* 右键菜单：表单子菜单紧凑样式 */
+.menu .menu-item.tappable.form-flow--ContextMenuCompactItem {
+        padding-top: 2px !important;
+        padding-bottom: 2px !important;
+        min-height: 24px !important;
+        height: 24px !important;
+}
+
+.menu .menu-item.tappable.form-flow--ContextMenuCompactItem .menu-item-icon,
+.menu .menu-item.tappable.form-flow--ContextMenuCompactItem .menu-item-icon svg {
+        width: 16px !important;
+        height: 16px !important;
+}
+
+.menu .menu-item.tappable.form-flow--ContextMenuCompactItem .menu-item-title {
+        line-height: 1.2;
+}
+
+.menu .menu-item.tappable.form-flow--ContextMenuCompactItem .form-flow--ContextMenuFormItemActions {
+        padding-right: 4px;
+}
+
+button.form-flow--ContextMenuFormItemMoreButton {
+        width: 18px;
+        height: 18px;
+        font-size: 14px;
+}

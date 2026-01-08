@@ -183,8 +183,6 @@ export class Zh implements Local {
 	run_on_startup_description = "开启后，Obsidian 启动时将自动提交此表单";
 	enable_context_menu = "在右键菜单中显示";
 	enable_context_menu_description = "启用后可以在编辑器右键菜单中直接访问此表单";
-	context_menu_group = "右键菜单分组";
-	context_menu_group_description = "用于右键菜单分组显示；留空则归入默认分组";
 	remove_value = "删除值";
 		custom_title = "自定义标题";
 		custom_title_description = "输入自定义动作标题，留空则使用系统生成的标题";

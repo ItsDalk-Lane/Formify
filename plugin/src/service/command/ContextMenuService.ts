@@ -1,4 +1,4 @@
-import { App, TFile, TAbstractFile, Menu, MenuItem } from "obsidian";
+import { App, Notice, TFile, TAbstractFile, Menu, MenuItem } from "obsidian";
 import { FormConfig } from "src/model/FormConfig";
 import FormPlugin from "src/main";
 import { ServiceContainer } from "../ServiceContainer";
@@ -7,7 +7,6 @@ export interface ContextMenuItem {
     id: string;
     title: string;
     icon: string;
-    group: string;
     callback: () => void;
 }
 
@@ -108,14 +107,11 @@ export class ContextMenuService {
      */
     private addFormsToContextMenu(menu: Menu): void {
         // 获取所有启用了右键菜单的表单
-        const enabledForms = Array.from(this.contextMenuItems.values())
-            .filter(item => item.callback && item.title);
+        const enabledForms = Array.from(this.contextMenuItems.values()).filter(
+            (item) => item.callback && item.title
+        );
 
-        if (enabledForms.length === 0) {
-            return; // 没有启用的表单，不添加菜单项
-        }
-
-        // 添加表单菜单项
+        // 添加表单菜单项（始终显示，以便用户可从右键菜单直接“添加表单”）
         menu.addItem((item) => {
             item.setTitle('表单')
                 .setIcon('file-spreadsheet')
@@ -124,53 +120,235 @@ export class ContextMenuService {
                 });
 
             // 添加子菜单
-            if (enabledForms.length > 0) {
-                const submenu = item.setSubmenu();
+            const submenu = item.setSubmenu();
 
-                const DEFAULT_GROUP_NAME = '默认';
-
-                const groupToItems = new Map<string, ContextMenuItem[]>();
-                for (const formItem of enabledForms) {
-                    const groupName = (formItem.group ?? '').trim() || DEFAULT_GROUP_NAME;
-                    const groupItems = groupToItems.get(groupName) ?? [];
-                    groupItems.push(formItem);
-                    groupToItems.set(groupName, groupItems);
-                }
-
-                const groupNames = Array.from(groupToItems.keys()).sort((a, b) => {
-                    const aIsDefault = a === DEFAULT_GROUP_NAME;
-                    const bIsDefault = b === DEFAULT_GROUP_NAME;
-                    if (aIsDefault && !bIsDefault) return -1;
-                    if (!aIsDefault && bIsDefault) return 1;
-                    return a.localeCompare(b, undefined, { sensitivity: 'base' });
-                });
-
-                groupNames.forEach((groupName, groupIndex) => {
-                    const itemsInGroup = groupToItems.get(groupName) ?? [];
-
-                    // 分组作为子菜单容器（可展开）
-                    submenu.addItem((groupItem) => {
-                        groupItem.setTitle(groupName);
-
-                        const groupSubmenu = groupItem.setSubmenu();
-
-                        // 组内按标题排序
-                        itemsInGroup.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
-
-                        // 添加每个表单到该分组子菜单
-                        itemsInGroup.forEach(formItem => {
-                            groupSubmenu.addItem((subItem) => {
-                                subItem.setTitle(formItem.title)
-                                    .setIcon(formItem.icon)
-                                    .onClick(() => {
-                                        formItem.callback();
-                                    });
-                            });
-                        });
+            // 固定选项：添加表单
+            submenu.addItem((subItem) => {
+                subItem.setTitle('添加表单')
+                    .setIcon('plus')
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    .onClick(async (evt: any) => {
+                        await this.openAddFormMenu(evt, submenu);
                     });
+
+                this.markCompactMenuItem(subItem);
+            });
+
+            // 按标题排序
+            enabledForms.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+
+            if (enabledForms.length > 0) {
+                // 分隔线
+                submenu.addSeparator();
+
+                // 添加每个表单到子菜单
+                enabledForms.forEach((formItem) => {
+                    this.addFormMenuItem(submenu, formItem.id, formItem.title, formItem.icon, formItem.callback);
                 });
             }
         });
+    }
+
+    /**
+     * 打开“添加表单”的表单文件列表
+     * 只显示未开启“在右键菜单中显示”的表单
+     */
+    private async openAddFormMenu(evt: MouseEvent | undefined, submenu: Menu): Promise<void> {
+        const candidates = await this.getContextMenuDisabledFormFiles();
+        const addMenu = new Menu(this.plugin.app);
+
+        if (candidates.length === 0) {
+            addMenu.addItem((item) => {
+                item.setTitle('没有可添加的表单').setDisabled(true);
+            });
+        } else {
+            // 按标题排序
+            candidates.sort((a, b) => a.basename.localeCompare(b.basename, undefined, { sensitivity: 'base' }));
+
+            candidates.forEach((file) => {
+                addMenu.addItem((item) => {
+                    item.setTitle(file.basename)
+                        .setIcon('file-spreadsheet')
+                        .onClick(async () => {
+                            try {
+                                await this.setFormContextMenuEnabled(file.path, true);
+                                await this.refreshContextMenuItems();
+
+                                // 立即把新表单项追加到当前打开的“表单”子菜单里
+                                this.addFormMenuItem(
+                                    submenu,
+                                    file.path,
+                                    file.basename,
+                                    'file-spreadsheet',
+                                    () => this.services?.formService.open(file, this.plugin.app)
+                                );
+                            } catch (error) {
+                                new Notice('添加表单失败，请稍后重试');
+                                console.warn('Failed to enable context menu for form:', error);
+                            }
+                        });
+                });
+            });
+        }
+
+        if (evt) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (addMenu as any).showAtMouseEvent?.(evt);
+        } else {
+            // 兜底：没有事件时尽量显示在屏幕中心
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (addMenu as any).showAtPosition?.({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+        }
+    }
+
+    /**
+     * 在指定子菜单中添加一个可执行的表单项，并在右侧注入“三点”按钮用于禁用
+     */
+    private addFormMenuItem(
+        submenu: Menu,
+        formPath: string,
+        title: string,
+        icon: string,
+        callback: () => void
+    ): void {
+        submenu.addItem((subItem) => {
+            let isDisabled = false;
+
+            subItem.setTitle(title)
+                .setIcon(icon)
+                .onClick(() => {
+                    if (isDisabled) {
+                        return;
+                    }
+                    callback();
+                });
+
+            this.markCompactMenuItem(subItem);
+
+            this.injectDisableButton(subItem, async () => {
+                if (isDisabled) {
+                    return;
+                }
+
+                isDisabled = true;
+                this.setMenuItemDisabledStyle(subItem);
+
+                try {
+                    await this.setFormContextMenuEnabled(formPath, false);
+                    await this.refreshContextMenuItems();
+                } catch (error) {
+                    new Notice('禁用失败，请稍后重试');
+                    console.warn('Failed to disable context menu for form:', error);
+                }
+            });
+        });
+    }
+
+    /**
+     * 给菜单项右侧注入“三点”按钮（仅此按钮会弹出“禁用”菜单）
+     */
+    private injectDisableButton(menuItem: MenuItem, onDisable: () => Promise<void>): void {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dom: HTMLElement | undefined = (menuItem as any)?.dom;
+        if (!dom) {
+            return;
+        }
+
+        dom.classList.add('form-flow--ContextMenuFormItem');
+
+        // 尽量让菜单项高度更紧凑（与截图一致）
+        dom.classList.add('form-flow--ContextMenuCompactItem');
+
+        const actionsEl = document.createElement('div');
+        actionsEl.className = 'form-flow--ContextMenuFormItemActions';
+
+        const moreBtn = document.createElement('button');
+        moreBtn.type = 'button';
+        moreBtn.className = 'form-flow--ContextMenuFormItemMoreButton';
+        moreBtn.setAttribute('aria-label', '更多');
+        moreBtn.textContent = '⋮';
+
+        moreBtn.addEventListener('click', (evt) => {
+            evt.preventDefault();
+            evt.stopPropagation();
+
+            const actionMenu = new Menu(this.plugin.app);
+            actionMenu.addItem((item) => {
+                item.setTitle('禁用')
+                    .setIcon('ban')
+                    .onClick(async () => {
+                        await onDisable();
+                    });
+            });
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (actionMenu as any).showAtMouseEvent?.(evt);
+        });
+
+        actionsEl.appendChild(moreBtn);
+        dom.appendChild(actionsEl);
+    }
+
+    /**
+     * 将菜单项标记为禁用（变灰 + 删除线），但不移除（关闭菜单后再消失）
+     */
+    private setMenuItemDisabledStyle(menuItem: MenuItem): void {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dom: HTMLElement | undefined = (menuItem as any)?.dom;
+        if (!dom) {
+            return;
+        }
+        dom.classList.add('form-flow--ContextMenuFormItemDisabled');
+    }
+
+    /**
+     * 标记菜单项为紧凑高度
+     */
+    private markCompactMenuItem(menuItem: MenuItem): void {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dom: HTMLElement | undefined = (menuItem as any)?.dom;
+        if (!dom) {
+            return;
+        }
+        dom.classList.add('form-flow--ContextMenuCompactItem');
+    }
+
+    /**
+     * 获取所有未开启右键菜单显示的表单文件
+     */
+    private async getContextMenuDisabledFormFiles(): Promise<TFile[]> {
+        const formFiles = this.plugin.app.vault.getFiles().filter((file) => this.isValidFormFile(file));
+        const result: TFile[] = [];
+
+        for (const file of formFiles) {
+            try {
+                const raw = await this.plugin.app.vault.read(file);
+                const json = JSON.parse(raw);
+                const enabled = json?.contextMenuEnabled === true;
+                if (!enabled) {
+                    result.push(file);
+                }
+            } catch {
+                // 无法解析的表单不参与添加列表，避免误伤
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 写入表单的 contextMenuEnabled 状态（与设置页同步）
+     */
+    private async setFormContextMenuEnabled(filePath: string, enabled: boolean): Promise<void> {
+        const file = this.plugin.app.vault.getAbstractFileByPath(filePath);
+        if (!file || !(file instanceof TFile)) {
+            throw new Error(`Form file not found: ${filePath}`);
+        }
+
+        const raw = await this.plugin.app.vault.read(file);
+        const json = JSON.parse(raw);
+        json.contextMenuEnabled = enabled;
+        await this.plugin.app.vault.modify(file, JSON.stringify(json, null, 2));
     }
 
     /**
@@ -211,7 +389,6 @@ export class ContextMenuService {
                 id: file.path,
                 title: file.basename,
                 icon: "file-spreadsheet",
-                group: config.getContextMenuGroup(),
                 callback: () => {
                     this.services?.formService.open(file, this.plugin.app);
                 }

@@ -20,7 +20,6 @@ export class FormConfig {
     commandId?: string;        // 命令ID，一旦生成永不改变
     commandEnabled?: boolean;  // 命令启用状态
     contextMenuEnabled?: boolean;  // 右键菜单启用状态
-    contextMenuGroup?: string;  // 右键菜单分组标识，未设置则归入默认分组
     runOnStartup?: boolean;  // 是否在Obsidian启动时自动运行
     startupConditions?: StartupConditionsConfig;  // 启动条件配置
     lastExecutionTime?: number;  // 上次执行时间（毫秒时间戳）
@@ -35,7 +34,6 @@ export class FormConfig {
         this.executionTimeoutThreshold = 30; // 默认30秒
         this.commandEnabled = true;  // 默认启用命令
         this.contextMenuEnabled = false;  // 默认不启用右键菜单
-        this.contextMenuGroup = '';  // 默认分组（空字符串表示未分组）
         this.runOnStartup = false;  // 默认不在启动时自动运行
         this.startupConditions = undefined;  // 默认不设置启动条件
     }
@@ -102,14 +100,6 @@ export class FormConfig {
      */
     setContextMenuEnabled(enabled: boolean): void {
         this.contextMenuEnabled = enabled;
-    }
-
-    /**
-     * 获取右键菜单分组标识
-     * 未设置或为空白时返回空字符串（表示默认分组）
-     */
-    getContextMenuGroup(): string {
-        return (this.contextMenuGroup ?? '').trim();
     }
 
     /**
