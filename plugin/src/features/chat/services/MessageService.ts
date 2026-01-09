@@ -1,20 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { Message as ProviderMessage, EmbedCache } from 'src/features/tars/providers';
+import type { EmbedCache } from 'obsidian';
+import type { Message as ProviderMessage } from 'src/features/tars/providers';
 import type { ChatMessage, ChatRole, SelectedFile, SelectedFolder } from '../types/chat';
-import { FileContentService, FileContentOptions, FileContent, FolderContent } from './FileContentService';
-import { InternalLinkParserService, ParseOptions } from 'src/service/InternalLinkParserService';
-
-interface LinkParseOptions {
-	enabled: boolean;
-	maxDepth: number;
-	timeout: number;
-	preserveOriginalOnError?: boolean;
-	enableCache?: boolean;
-}
+import { FileContentService, FileContentOptions } from './FileContentService';
+import { PromptBuilder, PromptBuilderLinkParseOptions } from 'src/service/PromptBuilder';
 
 export class MessageService {
-	private linkParser?: InternalLinkParserService;
-
 	constructor(private readonly app: any, private readonly fileContentService?: FileContentService) {}
 
 	createMessage(role: ChatRole, content: string, extras?: Partial<ChatMessage>): ChatMessage {
@@ -51,63 +42,26 @@ export class MessageService {
 			selectedFiles?: SelectedFile[];
 			selectedFolders?: SelectedFolder[];
 			fileContentOptions?: FileContentOptions;
-			linkParseOptions?: LinkParseOptions;
+			linkParseOptions?: PromptBuilderLinkParseOptions;
+			parseLinksInTemplates?: boolean;
+			sourcePath?: string;
+			maxHistoryRounds?: number;
 		}
 	): Promise<ProviderMessage[]> {
-		const providerMessages: ProviderMessage[] = [];
-		const { contextNotes = [], systemPrompt, selectedFiles = [], selectedFolders = [], fileContentOptions, linkParseOptions } = options ?? {};
+		const { contextNotes = [], systemPrompt, selectedFiles = [], selectedFolders = [], fileContentOptions, linkParseOptions, parseLinksInTemplates, sourcePath, maxHistoryRounds } = options ?? {};
 
-		if (systemPrompt) {
-			providerMessages.push({
-				role: 'system',
-				content: systemPrompt
-			});
-		}
-
-		// 处理文件和文件夹内容
-		if (selectedFiles.length > 0 || selectedFolders.length > 0) {
-			await this.processFileAndFolderContent(
-				selectedFiles,
-				selectedFolders,
-				providerMessages,
-				fileContentOptions,
-				linkParseOptions
-			);
-		}
-
-		// 不再显示contextNotes作为Relevant context，因为文件和文件夹信息已经在processFileAndFolderContent中处理
-		// if (contextNotes.length > 0) {
-		// 	providerMessages.push({
-		// 		role: 'system',
-		// 		content: `Relevant context provided by the user:\n${contextNotes.map((note, index) => `${index + 1}. ${note}`).join('\n')}`
-		// 	});
-		// }
-
-		messages.forEach((message) => {
-			const embeds = this.createEmbedsFromImages(message.images ?? []);
-
-			// 如果消息的 metadata 中包含 parsedContent，使用解析后的内容
-			// 否则使用原始内容
-			let messageContent = message.content;
-			if (message.metadata?.parsedContent && typeof message.metadata.parsedContent === 'string') {
-				messageContent = message.metadata.parsedContent;
-			}
-
-			// 如果消息的 metadata 中包含 selectedText，添加选中文本到消息内容
-			// 这样AI可以看到选中的文本，但UI中会作为标签显示
-			if (message.metadata?.selectedText && typeof message.metadata.selectedText === 'string') {
-				const selectedText = message.metadata.selectedText;
-				messageContent += `\n\n> 选中文本:\n> ${selectedText.split('\n').join('\n> ')}`;
-			}
-
-			providerMessages.push({
-				role: message.role,
-				content: messageContent,
-				embeds: embeds.length > 0 ? embeds : undefined
-			});
+		const promptBuilder = new PromptBuilder(this.app, this.fileContentService);
+		return promptBuilder.buildChatProviderMessages(messages, {
+			systemPrompt,
+			contextNotes,
+			selectedFiles,
+			selectedFolders,
+			fileContentOptions,
+			linkParseOptions,
+			parseLinksInTemplates,
+			sourcePath,
+			maxHistoryRounds
 		});
-
-		return providerMessages;
 	}
 
 	serializeMessage(message: ChatMessage, selectedFiles?: SelectedFile[], selectedFolders?: SelectedFolder[]): string {
@@ -180,101 +134,10 @@ export class MessageService {
 	}
 
 	/**
-	 * 处理文件和文件夹内容，将其添加到提供者消息中
-	 * @param selectedFiles 选中的文件列表
-	 * @param selectedFolders 选中的文件夹列表
-	 * @param providerMessages 提供者消息数组
-	 * @param options 文件内容读取选项
-	 */
-	private async processFileAndFolderContent(
-		selectedFiles: SelectedFile[],
-		selectedFolders: SelectedFolder[],
-		providerMessages: ProviderMessage[],
-		options?: FileContentOptions,
-		linkParseOptions?: LinkParseOptions
-	): Promise<void> {
-		if (!this.fileContentService) {
-			console.warn('[MessageService] FileContentService未初始化，无法处理文件内容');
-			return;
-		}
-
-		try {
-			let fileContentText = '用户提供了以下文件和文件夹作为上下文:\n\n';
-
-			// 处理文件内容
-			if (selectedFiles.length > 0) {
-				const fileContents = await this.fileContentService.readFilesContent(selectedFiles, options);
-				const parsedFiles = await this.parseFilesWithInternalLinks(fileContents, linkParseOptions);
-				for (const fileContent of parsedFiles) {
-					fileContentText += this.fileContentService.formatFileContentForAI(fileContent) + '\n\n';
-				}
-			}
-
-			// 处理文件夹内容
-			if (selectedFolders.length > 0) {
-				const folderContents = await this.fileContentService.readFoldersContent(selectedFolders, options);
-				const parsedFolders = await this.parseFoldersWithInternalLinks(folderContents, linkParseOptions);
-				for (const folderContent of parsedFolders) {
-					fileContentText += this.fileContentService.formatFolderContentForAI(folderContent) + '\n\n';
-				}
-			}
-
-			// 添加文件内容作为系统消息
-			providerMessages.push({
-				role: 'system',
-				content: fileContentText
-			});
-		} catch (error) {
-			console.error('[MessageService] 处理文件和文件夹内容失败:', error);
-		}
-	}
-
-	private getLinkParser(): InternalLinkParserService {
-		if (!this.linkParser) {
-			this.linkParser = new InternalLinkParserService(this.app);
-		}
-		return this.linkParser;
-	}
-
-	private async parseContentIfNeeded(content: string, sourcePath: string, options?: LinkParseOptions): Promise<string> {
-		if (!options?.enabled) {
-			return content;
-		}
-
-		const parser = this.getLinkParser();
-		const parseOptions: ParseOptions = {
-			enableParsing: true,
-			maxDepth: options.maxDepth,
-			timeout: options.timeout,
-			preserveOriginalOnError: options.preserveOriginalOnError ?? true,
-			enableCache: options.enableCache ?? true
-		};
-
-		return parser.parseLinks(content, sourcePath, parseOptions);
-	}
-
-	private async parseFilesWithInternalLinks(files: FileContent[], options?: LinkParseOptions): Promise<FileContent[]> {
-		return Promise.all(
-			files.map(async (file) => ({
-				...file,
-				content: await this.parseContentIfNeeded(file.content, file.path, options)
-			}))
-		);
-	}
-
-	private async parseFoldersWithInternalLinks(folders: FolderContent[], options?: LinkParseOptions): Promise<FolderContent[]> {
-		return Promise.all(
-			folders.map(async (folder) => ({
-				...folder,
-				files: await this.parseFilesWithInternalLinks(folder.files, options)
-			}))
-		);
-	}
-
-	/**
 	 * 从base64图片字符串数组创建EmbedCache对象数组
 	 * @param imageBase64Array base64图片字符串数组
 	 * @returns EmbedCache对象数组
+	 * @deprecated Chat 消息拼装已迁移到 PromptBuilder，此方法保留用于向下兼容。
 	 */
 	private createEmbedsFromImages(imageBase64Array: string[]): EmbedCache[] {
 		return imageBase64Array.map((imageBase64, index) => {
@@ -299,7 +162,7 @@ export class MessageService {
 				// 实际的图片数据将在resolveEmbedAsBinary时从base64字符串中获取
 				[Symbol.for('originalBase64')]: imageBase64,
 				[Symbol.for('mimeType')]: mimeType
-			} as EmbedCache;
+			} as unknown as EmbedCache;
 		});
 	}
 

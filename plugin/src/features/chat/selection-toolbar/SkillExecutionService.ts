@@ -5,6 +5,7 @@ import { availableVendors } from '../../tars/settings';
 import type { ProviderSettings, Message, Vendor } from '../../tars/providers';
 import { getFormSkillService } from './FormSkillService';
 import { localInstance } from 'src/i18n/locals';
+import { DebugLogger } from 'src/utils/DebugLogger';
 
 /**
  * 技能执行结果接口
@@ -297,6 +298,7 @@ export class SkillExecutionService {
 
 		// 获取发送函数
 		const sendRequest = vendor.sendRequestFunc(providerSettings.options);
+		DebugLogger.logLlmMessages('SkillExecutionService.callAI', messages, { level: 'debug' });
 
 		// 创建空的 resolveEmbed 函数
 		const resolveEmbed = async () => new ArrayBuffer(0);
@@ -306,6 +308,7 @@ export class SkillExecutionService {
 		for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
 			result += chunk;
 		}
+		DebugLogger.logLlmResponsePreview('SkillExecutionService.callAI', result, { level: 'debug', previewChars: 100 });
 
 		return result;
 	}
@@ -376,14 +379,23 @@ export class SkillExecutionService {
 
 			// 获取发送函数
 			const sendRequest = vendor.sendRequestFunc(providerSettings.options);
+			DebugLogger.logLlmMessages('SkillExecutionService.executeSkillStream', messages, { level: 'debug' });
 
 			// 创建空的 resolveEmbed 函数
 			const resolveEmbed = async () => new ArrayBuffer(0);
 
 			// 流式返回结果
+			let preview = '';
 			for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
+				if (preview.length < 100) {
+					preview += chunk;
+					if (preview.length > 100) {
+						preview = preview.slice(0, 100);
+					}
+				}
 				yield chunk;
 			}
+			DebugLogger.logLlmResponsePreview('SkillExecutionService.executeSkillStream', preview, { level: 'debug', previewChars: 100 });
 		} catch (error) {
 			console.error('[SkillExecutionService] 流式执行技能失败:', error);
 			throw error;

@@ -267,6 +267,7 @@ export class TabCompletionService {
             
             // 构建消息
             const messages = this.buildMessages(context, maxSentences)
+			DebugLogger.logLlmMessages('TabCompletionService.requestAISuggestion', messages, { level: 'debug' })
 
             // 获取发送函数
             const sendRequest = vendor.sendRequestFunc(provider.options)
@@ -288,6 +289,7 @@ export class TabCompletionService {
 
             // 后处理：智能处理换行、格式等
             let processedSuggestion = postProcessSuggestion(rawSuggestion.trim(), context)
+			DebugLogger.logLlmResponsePreview('TabCompletionService.requestAISuggestion', processedSuggestion, { level: 'debug', previewChars: 100 })
 
             // 长度限制（代码逻辑控制，不依赖 AI）
             processedSuggestion = limitSuggestionLength(processedSuggestion, maxSentences)

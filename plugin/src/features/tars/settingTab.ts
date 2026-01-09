@@ -1049,6 +1049,34 @@ export class TarsSettingTab {
 				})
 			)
 
+		// LLM 调用日志（独立于调试模式）
+		new Setting(advancedSection)
+			.setName('LLM 调用日志（messages / 响应预览）')
+			.setDesc('独立于调试模式：在控制台输出每次调用大模型的 messages 数组与返回内容预览')
+			.addToggle((toggle) =>
+				toggle.setValue(this.settings.enableLlmConsoleLog ?? false).onChange(async (value) => {
+					this.settings.enableLlmConsoleLog = value
+					await this.saveSettings()
+					DebugLogger.setLlmConsoleLogEnabled(value)
+				})
+			)
+
+		new Setting(advancedSection)
+			.setName('LLM 返回预览长度')
+			.setDesc('控制台输出 AI 返回内容的前 N 个字符（默认 100）')
+			.addText((text) =>
+				text
+					.setPlaceholder('100')
+					.setValue(String(this.settings.llmResponsePreviewChars ?? 100))
+					.onChange(async (value) => {
+						const parsed = Number.parseInt(value, 10)
+						const previewChars = Number.isFinite(parsed) && parsed >= 0 ? parsed : 100
+						this.settings.llmResponsePreviewChars = previewChars
+						await this.saveSettings()
+						DebugLogger.setLlmResponsePreviewChars(previewChars)
+					})
+			)
+
 		// 调试级别设置
 		new Setting(advancedSection)
 			.setName('调试日志级别')

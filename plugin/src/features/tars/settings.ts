@@ -49,6 +49,8 @@ export interface TarsSettings {
 	enableStreamLog: boolean
 	debugMode: boolean // 调试模式开关
 	debugLevel: 'debug' | 'info' | 'warn' | 'error' // 调试日志级别
+	enableLlmConsoleLog: boolean // 是否在控制台输出每次调用大模型的 messages/响应预览（独立开关）
+	llmResponsePreviewChars: number // AI 返回内容预览字符数
 	// Tab 补全功能设置
 	enableTabCompletion: boolean // Tab 补全功能开关
 	tabCompletionTriggerKey: string // 触发快捷键（默认 Alt）
@@ -85,6 +87,8 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 	enableStreamLog: false,
 	debugMode: false, // 默认关闭调试模式
 	debugLevel: 'error', // 默认只输出错误日志
+	enableLlmConsoleLog: false,
+	llmResponsePreviewChars: 100,
 	// Tab 补全功能默认设置
 	enableTabCompletion: false, // 默认关闭
 	tabCompletionTriggerKey: 'Alt', // 默认使用 Alt 键

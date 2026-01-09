@@ -106,5 +106,7 @@ export default class FormPlugin extends Plugin {
 	private applyDebugSettings() {
 		DebugLogger.setDebugMode(this.settings.tars?.settings?.debugMode ?? false);
 		DebugLogger.setDebugLevel(this.settings.tars?.settings?.debugLevel ?? 'error');
+		DebugLogger.setLlmConsoleLogEnabled(this.settings.tars?.settings?.enableLlmConsoleLog ?? false);
+		DebugLogger.setLlmResponsePreviewChars(this.settings.tars?.settings?.llmResponsePreviewChars ?? 100);
 	}
 }

@@ -11,6 +11,7 @@ import type { ChatMessage, ChatSession, ChatSettings, ChatState, SelectedFile, S
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
 import { v4 as uuidv4 } from 'uuid';
 import { InternalLinkParserService } from '../../../service/InternalLinkParserService';
+import { DebugLogger } from 'src/utils/DebugLogger';
 
 type ChatSubscriber = (state: ChatState) => void;
 
@@ -407,21 +408,6 @@ export class ChatService {
 
 		// 保存用户输入的原始内容，用于在对话消息框中显示
 		const originalUserInput = trimmed;
-		
-		// 内链解析：处理用户输入中的内链，用于发送给 AI
-		// 解析后的内容仅用于 AI 理解，不影响对话消息框的显示
-		let parsedContent = trimmed;
-		if (this.settings.enableInternalLinkParsing && trimmed) {
-			const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
-			const parser = new InternalLinkParserService(this.app);
-			parsedContent = await parser.parseLinks(trimmed, sourcePath, {
-				enableParsing: true,
-				maxDepth: this.settings.maxLinkParseDepth,
-				timeout: this.settings.linkParseTimeout,
-				preserveOriginalOnError: true,
-				enableCache: true
-			});
-		}
 
 		// 检测图片生成意图（使用原始输入）
 		const isImageGenerationIntent = this.detectImageGenerationIntent(originalUserInput);
@@ -446,55 +432,24 @@ export class ChatService {
 		session.selectedFiles = [...this.state.selectedFiles];
 		session.selectedFolders = [...this.state.selectedFolders];
 
-		// 处理提示词模板
-		// 用户消息使用原始输入，模板处理使用解析后的内容
+		// 处理提示词模板（仅用于 Task 层，不再覆盖系统提示词）
 		let finalUserMessage = originalUserInput;
-		let finalParsedContentForAI = parsedContent;
-		let templateSystemPrompt: string | undefined;
+		let taskTemplate: string | undefined;
 		let templateTag: string | undefined;
 		
 		if (this.state.selectedPromptTemplate) {
-			let templateContent = this.state.selectedPromptTemplate.content;
+			const templateContent = this.state.selectedPromptTemplate.content;
 			const templateName = this.state.selectedPromptTemplate.name;
-			
-			// 内链解析：如果启用了解析模板中的内链，则解析模板内容
-			if (this.settings.enableInternalLinkParsing && this.settings.parseLinksInTemplates) {
-				const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
-				const parser = new InternalLinkParserService(this.app);
-				templateContent = await parser.parseLinks(templateContent, sourcePath, {
-					enableParsing: true,
-					maxDepth: this.settings.maxLinkParseDepth,
-					timeout: this.settings.linkParseTimeout,
-					preserveOriginalOnError: true,
-					enableCache: true
-				});
-			}
-			
-			const variableRegex = /\{\{([^}]+)\}\}/g;
-			const hasVariables = variableRegex.test(templateContent);
 			
 			// 创建提示词模板标签
 			templateTag = `[[${templateName}]]`;
-			
-			if (hasVariables) {
-				// 如果模板有变量，用解析后的内容替换所有变量，并将结果作为系统提示词
-				templateSystemPrompt = templateContent.replace(variableRegex, parsedContent);
-				// 用户消息仍显示原始输入和模板标签
-				finalUserMessage = `${originalUserInput}\n\n${templateTag}`;
-			} else {
-				// 如果模板没有变量，将模板内容作为系统提示词，用户输入作为用户消息
-				templateSystemPrompt = templateContent;
-				// 用户消息显示原始输入和模板标签
-				finalUserMessage = `${originalUserInput}\n\n${templateTag}`;
-			}
+			finalUserMessage = `${originalUserInput}\n\n${templateTag}`;
+			taskTemplate = templateContent;
 		}
 
-		// 获取系统提示词（仅在没有使用模板时）
+		// 获取系统提示词（System 层独立，模板不再覆盖系统提示词）
 		let systemPrompt: string | undefined;
-		// 如果有模板系统提示词，使用模板系统提示词，忽略原有的系统提示词
-		if (templateSystemPrompt) {
-			systemPrompt = templateSystemPrompt;
-		} else if (this.settings.enableSystemPrompt) {
+		if (this.settings.enableSystemPrompt) {
 			// 检查AI助手的系统提示词设置
 			const tarsSettings = this.plugin.settings.tars.settings;
 			if (tarsSettings.enableDefaultSystemMsg && tarsSettings.defaultSystemMsg) {
@@ -533,8 +488,9 @@ export class ChatService {
 		const userMessage = this.messageService.createMessage('user', messageContent, {
 			images: this.state.selectedImages,
 			metadata: {
-				// 存储解析后的内容，用于发送给 AI
-				parsedContent: parsedContent !== originalUserInput ? parsedContent : undefined,
+				// Task 层：保留原始用户输入与模板，供 PromptBuilder 统一组装/解析
+				taskUserInput: originalUserInput,
+				taskTemplate: taskTemplate,
 				// 存储选中文本，用于UI显示和发送给AI
 				selectedText: this.state.selectedText
 			}
@@ -925,6 +881,7 @@ export class ChatService {
 			}
 			const sendRequest = vendor.sendRequestFunc(provider.options);
 			const messages = await this.buildProviderMessages(session);
+			DebugLogger.logLlmMessages('ChatService.generateAssistantResponse', messages, { level: 'debug' });
 			const assistantMessage = this.messageService.createMessage('assistant', '');
 			session.messages.push(assistantMessage);
 			session.updatedAt = Date.now();
@@ -1006,6 +963,7 @@ export class ChatService {
 						session.updatedAt = Date.now();
 						this.emitState();
 					}
+					DebugLogger.logLlmResponsePreview('ChatService.generateAssistantResponse', assistantMessage.content, { level: 'debug', previewChars: 100 });
 				} catch (error) {
 					// 针对图片生成错误的特殊处理
 					if (error instanceof Error) {
@@ -1065,6 +1023,7 @@ export class ChatService {
 					session.updatedAt = Date.now();
 					this.emitState();
 				}
+				DebugLogger.logLlmResponsePreview('ChatService.generateAssistantResponse', assistantMessage.content, { level: 'debug', previewChars: 100 });
 			}
 
 			this.state.isGenerating = false;
@@ -1150,6 +1109,7 @@ export class ChatService {
 		
 		// 使用会话中存储的系统提示词，而不是重新计算
 		let systemPrompt: string | undefined = session.systemPrompt;
+		const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
 		
 		return await this.messageService.toProviderMessages(session.messages, {
 			contextNotes,
@@ -1157,6 +1117,8 @@ export class ChatService {
 			selectedFiles,
 			selectedFolders,
 			fileContentOptions,
+			parseLinksInTemplates: this.settings.parseLinksInTemplates,
+			sourcePath,
 			linkParseOptions: {
 				enabled: this.settings.enableInternalLinkParsing,
 				maxDepth: this.settings.maxLinkParseDepth,

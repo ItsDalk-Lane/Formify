@@ -484,7 +484,7 @@ export const generate = async (
 		const messages = conversation.map((c) =>
 			c.embeds ? { role: c.role, content: c.content, embeds: c.embeds } : { role: c.role, content: c.content }
 		)
-		DebugLogger.debug('messages', messages)
+		DebugLogger.logLlmMessages('Tars.generate', messages, { level: 'debug' })
 
 		const lastMsg = messages.last()
 		if (!lastMsg || lastMsg.role !== 'user' || lastMsg.content.trim().length === 0) {
@@ -548,7 +548,7 @@ export const generate = async (
 			throw new Error(t('No text generated'))
 		}
 
-		DebugLogger.debug('✨ ' + t('AI generate') + ' ✨ ', llmResponse)
+		DebugLogger.logLlmResponsePreview('Tars.generate', llmResponse, { level: 'debug', previewChars: 100 })
 		if (startPos) {
 			const endPos = editor.getCursor('to')
 			const insertedText = editor.getRange(startPos, endPos)

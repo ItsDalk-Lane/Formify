@@ -16,7 +16,8 @@ import CommonSuggestModal from "src/component/modal/CommonSuggestModal";
 import { AIRuntimeFieldsGenerator } from "src/utils/AIRuntimeFieldsGenerator";
 import { AIStreamingModal, AIStreamingModalOptions } from "src/component/modal/AIStreamingModal";
 import "src/component/modal/AIStreamingModal.css";
-import { InternalLinkParserService, ParseOptions } from "src/service/InternalLinkParserService";
+import { ParseOptions } from "src/service/InternalLinkParserService";
+import { PromptBuilder } from "src/service/PromptBuilder";
 
 /**
  * AI动作服务
@@ -113,27 +114,18 @@ export default class AIActionService implements IActionService {
             }
 
             // 2. 构建消息列表
-            const messages: Message[] = [];
-
-            // 2.1 处理系统提示词
             const systemPrompt = await this.buildSystemPrompt(effectiveAction, context);
-            if (systemPrompt) {
-                messages.push({
-                    role: "system",
-                    content: systemPrompt
-                });
-                DebugLogger.debug("[AIAction] 系统提示词:", systemPrompt);
-            }
-
-            // 2.2 处理用户提示词
             const userPrompt = await this.buildUserPrompt(effectiveAction, context);
             if (!userPrompt || userPrompt.trim().length === 0) {
                 throw new Error(localInstance.ai_prompt_empty);
             }
-            messages.push({
-                role: "user",
-                content: userPrompt
-            });
+
+            const promptBuilder = new PromptBuilder(context.app);
+            const messages: Message[] = promptBuilder.buildActionProviderMessages(systemPrompt, userPrompt);
+
+            if (systemPrompt) {
+                DebugLogger.debug("[AIAction] 系统提示词:", systemPrompt);
+            }
             DebugLogger.debug("[AIAction] 用户提示词:", userPrompt);
 
             // 3. 调用AI并获取响应
@@ -186,85 +178,55 @@ export default class AIActionService implements IActionService {
      * 构建系统提示词
      */
     private async buildSystemPrompt(aiAction: AIFormAction, context: ActionContext): Promise<string | null> {
-        const mode = aiAction.systemPromptMode || SystemPromptMode.DEFAULT;
+        const plugin = (context.app as any).plugins?.plugins?.["formify"];
+        const defaultSystemMsg = plugin?.settings?.tars?.settings?.defaultSystemMsg;
 
-        let systemPrompt: string | null = null;
+        const activeFile = context.app.workspace.getActiveFile();
+        const sourcePath = activeFile?.path ?? '';
 
-        switch (mode) {
-            case SystemPromptMode.NONE:
-                // 不使用系统提示词
-                return null;
+        const promptBuilder = new PromptBuilder(context.app);
 
-            case SystemPromptMode.CUSTOM:
-                // 使用自定义系统提示词
-                if (!aiAction.customSystemPrompt) {
-                    DebugLogger.warn("[AIAction] 自定义系统提示词模式但内容为空");
-                    return null;
-                }
-                systemPrompt = await this.processTemplate(aiAction.customSystemPrompt, context);
-                break;
-
-            case SystemPromptMode.DEFAULT:
-            default:
-                // 使用默认系统提示词
-                const plugin = (context.app as any).plugins?.plugins?.["formify"];
-                const defaultSystemMsg = plugin?.settings?.tars?.settings?.defaultSystemMsg;
-                if (defaultSystemMsg) {
-                    systemPrompt = await this.processTemplate(defaultSystemMsg, context);
-                } else {
-                    return null;
-                }
-                break;
+        if ((aiAction.systemPromptMode || SystemPromptMode.DEFAULT) === SystemPromptMode.CUSTOM && !aiAction.customSystemPrompt) {
+            DebugLogger.warn("[AIAction] 自定义系统提示词模式但内容为空");
         }
 
-        // 内链解析
-        if (systemPrompt && (aiAction.enableInternalLinkParsing ?? true)) {
-            const activeFile = context.app.workspace.getActiveFile();
-            const sourcePath = activeFile?.path ?? '';
-            
-            const parser = new InternalLinkParserService(context.app);
-            systemPrompt = await parser.parseLinks(
-                systemPrompt,
-                sourcePath,
-                this.getInternalLinkParseOptions(context)
-            );
-        }
-
-        return systemPrompt;
+        return promptBuilder.buildSystemPrompt({
+            mode: aiAction.systemPromptMode || SystemPromptMode.DEFAULT,
+            defaultSystemPrompt: defaultSystemMsg,
+            customSystemPrompt: aiAction.customSystemPrompt,
+            processTemplate: async (template: string) => this.processTemplate(template, context),
+            enableInternalLinkParsing: aiAction.enableInternalLinkParsing ?? true,
+            sourcePath,
+            parseOptions: this.getInternalLinkParseOptions(context)
+        });
     }
 
     /**
      * 构建用户提示词
      */
     private async buildUserPrompt(aiAction: AIFormAction, context: ActionContext): Promise<string> {
-        const promptSource = aiAction.promptSource || PromptSourceType.CUSTOM;
+        const activeFile = context.app.workspace.getActiveFile();
+        const sourcePath = activeFile?.path ?? '';
 
-        let userPrompt: string;
+        const promptBuilder = new PromptBuilder(context.app);
 
-        if (promptSource === PromptSourceType.TEMPLATE && aiAction.templateFile) {
-            // 从模板文件加载
-            userPrompt = await this.loadTemplateFile(aiAction.templateFile, context);
-        } else if (promptSource === PromptSourceType.CUSTOM && aiAction.customPrompt) {
-            // 使用自定义内容
-            userPrompt = await this.processTemplate(aiAction.customPrompt, context);
-        } else {
-            throw new Error(localInstance.ai_prompt_source_invalid);
-        }
-
-        // 内链解析
-        if (aiAction.enableInternalLinkParsing ?? true) {
-            const activeFile = context.app.workspace.getActiveFile();
-            const sourcePath = activeFile?.path ?? '';
-            
-            const parser = new InternalLinkParserService(context.app);
-            userPrompt = await parser.parseLinks(
-                userPrompt,
+        try {
+            return await promptBuilder.buildUserPrompt({
+                promptSource: aiAction.promptSource || PromptSourceType.CUSTOM,
+                templateFile: aiAction.templateFile,
+                customPrompt: aiAction.customPrompt,
+                loadTemplateFile: async (templatePath: string) => this.loadTemplateFile(templatePath, context),
+                processTemplate: async (template: string) => this.processTemplate(template, context),
+                enableInternalLinkParsing: aiAction.enableInternalLinkParsing ?? true,
                 sourcePath,
-                this.getInternalLinkParseOptions(context)
-            );
+                parseOptions: this.getInternalLinkParseOptions(context)
+            });
+        } catch (error) {
+            if (error instanceof Error && error.message === '提示词来源无效') {
+                throw new Error(localInstance.ai_prompt_source_invalid);
+            }
+            throw error;
         }
-
-        return userPrompt;
     }
 
     /**
@@ -351,6 +313,7 @@ export default class AIActionService implements IActionService {
         options?: { includeReasoning?: boolean }
     ): Promise<string> {
         // 查找对应的vendor
+        DebugLogger.logLlmMessages('AIActionService.callAI', messages, { level: 'debug' });
         const vendor = availableVendors.find((v) => v.name === provider.vendor);
         if (!vendor) {
             throw new Error(`${localInstance.ai_vendor_not_found}: ${provider.vendor}`);
@@ -403,6 +366,7 @@ export default class AIActionService implements IActionService {
             }
 
             new Notice(localInstance.ai_execution_success, 3000);
+			DebugLogger.logLlmResponsePreview('AIActionService.callAI', finalResponse, { level: 'debug', previewChars: 100 });
             return finalResponse;
         } catch (error) {
             notice.hide();
@@ -430,6 +394,7 @@ export default class AIActionService implements IActionService {
         userPrompt: string
     ): Promise<string> {
         // 查找对应的vendor
+        DebugLogger.logLlmMessages('AIActionService.callAIWithModal', messages, { level: 'debug' });
         const vendor = availableVendors.find((v) => v.name === provider.vendor);
         if (!vendor) {
             throw new Error(`${localInstance.ai_vendor_not_found}: ${provider.vendor}`);
@@ -479,6 +444,7 @@ export default class AIActionService implements IActionService {
                     reject(new Error(localInstance.ai_response_empty));
                 } else {
                     new Notice(localInstance.ai_execution_success, 3000);
+					DebugLogger.logLlmResponsePreview('AIActionService.callAIWithModal', finalContent, { level: 'debug', previewChars: 100 });
                     resolve(finalContent);
                 }
             };

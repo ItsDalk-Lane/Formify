@@ -23,6 +23,8 @@ import { createRoot, Root } from 'react-dom/client';
 import { StrictMode } from 'react';
 import { SelectionToolbar } from './selection-toolbar/SelectionToolbar';
 import { SkillResultModal } from './selection-toolbar/SkillResultModal';
+import type { ChatMessage } from './types/chat';
+import { PromptBuilder } from 'src/service/PromptBuilder';
 import { DebugLogger } from 'src/utils/DebugLogger';
 import { ModifyTextModal } from './selection-toolbar/ModifyTextModal';
 import { createModifyGhostTextExtension, setModifyGhostEffect } from './selection-toolbar/ModifyGhostTextExtension';
@@ -637,16 +639,41 @@ export class ChatFeatureManager {
 		}
 
 		const systemPrompt = `你是文本编辑助手。根据用户指令修改输入文本。\n\n规则：\n1. 仅输出修改后的最终文本，不要解释\n2. 保持原文语言\n3. 保留 Markdown 结构（如有）`;
-		const userPrompt = `指令：${instruction}\n\n文本：\n${content}`;
 
-		const messages: Message[] = [
-			{ role: 'system', content: systemPrompt },
-			{ role: 'user', content: userPrompt }
-		];
+		const taskMessage: ChatMessage = {
+			id: 'modify-task',
+			role: 'user',
+			content: instruction,
+			timestamp: Date.now(),
+			images: [],
+			isError: false,
+			metadata: {
+				taskUserInput: instruction,
+				taskTemplate: null,
+				selectedText: content
+			}
+		};
+
+		const promptBuilder = new PromptBuilder(this.plugin.app);
+		const sourcePath = this.plugin.app.workspace.getActiveFile()?.path ?? '';
+		const messages: Message[] = await promptBuilder.buildChatProviderMessages([taskMessage], {
+			systemPrompt,
+			sourcePath,
+			parseLinksInTemplates: false,
+			linkParseOptions: {
+				enabled: false,
+				maxDepth: 1,
+				timeout: 1,
+				preserveOriginalOnError: true,
+				enableCache: true
+			},
+			maxHistoryRounds: 0
+		});
 
 		const controller = new AbortController();
 		const resolveEmbed = async () => new ArrayBuffer(0);
 		const sendRequest = vendor.sendRequestFunc(provider.options);
+		DebugLogger.logLlmMessages('ChatFeatureManager.requestModifyText', messages, { level: 'debug' });
 		let output = '';
 		for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
 			output += chunk;
@@ -654,6 +681,7 @@ export class ChatFeatureManager {
 				break;
 			}
 		}
+		DebugLogger.logLlmResponsePreview('ChatFeatureManager.requestModifyText', output, { level: 'debug', previewChars: 100 });
 		return output.trim();
 	}
 
