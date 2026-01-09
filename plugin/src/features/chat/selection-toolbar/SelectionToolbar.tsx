@@ -50,6 +50,11 @@ export const SelectionToolbar = ({
 	const closeTimerRef = useRef<NodeJS.Timeout | null>(null);
 	const [groupSubmenuPath, setGroupSubmenuPath] = useState<string[]>([]);
 
+	// 截断按钮名称，最多显示4个字符
+	const truncateName = (name: string): string => {
+		return name.length > 4 ? name.slice(0, 4) : name;
+	};
+
 	// 每次工具栏重新显示时，重置下拉菜单为折叠状态并清除定时器
 	useEffect(() => {
 		if (visible) {
@@ -421,7 +426,7 @@ export const SelectionToolbar = ({
 							onClick={() => handleSkillClick(item)}
 							title={item.name}
 						>
-							<span>{item.name}</span>
+							<span>{truncateName(item.name)}</span>
 						</button>
 					);
 				}
@@ -457,8 +462,7 @@ export const SelectionToolbar = ({
 							}}
 							title={group.name}
 						>
-							<span>{group.name}</span>
-							<span className="selection-toolbar-btn-group-triangle">▼</span>
+							<span>{truncateName(group.name)}⇣</span>
 						</button>
 
 						{openGroupId === group.id && (

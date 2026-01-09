@@ -66,10 +66,9 @@ button.selection-toolbar-btn-more {
 	padding: 6px 8px;
 }
 
-/* 技能组按钮样式（纯文字 + 右下角小三角） */
+/* 技能组按钮样式（文字 + 箭头标识） */
 button.selection-toolbar-btn-group {
-	position: relative;
-	padding-right: 12px;
+	padding-right: 0;
 }
 
 .selection-toolbar-btn-group-triangle {

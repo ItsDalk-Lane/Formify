@@ -1157,7 +1157,7 @@ export class TarsSettingTab {
 			.setDesc(localInstance.selection_toolbar_max_buttons_desc)
 			.addSlider((slider) => {
 				slider
-					.setLimits(2, 8, 1)
+					.setLimits(2, 12, 1)
 					.setValue(this.chatSettings.maxToolbarButtons ?? 4)
 					.setDynamicTooltip()
 					.onChange(async (value) => {
