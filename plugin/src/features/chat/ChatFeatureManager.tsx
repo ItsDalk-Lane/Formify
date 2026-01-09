@@ -1,5 +1,5 @@
 import { WorkspaceLeaf, Notice, TFile, MarkdownView } from 'obsidian';
-import { Extension } from '@codemirror/state';
+import { Extension, Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import FormPlugin from 'src/main';
 import { ChatService } from './services/ChatService';
@@ -24,6 +24,10 @@ import { StrictMode } from 'react';
 import { SelectionToolbar } from './selection-toolbar/SelectionToolbar';
 import { SkillResultModal } from './selection-toolbar/SkillResultModal';
 import { DebugLogger } from 'src/utils/DebugLogger';
+import { ModifyTextModal } from './selection-toolbar/ModifyTextModal';
+import { createModifyGhostTextExtension, setModifyGhostEffect } from './selection-toolbar/ModifyGhostTextExtension';
+import { availableVendors } from '../tars/settings';
+import type { Message, ProviderSettings } from '../tars/providers';
 
 export class ChatFeatureManager {
 	private readonly service: ChatService;
@@ -41,6 +45,19 @@ export class ChatFeatureManager {
 	private currentEditorView: EditorView | null = null;
 	private isToolbarVisible = false;
 	private currentTriggerSymbolRange: { from: number; to: number } | null = null; // 记录触发符号位置
+	private modifyModalContainer: HTMLElement | null = null;
+	private modifyModalRoot: Root | null = null;
+	private isModifyModalVisible = false;
+	private selectedModifyModelTag = '';
+	private pendingModifyContext: {
+		triggerSource: 'selection' | 'symbol';
+		anchorCoords?: SelectionInfo['coords'];
+		contentForAI: string;
+		replaceFrom: number;
+		replaceTo: number;
+		ghostPos: number;
+	} | null = null;
+	private modifyGhostExtensions: Extension[] = [];
 
 	// 技能结果模态框状态
 	private resultModalContainer: HTMLElement | null = null;
@@ -57,6 +74,7 @@ export class ChatFeatureManager {
 		this.createRibbon();
 		this.registerChatTriggerExtension();
 		this.registerSelectionToolbarExtension();
+		this.registerModifyGhostTextExtension();
 		this.initializeSkillExecutionService();
 		await this.initializeSkillDataService(initialSettings);
 
@@ -69,6 +87,11 @@ export class ChatFeatureManager {
 				void this.activateChatView(openMode);
 			}, 300);
 		}
+	}
+
+	private registerModifyGhostTextExtension() {
+		this.modifyGhostExtensions = createModifyGhostTextExtension();
+		this.plugin.registerEditorExtension(this.modifyGhostExtensions);
 	}
 
 	updateChatSettings(settings: Partial<ChatSettings>) {
@@ -393,6 +416,7 @@ export class ChatFeatureManager {
 					selectionInfo={this.currentSelectionInfo}
 					settings={settingsWithCachedSkills}
 					onOpenChat={(selection) => this.openChatWithSelection(selection, triggerSource, fullText)}
+					onModify={() => this.openModifyModal(triggerSource, fullText)}
 					onExecuteSkill={(skill, selection) => this.executeSkill(skill, selection, triggerSource, fullText)}
 					onClose={() => this.hideSelectionToolbar()}
 				/>
@@ -424,12 +448,213 @@ export class ChatFeatureManager {
 						selectionInfo={null}
 						settings={settingsWithCachedSkills}
 						onOpenChat={() => {}}
+						onModify={() => {}}
 						onExecuteSkill={() => {}}
 						onClose={() => {}}
 					/>
 				</StrictMode>
 			);
 		}
+	}
+
+	private getFrontmatterLength(docText: string): number {
+		const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/;
+		const match = docText.match(frontmatterRegex);
+		return match ? match[0].length : 0;
+	}
+
+	private resolveProviders(): ProviderSettings[] {
+		return (this.plugin.settings.tars?.settings?.providers ?? []) as ProviderSettings[];
+	}
+
+	private resolveDefaultModifyModelTag(providers: ProviderSettings[]): string {
+		const fromChat = this.plugin.settings.chat?.defaultModel ?? '';
+		if (fromChat && providers.some(p => p.tag === fromChat)) {
+			return fromChat;
+		}
+		return providers[0]?.tag ?? '';
+	}
+
+	private openModifyModal(triggerSource?: 'selection' | 'symbol', fullText?: string) {
+		if (!this.currentEditorView || !this.currentSelectionInfo) {
+			return;
+		}
+
+		const view = this.currentEditorView;
+		const selectionInfo = this.currentSelectionInfo;
+		const source = triggerSource ?? selectionInfo.triggerSource;
+
+		// 符号触发：点击任何操作后需删除触发符号
+		if (source === 'symbol' && this.currentTriggerSymbolRange && this.currentEditorView) {
+			this.deleteTriggerSymbol();
+		}
+
+		// 隐藏工具栏，但保留 editor 引用用于后续展示灰字
+		this.hideSelectionToolbar();
+		this.currentEditorView = view;
+
+		const docText = view.state.doc.toString();
+		const frontmatterLen = this.getFrontmatterLength(docText);
+		const bodyStart = frontmatterLen;
+		const docEnd = view.state.doc.length;
+
+		const providers = this.resolveProviders();
+		this.selectedModifyModelTag = this.selectedModifyModelTag || this.resolveDefaultModifyModelTag(providers);
+
+		if (!this.selectedModifyModelTag) {
+			this.selectedModifyModelTag = this.resolveDefaultModifyModelTag(providers);
+		}
+
+		if (source === 'selection') {
+			this.pendingModifyContext = {
+				triggerSource: 'selection',
+				anchorCoords: selectionInfo.coords,
+				contentForAI: selectionInfo.text,
+				replaceFrom: selectionInfo.from,
+				replaceTo: selectionInfo.to,
+				ghostPos: selectionInfo.to
+			};
+		} else {
+			this.pendingModifyContext = {
+				triggerSource: 'symbol',
+				anchorCoords: selectionInfo.coords,
+				contentForAI: fullText ?? getContentWithoutFrontmatter(this.plugin.app),
+				replaceFrom: bodyStart,
+				replaceTo: docEnd,
+				ghostPos: docEnd
+			};
+		}
+
+		this.showModifyModal();
+	}
+
+	private showModifyModal() {
+		if (!this.modifyModalContainer) {
+			this.modifyModalContainer = document.createElement('div');
+			this.modifyModalContainer.className = 'modify-text-modal-container';
+			document.body.appendChild(this.modifyModalContainer);
+			this.modifyModalRoot = createRoot(this.modifyModalContainer);
+		}
+		this.isModifyModalVisible = true;
+		this.renderModifyModal();
+	}
+
+	private hideModifyModal() {
+		this.isModifyModalVisible = false;
+		this.renderModifyModal();
+	}
+
+	private renderModifyModal() {
+		if (!this.modifyModalRoot) {
+			return;
+		}
+		const providers = this.resolveProviders();
+		const anchorCoords = this.pendingModifyContext?.anchorCoords;
+		this.modifyModalRoot.render(
+			<StrictMode>
+				<ModifyTextModal
+					visible={this.isModifyModalVisible}
+					providers={providers}
+					selectedModelTag={this.selectedModifyModelTag}
+					anchorCoords={anchorCoords}
+					onChangeModel={(tag) => {
+						this.selectedModifyModelTag = tag;
+						this.renderModifyModal();
+					}}
+					onSend={(instruction) => {
+						this.hideModifyModal();
+						void this.executeModifyRequest(instruction);
+					}}
+					onClose={() => this.hideModifyModal()}
+				/>
+			</StrictMode>
+		);
+	}
+
+	private async executeModifyRequest(instruction: string) {
+		if (!this.currentEditorView) {
+			return;
+		}
+		const ctx = this.pendingModifyContext;
+		if (!ctx) {
+			return;
+		}
+
+		// 让编辑器重新获得焦点，并将光标折叠到灰字展示位置
+		try {
+			this.currentEditorView.focus();
+			this.currentEditorView.dispatch({
+				selection: { anchor: ctx.ghostPos },
+				annotations: Transaction.userEvent.of('modify-ghost-internal')
+			});
+		} catch {
+			// ignore
+		}
+
+		const providers = this.resolveProviders();
+		const provider = providers.find(p => p.tag === this.selectedModifyModelTag) ?? providers[0];
+		if (!provider) {
+			new Notice('尚未配置AI模型');
+			return;
+		}
+
+		try {
+			this.currentEditorView.dispatch({
+				effects: setModifyGhostEffect.of({
+					text: '生成中...',
+					pos: ctx.ghostPos,
+					replaceFrom: ctx.replaceFrom,
+					replaceTo: ctx.replaceTo,
+					isLoading: true
+				}),
+				annotations: Transaction.userEvent.of('modify-ghost-internal')
+			});
+
+			const result = await this.requestModifyText(provider, instruction, ctx.contentForAI);
+			if (!result.trim()) {
+				new Notice('AI 未返回可用内容');
+				return;
+			}
+
+			this.currentEditorView.dispatch({
+				effects: setModifyGhostEffect.of({
+					text: result,
+					pos: ctx.ghostPos,
+					replaceFrom: ctx.replaceFrom,
+					replaceTo: ctx.replaceTo,
+					isLoading: false
+				})
+			});
+		} catch (e) {
+			new Notice(e instanceof Error ? e.message : String(e));
+		}
+	}
+
+	private async requestModifyText(provider: ProviderSettings, instruction: string, content: string): Promise<string> {
+		const vendor = availableVendors.find(v => v.name === provider.vendor);
+		if (!vendor) {
+			throw new Error(`未知的模型供应商: ${provider.vendor}`);
+		}
+
+		const systemPrompt = `你是文本编辑助手。根据用户指令修改输入文本。\n\n规则：\n1. 仅输出修改后的最终文本，不要解释\n2. 保持原文语言\n3. 保留 Markdown 结构（如有）`;
+		const userPrompt = `指令：${instruction}\n\n文本：\n${content}`;
+
+		const messages: Message[] = [
+			{ role: 'system', content: systemPrompt },
+			{ role: 'user', content: userPrompt }
+		];
+
+		const controller = new AbortController();
+		const resolveEmbed = async () => new ArrayBuffer(0);
+		const sendRequest = vendor.sendRequestFunc(provider.options);
+		let output = '';
+		for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
+			output += chunk;
+			if (controller.signal.aborted) {
+				break;
+			}
+		}
+		return output.trim();
 	}
 
 	/**

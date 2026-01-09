@@ -1,0 +1,120 @@
+/* 悬浮输入模态（轻量，不遮罩内容） */
+.modify-text-modal-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 1200;
+	background: transparent;
+}
+
+.modify-text-modal {
+	position: fixed;
+	width: 420px;
+	max-width: calc(100vw - 16px);
+	background: var(--background-primary);
+	border: none;
+	border-radius: 8px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+	color: var(--text-normal);
+	padding: 10px;
+}
+
+.modify-text-modal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 2px 2px 8px;
+}
+
+.modify-text-modal-title {
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+}
+
+.modify-text-modal-close {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	padding: 4px;
+	border-radius: 6px;
+}
+
+.modify-text-modal-close:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.modify-text-modal-body {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 2px;
+}
+
+.modify-text-modal-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.modify-text-modal-label {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.modify-text-modal-textarea {
+	width: 100%;
+	resize: none;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	padding: 8px 10px;
+	line-height: 1.4;
+}
+
+.modify-text-modal-textarea:focus {
+	outline: none;
+	border-color: var(--interactive-accent);
+}
+
+.modify-text-modal-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	padding-top: 10px;
+}
+
+.modify-text-modal-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	border-radius: 8px;
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+	padding: 6px 12px;
+}
+
+.modify-text-modal-btn-secondary {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.modify-text-modal-btn-primary {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.modify-text-modal-btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}

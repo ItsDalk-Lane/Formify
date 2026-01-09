@@ -22,6 +22,7 @@ interface SelectionToolbarProps {
 	selectionInfo: SelectionInfo | null;
 	settings: ChatSettings;
 	onOpenChat: (selection: string) => void;
+	onModify: () => void;
 	onExecuteSkill: (skill: Skill, selection: string) => void;
 	onClose: () => void;
 }
@@ -31,18 +32,22 @@ export const SelectionToolbar = ({
 	selectionInfo,
 	settings,
 	onOpenChat,
+	onModify,
 	onExecuteSkill,
 	onClose
 }: SelectionToolbarProps) => {
 	const [openMenu, setOpenMenu] = useState<
 		| { type: 'more' }
+		| { type: 'chat' }
 		| { type: 'group'; groupId: string }
 		| null
 	>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 	const toolbarRootRef = useRef<HTMLDivElement>(null);
 	const moreButtonRef = useRef<HTMLButtonElement>(null);
+	const chatButtonRef = useRef<HTMLButtonElement>(null);
 	const dropdownMenuRef = useRef<HTMLDivElement>(null);
+	const chatMenuRef = useRef<HTMLDivElement>(null);
 	const groupButtonRefs = useRef(new Map<string, HTMLButtonElement>());
 	const groupMenuRefs = useRef(new Map<string, HTMLDivElement>());
 	const groupSubmenuAnchorRefs = useRef(new Map<string, HTMLDivElement>());
@@ -105,6 +110,7 @@ export const SelectionToolbar = ({
 	}, [settings.skills, settings.maxToolbarButtons]);
 
 	const isMoreDropdownOpen = openMenu?.type === 'more';
+	const isChatDropdownOpen = openMenu?.type === 'chat';
 	const openGroupId = openMenu?.type === 'group' ? openMenu.groupId : null;
 
 	const groupHasVisibleSkill = useMemo(() => {
@@ -301,11 +307,32 @@ export const SelectionToolbar = ({
 		}, 100);
 	}, []);
 
+	const computeMenuShouldOpenUp = useCallback((estimatedMenuHeight: number) => {
+		const rect = toolbarRootRef.current?.getBoundingClientRect();
+		if (!rect) {
+			return false;
+		}
+		const spaceBelow = window.innerHeight - rect.bottom;
+		const spaceAbove = rect.top;
+		if (spaceBelow >= estimatedMenuHeight + 8) {
+			return false;
+		}
+		return spaceAbove >= estimatedMenuHeight + 8;
+	}, []);
+
+	const [chatMenuOpenUp, setChatMenuOpenUp] = useState(false);
+
 	// 鼠标悬停在"更多"按钮上时打开下拉菜单
 	const handleMoreButtonMouseEnter = useCallback(() => {
 		clearCloseTimer();
 		setOpenMenu({ type: 'more' });
 	}, [clearCloseTimer]);
+
+	const handleChatButtonMouseEnter = useCallback(() => {
+		clearCloseTimer();
+		setChatMenuOpenUp(computeMenuShouldOpenUp(96));
+		setOpenMenu({ type: 'chat' });
+	}, [clearCloseTimer, computeMenuShouldOpenUp]);
 
 	// 鼠标悬停在下拉菜单列表上时取消关闭
 	const handleDropdownMenuMouseEnter = useCallback(() => {
@@ -352,6 +379,15 @@ export const SelectionToolbar = ({
 						clearCloseTimer();
 						return;
 					}
+				}
+				scheduleClose();
+				return;
+			}
+
+			if (openMenu.type === 'chat') {
+				if (isInEl(chatButtonRef.current) || isInEl(chatMenuRef.current)) {
+					clearCloseTimer();
+					return;
 				}
 				scheduleClose();
 				return;
@@ -407,14 +443,52 @@ export const SelectionToolbar = ({
 			style={{ ...floatingStyles, gap: '1px' }}
 			{...getFloatingProps()}
 		>
-			{/* AI Chat 按钮（固定） */}
-			<button
-				className="selection-toolbar-btn selection-toolbar-btn-primary"
-				onClick={handleChatClick}
-				title={localInstance.selection_toolbar_ai_chat || 'AI Chat'}
-			>
-				<MessageSquare size={14} />
-			</button>
+			{/* AI Chat 下拉菜单（对话/修改） */}
+			<div className="selection-toolbar-dropdown" onMouseLeave={handleDropdownMouseLeave}>
+				<button
+					ref={chatButtonRef}
+					className="selection-toolbar-btn selection-toolbar-btn-primary"
+					onClick={(e) => {
+						e.stopPropagation();
+						clearCloseTimer();
+						setChatMenuOpenUp(computeMenuShouldOpenUp(96));
+						setOpenMenu(prev => (prev?.type === 'chat' ? null : { type: 'chat' }));
+					}}
+					onMouseEnter={handleChatButtonMouseEnter}
+					title={localInstance.selection_toolbar_ai_chat || 'AI Chat'}
+				>
+					<MessageSquare size={14} />
+				</button>
+
+				{isChatDropdownOpen && (
+					<div
+						className={`selection-toolbar-dropdown-menu ${chatMenuOpenUp ? 'selection-toolbar-dropdown-menu-up' : ''}`}
+						ref={chatMenuRef}
+						onMouseEnter={handleDropdownMenuMouseEnter}
+					>
+						<div
+							className="selection-toolbar-dropdown-item"
+							onClick={(e) => {
+								e.stopPropagation();
+								setOpenMenu(null);
+								onModify();
+							}}
+						>
+							{localInstance.modify || '修改'}
+						</div>
+						<div
+							className="selection-toolbar-dropdown-item"
+							onClick={(e) => {
+								e.stopPropagation();
+								setOpenMenu(null);
+								handleChatClick();
+							}}
+						>
+							{localInstance.chat || '对话'}
+						</div>
+					</div>
+				)}
+			</div>
 
 			{/* 技能按钮 */}
 			{toolbarItems.map((item) => {

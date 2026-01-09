@@ -107,7 +107,7 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 						top: 0,
 						transform: `translate(${getButtonPosition().left}px, ${getButtonPosition().top}px)`,
 						minWidth: 'max-content',
-						zIndex: 50,
+						zIndex: 1305,
 						pointerEvents: 'auto'
 					}}
 				>

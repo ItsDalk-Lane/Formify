@@ -115,6 +115,14 @@ button.selection-toolbar-btn-group:hover .selection-toolbar-btn-group-triangle {
 	z-index: 1001;
 }
 
+/* 向上展开 */
+.selection-toolbar-dropdown-menu-up {
+	top: auto;
+	bottom: 100%;
+	margin-top: 0;
+	margin-bottom: 4px;
+}
+
 /* 技能组级联子菜单：独立浮层（不嵌在父菜单内容流里） */
 .selection-toolbar-dropdown-menu-submenu {
 	position: fixed;
