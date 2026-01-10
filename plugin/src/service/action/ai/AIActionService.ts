@@ -18,6 +18,7 @@ import { AIStreamingModal, AIStreamingModalOptions } from "src/component/modal/A
 import "src/component/modal/AIStreamingModal.css";
 import { ParseOptions } from "src/service/InternalLinkParserService";
 import { PromptBuilder } from "src/service/PromptBuilder";
+import { SystemPromptAssembler } from "src/service/SystemPromptAssembler";
 
 /**
  * AI动作服务
@@ -178,31 +179,14 @@ export default class AIActionService implements IActionService {
      * 构建系统提示词
      */
     private async buildSystemPrompt(aiAction: AIFormAction, context: ActionContext): Promise<string | null> {
-        const plugin = (context.app as any).plugins?.plugins?.["formify"];
-        const defaultSystemMsg = plugin?.settings?.tars?.settings?.defaultSystemMsg;
+		const mode = aiAction.systemPromptMode || SystemPromptMode.DEFAULT;
+		if (mode === SystemPromptMode.NONE) {
+			return null;
+		}
 
-        const activeFile = context.app.workspace.getActiveFile();
-        const sourcePath = activeFile?.path ?? '';
-
-        const promptBuilder = new PromptBuilder(context.app);
-
-        if ((aiAction.systemPromptMode || SystemPromptMode.DEFAULT) === SystemPromptMode.CUSTOM && !aiAction.customSystemPrompt) {
-            DebugLogger.warn("[AIAction] 自定义系统提示词模式但内容为空");
-        }
-
-        // 从 Tars 全局设置读取内链解析配置
-        const tarsSettings = plugin?.settings?.tars?.settings;
-        const globalParseInTemplates = tarsSettings?.internalLinkParsing?.parseInTemplates ?? true;
-
-        return promptBuilder.buildSystemPrompt({
-            mode: aiAction.systemPromptMode || SystemPromptMode.DEFAULT,
-            defaultSystemPrompt: defaultSystemMsg,
-            customSystemPrompt: aiAction.customSystemPrompt,
-            processTemplate: async (template: string) => this.processTemplate(template, context),
-            enableInternalLinkParsing: tarsSettings?.internalLinkParsing?.enabled ?? true,
-            sourcePath,
-            parseOptions: this.getInternalLinkParseOptions(context)
-        });
+		const assembler = new SystemPromptAssembler(context.app);
+		const globalSystemPrompt = await assembler.buildGlobalSystemPrompt('ai_action');
+		return globalSystemPrompt.trim().length > 0 ? globalSystemPrompt : null;
     }
 
     /**

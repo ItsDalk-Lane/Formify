@@ -285,7 +285,8 @@ export class TarsFeatureManager {
 			contextLengthBefore: this.settings.tabCompletionContextLengthBefore ?? 1000,
 			contextLengthAfter: this.settings.tabCompletionContextLengthAfter ?? 500,
 			timeout: this.settings.tabCompletionTimeout ?? 5000,
-			providerTag: this.settings.tabCompletionProviderTag ?? ''
+			providerTag: this.settings.tabCompletionProviderTag ?? '',
+			promptTemplate: this.settings.tabCompletionPromptTemplate ?? '{{rules}}\n\n{{context}}'
 		}
 	}
 

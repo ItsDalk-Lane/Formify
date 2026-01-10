@@ -6,6 +6,7 @@ import type { ProviderSettings, Message, Vendor } from '../../tars/providers';
 import { getFormSkillService } from './FormSkillService';
 import { localInstance } from 'src/i18n/locals';
 import { DebugLogger } from 'src/utils/DebugLogger';
+import { SystemPromptAssembler } from 'src/service/SystemPromptAssembler';
 
 /**
  * 技能执行结果接口
@@ -285,13 +286,15 @@ export class SkillExecutionService {
 			throw new Error(`未找到AI提供商: ${providerSettings.vendor}`);
 		}
 
+		const assembler = new SystemPromptAssembler(this.app);
+		const globalSystemPrompt = (await assembler.buildGlobalSystemPrompt('selection_toolbar')).trim();
+
 		// 构建消息
-		const messages: Message[] = [
-			{
-				role: 'user',
-				content: prompt
-			}
-		];
+		const messages: Message[] = [];
+		if (globalSystemPrompt.length > 0) {
+			messages.push({ role: 'system', content: globalSystemPrompt });
+		}
+		messages.push({ role: 'user', content: prompt });
 
 		// 创建 AbortController
 		const controller = new AbortController();
@@ -367,12 +370,15 @@ export class SkillExecutionService {
 				throw new Error(`未找到AI提供商: ${providerSettings.vendor}`);
 			}
 
-			const messages: Message[] = [
-				{
-					role: 'user',
-					content: resolvedPrompt
-				}
-			];
+
+			const assembler = new SystemPromptAssembler(this.app);
+			const globalSystemPrompt = (await assembler.buildGlobalSystemPrompt('selection_toolbar')).trim();
+
+			const messages: Message[] = [];
+			if (globalSystemPrompt.length > 0) {
+				messages.push({ role: 'system', content: globalSystemPrompt });
+			}
+			messages.push({ role: 'user', content: resolvedPrompt });
 
 			// 创建 AbortController
 			const controller = new AbortController();

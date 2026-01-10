@@ -27,6 +27,8 @@ import { qwenVendor, QwenOptions } from './providers/qwen'
 import { siliconFlowVendor } from './providers/siliconflow'
 import { zhipuVendor, ZhipuOptions, ZHIPU_THINKING_TYPE_OPTIONS, DEFAULT_ZHIPU_THINKING_TYPE, isReasoningModel } from './providers/zhipu'
 import { getCapabilityEmoji, getCapabilityDisplayText } from './providers/utils'
+import { localInstance } from 'src/i18n/locals'
+import { SystemPromptManagerModal } from './system-prompts/SystemPromptManagerModal'
 import { availableVendors, DEFAULT_TARS_SETTINGS } from './settings'
 import type { TarsSettings } from './settings'
 import FolderSuggest from '../../component/combobox/FolderSuggest'
@@ -54,6 +56,7 @@ export class TarsSettingTab {
 	private isSelectionToolbarCollapsed = true // 默认折叠AI划词设置
 	private isSkillManagementCollapsed = true // 默认折叠技能管理
 	private isTabCompletionCollapsed = true // 默认折叠Tab补全设置
+	private isSystemPromptSettingsCollapsed = true // 默认折叠系统提示词设置
 	private isAdvancedCollapsed = true // 默认折叠高级设置
 	private doubaoRenderers = new Map<any, () => void>()
 	private skillGroupExpandedState = new Map<string, boolean>()
@@ -363,16 +366,7 @@ export class TarsSettingTab {
 				});
 			});
 
-		// 添加系统提示词设置项
-		new Setting(chatSection)
-			.setName("启用系统提示词")
-			.setDesc("使用AI助手功能中配置的系统提示词，为AI聊天提供一致的角色定义和行为指导")
-			.addToggle((toggle) => {
-				toggle.setValue(this.chatSettings.enableSystemPrompt ?? true);
-				toggle.onChange(async (value) => {
-					await this.updateChatSettings({ enableSystemPrompt: value });
-				});
-			});
+		// 系统提示词开关仅由“系统提示词设置”区域统一管理
 
 		// 自动添加活跃文件设置
 		new Setting(chatSection)
@@ -578,6 +572,98 @@ export class TarsSettingTab {
 					})
 			)
 
+		new Setting(tabCompletionSection)
+			.setName('Tab 补全提示词模板')
+			.setDesc('用于构建发送给 AI 的用户消息。可用占位符：{{rules}}（规则）、{{context}}（上下文）')
+			.addTextArea((text) => {
+				text.setPlaceholder('{{rules}}\n\n{{context}}')
+				text.setValue(this.settings.tabCompletionPromptTemplate ?? '{{rules}}\n\n{{context}}')
+				text.onChange(async (value) => {
+					this.settings.tabCompletionPromptTemplate = value
+					await this.saveSettings()
+				})
+				text.inputEl.style.minHeight = '90px'
+				text.inputEl.style.width = '100%'
+			})
+
+		// ===== 系统提示词设置（折叠区域） =====
+		const systemPromptHeaderSetting = new Setting(containerEl)
+			.setName(localInstance.system_prompt_settings_section || '系统提示词设置')
+
+		const systemPromptButtonWrapper = systemPromptHeaderSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
+		systemPromptButtonWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
+
+		const systemPromptChevronIcon = systemPromptButtonWrapper.createEl('div', { cls: 'ai-provider-chevron' })
+		systemPromptChevronIcon.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="6 9 12 15 18 9"></polyline>
+			</svg>
+		`
+		systemPromptChevronIcon.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			color: var(--text-muted);
+			cursor: pointer;
+			transition: transform 0.2s ease;
+			transform: ${this.isSystemPromptSettingsCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};
+			width: 16px;
+			height: 16px;
+		`
+
+		const systemPromptHeaderEl = systemPromptHeaderSetting.settingEl
+		systemPromptHeaderEl.style.cursor = 'pointer'
+		systemPromptHeaderEl.style.borderRadius = '0px'
+		systemPromptHeaderEl.style.border = '1px solid var(--background-modifier-border)'
+		systemPromptHeaderEl.style.marginBottom = '0px'
+		systemPromptHeaderEl.style.padding = '12px 12px'
+
+		const systemPromptSection = containerEl.createDiv({ cls: 'system-prompt-settings-container' })
+		systemPromptSection.style.padding = '0 8px 8px 8px'
+		systemPromptSection.style.backgroundColor = 'var(--background-secondary)'
+		systemPromptSection.style.borderRadius = '0px'
+		systemPromptSection.style.border = '1px solid var(--background-modifier-border)'
+		systemPromptSection.style.borderTop = 'none'
+		systemPromptSection.style.display = this.isSystemPromptSettingsCollapsed ? 'none' : 'block'
+
+		const toggleSystemPromptSection = () => {
+			this.isSystemPromptSettingsCollapsed = !this.isSystemPromptSettingsCollapsed
+			systemPromptChevronIcon.style.transform = this.isSystemPromptSettingsCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'
+			systemPromptSection.style.display = this.isSystemPromptSettingsCollapsed ? 'none' : 'block'
+		}
+
+		systemPromptHeaderEl.addEventListener('click', (e) => {
+			if ((e.target as HTMLElement).closest('.ai-provider-chevron')) {
+				return
+			}
+			toggleSystemPromptSection()
+		})
+
+		systemPromptChevronIcon.addEventListener('click', (e) => {
+			e.stopPropagation()
+			toggleSystemPromptSection()
+		})
+
+		new Setting(systemPromptSection)
+			.setName(localInstance.enable_global_system_prompts || '启用全局系统提示词')
+			.setDesc(localInstance.enable_global_system_prompts_desc || '开启后将使用系统提示词管理器中配置的提示词')
+			.addToggle((toggle) =>
+				toggle.setValue(this.settings.enableGlobalSystemPrompts ?? false).onChange(async (value) => {
+					this.settings.enableGlobalSystemPrompts = value
+					await this.saveSettings()
+				})
+			)
+
+		new Setting(systemPromptSection)
+			.setName(localInstance.system_prompt_manager_setting || '系统提示词管理')
+			.setDesc(localInstance.system_prompt_manager_setting_desc || '管理全局系统提示词列表')
+			.addButton((btn) => {
+				btn.setButtonText(localInstance.system_prompt_open_manager || '打开管理界面')
+				btn.onClick(() => {
+					new SystemPromptManagerModal(this.app).open()
+				})
+			})
+
 		// 高级设置区域（使用 Setting 组件，与上方保持一致）
 		const advancedHeaderSetting = new Setting(containerEl)
 			.setName(t('Advanced'))
@@ -649,45 +735,6 @@ export class TarsSettingTab {
 			e.stopPropagation()
 			toggleAdvancedSection()
 		})
-
-		let defaultSystemMsgInput: HTMLTextAreaElement | null = null
-		new Setting(advancedSection)
-			.setName(t('Enable default system message'))
-			.setDesc(t('Automatically add a system message when none exists in the conversation'))
-			.addToggle((toggle) =>
-				toggle.setValue(this.settings.enableDefaultSystemMsg).onChange(async (value) => {
-					this.settings.enableDefaultSystemMsg = value
-					await this.saveSettings()
-					if (defaultSystemMsgInput) {
-						defaultSystemMsgInput.disabled = !value
-					}
-				})
-			)
-
-		// “默认系统消息”输入框（上下布局）
-		const defaultSystemMsgSetting = new Setting(advancedSection).setName(t('Default system message'))
-		defaultSystemMsgSetting.settingEl.style.display = 'block'
-		defaultSystemMsgSetting.infoEl.style.marginBottom = '8px'
-		const textArea = defaultSystemMsgSetting.controlEl.createEl('textarea', { cls: 'tars-system-message-input' })
-		textArea.style.cssText = `
-			width: 100%;
-			min-height: 100px;
-			padding: 8px;
-			border: 1px solid var(--background-modifier-border);
-			border-radius: var(--radius-s);
-			background: var(--background-primary);
-			color: var(--text-normal);
-			font-family: var(--font-text);
-			font-size: var(--font-ui-small);
-			resize: vertical;
-		`
-		textArea.disabled = !this.settings.enableDefaultSystemMsg
-		textArea.value = this.settings.defaultSystemMsg
-		textArea.addEventListener('input', async () => {
-			this.settings.defaultSystemMsg = textArea.value.trim()
-			await this.saveSettings()
-		})
-		defaultSystemMsgInput = textArea
 
 		// ===== 内链解析设置（统一配置） =====
 		new Setting(advancedSection)

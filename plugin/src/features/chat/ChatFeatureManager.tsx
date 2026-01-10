@@ -25,6 +25,7 @@ import { SelectionToolbar } from './selection-toolbar/SelectionToolbar';
 import { SkillResultModal } from './selection-toolbar/SkillResultModal';
 import type { ChatMessage } from './types/chat';
 import { PromptBuilder } from 'src/service/PromptBuilder';
+import { SystemPromptAssembler } from 'src/service/SystemPromptAssembler';
 import { DebugLogger } from 'src/utils/DebugLogger';
 import { ModifyTextModal } from './selection-toolbar/ModifyTextModal';
 import { createModifyGhostTextExtension, setModifyGhostEffect } from './selection-toolbar/ModifyGhostTextExtension';
@@ -638,12 +639,15 @@ export class ChatFeatureManager {
 			throw new Error(`未知的模型供应商: ${provider.vendor}`);
 		}
 
-		const systemPrompt = `你是文本编辑助手。根据用户指令修改输入文本。\n\n规则：\n1. 仅输出修改后的最终文本，不要解释\n2. 保持原文语言\n3. 保留 Markdown 结构（如有）`;
+		const assembler = new SystemPromptAssembler(this.plugin.app);
+		const globalSystemPrompt = (await assembler.buildGlobalSystemPrompt('selection_toolbar')).trim();
+
+		const userInstruction = `任务：根据用户指令修改输入文本。\n\n规则：\n1. 仅输出修改后的最终文本，不要解释\n2. 保持原文语言\n3. 保留 Markdown 结构（如有）\n\n用户指令：\n${instruction}`;
 
 		const taskMessage: ChatMessage = {
 			id: 'modify-task',
 			role: 'user',
-			content: instruction,
+			content: userInstruction,
 			timestamp: Date.now(),
 			images: [],
 			isError: false,
@@ -657,7 +661,7 @@ export class ChatFeatureManager {
 		const promptBuilder = new PromptBuilder(this.plugin.app);
 		const sourcePath = this.plugin.app.workspace.getActiveFile()?.path ?? '';
 		const messages: Message[] = await promptBuilder.buildChatProviderMessages([taskMessage], {
-			systemPrompt,
+			systemPrompt: globalSystemPrompt.length > 0 ? globalSystemPrompt : undefined,
 			sourcePath,
 			parseLinksInTemplates: false,
 			linkParseOptions: {

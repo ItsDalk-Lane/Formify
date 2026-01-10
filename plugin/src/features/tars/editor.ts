@@ -23,6 +23,7 @@ import { GenerationStats, StatusBarManager } from './statusBarManager'
 import { TagRole } from './suggest'
 import { DebugLogger } from '../../utils/DebugLogger'
 import { InternalLinkParserService } from '../../service/InternalLinkParserService'
+import { SystemPromptAssembler } from '../../service/SystemPromptAssembler'
 
 export interface RunEnv {
 	readonly app: App
@@ -42,8 +43,6 @@ export interface RunEnv {
 		enableInternalLink: boolean
 		maxInternalLinkDepth: number
 		linkParseTimeout: number
-		enableDefaultSystemMsg: boolean
-		defaultSystemMsg: string
 		enableStreamLog: boolean
 	}
 	saveAttachment: SaveAttachment
@@ -117,8 +116,6 @@ export const buildRunEnv = async (app: App, settings: TarsSettings): Promise<Run
 		enableInternalLink: settings.internalLinkParsing?.enabled ?? settings.enableInternalLink ?? true,
 		maxInternalLinkDepth: settings.internalLinkParsing?.maxDepth ?? settings.maxLinkParseDepth ?? 5,
 		linkParseTimeout: settings.internalLinkParsing?.timeout ?? settings.linkParseTimeout ?? 5000,
-		enableDefaultSystemMsg: settings.enableDefaultSystemMsg,
-		defaultSystemMsg: settings.defaultSystemMsg,
 		enableStreamLog: settings.enableStreamLog
 	}
 
@@ -489,13 +486,16 @@ export const generate = async (
 			throw new Error(t('Please add a user message first, or wait for the user message to be parsed.'))
 		}
 
-		if (env.options.enableDefaultSystemMsg && messages[0]?.role !== 'system' && env.options.defaultSystemMsg) {
-			// If the first message is not a system message, add the default system message
-			messages.unshift({
-				role: 'system',
-				content: env.options.defaultSystemMsg
-			})
-			DebugLogger.debug('Default system message added:', env.options.defaultSystemMsg)
+		if (messages[0]?.role !== 'system') {
+			const assembler = new SystemPromptAssembler(env.app)
+			const globalSystemPrompt = await assembler.buildGlobalSystemPrompt('tars_chat')
+			if (globalSystemPrompt && globalSystemPrompt.trim().length > 0) {
+				messages.unshift({
+					role: 'system',
+					content: globalSystemPrompt
+				})
+				DebugLogger.debug('Global system prompts added')
+			}
 		}
 
 		const round = messages.filter((m) => m.role === 'assistant').length + 1

@@ -12,6 +12,7 @@ import { ProviderSettings, Message } from '../providers'
 import { availableVendors } from '../settings'
 import { t } from '../lang/helper'
 import { DebugLogger } from '../../../utils/DebugLogger'
+import { SystemPromptAssembler } from '../../../service/SystemPromptAssembler'
 
 /**
  * Tab 补全设置接口
@@ -29,6 +30,8 @@ export interface TabCompletionSettings {
     timeout: number
     /** 使用的 AI provider 标签 */
     providerTag: string
+	/** 用户提示词模板（支持 {{rules}} 与 {{context}}） */
+	promptTemplate: string
 }
 
 /**
@@ -40,7 +43,8 @@ export const DEFAULT_TAB_COMPLETION_SETTINGS: TabCompletionSettings = {
     contextLengthBefore: 1000,
     contextLengthAfter: 500,
     timeout: 5000,
-    providerTag: ''
+	providerTag: '',
+	promptTemplate: '{{rules}}\n\n{{context}}'
 }
 
 /**
@@ -266,7 +270,7 @@ export class TabCompletionService {
             const maxSentences = this.getMaxSentences()
             
             // 构建消息
-            const messages = this.buildMessages(context, maxSentences)
+            const messages = await this.buildMessages(context, maxSentences)
 			DebugLogger.logLlmMessages('TabCompletionService.requestAISuggestion', messages, { level: 'debug' })
 
             // 获取发送函数
@@ -315,32 +319,41 @@ export class TabCompletionService {
     /**
      * 构建发送给 AI 的消息
      */
-    private buildMessages(context: EditorContext, maxSentences: number): Message[] {
+    private async buildMessages(context: EditorContext, maxSentences: number): Promise<Message[]> {
         const formatHint = generateContextPrompt(context)
         const lengthHint = maxSentences === 1 
             ? '续写一句话' 
             : `续写${maxSentences}句话左右`
 
-        // 系统提示 - 简洁明了
-        const systemPrompt = `你是写作助手。根据上下文续写内容。
+        const assembler = new SystemPromptAssembler(this.app)
+        const globalSystemPrompt = (await assembler.buildGlobalSystemPrompt('tab_completion')).trim()
 
-规则：
-1. 直接输出续写内容，不要解释
-2. ${lengthHint}
-3. 不要重复已有内容
-4. ${formatHint}`
+        // 用户消息：提供上下文与规则（提示词模板可在设置中配置）
+        const rules = `规则：\n1. 直接输出续写内容，不要解释\n2. ${lengthHint}\n3. 不要重复已有内容\n4. ${formatHint}`
 
-        // 用户消息：提供上下文
-        let userPrompt = context.textBefore
-        
+        let contextBlock = context.textBefore
         if (context.textAfter && context.textAfter.trim()) {
-            userPrompt += `\n[...后续内容省略...]`
+            contextBlock += `\n[...后续内容省略...]`
         }
 
-        return [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-        ]
+        const template = this.settings.promptTemplate?.trim()
+            ? this.settings.promptTemplate
+            : '{{rules}}\n\n{{context}}'
+
+        let userPrompt = template
+            .replace(/\{\{rules\}\}/g, rules)
+            .replace(/\{\{context\}\}/g, contextBlock)
+
+        if (!userPrompt.trim()) {
+            userPrompt = `${rules}\n\n${contextBlock}`
+        }
+
+        const messages: Message[] = []
+        if (globalSystemPrompt.length > 0) {
+            messages.push({ role: 'system', content: globalSystemPrompt })
+        }
+        messages.push({ role: 'user', content: userPrompt })
+        return messages
     }
 
     /**

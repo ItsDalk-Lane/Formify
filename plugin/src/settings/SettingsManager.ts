@@ -5,6 +5,7 @@ import type { TarsSettings } from 'src/features/tars';
 import { encryptApiKey, decryptApiKey } from 'src/features/tars/utils/cryptoUtils';
 import { DEFAULT_CHAT_SETTINGS, type ChatSettings } from 'src/features/chat';
 import { DebugLogger } from 'src/utils/DebugLogger';
+import { SystemPromptDataService } from 'src/features/tars/system-prompts/SystemPromptDataService';
 
 interface BaseOptions {
     apiKey: string;
@@ -34,6 +35,24 @@ export class SettingsManager {
 
         // 迁移内链解析配置到新结构
         const migratedSettings = this.migrateInternalLinkSettings(tarsSettings, mergedChat);
+
+        // 迁移旧版默认系统消息到独立的 system-prompts.json（向下兼容）
+        try {
+            const systemPromptService = SystemPromptDataService.getInstance(this.plugin.app);
+            const migrated = await systemPromptService.migrateFromLegacyDefaultSystemMessage({
+                enabled: (tarsSettings as any)?.enableDefaultSystemMsg,
+                content: (tarsSettings as any)?.defaultSystemMsg
+            });
+            if (migrated) {
+                migratedSettings.enableGlobalSystemPrompts = true;
+            }
+        } catch (error) {
+            DebugLogger.error('[SettingsManager] 迁移默认系统消息失败（忽略，继续加载）', error);
+        }
+
+        // 剥离旧字段，避免继续在运行期被引用
+        delete (migratedSettings as any).enableDefaultSystemMsg;
+        delete (migratedSettings as any).defaultSystemMsg;
 
         return {
             ...DEFAULT_SETTINGS,
@@ -93,10 +112,15 @@ export class SettingsManager {
     }
 
     async save(settings: PluginSettings): Promise<void> {
+        const encryptedTars = this.encryptTarsSettings(settings.tars.settings);
+        // 剥离旧字段，避免写回 data.json
+        delete (encryptedTars as any).enableDefaultSystemMsg;
+        delete (encryptedTars as any).defaultSystemMsg;
+
         const settingsToPersist: PluginSettings = {
             ...settings,
             tars: {
-                settings: this.encryptTarsSettings(settings.tars.settings),
+                settings: encryptedTars,
             },
             chat: {
                 ...settings.chat,

@@ -25,6 +25,8 @@ export interface EditorStatus {
 export interface TarsSettings {
 	editorStatus: EditorStatus
 	providers: ProviderSettings[]
+	/** 是否启用全局系统提示词（由系统提示词管理器提供） */
+	enableGlobalSystemPrompts: boolean
 	// 统一的内链解析配置
 	internalLinkParsing: {
 		/** 总开关：控制整个插件的内链解析功能 */
@@ -42,8 +44,10 @@ export interface TarsSettings {
 	maxLinkParseDepth?: number
 	/** @deprecated 使用 internalLinkParsing.timeout 替代 */
 	linkParseTimeout?: number
-	enableDefaultSystemMsg: boolean
-	defaultSystemMsg: string
+	/** @deprecated 已废弃：旧版默认系统消息开关，仅用于向下兼容迁移 */
+	enableDefaultSystemMsg?: boolean
+	/** @deprecated 已废弃：旧版默认系统消息内容，仅用于向下兼容迁移 */
+	defaultSystemMsg?: string
 	enableStreamLog: boolean
 	debugMode: boolean // 调试模式开关
 	debugLevel: 'debug' | 'info' | 'warn' | 'error' // 调试日志级别
@@ -56,11 +60,14 @@ export interface TarsSettings {
 	tabCompletionContextLengthAfter: number // 上下文长度（光标后）
 	tabCompletionTimeout: number // 请求超时时间（毫秒）
 	tabCompletionProviderTag: string // 使用的 AI provider 标签
+	/** Tab 补全用户提示词模板（支持 {{rules}} 与 {{context}}） */
+	tabCompletionPromptTemplate: string
 }
 
 export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 	editorStatus: { isTextInserting: false },
 	providers: [],
+	enableGlobalSystemPrompts: false,
 	// 统一的内链解析配置默认值
 	internalLinkParsing: {
 		enabled: true,
@@ -72,8 +79,6 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 	enableInternalLink: true,
 	maxLinkParseDepth: 5,
 	linkParseTimeout: 5000,
-	enableDefaultSystemMsg: false,
-	defaultSystemMsg: '',
 	enableStreamLog: false,
 	debugMode: false, // 默认关闭调试模式
 	debugLevel: 'error', // 默认只输出错误日志
@@ -85,7 +90,8 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 	tabCompletionContextLengthBefore: 1000, // 默认获取光标前 1000 字符
 	tabCompletionContextLengthAfter: 500, // 默认获取光标后 500 字符
 	tabCompletionTimeout: 5000, // 默认 5 秒超时
-	tabCompletionProviderTag: '' // 默认为空，使用第一个可用的 provider
+	tabCompletionProviderTag: '', // 默认为空，使用第一个可用的 provider
+	tabCompletionPromptTemplate: '{{rules}}\n\n{{context}}'
 }
 
 export const availableVendors: Vendor[] = [

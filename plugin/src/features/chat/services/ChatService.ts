@@ -12,6 +12,7 @@ import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
 import { v4 as uuidv4 } from 'uuid';
 import { InternalLinkParserService } from '../../../service/InternalLinkParserService';
 import { DebugLogger } from 'src/utils/DebugLogger';
+import { SystemPromptAssembler } from 'src/service/SystemPromptAssembler';
 
 type ChatSubscriber = (state: ChatState) => void;
 
@@ -449,12 +450,10 @@ export class ChatService {
 
 		// 获取系统提示词（System 层独立，模板不再覆盖系统提示词）
 		let systemPrompt: string | undefined;
-		if (this.settings.enableSystemPrompt) {
-			// 检查AI助手的系统提示词设置
-			const tarsSettings = this.plugin.settings.tars.settings;
-			if (tarsSettings.enableDefaultSystemMsg && tarsSettings.defaultSystemMsg) {
-				systemPrompt = tarsSettings.defaultSystemMsg;
-			}
+		const assembler = new SystemPromptAssembler(this.app);
+		const built = await assembler.buildGlobalSystemPrompt('tars_chat');
+		if (built && built.trim().length > 0) {
+			systemPrompt = built;
 		}
 
 		// 创建用户消息，包含文件和文件夹信息
