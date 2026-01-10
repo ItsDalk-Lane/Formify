@@ -108,11 +108,15 @@ export interface ChatSettings {
 	showSidebarByDefault: boolean;
 	openMode: ChatOpenMode;
 	enableSystemPrompt: boolean; // 是否启用系统提示词功能
-	// 内链解析配置
-	enableInternalLinkParsing: boolean; // 是否启用内链解析功能
-	parseLinksInTemplates: boolean; // 是否解析提示词模板中的内链
-	maxLinkParseDepth: number; // 内链嵌套解析的最大深度
-	linkParseTimeout: number; // 单个链接解析超时时间(毫秒)
+	// 内链解析配置（已迁移到 Tars 设置中的 internalLinkParsing）
+	/** @deprecated 已迁移到 Tars 设置中的 internalLinkParsing.enabled */
+	enableInternalLinkParsing?: boolean;
+	/** @deprecated 已迁移到 Tars 设置中的 internalLinkParsing.parseInTemplates */
+	parseLinksInTemplates?: boolean;
+	/** @deprecated 已迁移到 Tars 设置中的 internalLinkParsing.maxDepth */
+	maxLinkParseDepth?: number;
+	/** @deprecated 已迁移到 Tars 设置中的 internalLinkParsing.timeout */
+	linkParseTimeout?: number;
 	// 自动添加活跃文件配置
 	autoAddActiveFile: boolean; // 是否自动将当前活跃的Markdown文件添加为上下文
 	// 功能区图标配置

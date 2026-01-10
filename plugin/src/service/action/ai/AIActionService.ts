@@ -190,12 +190,16 @@ export default class AIActionService implements IActionService {
             DebugLogger.warn("[AIAction] 自定义系统提示词模式但内容为空");
         }
 
+        // 从 Tars 全局设置读取内链解析配置
+        const tarsSettings = plugin?.settings?.tars?.settings;
+        const globalParseInTemplates = tarsSettings?.internalLinkParsing?.parseInTemplates ?? true;
+
         return promptBuilder.buildSystemPrompt({
             mode: aiAction.systemPromptMode || SystemPromptMode.DEFAULT,
             defaultSystemPrompt: defaultSystemMsg,
             customSystemPrompt: aiAction.customSystemPrompt,
             processTemplate: async (template: string) => this.processTemplate(template, context),
-            enableInternalLinkParsing: aiAction.enableInternalLinkParsing ?? true,
+            enableInternalLinkParsing: tarsSettings?.internalLinkParsing?.enabled ?? true,
             sourcePath,
             parseOptions: this.getInternalLinkParseOptions(context)
         });
@@ -210,6 +214,10 @@ export default class AIActionService implements IActionService {
 
         const promptBuilder = new PromptBuilder(context.app);
 
+        // 从 Tars 全局设置读取内链解析配置
+        const plugin = (context.app as any).plugins?.plugins?.["formify"];
+        const tarsSettings = plugin?.settings?.tars?.settings;
+
         try {
             return await promptBuilder.buildUserPrompt({
                 promptSource: aiAction.promptSource || PromptSourceType.CUSTOM,
@@ -217,7 +225,7 @@ export default class AIActionService implements IActionService {
                 customPrompt: aiAction.customPrompt,
                 loadTemplateFile: async (templatePath: string) => this.loadTemplateFile(templatePath, context),
                 processTemplate: async (template: string) => this.processTemplate(template, context),
-                enableInternalLinkParsing: aiAction.enableInternalLinkParsing ?? true,
+                enableInternalLinkParsing: tarsSettings?.internalLinkParsing?.enabled ?? true,
                 sourcePath,
                 parseOptions: this.getInternalLinkParseOptions(context)
             });

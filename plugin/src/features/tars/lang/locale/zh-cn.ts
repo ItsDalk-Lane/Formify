@@ -82,8 +82,6 @@ export default {
 	'For those compatible with the OpenAI protocol, you can select OpenAI.': '对于兼容 OpenAI 协议的，可以选择 OpenAI.',
 	'Add AI Provider': '添加 AI 服务商',
 	'Please add at least one AI assistant to start using the plugin.': '请至少添加一个 AI 助手，以便开始使用插件',
-	'Message tags': '消息标签',
-	'Keywords for tags in the text box are separated by spaces': '在文本框中的标签关键字用空格分隔',
 	'Test model': '测试模型',
 	'Test model description': '发送一次简单请求，验证当前服务商配置是否可用。',
 	'Test now': '立即测试',
@@ -95,12 +93,6 @@ export default {
 	'Model test system prompt': '你正在协助 Obsidian Formify 插件验证连接。',
 	'Model test user prompt': '请返回一条简短的确认回复。',
 	'Model test empty response': '测试返回内容为空。',
-	'New chat tags': '新对话的标签',
-	'User message tags': '用户消息的标签',
-	'System message tags': '系统消息的标签',
-	'At least one tag is required': '至少需要一个标签',
-	'Assistant message tag': '助手消息的标签',
-	'Tag used to trigger AI text generation': '用于触发 AI 文本生成的标签',
 	'Obtain key from ': '获取 key 网站 ',
 	'Web search': '网络搜索',
 	'Enable web search for AI': '为当前 AI 启用网络搜索',
@@ -109,9 +101,6 @@ export default {
 	'API Secret (已设置)': 'API Secret (已设置)',
 	'Default:': '默认:',
 	'Refer to the technical documentation': '参考技术文档',
-	'Keyword for tag must not contain #': '标签关键字不能包含 #',
-	'Keyword for tag must not contain space': '标签关键字不能包含空格',
-	'Keyword for tag must be unique': '标签关键字必须唯一',
 	Model: '模型',
 	'Supported features': '支持功能',
 	'Select the model to use': '选择要使用的模型',
@@ -139,33 +128,25 @@ export default {
 	Endpoint: '终结点',
 	'API version': 'API 版本',
 	'Select assistant': '选择助手',
+	'Provider tag': '服务商标识',
+	'A short identifier used to reference this provider': '用于引用该服务商的简短标识（用于设置与功能选择）',
+	'Provider tag must be unique': '服务商标识必须唯一',
+	'Provider tag must not contain #': '服务商标识不能包含 #',
+	'Provider tag must not contain space': '服务商标识不能包含空格',
+	'Invalid provider tag': '服务商标识无效',
 
-	'Confirm before regeneration': '重新生成前是否需要确认',
-	'Confirm before replacing existing assistant responses when using assistant commands':
-		'在使用助手标签命令时，替换旧的助手消息，是否需要弹窗确认',
 	'Internal links': '内部链接',
 
 	'Internal links in user and system messages will be replaced with their referenced content. When disabled, only the original text of the links will be used.':
 		'用户和系统消息中的内部链接将被替换为其引用的内容。禁用时，仅使用链接的原始文本。',
 
 	// Advanced settings
-	'Internal links for assistant messages': '助手消息的内部链接',
-	'Replace internal links in assistant messages with their referenced content. Note: This feature is generally not recommended as assistant-generated content may contain non-existent links.':
-		'助手消息中的内部链接替换为其引用的内容。注意：通常情况下不建议启用此功能，因为助手生成的内容可能包含不存在的链接。',
 	'System message': '系统消息',
 	'Enable default system message': '启用默认系统消息',
 	'Automatically add a system message when none exists in the conversation':
 		'当对话中没有系统消息时，自动添加自定义的默认的系统消息',
 	'Default system message': '默认系统消息',
 	Advanced: '高级',
-	'Delay before answer (Seconds)': '回答前的延迟（秒）',
-	'If you encounter errors with missing user messages when executing assistant commands on selected text, it may be due to the need for more time to parse the messages. Please slightly increase the delay time.':
-		'在选中文本执行助手命令的时候，如果遇到缺少用户消息的错误，可能是需要更多时间来解析消息，请稍微增加延迟',
-	'Replace tag Command': '替换标签命令',
-	'Export to JSONL Command': '导出到 JSONL 命令',
-	'Tag suggest': '标签建议',
-	'If you only use commands without needing tag suggestions, you can disable this feature. Changes will take effect after restarting the plugin.':
-		'如果你只使用命令而不需要标签建议，可以禁用此功能。更改将在重新启动插件后生效。',
 
 	// gpt image settings
 	'Image Display Width': '图片显示宽度',

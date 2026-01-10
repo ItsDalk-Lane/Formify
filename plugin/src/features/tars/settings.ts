@@ -25,25 +25,23 @@ export interface EditorStatus {
 export interface TarsSettings {
 	editorStatus: EditorStatus
 	providers: ProviderSettings[]
-	systemTags: string[]
-	newChatTags: string[]
-	userTags: string[]
-	roleEmojis: {
-		assistant: string
-		system: string
-		newChat: string
-		user: string
+	// 统一的内链解析配置
+	internalLinkParsing: {
+		/** 总开关：控制整个插件的内链解析功能 */
+		enabled: boolean
+		/** 嵌套内链的最大解析层数 */
+		maxDepth: number
+		/** 单个链接解析超时时间（毫秒） */
+		timeout: number
+		/** 是否解析提示词模板中的内链 */
+		parseInTemplates: boolean
 	}
-	enableInternalLink: boolean // For user messages and system messages
-	enableInternalLinkForAssistantMsg: boolean
-	maxLinkParseDepth: number
-	linkParseTimeout: number
-	confirmRegenerate: boolean
-	enableTagSuggest: boolean
-	tagSuggestMaxLineLength: number
-	answerDelayInMilliseconds: number
-	enableExportToJSONL: boolean
-	enableReplaceTag: boolean
+	/** @deprecated 使用 internalLinkParsing.enabled 替代 */
+	enableInternalLink?: boolean
+	/** @deprecated 使用 internalLinkParsing.maxDepth 替代 */
+	maxLinkParseDepth?: number
+	/** @deprecated 使用 internalLinkParsing.timeout 替代 */
+	linkParseTimeout?: number
 	enableDefaultSystemMsg: boolean
 	defaultSystemMsg: string
 	enableStreamLog: boolean
@@ -63,25 +61,17 @@ export interface TarsSettings {
 export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 	editorStatus: { isTextInserting: false },
 	providers: [],
-	systemTags: ['System', '系统'],
-	newChatTags: ['NewChat', '新对话'],
-	userTags: ['User', '我'],
-	roleEmojis: {
-		assistant: '✨',
-		system: '🔧',
-		newChat: '🚀',
-		user: '💬'
+	// 统一的内链解析配置默认值
+	internalLinkParsing: {
+		enabled: true,
+		maxDepth: 5,
+		timeout: 5000,
+		parseInTemplates: true,
 	},
+	// 保留旧字段的默认值以确保向下兼容
 	enableInternalLink: true,
-	enableInternalLinkForAssistantMsg: false,
 	maxLinkParseDepth: 5,
 	linkParseTimeout: 5000,
-	answerDelayInMilliseconds: 2000,
-	confirmRegenerate: true,
-	enableTagSuggest: true,
-	tagSuggestMaxLineLength: 20,
-	enableExportToJSONL: false,
-	enableReplaceTag: false,
 	enableDefaultSystemMsg: false,
 	defaultSystemMsg: '',
 	enableStreamLog: false,

@@ -40,7 +40,6 @@ export interface RunEnv {
 		assistantTags: string[]
 		systemTags: string[]
 		enableInternalLink: boolean
-		enableInternalLinkForAssistantMsg: boolean
 		maxInternalLinkDepth: number
 		linkParseTimeout: number
 		enableDefaultSystemMsg: boolean
@@ -115,10 +114,9 @@ export const buildRunEnv = async (app: App, settings: TarsSettings): Promise<Run
 		userTags: settings.userTags,
 		assistantTags: settings.providers.map((p) => p.tag),
 		systemTags: settings.systemTags,
-		enableInternalLink: settings.enableInternalLink,
-		enableInternalLinkForAssistantMsg: settings.enableInternalLinkForAssistantMsg,
-		maxInternalLinkDepth: settings.maxLinkParseDepth ?? 5,
-		linkParseTimeout: settings.linkParseTimeout ?? 5000,
+		enableInternalLink: settings.internalLinkParsing?.enabled ?? settings.enableInternalLink ?? true,
+		maxInternalLinkDepth: settings.internalLinkParsing?.maxDepth ?? settings.maxLinkParseDepth ?? 5,
+		linkParseTimeout: settings.internalLinkParsing?.timeout ?? settings.linkParseTimeout ?? 5000,
 		enableDefaultSystemMsg: settings.enableDefaultSystemMsg,
 		defaultSystemMsg: settings.defaultSystemMsg,
 		enableStreamLog: settings.enableStreamLog
@@ -222,7 +220,7 @@ const resolveTextRangeWithLinks = async (
 		fileText,
 		links: links = [],
 		embeds: embeds = [],
-		options: { enableInternalLink, enableInternalLinkForAssistantMsg, maxInternalLinkDepth, linkParseTimeout },
+		options: { enableInternalLink, maxInternalLinkDepth, linkParseTimeout },
 		linkParser,
 		filePath
 	} = env
@@ -249,7 +247,7 @@ const resolveTextRangeWithLinks = async (
 		(item) => startOffset <= item.ref.position.start.offset && item.ref.position.end.offset <= endOffset
 	)
 
-	const shouldResolveLinks = role === 'assistant' ? enableInternalLinkForAssistantMsg : enableInternalLink
+	const shouldResolveLinks = enableInternalLink
 	let textWithoutEmbeds = fileText.slice(startOffset, endOffset)
 
 	const embedsToStrip = filteredRefers.filter((item) => item.type === 'embed')

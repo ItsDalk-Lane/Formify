@@ -1,24 +1,10 @@
 import { Extension } from '@codemirror/state'
 import { Notice, Plugin } from 'obsidian'
-import {
-	asstTagCmd,
-	exportCmd,
-	exportCmdId,
-	getMeta,
-	getTagCmdIdsFromSettings,
-	newChatTagCmd,
-	replaceCmd,
-	replaceCmdId,
-	selectMsgAtCursorCmd,
-	systemTagCmd,
-	userTagCmd
-} from './commands'
 import { RequestController } from './editor'
 import { t } from './lang/helper'
 import { ProviderSettings } from './providers'
 import { TarsSettings } from './settings'
 import { StatusBarManager } from './statusBarManager'
-import { getMaxTriggerLineLength, TagEditorSuggest, TagEntry } from './suggest'
 import {
 	createTabCompletionExtension,
 	updateTabCompletionSettings,
@@ -29,11 +15,8 @@ import {
 
 export class TarsFeatureManager {
 	private statusBarManager: StatusBarManager | null = null
-	private readonly tagLowerCaseMap: Map<string, Omit<TagEntry, 'replacement'>> = new Map()
 	private aborterInstance: AbortController | null = null
-	private tagCmdIds: string[] = []
 	private registeredCommandIds: Set<string> = new Set()
-	private tagEditorSuggest: TagEditorSuggest | null = null
 	private tabCompletionExtensions: Extension[] = []
 	private tabCompletionRegistered: boolean = false
 
@@ -47,12 +30,6 @@ export class TarsFeatureManager {
 		const statusBarItem = this.plugin.addStatusBarItem()
 		this.statusBarManager = new StatusBarManager(this.plugin.app, statusBarItem)
 
-		this.buildTagCommands(true)
-
-		const selectCommand = selectMsgAtCursorCmd(this.plugin.app, this.settings)
-		this.registerCommand(selectCommand.id, selectCommand)
-
-		this.syncEditorSuggest()
 		this.syncTabCompletion()
 
 		this.registerCommand('cancelGeneration', {
@@ -73,19 +50,12 @@ export class TarsFeatureManager {
 				this.aborterInstance.abort()
 			}
 		})
-
-		this.syncOptionalCommands()
 	}
 
 	dispose() {
 		this.registeredCommandIds.forEach((id) => this.plugin.removeCommand(id))
 		this.registeredCommandIds.clear()
 
-		this.tagCmdIds.forEach((id) => this.plugin.removeCommand(id))
-		this.tagCmdIds = []
-		this.tagLowerCaseMap.clear()
-
-		this.disposeEditorSuggest(true)
 		this.disposeTabCompletion()
 
 		this.statusBarManager?.dispose()
@@ -104,20 +74,11 @@ export class TarsFeatureManager {
 		
 		this.settings = settings
 		
-		// 如果 provider 配置有变化，需要完全重建命令以确保使用新的 API 密钥
+		// 如果 provider 配置有变化，需要更新 Tab 补全的 providers
 		if (hasProviderChanges) {
-			console.debug('[Tars] 检测到 provider 配置变化，重建所有命令')
-			this.rebuildAllCommands()
-			// 同时更新 Tab 补全的 providers
+			console.debug('[Tars] 检测到 provider 配置变化，更新 Tab 补全')
 			updateTabCompletionProviders(settings.providers)
-		} else {
-			// 否则只进行增量更新
-			console.debug('[Tars] 未检测到 provider 配置变化，执行增量更新')
-			this.buildTagCommands()
 		}
-		
-		this.syncOptionalCommands()
-		this.syncEditorSuggest()
 		
 		// 处理 Tab 补全设置变化
 		if (hasTabCompletionChanges) {
@@ -163,6 +124,17 @@ export class TarsFeatureManager {
 		}
 
 		return false
+	}
+
+	private registerCommand(
+		id: string,
+		command: Parameters<Plugin['addCommand']>[0],
+		track: boolean = true
+	) {
+		this.plugin.addCommand(command)
+		if (track) {
+			this.registeredCommandIds.add(id)
+		}
 	}
 
 	/**
@@ -300,28 +272,6 @@ export class TarsFeatureManager {
 				this.settings.editorStatus.isTextInserting = false
 				this.aborterInstance = null
 			}
-		}
-	}
-
-	private syncOptionalCommands() {
-		if (this.settings.enableReplaceTag) {
-			if (!this.registeredCommandIds.has(replaceCmdId)) {
-				const command = replaceCmd(this.plugin.app)
-				this.registerCommand(command.id, command)
-			}
-		} else if (this.registeredCommandIds.has(replaceCmdId)) {
-			this.plugin.removeCommand(replaceCmdId)
-			this.registeredCommandIds.delete(replaceCmdId)
-		}
-
-		if (this.settings.enableExportToJSONL) {
-			if (!this.registeredCommandIds.has(exportCmdId)) {
-				const command = exportCmd(this.plugin.app, this.settings)
-				this.registerCommand(command.id, command)
-			}
-		} else if (this.registeredCommandIds.has(exportCmdId)) {
-			this.plugin.removeCommand(exportCmdId)
-			this.registeredCommandIds.delete(exportCmdId)
 		}
 	}
 

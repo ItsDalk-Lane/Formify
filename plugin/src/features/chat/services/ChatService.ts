@@ -1110,19 +1110,23 @@ export class ChatService {
 		// 使用会话中存储的系统提示词，而不是重新计算
 		let systemPrompt: string | undefined = session.systemPrompt;
 		const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
-		
+
+		// 从 Tars 全局设置读取内链解析配置
+		const tarsSettings = this.plugin.settings.tars.settings;
+		const internalLinkParsing = tarsSettings.internalLinkParsing;
+
 		return await this.messageService.toProviderMessages(session.messages, {
 			contextNotes,
 			systemPrompt,
 			selectedFiles,
 			selectedFolders,
 			fileContentOptions,
-			parseLinksInTemplates: this.settings.parseLinksInTemplates,
+			parseLinksInTemplates: internalLinkParsing?.parseInTemplates ?? true,
 			sourcePath,
 			linkParseOptions: {
-				enabled: this.settings.enableInternalLinkParsing,
-				maxDepth: this.settings.maxLinkParseDepth,
-				timeout: this.settings.linkParseTimeout,
+				enabled: internalLinkParsing?.enabled ?? true,
+				maxDepth: internalLinkParsing?.maxDepth ?? 5,
+				timeout: internalLinkParsing?.timeout ?? 5000,
 				preserveOriginalOnError: true,
 				enableCache: true
 			}

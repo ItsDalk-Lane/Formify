@@ -85,9 +85,6 @@ export default {
 	'Add AI Provider': 'Add AI Provider',
 	'Please add at least one AI assistant to start using the plugin.':
 		'Please add at least one AI assistant to start using the plugin.',
-	'Message tags': 'Message tags',
-	'Keywords for tags in the text box are separated by spaces':
-		'Keywords for tags in the text box are separated by spaces',
 	'Test model': 'Test model',
 	'Test model description': 'Send a simple request to verify the current provider configuration.',
 	'Test now': 'Test now',
@@ -99,12 +96,6 @@ export default {
 	'Model test system prompt': 'You are verifying connectivity for the Obsidian Formify plugin.',
 	'Model test user prompt': 'Please reply with a short confirmation message.',
 	'Model test empty response': 'Model returned empty response during testing.',
-	'New chat tags': 'New chat tags',
-	'User message tags': 'User message tags',
-	'System message tags': 'System message tags',
-	'At least one tag is required': 'At least one tag is required',
-	'Assistant message tag': 'Assistant message tag',
-	'Tag used to trigger AI text generation': 'Tag used to trigger AI text generation',
 	'Obtain key from ': 'Obtain key from ',
 	'Web search': 'Web search',
 	'Enable web search for AI': 'Enable web search for AI',
@@ -113,9 +104,6 @@ export default {
 	'API Secret (已设置)': 'API Secret (configured)',
 	'Default:': 'Default:',
 	'Refer to the technical documentation': 'Refer to the technical documentation',
-	'Keyword for tag must not contain #': 'Keyword for tag must not contain #',
-	'Keyword for tag must not contain space': 'Keyword for tag must not contain space',
-	'Keyword for tag must be unique': 'Keyword for tag must be unique',
 	Model: 'Model',
 	'Supported features': 'Supported features',
 	'Select the model to use': 'Select the model to use',
@@ -144,32 +132,24 @@ export default {
 	Endpoint: 'Endpoint',
 	'API version': 'API version',
 	'Select assistant': 'Select assistant',
+	'Provider tag': 'Provider tag',
+	'A short identifier used to reference this provider': 'A short identifier used to reference this provider',
+	'Provider tag must be unique': 'Provider tag must be unique',
+	'Provider tag must not contain #': 'Provider tag must not contain #',
+	'Provider tag must not contain space': 'Provider tag must not contain space',
+	'Invalid provider tag': 'Invalid provider tag',
 
-	'Confirm before regeneration': 'Confirm before regeneration',
-	'Confirm before replacing existing assistant responses when using assistant commands':
-		'Confirm before replacing existing assistant responses when using assistant commands',
 	'Internal links': 'Internal links',
 	'Internal links in user and system messages will be replaced with their referenced content. When disabled, only the original text of the links will be used.':
 		'Internal links in user and system messages will be replaced with their referenced content. When disabled, only the original text of the links will be used.',
 
 	// Advanced settings
-	'Internal links for assistant messages': 'Internal links for assistant messages',
-	'Replace internal links in assistant messages with their referenced content. Note: This feature is generally not recommended as assistant-generated content may contain non-existent links.':
-		'Replace internal links in assistant messages with their referenced content. Note: This feature is generally not recommended as assistant-generated content may contain non-existent links.',
 	'System message': 'System message',
 	'Enable default system message': 'Enable default system message',
 	'Automatically add a system message when none exists in the conversation':
 		'Automatically add a system message when none exists in the conversation',
 	'Default system message': 'Default system message',
 	Advanced: 'Advanced',
-	'Delay before answer (Seconds)': 'Delay before answer (Seconds)',
-	'If you encounter errors with missing user messages when executing assistant commands on selected text, it may be due to the need for more time to parse the messages. Please slightly increase the delay time.':
-		'If you encounter errors with missing user messages when executing assistant commands on selected text, it may be due to the need for more time to parse the messages. Please slightly increase the delay time.',
-	'Replace tag Command': 'Replace tag Command',
-	'Export to JSONL Command': 'Export to JSONL Command',
-	'Tag suggest': 'Tag suggest',
-	'If you only use commands without needing tag suggestions, you can disable this feature. Changes will take effect after restarting the plugin.':
-		'If you only use commands without needing tag suggestions, you can disable this feature. Changes will take effect after restarting the plugin.',
 
 	// gpt image settings
 	'Image Display Width': 'Image Display Width',

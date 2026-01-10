@@ -50,7 +50,6 @@ export class TarsSettingTab {
 	private currentOpenProviderIndex = -1
 	private autoSaveEnabled = true
 	private isProvidersCollapsed = true // 默认折叠列表
-	private isMessageCollapsed = true // 默认折叠消息设置
 	private isChatCollapsed = true // 默认折叠AI Chat设置
 	private isSelectionToolbarCollapsed = true // 默认折叠AI划词设置
 	private isSkillManagementCollapsed = true // 默认折叠技能管理
@@ -202,265 +201,6 @@ export class TarsSettingTab {
 			const shouldOpen = (isLast && expandLastProvider) || index === keepOpenIndex
 			this.createProviderSetting(index, provider, shouldOpen)
 		}
-
-		// 移除间隔行，使区域直接相邻
-
-		// 消息区域（使用 Setting 组件，与上方保持一致）
-		const messageHeaderSetting = new Setting(containerEl)
-			.setName('消息')
-			.setDesc('标签在文本框中的关键词，之间用空格隔开')
-
-		// 创建一个包装器来容纳图标
-		const messageButtonWrapper = messageHeaderSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
-		messageButtonWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
-
-		// 添加Chevron图标
-		const messageChevronIcon = messageButtonWrapper.createEl('div', { cls: 'ai-provider-chevron' })
-		messageChevronIcon.innerHTML = `
-			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-				<polyline points="6 9 12 15 18 9"></polyline>
-			</svg>
-		`
-		messageChevronIcon.style.cssText = `
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			color: var(--text-muted);
-			cursor: pointer;
-			transition: transform 0.2s ease;
-			transform: ${this.isMessageCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};
-			width: 16px;
-			height: 16px;
-		`
-
-		// 扩大整行的点击区域（除了按钮）
-		const messageHeaderEl = messageHeaderSetting.settingEl
-		messageHeaderEl.style.cursor = 'pointer'
-		// 移除背景色设置，使用默认背景色，与"新的AI助手"标题行保持一致
-		// 设置直角设计，移除圆角效果
-		messageHeaderEl.style.borderRadius = '0px'
-		messageHeaderEl.style.border = '1px solid var(--background-modifier-border)'
-		messageHeaderEl.style.marginBottom = '0px'  // 移除底部边距，使区域直接相邻
-		// 统一内边距，确保标题文字和图标的上下间距一致
-		messageHeaderEl.style.padding = '12px 12px'
-
-		// 创建消息设置容器
-		const messageSection = containerEl.createDiv({ cls: 'message-settings-container' })
-		messageSection.style.padding = '0 8px 8px 8px'
-		// 保持折叠区域的背景色为secondary，与标题行形成对比
-		messageSection.style.backgroundColor = 'var(--background-secondary)'
-		// 设置直角设计，移除圆角效果
-		messageSection.style.borderRadius = '0px'
-		messageSection.style.border = '1px solid var(--background-modifier-border)'
-		messageSection.style.borderTop = 'none'
-		// 移除底部边框，使消息区域与高级区域紧密相连
-		// 根据折叠状态设置显示/隐藏
-		messageSection.style.display = this.isMessageCollapsed ? 'none' : 'block'
-
-		// 添加消息区域折叠/展开功能
-		const toggleMessageSection = () => {
-			this.isMessageCollapsed = !this.isMessageCollapsed
-			messageChevronIcon.style.transform = this.isMessageCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'
-			messageSection.style.display = this.isMessageCollapsed ? 'none' : 'block'
-		}
-
-		// 点击整行切换折叠状态
-		messageHeaderEl.addEventListener('click', (e) => {
-			// 避免点击图标时重复触发
-			if ((e.target as HTMLElement).closest('.ai-provider-chevron')) {
-				return
-			}
-			toggleMessageSection()
-		})
-
-		// 点击图标也能切换折叠状态
-		messageChevronIcon.addEventListener('click', (e) => {
-			e.stopPropagation()
-			toggleMessageSection()
-		})
-
-		let newChatTagsInput: HTMLInputElement | null = null
-		new Setting(messageSection)
-			.setName(this.settings.roleEmojis.newChat + ' ' + t('New chat tags'))
-			.addExtraButton((btn) => {
-				btn
-					.setIcon('reset')
-					.setTooltip(t('Restore default'))
-					.onClick(async () => {
-						this.settings.newChatTags = [...DEFAULT_TARS_SETTINGS.newChatTags]
-						await this.saveSettings()
-						if (newChatTagsInput) {
-							newChatTagsInput.value = this.settings.newChatTags.join(' ')
-						}
-					})
-			})
-			.addText((text) => {
-				newChatTagsInput = text.inputEl
-				text
-					.setPlaceholder(DEFAULT_TARS_SETTINGS.newChatTags.join(' '))
-					.setValue(this.settings.newChatTags.join(' '))
-					.onChange(async (value) => {
-						const tags = value.split(' ').filter((e) => e.length > 0)
-						if (!validateTagList(tags)) return
-						this.settings.newChatTags = tags
-						await this.saveSettings()
-					})
-			})
-
-		let userTagsInput: HTMLInputElement | null = null
-		new Setting(messageSection)
-			.setName(this.settings.roleEmojis.user + ' ' + t('User message tags'))
-			.addExtraButton((btn) => {
-				btn
-					.setIcon('reset')
-					.setTooltip(t('Restore default'))
-					.onClick(async () => {
-						this.settings.userTags = [...DEFAULT_TARS_SETTINGS.userTags]
-						await this.saveSettings()
-						if (userTagsInput) {
-							userTagsInput.value = this.settings.userTags.join(' ')
-						}
-					})
-			})
-			.addText((text) => {
-				userTagsInput = text.inputEl
-				text
-					.setPlaceholder(DEFAULT_TARS_SETTINGS.userTags.join(' '))
-					.setValue(this.settings.userTags.join(' '))
-					.onChange(async (value) => {
-						const tags = value.split(' ').filter((e) => e.length > 0)
-						if (!validateTagList(tags)) return
-						this.settings.userTags = tags
-						await this.saveSettings()
-					})
-			})
-
-		let systemTagsInput: HTMLInputElement | null = null
-		new Setting(messageSection)
-			.setName(this.settings.roleEmojis.system + ' ' + t('System message tags'))
-			.addExtraButton((btn) => {
-				btn
-					.setIcon('reset')
-					.setTooltip(t('Restore default'))
-					.onClick(async () => {
-						this.settings.systemTags = [...DEFAULT_TARS_SETTINGS.systemTags]
-						await this.saveSettings()
-						if (systemTagsInput) {
-							systemTagsInput.value = this.settings.systemTags.join(' ')
-						}
-					})
-			})
-			.addText((text) => {
-				systemTagsInput = text.inputEl
-				text
-					.setPlaceholder(DEFAULT_TARS_SETTINGS.systemTags.join(' '))
-					.setValue(this.settings.systemTags.join(' '))
-					.onChange(async (value) => {
-						const tags = value.split(' ').filter((e) => e.length > 0)
-						if (!validateTagList(tags)) return
-						this.settings.systemTags = tags
-						await this.saveSettings()
-					})
-			})
-
-		// "重新生成前是否需要确认"设置项
-		new Setting(messageSection)
-			.setName(t('Confirm before regeneration'))
-			.setDesc(t('Confirm before replacing existing assistant responses when using assistant commands'))
-			.addToggle((toggle) =>
-				toggle.setValue(this.settings.confirmRegenerate).onChange(async (value) => {
-					this.settings.confirmRegenerate = value
-					await this.saveSettings()
-				})
-			)
-
-		let defaultSystemMsgInput: HTMLTextAreaElement | null = null
-		new Setting(messageSection)
-			.setName(t('Enable default system message'))
-			.setDesc(t('Automatically add a system message when none exists in the conversation'))
-			.addToggle((toggle) =>
-				toggle.setValue(this.settings.enableDefaultSystemMsg).onChange(async (value) => {
-					this.settings.enableDefaultSystemMsg = value
-					await this.saveSettings()
-					if (defaultSystemMsgInput) {
-						defaultSystemMsgInput.disabled = !value
-					}
-				})
-			)
-
-		// "默认系统消息"设置项 - 修改为上下布局
-		const defaultSystemMsgSetting = new Setting(messageSection)
-			.setName(t('Default system message'))
-		
-		// 移除 Setting 的 flex 布局，改为块级布局
-		defaultSystemMsgSetting.settingEl.style.display = 'block'
-		defaultSystemMsgSetting.infoEl.style.marginBottom = '8px'
-		
-		const textArea = defaultSystemMsgSetting.controlEl.createEl('textarea', {
-			cls: 'tars-system-message-input'
-		})
-		textArea.style.cssText = `
-			width: 100%;
-			min-height: 100px;
-			padding: 8px;
-			border: 1px solid var(--background-modifier-border);
-			border-radius: var(--radius-s);
-			background: var(--background-primary);
-			color: var(--text-normal);
-			font-family: var(--font-text);
-			font-size: var(--font-ui-small);
-			resize: vertical;
-		`
-		textArea.disabled = !this.settings.enableDefaultSystemMsg
-		textArea.value = this.settings.defaultSystemMsg
-		textArea.addEventListener('input', async () => {
-			this.settings.defaultSystemMsg = textArea.value.trim()
-			await this.saveSettings()
-		})
-		defaultSystemMsgInput = textArea
-
-		// "内部链接"设置项
-		new Setting(messageSection)
-			.setName(t('Internal links'))
-			.setDesc(
-				t(
-					'Internal links in user and system messages will be replaced with their referenced content. When disabled, only the original text of the links will be used.'
-				)
-			)
-			.addToggle((toggle) =>
-				toggle.setValue(this.settings.enableInternalLink).onChange(async (value) => {
-					this.settings.enableInternalLink = value
-					await this.saveSettings()
-				})
-			)
-
-		new Setting(messageSection)
-			.setName('内链解析最大深度')
-			.setDesc('限制嵌套内链的递归层数，避免循环引用（默认 5 层）')
-			.addSlider((slider) => {
-				slider
-					.setLimits(1, 10, 1)
-					.setValue(this.settings.maxLinkParseDepth ?? 5)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.settings.maxLinkParseDepth = value
-						await this.saveSettings()
-					})
-			})
-
-		new Setting(messageSection)
-			.setName('内链解析超时时间')
-			.setDesc('单个内链的解析超时（毫秒），超时后保留原始链接文本')
-			.addSlider((slider) => {
-				slider
-					.setLimits(1000, 30000, 1000)
-					.setValue(this.settings.linkParseTimeout ?? 5000)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.settings.linkParseTimeout = value
-						await this.saveSettings()
-					})
-			})
 
 		// 移除间隔行，使区域直接相邻
 
@@ -632,53 +372,6 @@ export class TarsSettingTab {
 				toggle.onChange(async (value) => {
 					await this.updateChatSettings({ enableSystemPrompt: value });
 				});
-			});
-
-		// 内链解析设置区域
-		new Setting(chatSection)
-			.setName("启用内链解析")
-			.setDesc("自动解析用户消息中的内部链接（[[文件名]]），将链接指向的笔记内容提供给AI")
-			.addToggle((toggle) => {
-				toggle.setValue(this.chatSettings.enableInternalLinkParsing ?? true);
-				toggle.onChange(async (value) => {
-					await this.updateChatSettings({ enableInternalLinkParsing: value });
-				});
-			});
-
-		new Setting(chatSection)
-			.setName("解析模板中的内链")
-			.setDesc("启用后，提示词模板中的内部链接也会被解析")
-			.addToggle((toggle) => {
-				toggle.setValue(this.chatSettings.parseLinksInTemplates ?? true);
-				toggle.onChange(async (value) => {
-					await this.updateChatSettings({ parseLinksInTemplates: value });
-				});
-			});
-
-		new Setting(chatSection)
-			.setName("内链解析最大深度")
-			.setDesc("嵌套内链的最大解析层数，防止循环引用（默认：5层）")
-			.addSlider((slider) => {
-				slider
-					.setLimits(1, 10, 1)
-					.setValue(this.chatSettings.maxLinkParseDepth ?? 5)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						await this.updateChatSettings({ maxLinkParseDepth: value });
-					});
-			});
-
-		new Setting(chatSection)
-			.setName("链接解析超时时间")
-			.setDesc("单个链接解析的最大等待时间（毫秒），超时后保留原始文本（默认：5000ms）")
-			.addSlider((slider) => {
-				slider
-					.setLimits(1000, 30000, 1000)
-					.setValue(this.chatSettings.linkParseTimeout ?? 5000)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						await this.updateChatSettings({ linkParseTimeout: value });
-					});
 			});
 
 		// 自动添加活跃文件设置
@@ -957,85 +650,125 @@ export class TarsSettingTab {
 			toggleAdvancedSection()
 		})
 
+		let defaultSystemMsgInput: HTMLTextAreaElement | null = null
 		new Setting(advancedSection)
-			.setName(t('Internal links for assistant messages'))
-			.setDesc(
-				t(
-					'Replace internal links in assistant messages with their referenced content. Note: This feature is generally not recommended as assistant-generated content may contain non-existent links.'
-				)
-			)
+			.setName(t('Enable default system message'))
+			.setDesc(t('Automatically add a system message when none exists in the conversation'))
 			.addToggle((toggle) =>
-				toggle.setValue(this.settings.enableInternalLinkForAssistantMsg ?? false).onChange(async (value) => {
-					this.settings.enableInternalLinkForAssistantMsg = value
+				toggle.setValue(this.settings.enableDefaultSystemMsg).onChange(async (value) => {
+					this.settings.enableDefaultSystemMsg = value
+					await this.saveSettings()
+					if (defaultSystemMsgInput) {
+						defaultSystemMsgInput.disabled = !value
+					}
+				})
+			)
+
+		// “默认系统消息”输入框（上下布局）
+		const defaultSystemMsgSetting = new Setting(advancedSection).setName(t('Default system message'))
+		defaultSystemMsgSetting.settingEl.style.display = 'block'
+		defaultSystemMsgSetting.infoEl.style.marginBottom = '8px'
+		const textArea = defaultSystemMsgSetting.controlEl.createEl('textarea', { cls: 'tars-system-message-input' })
+		textArea.style.cssText = `
+			width: 100%;
+			min-height: 100px;
+			padding: 8px;
+			border: 1px solid var(--background-modifier-border);
+			border-radius: var(--radius-s);
+			background: var(--background-primary);
+			color: var(--text-normal);
+			font-family: var(--font-text);
+			font-size: var(--font-ui-small);
+			resize: vertical;
+		`
+		textArea.disabled = !this.settings.enableDefaultSystemMsg
+		textArea.value = this.settings.defaultSystemMsg
+		textArea.addEventListener('input', async () => {
+			this.settings.defaultSystemMsg = textArea.value.trim()
+			await this.saveSettings()
+		})
+		defaultSystemMsgInput = textArea
+
+		// ===== 内链解析设置（统一配置） =====
+		new Setting(advancedSection)
+			.setName('内链解析')
+			.setDesc('启用后将自动解析所有AI消息中的内部链接（[[文件名]]），将链接指向的笔记内容提供给AI')
+			.addToggle((toggle) =>
+				toggle.setValue(this.settings.internalLinkParsing?.enabled ?? true).onChange(async (value) => {
+					if (!this.settings.internalLinkParsing) {
+						this.settings.internalLinkParsing = {
+							enabled: true,
+							maxDepth: 5,
+							timeout: 5000,
+							parseInTemplates: true,
+						}
+					}
+					this.settings.internalLinkParsing.enabled = value
 					await this.saveSettings()
 				})
 			)
 
-		let answerDelayInput: HTMLInputElement | null = null
 		new Setting(advancedSection)
-			.setName(t('Delay before answer (Seconds)'))
-			.setDesc(
-				t(
-					'If you encounter errors with missing user messages when executing assistant commands on selected text, it may be due to the need for more time to parse the messages. Please slightly increase the delay time.'
-				)
-			)
-			.addExtraButton((btn) => {
-				btn
-					.setIcon('reset')
-					.setTooltip(t('Restore default'))
-					.onClick(async () => {
-						this.settings.answerDelayInMilliseconds = DEFAULT_TARS_SETTINGS.answerDelayInMilliseconds
-						await this.saveSettings()
-						if (answerDelayInput) {
-							answerDelayInput.value = (this.settings.answerDelayInMilliseconds / 1000).toString()
+			.setName('解析提示词模板中的内链')
+			.setDesc('启用后，提示词模板文件中的内部链接也会被解析')
+			.addToggle((toggle) =>
+				toggle.setValue(this.settings.internalLinkParsing?.parseInTemplates ?? true).onChange(async (value) => {
+					if (!this.settings.internalLinkParsing) {
+						this.settings.internalLinkParsing = {
+							enabled: true,
+							maxDepth: 5,
+							timeout: 5000,
+							parseInTemplates: true,
 						}
-					})
-			})
+					}
+					this.settings.internalLinkParsing.parseInTemplates = value
+					await this.saveSettings()
+				})
+			)
+
+		new Setting(advancedSection)
+			.setName('内链解析最大深度')
+			.setDesc('限制嵌套内链的递归层数，避免循环引用（默认 5 层）')
 			.addSlider((slider) => {
-				answerDelayInput = slider.sliderEl
 				slider
-					.setLimits(1.5, 4, 0.5)
-					.setValue(this.settings.answerDelayInMilliseconds / 1000)
+					.setLimits(1, 10, 1)
+					.setValue(this.settings.internalLinkParsing?.maxDepth ?? 5)
 					.setDynamicTooltip()
 					.onChange(async (value) => {
-						this.settings.answerDelayInMilliseconds = Math.round(value * 1000)
+						if (!this.settings.internalLinkParsing) {
+							this.settings.internalLinkParsing = {
+								enabled: true,
+								maxDepth: 5,
+								timeout: 5000,
+								parseInTemplates: true,
+							}
+						}
+						this.settings.internalLinkParsing.maxDepth = value
 						await this.saveSettings()
 					})
 			})
 
 		new Setting(advancedSection)
-			.setName(t('Replace tag Command'))
-			.setDesc(t('Replace the names of the two most frequently occurring speakers with tag format.'))
-			.addToggle((toggle) =>
-				toggle.setValue(this.settings.enableReplaceTag).onChange(async (value) => {
-					this.settings.enableReplaceTag = value
-					await this.saveSettings()
-				})
-			)
-
-		new Setting(advancedSection)
-			.setName(t('Export to JSONL Command'))
-			.setDesc(t('Export conversations to JSONL'))
-			.addToggle((toggle) =>
-				toggle.setValue(this.settings.enableExportToJSONL).onChange(async (value) => {
-					this.settings.enableExportToJSONL = value
-					await this.saveSettings()
-				})
-			)
-
-		new Setting(advancedSection)
-			.setName(t('Tag suggest'))
-			.setDesc(
-				t(
-					'If you only use commands without needing tag suggestions, you can disable this feature. Changes will take effect after restarting the plugin.'
-				)
-			)
-			.addToggle((toggle) =>
-				toggle.setValue(this.settings.enableTagSuggest).onChange(async (value) => {
-					this.settings.enableTagSuggest = value
-					await this.saveSettings()
-				})
-			)
+			.setName('内链解析超时时间')
+			.setDesc('单个内链解析的超时时间（毫秒），超时后将保留原始链接文本（默认 5000ms）')
+			.addSlider((slider) => {
+				slider
+					.setLimits(1000, 30000, 1000)
+					.setValue(this.settings.internalLinkParsing?.timeout ?? 5000)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						if (!this.settings.internalLinkParsing) {
+							this.settings.internalLinkParsing = {
+								enabled: true,
+								maxDepth: 5,
+								timeout: 5000,
+								parseInTemplates: true,
+							}
+						}
+						this.settings.internalLinkParsing.timeout = value
+						await this.saveSettings()
+					})
+			})
 
 		// 调试模式设置
 		new Setting(advancedSection)
@@ -3569,14 +3302,14 @@ export class TarsSettingTab {
 					const tags = this.settings.providers.map((p) => p.tag.toLowerCase())
 					const uniqueTags = new Set(tags)
 					if (tags.length !== uniqueTags.size) {
-						new Notice('❌ ' + t('Keyword for tag must be unique'))
+						new Notice('❌ ' + t('Provider tag must be unique'))
 						return
 					}
 
 					// 验证标签格式
 					for (const provider of this.settings.providers) {
 						if (!validateTag(provider.tag)) {
-							new Notice('❌ 标签格式无效: ' + provider.tag)
+							new Notice('❌ ' + t('Invalid provider tag') + ': ' + provider.tag)
 							return
 						}
 					}
@@ -3607,8 +3340,8 @@ export class TarsSettingTab {
 
 	addTagSection = (details: HTMLElement, settings: ProviderSettings, index: number, defaultTag: string) =>
 		new Setting(details)
-			.setName('✨ ' + t('Assistant message tag'))
-			.setDesc(t('Tag used to trigger AI text generation'))
+			.setName(t('Provider tag'))
+			.setDesc(t('A short identifier used to reference this provider'))
 			.addText((text) =>
 				text
 					.setPlaceholder(defaultTag)
@@ -4899,23 +4632,12 @@ const getSummary = (tag: string, defaultTag: string) =>
 
 const validateTag = (tag: string) => {
 	if (tag.includes('#')) {
-		new Notice(t('Keyword for tag must not contain #'))
+		new Notice(t('Provider tag must not contain #'))
 		return false
 	}
 	if (tag.includes(' ')) {
-		new Notice(t('Keyword for tag must not contain space'))
+		new Notice(t('Provider tag must not contain space'))
 		return false
-	}
-	return true
-}
-
-const validateTagList = (tags: string[]) => {
-	if (tags.length === 0) {
-		new Notice(t('At least one tag is required'))
-		return false
-	}
-	for (const tag of tags) {
-		if (!validateTag(tag)) return false
 	}
 	return true
 }
