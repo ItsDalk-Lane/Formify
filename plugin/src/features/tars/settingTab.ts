@@ -347,9 +347,10 @@ export class TarsSettingTab {
 				dropdown.addOption('left-sidebar', '左侧边栏');
 				dropdown.addOption('tab', '编辑区标签页');
 				dropdown.addOption('window', '新窗口');
+				dropdown.addOption('persistent-modal', '持久化模态框');
 				dropdown.setValue(this.chatSettings.openMode);
 				dropdown.onChange(async (value) => {
-					await this.updateChatSettings({ openMode: value as 'sidebar' | 'left-sidebar' | 'tab' | 'window' });
+					await this.updateChatSettings({ openMode: value as 'sidebar' | 'left-sidebar' | 'tab' | 'window' | 'persistent-modal' });
 					// 更新自动打开设置的描述文本
 					autoOpenSetting.setDesc(getOpenModeDescription(value));
 				});

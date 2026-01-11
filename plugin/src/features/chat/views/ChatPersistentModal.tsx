@@ -1,4 +1,4 @@
-import { App, Modal, TFile } from 'obsidian';
+import { App, EventRef, MarkdownView, Modal, TFile } from 'obsidian';
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { ObsidianAppContext } from 'src/context/obsidianAppContext';
@@ -10,24 +10,29 @@ import { ChatControls } from './ChatControls';
 import { ChatInput } from './ChatInput';
 
 /**
- * Chat 模态框配置选项
+ * Chat 持久化模态框配置选项
  */
-export interface ChatModalOptions {
+export interface ChatPersistentModalOptions {
 	width: number;
 	height: number;
 	activeFile?: TFile | null;
-	initialSelection?: string; // 初始选中文本，用于快捷技能
 }
 
 /**
- * AI Chat 模态框
- * 用于在编辑器中快速唤起聊天界面
+ * AI Chat 持久化模态框
+ * 与临时模态框(ChatModal)的区别:
+ * 1. 保存聊天历史(shouldSaveHistory=true)
+ * 2. 不创建新会话,继续使用当前会话
+ * 3. 关闭时不恢复会话状态
+ * 4. 注册事件监听器,实现文件自动管理
  */
-export class ChatModal extends Modal {
+export class ChatPersistentModal extends Modal {
 	private root: Root | null = null;
-	private autoAddedFileId: string | null = null;
-	private previousShouldSaveHistory: boolean | null = null; // 保存之前的历史保存状态
-	private previousSession: any = null; // 保存之前的会话状态
+	private readonly service: ChatService;
+	private readonly options: ChatPersistentModalOptions;
+
+	// 事件监听器引用(用于清理)
+	private eventRefs: EventRef[] = [];
 
 	// 拖动相关
 	private isDragging = false;
@@ -40,17 +45,19 @@ export class ChatModal extends Modal {
 
 	constructor(
 		app: App,
-		private readonly service: ChatService,
-		private readonly options: ChatModalOptions
+		service: ChatService,
+		options: ChatPersistentModalOptions
 	) {
 		super(app);
+		this.service = service;
+		this.options = options;
 	}
 
 	onOpen() {
 		const { contentEl, modalEl, titleEl } = this;
 		contentEl.empty();
-		contentEl.addClass('chat-modal-content');
-		modalEl.addClass('chat-modal');
+		contentEl.addClass('chat-persistent-modal-content');
+		modalEl.addClass('chat-persistent-modal');
 
 		// 设置模态框标题
 		titleEl.textContent = localInstance.chat_modal_title;
@@ -62,40 +69,24 @@ export class ChatModal extends Modal {
 		modalEl.style.setProperty('--chat-modal-width', `${this.options.width}px`);
 		modalEl.style.setProperty('--chat-modal-height', `${this.options.height}px`);
 
-		// 保存之前的历史保存状态和会话状态
-		const currentState = this.service.getState();
-		this.previousShouldSaveHistory = currentState.shouldSaveHistory;
-		this.previousSession = this.service.saveSessionState();
-		this.service.setShouldSaveHistory(false);
+		// 确保历史记录保存开启(与ChatModal不同)
+		this.service.setShouldSaveHistory(true);
 
-		// 创建全新的会话，确保每次打开模态框都是干净的界面
-		this.service.createNewSession();
+		// 不创建新会话,继续使用当前会话(与ChatModal不同)
+		// 不保存会话状态(与ChatModal不同)
 
-		// 重新打开模态框时，清除当前文件的手动移除标记
-		// 这样在同一文件中重新打开模态框时，文件可以重新被自动添加
+		// 重新打开模态框时,清除当前文件的手动移除标记
+		// 这样在同一文件中重新打开模态框时,文件可以重新被自动添加
 		if (this.options.activeFile) {
 			this.service.onChatViewReopened(this.options.activeFile);
 		}
 
-		// 自动添加当前活动文件到上下文
-		// 注意：通过快捷技能打开时（有 initialSelection）不自动添加文件
-		if (this.options.activeFile && !this.options.initialSelection) {
-			const file = this.options.activeFile;
-			// 使用 addActiveFile 方法，它会正确处理自动添加标记
-			this.service.addActiveFile(file);
-			// 保存自动添加的文件ID，以便关闭时清理
-			const updatedState = this.service.getState();
-			const addedFile = updatedState.selectedFiles.find(
-				f => f.path === file.path && f.isAutoAdded
-			);
-			if (addedFile) {
-				this.autoAddedFileId = addedFile.id;
-			}
-		}
+		// 注册事件监听器(核心功能,从ChatView复制)
+		this.registerEventListeners();
 
-		// 如果有初始选中文本，设置为选中文本标签（不直接显示在输入框中）
-		if (this.options.initialSelection) {
-			this.service.setSelectedText(this.options.initialSelection);
+		// 自动添加当前活动文件到上下文
+		if (this.options.activeFile) {
+			this.service.addActiveFile(this.options.activeFile);
 		}
 
 		// 创建 React 根节点并渲染
@@ -104,33 +95,106 @@ export class ChatModal extends Modal {
 	}
 
 	onClose() {
+		// 不恢复会话状态(与ChatModal不同)
+		// 不清理文件(与ChatModal不同)
+		// 保持当前会话和文件选择状态
+
+		// 清理事件监听器
+		this.unregisterEventListeners();
+
 		// 清理拖动事件监听器
 		this.cleanupDragListeners();
-
-		// 恢复之前的历史保存状态
-		if (this.previousShouldSaveHistory !== null) {
-			this.service.setShouldSaveHistory(this.previousShouldSaveHistory);
-			this.previousShouldSaveHistory = null;
-		}
-
-		// 恢复之前的会话状态
-		if (this.previousSession) {
-			this.service.restoreSessionState(this.previousSession);
-			this.previousSession = null;
-		}
-
-		// 清理自动添加的文件
-		if (this.autoAddedFileId) {
-			this.service.removeSelectedFile(this.autoAddedFileId, false);
-			this.autoAddedFileId = null;
-		}
-
-		// 清理选中文本
-		this.service.clearSelectedText();
 
 		// 卸载 React 组件
 		this.root?.unmount();
 		this.root = null;
+	}
+
+	/**
+	 * 注册事件监听器
+	 * 从ChatView复制并修改,实现文件自动管理功能
+	 */
+	private registerEventListeners() {
+		// 1. active-leaf-change事件:监听文件切换
+		const activeLeafRef = this.app.workspace.on('active-leaf-change', () => {
+			const file = this.app.workspace.getActiveFile();
+			if (!file) {
+				// 如果文件为null,说明没有活动文件,移除所有自动添加的文件并重置标记
+				this.service.removeAllAutoAddedFiles();
+				this.service.onNoActiveFile();
+			} else {
+				// 添加新的活动文件(会自动移除之前的自动添加文件)
+				this.service.addActiveFile(file);
+				// 同时检查并清理已关闭的文件
+				this.checkAndCleanAutoAddedFiles();
+			}
+		});
+		this.eventRefs.push(activeLeafRef);
+
+		// 2. file-open事件:监听文件打开/关闭
+		const fileOpenRef = this.app.workspace.on('file-open', (file) => {
+			if (!file) {
+				// 文件被关闭,检查自动添加的文件是否仍打开
+				this.checkAndCleanAutoAddedFiles();
+				// 如果没有任何打开的Markdown文件,重置标记
+				const openFiles = this.getOpenMarkdownFiles();
+				if (openFiles.size === 0) {
+					this.service.onNoActiveFile();
+				}
+			} else {
+				this.service.addActiveFile(file);
+			}
+		});
+		this.eventRefs.push(fileOpenRef);
+
+		// 3. layout-change事件:监听布局变化(检测标签页关闭)
+		const layoutChangeRef = this.app.workspace.on('layout-change', () => {
+			// 延迟执行检查,确保布局已更新
+			setTimeout(() => {
+				this.checkAndCleanAutoAddedFiles();
+			}, 50);
+		});
+		this.eventRefs.push(layoutChangeRef);
+	}
+
+	/**
+	 * 清理事件监听器
+	 */
+	private unregisterEventListeners() {
+		this.eventRefs.forEach(ref => {
+			this.app.workspace.offref(ref);
+		});
+		this.eventRefs = [];
+	}
+
+	/**
+	 * 获取当前所有打开的Markdown文件路径
+	 * 从ChatView复制
+	 */
+	private getOpenMarkdownFiles(): Set<string> {
+		const openFiles = new Set<string>();
+		this.app.workspace.iterateAllLeaves((leaf) => {
+			if (leaf.view instanceof MarkdownView && leaf.view.file) {
+				openFiles.add(leaf.view.file.path);
+			}
+		});
+		return openFiles;
+	}
+
+	/**
+	 * 检查自动添加的文件是否仍然打开,如果未打开则清除
+	 * 从ChatView复制
+	 */
+	private checkAndCleanAutoAddedFiles() {
+		const openFiles = this.getOpenMarkdownFiles();
+		const autoAddedFiles = this.service.getAutoAddedFiles();
+
+		for (const file of autoAddedFiles) {
+			if (!openFiles.has(file.path)) {
+				// 自动添加的文件已关闭,从上下文中移除
+				this.service.removeSelectedFile(file.id, false);
+			}
+		}
 	}
 
 	private renderReact() {
@@ -139,7 +203,7 @@ export class ChatModal extends Modal {
 		this.root.render(
 			<StrictMode>
 				<ObsidianAppContext.Provider value={this.app}>
-					<ChatModalApp
+					<ChatPersistentModalApp
 						service={this.service}
 						app={this.app}
 					/>
@@ -225,12 +289,16 @@ export class ChatModal extends Modal {
 	}
 }
 
-interface ChatModalAppProps {
+interface ChatPersistentModalAppProps {
 	service: ChatService;
 	app: App;
 }
 
-const ChatModalApp = ({ service, app }: ChatModalAppProps) => {
+/**
+ * Chat 持久化模态框 React 应用组件
+ * UI结构与ChatView保持一致
+ */
+const ChatPersistentModalApp = ({ service, app }: ChatPersistentModalAppProps) => {
 	const [state, setState] = useState<ChatState>(service.getState());
 
 	useEffect(() => {
@@ -243,9 +311,8 @@ const ChatModalApp = ({ service, app }: ChatModalAppProps) => {
 	const session = state.activeSession;
 
 	return (
-		<div className="chat-modal-app tw-flex tw-h-full tw-flex-col tw-overflow-hidden tw-gap-2">
-			{/* 聊天内容区域 */}
-			<div className="chat-modal-body tw-flex tw-flex-col tw-flex-1 tw-overflow-hidden tw-gap-2">
+		<div className="chat-persistent-modal-app tw-flex tw-h-full tw-flex-col tw-overflow-hidden tw-gap-2">
+			<div className="chat-persistent-modal-body tw-flex tw-flex-col tw-flex-1 tw-overflow-hidden tw-gap-2">
 				{session ? (
 					<>
 						<ChatMessages service={service} state={state} />
@@ -254,7 +321,7 @@ const ChatModalApp = ({ service, app }: ChatModalAppProps) => {
 					</>
 				) : (
 					<div className="tw-flex tw-h-full tw-items-center tw-justify-center tw-text-muted">
-						暂无聊天会话，开始输入以创建新对话。
+						暂无聊天会话,点击"New Chat"开始新的对话。
 					</div>
 				)}
 			</div>

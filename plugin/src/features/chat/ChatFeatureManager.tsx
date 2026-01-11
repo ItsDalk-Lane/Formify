@@ -5,6 +5,7 @@ import FormPlugin from 'src/main';
 import { ChatService } from './services/ChatService';
 import { ChatView, VIEW_TYPE_CHAT_SIDEBAR, VIEW_TYPE_CHAT_TAB } from './views/ChatView';
 import { ChatModal } from './views/ChatModal';
+import { ChatPersistentModal } from './views/ChatPersistentModal';
 import { createChatTriggerExtension, updateChatTriggerSettings } from './trigger/ChatTriggerExtension';
 import {
 	createSelectionToolbarExtension,
@@ -139,6 +140,9 @@ export class ChatFeatureManager {
 			if (mode === 'window') {
 				// 在新窗口中打开 - Obsidian 不直接支持新窗口，使用弹出窗口方式
 				await this.openInWindow();
+			} else if (mode === 'persistent-modal') {
+				// 打开持久化模态框
+				this.openChatInPersistentModal();
 			} else if (mode === 'sidebar') {
 				// 添加延迟确保工作区完全加载
 				await this.waitForWorkspaceReady();
@@ -206,6 +210,28 @@ export class ChatFeatureManager {
 
 		// 创建并打开模态框
 		const modal = new ChatModal(
+			this.plugin.app,
+			this.service,
+			{
+				width: settings.chatModalWidth ?? 700,
+				height: settings.chatModalHeight ?? 500,
+				activeFile: file
+			}
+		);
+		modal.open();
+	}
+
+	/**
+	 * 在持久化模态框中打开 AI Chat
+	 * 与临时模态框的区别:保存历史、不创建新会话、与侧边栏共享会话
+	 * @param activeFile 当前活动的文件（可选）
+	 */
+	openChatInPersistentModal(activeFile?: TFile | null) {
+		const settings = this.plugin.settings.chat;
+		const file = activeFile ?? this.plugin.app.workspace.getActiveFile();
+
+		// 创建并打开持久化模态框
+		const modal = new ChatPersistentModal(
 			this.plugin.app,
 			this.service,
 			{
@@ -1024,6 +1050,11 @@ export class ChatFeatureManager {
 			id: 'form-chat-open-window',
 			name: '在新窗口打开 AI Chat',
 			callback: () => this.activateChatView('window')
+		});
+		this.plugin.addCommand({
+			id: 'form-chat-open-persistent-modal',
+			name: '在持久化模态框中打开 AI Chat',
+			callback: () => this.openChatInPersistentModal()
 		});
 		this.plugin.addCommand({
 			id: 'form-chat-new-conversation',
