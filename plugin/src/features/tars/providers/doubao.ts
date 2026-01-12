@@ -1,7 +1,7 @@
 import { requestUrl } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
-import { CALLOUT_BLOCK_END, CALLOUT_BLOCK_START, convertEmbedToImageUrl, getMimeTypeFromFilename } from './utils'
+import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl, getMimeTypeFromFilename } from './utils'
 
 // Web Search 工具配置
 export interface WebSearchTool {
@@ -223,8 +223,6 @@ const extractString = (value: unknown): string | undefined => {
 	}
 	return undefined
 }
-
-const formatThinking = (text: string) => text.replace(/\n/g, '\n> ')
 
 // 处理消息，支持文本和图片的多模态输入
 // 当启用 Web Search 时，需要转换为 Responses API 的消息格式
@@ -518,6 +516,10 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 	const decoder = new TextDecoder()
 	let buffer = ''
 	let thinkingActive = false
+	let thinkingStartMs: number | null = null
+	const shouldShowThinking =
+		(effectiveThinkingType ?? 'disabled') !== 'disabled' &&
+		(useResponsesAPI ? webSearchConfig?.enableThinking !== false : true)
 
 	try {
 		while (true) {
@@ -540,9 +542,13 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 						const chunkType = payload.type as string | undefined
 						if (chunkType && chunkType.startsWith('response.thinking')) {
 							const thinkingText = extractString(payload.delta ?? payload.thinking ?? payload.content)
-							if (thinkingText) {
-								const prefix = !thinkingActive ? ((thinkingActive = true), CALLOUT_BLOCK_START) : ''
-								yield prefix + formatThinking(thinkingText)
+							if (thinkingText && shouldShowThinking) {
+								if (!thinkingActive) {
+									thinkingActive = true
+									thinkingStartMs = Date.now()
+									yield buildReasoningBlockStart(thinkingStartMs)
+								}
+								yield thinkingText // 直接输出，不加任何前缀
 							}
 							continue
 						}
@@ -551,40 +557,50 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 							if (content) {
 								if (thinkingActive) {
 									thinkingActive = false
-									yield CALLOUT_BLOCK_END + content
-								} else {
-									yield content
+									const durationMs = Date.now() - (thinkingStartMs ?? Date.now())
+									thinkingStartMs = null
+									yield buildReasoningBlockEnd(durationMs)
 								}
+								yield content
 							}
 							continue
 						}
 						if (chunkType === 'response.completed' && thinkingActive) {
 							thinkingActive = false
-							yield CALLOUT_BLOCK_END
+							const durationMs = Date.now() - (thinkingStartMs ?? Date.now())
+							thinkingStartMs = null
+							yield buildReasoningBlockEnd(durationMs)
 						}
 					} else {
 						const delta = payload.choices?.[0]?.delta ?? {}
 
 						// 豆包使用 reasoning_content 字段返回推理过程
 						const reasoningContent = (delta as any).reasoning_content
-						if (reasoningContent) {
-							const prefix = !thinkingActive ? ((thinkingActive = true), CALLOUT_BLOCK_START) : ''
-							yield prefix + formatThinking(reasoningContent)
+						if (reasoningContent && shouldShowThinking) {
+							if (!thinkingActive) {
+								thinkingActive = true
+								thinkingStartMs = Date.now()
+								yield buildReasoningBlockStart(thinkingStartMs)
+							}
+							yield reasoningContent // 直接输出，不加任何前缀
 						}
 
 						const content = (delta as any).content
 						if (content) {
 							if (thinkingActive) {
 								thinkingActive = false
-								yield CALLOUT_BLOCK_END + content
-							} else {
-								yield content
+								const durationMs = Date.now() - (thinkingStartMs ?? Date.now())
+								thinkingStartMs = null
+								yield buildReasoningBlockEnd(durationMs)
 							}
+							yield content
 						}
 						const finishReason = payload.choices?.[0]?.finish_reason
 						if (finishReason && thinkingActive) {
 							thinkingActive = false
-							yield CALLOUT_BLOCK_END
+							const durationMs = Date.now() - (thinkingStartMs ?? Date.now())
+							thinkingStartMs = null
+							yield buildReasoningBlockEnd(durationMs)
 						}
 					}
 				} catch (e) {
@@ -595,7 +611,9 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 	} finally {
 		if (thinkingActive) {
 			thinkingActive = false
-			yield CALLOUT_BLOCK_END
+			const durationMs = Date.now() - (thinkingStartMs ?? Date.now())
+			thinkingStartMs = null
+			yield buildReasoningBlockEnd(durationMs)
 		}
 		reader.releaseLock()
 	}

@@ -1,7 +1,7 @@
 import OpenAI from 'openai'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
-import { CALLOUT_BLOCK_END, CALLOUT_BLOCK_START } from './utils'
+import { buildReasoningBlockStart, buildReasoningBlockEnd } from './utils'
 import { DebugLogger } from '../../../utils/DebugLogger'
 
 // DeepSeek选项接口，扩展基础选项以支持推理功能
@@ -37,7 +37,8 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			{ signal: controller.signal }
 		)
 
-		let startReasoning = false
+		let inReasoning = false
+		let reasoningStartMs: number | null = null
 		const deepSeekOptions = settings as DeepSeekOptions
 		const isReasoningEnabled = deepSeekOptions.enableReasoning ?? false
 		
@@ -50,12 +51,27 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 
 			// 只有在启用推理功能时才显示推理内容
 			if (reasonContent && isReasoningEnabled) {
-				const prefix = !startReasoning ? ((startReasoning = true), CALLOUT_BLOCK_START) : ''
-				yield prefix + reasonContent.replace(/\n/g, '\n> ') // Each line of the callout needs to have '>' at the beginning
+				if (!inReasoning) {
+					inReasoning = true
+					reasoningStartMs = Date.now()
+					yield buildReasoningBlockStart(reasoningStartMs)
+				}
+				yield reasonContent // 直接输出，不加任何前缀
 			} else {
-				const prefix = startReasoning ? ((startReasoning = false), CALLOUT_BLOCK_END) : ''
-				if (delta?.content) yield prefix + delta?.content
+				if (inReasoning) {
+					inReasoning = false
+					const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+					reasoningStartMs = null
+					yield buildReasoningBlockEnd(durationMs)
+				}
+				if (delta?.content) yield delta.content
 			}
+		}
+
+		// 流结束时如果还在推理状态，关闭推理块
+		if (inReasoning) {
+			const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+			yield buildReasoningBlockEnd(durationMs)
 		}
 	}
 
@@ -69,7 +85,7 @@ export const deepSeekVendor: Vendor = {
 		model: models[0],
 		parameters: {},
 		enableReasoning: false // 默认关闭推理功能
-	},
+	} as DeepSeekOptions,
 	sendRequestFunc,
 	models,
 	websiteToObtainKey: 'https://platform.deepseek.com',

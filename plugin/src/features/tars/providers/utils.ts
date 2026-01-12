@@ -47,8 +47,27 @@ export const getMimeTypeFromFilename = (filename: string) => {
 	return mimeTypes[extension] || 'application/octet-stream'
 }
 
-export const CALLOUT_BLOCK_START = ' \n\n> [!quote]+  \n> '
+export const CALLOUT_BLOCK_START = ' \n\n> [!danger]+\n> '
 export const CALLOUT_BLOCK_END = '\n\n'
+
+// 推理区块标记（用于前端解析和创建独立的推理 UI）
+export const REASONING_BLOCK_START_MARKER = '{{FF_REASONING_START}}'
+export const REASONING_BLOCK_END_MARKER = '{{FF_REASONING_END}}'
+
+export const formatReasoningDuration = (durationMs: number) => {
+	const centiSeconds = Math.max(1, Math.round(durationMs / 10))
+	return `${(centiSeconds / 100).toFixed(2)}s`
+}
+
+// 推理区块开始标记（包含时间戳）
+export const buildReasoningBlockStart = (startMs: number) => {
+	return `${REASONING_BLOCK_START_MARKER}:${startMs}:`
+}
+
+// 推理区块结束标记（包含耗时）
+export const buildReasoningBlockEnd = (durationMs: number) => {
+	return `:${REASONING_BLOCK_END_MARKER}:${durationMs}`
+}
 
 export const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
 	let binary = ''

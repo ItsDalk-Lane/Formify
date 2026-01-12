@@ -1,11 +1,11 @@
-import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download, Highlighter } from 'lucide-react';
+import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download, Highlighter, ChevronDown, ChevronRight } from 'lucide-react';
 import { Component, Platform } from 'obsidian';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
 import type { ChatMessage } from '../types/chat';
 import { ChatService } from '../services/ChatService';
 import { MessageService } from '../services/MessageService';
-import { renderMarkdownContent } from '../utils/markdown';
+import { renderMarkdownContent, parseContentBlocks, hasReasoningBlock, ContentBlock } from '../utils/markdown';
 import { Notice } from 'obsidian';
 
 interface MessageItemProps {
@@ -14,25 +14,134 @@ interface MessageItemProps {
 	isGenerating?: boolean;
 }
 
+// 格式化推理耗时
+const formatDuration = (durationMs: number): string => {
+	const centiSeconds = Math.max(1, Math.round(durationMs / 10))
+	return `${(centiSeconds / 100).toFixed(2)}s`
+}
+
+// 推理块组件
+interface ReasoningBlockProps {
+	content: string;
+	startMs: number;
+	durationMs?: number;
+	isGenerating: boolean;
+}
+
+const ReasoningBlockComponent = ({ content, startMs, durationMs, isGenerating }: ReasoningBlockProps) => {
+	const [collapsed, setCollapsed] = useState(false);
+	const [elapsedTime, setElapsedTime] = useState('0.00s');
+	const contentRef = useRef<HTMLDivElement>(null);
+	
+	// 推理完成后自动折叠
+	useEffect(() => {
+		if (durationMs !== undefined) {
+			setCollapsed(true);
+			setElapsedTime(formatDuration(durationMs));
+		}
+	}, [durationMs]);
+	
+	// 实时更新计时器
+	useEffect(() => {
+		if (durationMs !== undefined) return; // 已完成，不需要计时
+		if (!isGenerating) return;
+		
+		let rafId: number;
+		const tick = () => {
+			const elapsed = Date.now() - startMs;
+			setElapsedTime(`${(elapsed / 1000).toFixed(2)}s`);
+			rafId = requestAnimationFrame(tick);
+		};
+		rafId = requestAnimationFrame(tick);
+		
+		return () => {
+			if (rafId) cancelAnimationFrame(rafId);
+		};
+	}, [startMs, durationMs, isGenerating]);
+	
+	// 自动滚动到底部
+	useEffect(() => {
+		if (!collapsed && contentRef.current && isGenerating) {
+			contentRef.current.scrollTop = contentRef.current.scrollHeight;
+		}
+	}, [content, collapsed, isGenerating]);
+	
+	const toggleCollapse = useCallback(() => {
+		setCollapsed(prev => !prev);
+	}, []);
+	
+	return (
+		<div className="ff-reasoning-block">
+			<div 
+				className="ff-reasoning-header"
+				onClick={toggleCollapse}
+			>
+				<span className="ff-reasoning-toggle">
+					{collapsed ? <ChevronRight className="tw-size-4" /> : <ChevronDown className="tw-size-4" />}
+				</span>
+				<span className="ff-reasoning-title">深度思考</span>
+				<span className="ff-reasoning-time">{elapsedTime}</span>
+			</div>
+			{!collapsed && (
+				<div 
+					ref={contentRef}
+					className="ff-reasoning-content"
+				>
+					{content}
+				</div>
+			)}
+		</div>
+	);
+};
+
+interface MessageItemProps {
+	message: ChatMessage;
+	service?: ChatService;
+	isGenerating?: boolean;
+}
+
+// 文本块组件 - 用于渲染 Markdown 内容
+interface TextBlockProps {
+	content: string;
+	app: any;
+}
+
+const TextBlockComponent = ({ content, app }: TextBlockProps) => {
+	const containerRef = useRef<HTMLDivElement>(null);
+	const componentRef = useRef(new Component());
+	
+	useEffect(() => {
+		if (!containerRef.current) return;
+		
+		const run = async () => {
+			await renderMarkdownContent(app, content, containerRef.current as HTMLDivElement, componentRef.current);
+		};
+		void run();
+		
+		return () => {
+			componentRef.current.unload();
+		};
+	}, [app, content]);
+	
+	return <div ref={containerRef}></div>;
+};
+
 export const MessageItem = ({ message, service, isGenerating }: MessageItemProps) => {
 	const app = useObsidianApp();
 	const helper = useMemo(() => new MessageService(), []);
-	const containerRef = useRef<HTMLDivElement>(null);
-	const componentRef = useRef(new Component());
 	const [copied, setCopied] = useState(false);
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState(message.content);
 	const [previewImage, setPreviewImage] = useState<string | null>(null);
+	const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
 
 	const timestamp = useMemo(() => helper.formatTimestamp(message.timestamp), [helper, message.timestamp]);
 
+	// 解析内容块
 	useEffect(() => {
-		if (!containerRef.current || editing) return;
-		void renderMarkdownContent(app, message.content, containerRef.current, componentRef.current);
-		return () => {
-			componentRef.current.unload();
-		};
-	}, [app, message.content, editing]);
+		const blocks = parseContentBlocks(message.content);
+		setContentBlocks(blocks);
+	}, [message.content]);
 
 	const handleCopy = async () => {
 		try {
@@ -216,7 +325,30 @@ export const MessageItem = ({ message, service, isGenerating }: MessageItemProps
 							rows={4}
 						/>
 					) : (
-						<div ref={containerRef}></div>
+						<>
+							{/* 按顺序渲染所有内容块 */}
+							{contentBlocks.map((block, index) => {
+								if (block.type === 'reasoning') {
+									return (
+										<ReasoningBlockComponent
+											key={`reasoning-${index}`}
+											content={block.content}
+											startMs={block.startMs}
+											durationMs={block.durationMs}
+											isGenerating={isGenerating ?? false}
+										/>
+									);
+								} else {
+									return (
+										<TextBlockComponent
+											key={`text-${index}`}
+											content={block.content}
+											app={app}
+										/>
+									);
+								}
+							})}
+						</>
 					)}
 				</div>
 				{/* 只在AI消息非生成状态或非AI消息时显示元数据 */}

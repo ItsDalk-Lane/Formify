@@ -1,7 +1,13 @@
 import OpenAI from 'openai'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
-import { CALLOUT_BLOCK_END, CALLOUT_BLOCK_START, convertEmbedToImageUrl } from './utils'
+import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl } from './utils'
+
+// SiliconFlow选项接口，扩展基础选项以支持推理功能
+export interface SiliconFlowOptions extends BaseOptions {
+	// 推理功能配置
+	enableReasoning?: boolean // 是否启用推理功能
+}
 
 type DeepSeekDelta = OpenAI.ChatCompletionChunk.Choice.Delta & {
 	reasoning_content?: string
@@ -32,17 +38,34 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		)
 
 		let startReasoning = false
+		let reasoningStartMs: number | null = null
+		const siliconFlowOptions = settings as SiliconFlowOptions
+		const isReasoningEnabled = siliconFlowOptions.enableReasoning ?? false
 		for await (const part of stream) {
 			const delta = part.choices[0]?.delta as DeepSeekDelta
 			const reasonContent = delta?.reasoning_content
 
-			if (reasonContent) {
-				const prefix = !startReasoning ? ((startReasoning = true), CALLOUT_BLOCK_START) : ''
-				yield prefix + reasonContent.replace(/\n/g, '\n> ') // Each line of the callout needs to have '>' at the beginning
+			if (reasonContent && isReasoningEnabled) {
+				if (!startReasoning) {
+					startReasoning = true
+					reasoningStartMs = Date.now()
+					yield buildReasoningBlockStart(reasoningStartMs)
+				}
+				yield reasonContent // 直接输出，不加任何前缀
 			} else {
-				const prefix = startReasoning ? ((startReasoning = false), CALLOUT_BLOCK_END) : ''
-				if (delta?.content) yield prefix + delta?.content
+				if (startReasoning) {
+					startReasoning = false
+					const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+					reasoningStartMs = null
+					yield buildReasoningBlockEnd(durationMs)
+				}
+				if (delta?.content) yield delta.content
 			}
+		}
+
+		if (startReasoning) {
+			const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+			yield buildReasoningBlockEnd(durationMs)
 		}
 	}
 
@@ -78,8 +101,9 @@ export const siliconFlowVendor: Vendor = {
 		apiKey: '',
 		baseURL: 'https://api.siliconflow.cn/v1',
 		model: '',
-		parameters: {}
-	},
+		parameters: {},
+		enableReasoning: false // 默认关闭推理功能
+	} as SiliconFlowOptions,
 	sendRequestFunc,
 	models: [],
 	websiteToObtainKey: 'https://siliconflow.cn',

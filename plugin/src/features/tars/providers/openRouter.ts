@@ -1,7 +1,7 @@
 import { EmbedCache, Notice } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SaveAttachment, SendRequest, Vendor } from '.'
-import { arrayBufferToBase64, getCapabilityEmoji, getMimeTypeFromFilename, CALLOUT_BLOCK_START, CALLOUT_BLOCK_END } from './utils'
+import { arrayBufferToBase64, buildReasoningBlockStart, buildReasoningBlockEnd, getCapabilityEmoji, getMimeTypeFromFilename } from './utils'
 
 // OpenRouter Reasoning Effort 级别
 export type OpenRouterReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
@@ -313,6 +313,7 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 			
 			// 用于追踪推理过程状态
 			let reasoningActive = false
+			let reasoningStartMs: number | null = null
 
 			try {
 				while (true) {
@@ -337,9 +338,12 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 									// 首先检查推理内容字段（参考 Doubao/Kimi 模式）
 									const reasonContent = parsed.reasoning_content || parsed.delta?.reasoning_content
 									if (reasonContent) {
-										const prefix = !reasoningActive ? ((reasoningActive = true), CALLOUT_BLOCK_START + '🤔 **推理过程：**\n') : ''
-										// 使用标准的格式化方式：每行前面加上引用符号
-										yield prefix + reasonContent.replace(/\n/g, '\n> ')
+										if (!reasoningActive) {
+											reasoningActive = true
+											reasoningStartMs = Date.now()
+											yield buildReasoningBlockStart(reasoningStartMs)
+										}
+										yield reasonContent // 直接输出，不加任何前缀
 										continue
 									}
 
@@ -351,9 +355,12 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 										if (eventType === 'response.reasoning.delta' || eventType === 'response.reasoning_text.delta') {
 											const reasoningText = parsed.delta
 											if (reasoningText) {
-												const prefix = !reasoningActive ? ((reasoningActive = true), CALLOUT_BLOCK_START + '🤔 **推理过程：**\n') : ''
-												// 使用标准的格式化方式：每行前面加上引用符号
-												yield prefix + reasoningText.replace(/\n/g, '\n> ')
+												if (!reasoningActive) {
+													reasoningActive = true
+													reasoningStartMs = Date.now()
+													yield buildReasoningBlockStart(reasoningStartMs)
+												}
+												yield reasoningText // 直接输出，不加任何前缀
 											}
 											continue
 										}
@@ -364,10 +371,11 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 											if (content) {
 												if (reasoningActive) {
 													reasoningActive = false
-													yield CALLOUT_BLOCK_END + '\n\n**回答：**\n\n' + content
-												} else {
-													yield content
+													const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+													reasoningStartMs = null
+													yield buildReasoningBlockEnd(durationMs)
 												}
+												yield content
 											}
 											continue
 										}
@@ -375,7 +383,9 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 										// 处理完成事件
 										if (eventType === 'response.completed' && reasoningActive) {
 											reasoningActive = false
-											yield CALLOUT_BLOCK_END
+											const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+											reasoningStartMs = null
+											yield buildReasoningBlockEnd(durationMs)
 											continue
 										}
 									}
@@ -473,7 +483,9 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 			} finally {
 				if (reasoningActive) {
 					reasoningActive = false
-					yield CALLOUT_BLOCK_END
+					const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+					reasoningStartMs = null
+					yield buildReasoningBlockEnd(durationMs)
 				}
 				reader.cancel()
 			}
@@ -486,38 +498,40 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 				// 处理 Responses API 的非流式响应
 				if (useResponsesAPI && parsed.output) {
 					let hasReasoning = false
+					let reasoningDurationMs = 0
 					let finalText = ''
+					let reasoningText = ''
 
 					// 遍历 output 数组处理推理和文本内容
 					for (const output of parsed.output) {
 						if (output.type === 'reasoning') {
 							if (!hasReasoning) {
 								hasReasoning = true
-								finalText += CALLOUT_BLOCK_START + '🤔 **推理过程：**\n'
+								reasoningDurationMs = 10
+								finalText += buildReasoningBlockStart(Date.now())
 							}
 							// 处理主要的推理内容
 							if (output.content && Array.isArray(output.content)) {
 								for (const contentItem of output.content) {
 									if (contentItem.type === 'input_text' && contentItem.text) {
-										// 使用标准的格式化方式：每行前面加上引用符号
-										finalText += contentItem.text.replace(/\n/g, '\n> ')
+										reasoningText += contentItem.text
 									}
 								}
 							}
 							// 如果有 summary，显示摘要
 							if (output.summary && Array.isArray(output.summary)) {
 								for (const summaryItem of output.summary) {
-									finalText += '\n> ' + summaryItem
+									reasoningText += '\n' + summaryItem
 								}
 							}
+							finalText += reasoningText
 						} else if (output.type === 'message' && output.content) {
 							const textContent = output.content.find((item: any) => item.type === 'output_text')?.text
 							if (textContent) {
 								if (hasReasoning) {
-									finalText += CALLOUT_BLOCK_END + '\n\n**回答：**\n\n' + textContent
-								} else {
-									finalText += textContent
+									finalText += buildReasoningBlockEnd(reasoningDurationMs)
 								}
+								finalText += textContent
 							}
 						}
 					}

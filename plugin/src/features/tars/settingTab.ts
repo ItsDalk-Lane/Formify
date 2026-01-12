@@ -395,13 +395,14 @@ export class TarsSettingTab {
 		new Setting(chatSection)
 			.setName("模态框宽度")
 			.setDesc("AI Chat 模态框的宽度（像素）")
-			.addSlider((slider) => {
-				slider
-					.setLimits(400, 1200, 50)
-					.setValue(this.chatSettings.chatModalWidth ?? 700)
-					.setDynamicTooltip()
+			.addText((text) => {
+				text
+					.setValue(String(this.chatSettings.chatModalWidth ?? 700))
 					.onChange(async (value) => {
-						await this.updateChatSettings({ chatModalWidth: value });
+						const num = parseInt(value);
+						if (!isNaN(num) && num > 0) {
+							await this.updateChatSettings({ chatModalWidth: num });
+						}
 					});
 			});
 
@@ -409,13 +410,14 @@ export class TarsSettingTab {
 		new Setting(chatSection)
 			.setName("模态框高度")
 			.setDesc("AI Chat 模态框的高度（像素）")
-			.addSlider((slider) => {
-				slider
-					.setLimits(300, 800, 50)
-					.setValue(this.chatSettings.chatModalHeight ?? 500)
-					.setDynamicTooltip()
+			.addText((text) => {
+				text
+					.setValue(String(this.chatSettings.chatModalHeight ?? 500))
 					.onChange(async (value) => {
-						await this.updateChatSettings({ chatModalHeight: value });
+						const num = parseInt(value);
+						if (!isNaN(num) && num > 0) {
+							await this.updateChatSettings({ chatModalHeight: num });
+						}
 					});
 			});
 

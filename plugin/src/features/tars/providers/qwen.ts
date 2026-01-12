@@ -1,7 +1,7 @@
 import OpenAI from 'openai'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
-import { CALLOUT_BLOCK_END, CALLOUT_BLOCK_START, convertEmbedToImageUrl } from './utils'
+import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl } from './utils'
 
 // Qwen 扩展选项接口
 export interface QwenOptions extends BaseOptions {
@@ -78,6 +78,8 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 
 		// 状态管理
 			let thinkingActive = false
+			let thinkingStartMs: number | null = null
+			const isThinkingEnabled = enableThinking ?? false
 
 			try {
 				for await (const part of stream as any) {
@@ -86,9 +88,13 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 
 					// 处理推理内容
 					const reasoningContent = (delta as any)?.reasoning_content
-					if (reasoningContent) {
-						const prefix = !thinkingActive ? ((thinkingActive = true), CALLOUT_BLOCK_START) : ''
-						yield prefix + reasoningContent.replace(/\n/g, '\n> ')
+					if (reasoningContent && isThinkingEnabled) {
+						if (!thinkingActive) {
+							thinkingActive = true
+							thinkingStartMs = Date.now()
+							yield buildReasoningBlockStart(thinkingStartMs)
+						}
+						yield reasoningContent // 直接输出，不加任何前缀
 						continue
 					}
 
@@ -97,10 +103,11 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 					if (content) {
 						if (thinkingActive) {
 							thinkingActive = false
-							yield CALLOUT_BLOCK_END + content
-						} else {
-							yield content
+							const durationMs = Date.now() - (thinkingStartMs ?? Date.now())
+							thinkingStartMs = null
+							yield buildReasoningBlockEnd(durationMs)
 						}
+						yield content
 						continue
 					}
 
@@ -110,7 +117,9 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 						console.log('[Qwen] 流结束，原因:', finishReason)
 						if (thinkingActive) {
 							thinkingActive = false
-							yield CALLOUT_BLOCK_END
+							const durationMs = Date.now() - (thinkingStartMs ?? Date.now())
+							thinkingStartMs = null
+							yield buildReasoningBlockEnd(durationMs)
 						}
 					}
 				}
@@ -118,7 +127,9 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 				// 确保在异常情况下也能正确结束思考块
 				if (thinkingActive) {
 					thinkingActive = false
-					yield CALLOUT_BLOCK_END
+					const durationMs = Date.now() - (thinkingStartMs ?? Date.now())
+					thinkingStartMs = null
+					yield buildReasoningBlockEnd(durationMs)
 				}
 			}
 		} catch (error: any) {

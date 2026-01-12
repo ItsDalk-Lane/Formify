@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
-import { CALLOUT_BLOCK_END, CALLOUT_BLOCK_START, convertEmbedToImageUrl } from './utils'
+import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl } from './utils'
 
 // Kimi选项接口，扩展基础选项以支持推理功能
 export interface KimiOptions extends BaseOptions {
@@ -39,6 +39,7 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 
 		let reading = true
 		let startReasoning = false
+		let reasoningStartMs: number | null = null
 		const kimiOptions = settings as KimiOptions
 		const isReasoningEnabled = kimiOptions.enableReasoning ?? false
 		
@@ -66,17 +67,31 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 
 						// 只有在启用推理功能时才显示推理内容
 						if (reasonContent && isReasoningEnabled) {
-							const prefix = !startReasoning ? ((startReasoning = true), CALLOUT_BLOCK_START) : ''
-							yield prefix + reasonContent.replace(/\n/g, '\n> ') // Each line of the callout needs to have '>' at the beginning
+							if (!startReasoning) {
+								startReasoning = true
+								reasoningStartMs = Date.now()
+								yield buildReasoningBlockStart(reasoningStartMs)
+							}
+							yield reasonContent // 直接输出，不加任何前缀
 						} else {
-							const prefix = startReasoning ? ((startReasoning = false), CALLOUT_BLOCK_END) : ''
+							if (startReasoning) {
+								startReasoning = false
+								const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+								reasoningStartMs = null
+								yield buildReasoningBlockEnd(durationMs)
+							}
 							if (delta.content) {
-								yield prefix + delta.content
+								yield delta.content
 							}
 						}
 					}
 				}
 			}
+		}
+
+		if (startReasoning) {
+			const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+			yield buildReasoningBlockEnd(durationMs)
 		}
 	}
 
@@ -121,7 +136,7 @@ export const kimiVendor: Vendor = {
 		model: '',
 		parameters: {},
 		enableReasoning: false // 默认关闭推理功能
-	},
+	} as KimiOptions,
 	sendRequestFunc,
 	models: [],
 	websiteToObtainKey: 'https://www.moonshot.cn',

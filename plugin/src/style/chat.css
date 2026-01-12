@@ -37,6 +37,23 @@
 	color: var(--text-normal);
 }
 
+/* 隐藏推理结束的 meta 标记 */
+.chat-message__content .ff-reasoning-meta {
+	display: none;
+}
+
+/* 推理 callout 标题样式 */
+.chat-message__content .callout.ff-reasoning-callout .callout-title-inner {
+	display: inline;
+}
+
+.chat-message__content .callout.ff-reasoning-callout .callout-title-inner .ff-reasoning-time {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-weight: 400;
+	margin-left: 4px;
+}
+
 .chat-message__actions {
 	opacity: 0;
 	transition: opacity 0.2s ease;
@@ -735,8 +752,11 @@
 .chat-persistent-modal {
 	width: var(--chat-modal-width, 700px);
 	height: var(--chat-modal-height, 500px);
-	max-width: 90vw;
-	max-height: 90vh;
+}
+
+/* 无消息时，模态框高度自适应 */
+.chat-persistent-modal.auto-height {
+	height: auto;
 }
 
 .chat-persistent-modal-content {
@@ -763,8 +783,11 @@
 .chat-modal {
 	width: var(--chat-modal-width, 700px);
 	height: var(--chat-modal-height, 500px);
-	max-width: 90vw;
-	max-height: 90vh;
+}
+
+/* 无消息时，模态框高度自适应 */
+.chat-modal.auto-height {
+	height: auto;
 }
 
 .chat-modal-content {
@@ -813,4 +836,77 @@
 .chat-modal .modal-title:hover,
 .chat-persistent-modal .modal-title:hover {
 	opacity: 0.8;
+}
+
+/* ===================================== */
+/* 推理块样式 */
+/* ===================================== */
+
+.ff-reasoning-block {
+	margin: 8px 0;
+	border-radius: var(--radius-m);
+	background-color: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	overflow: hidden;
+}
+
+.ff-reasoning-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 12px;
+	background-color: var(--background-modifier-hover);
+	cursor: pointer;
+	user-select: none;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ff-reasoning-header:hover {
+	background-color: var(--background-modifier-active-hover);
+}
+
+.ff-reasoning-toggle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-muted);
+}
+
+.ff-reasoning-title {
+	font-weight: 500;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+}
+
+.ff-reasoning-time {
+	margin-left: auto;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.ff-reasoning-content {
+	padding: 12px;
+	max-height: 400px;
+	overflow-y: auto;
+	font-size: var(--font-ui-small);
+	line-height: 1.6;
+	color: var(--text-muted);
+	white-space: pre-wrap;
+	word-break: break-word;
+	background-color: var(--background-secondary-alt);
+}
+
+/* 推理内容滚动条样式 */
+.ff-reasoning-content::-webkit-scrollbar {
+	width: 6px;
+}
+
+.ff-reasoning-content::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.ff-reasoning-content::-webkit-scrollbar-thumb {
+	background-color: var(--scrollbar-thumb-bg);
+	border-radius: 3px;
 }

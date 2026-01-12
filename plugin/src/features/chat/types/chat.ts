@@ -138,6 +138,8 @@ export interface ChatState {
 	isGenerating: boolean;
 	inputValue: string;
 	selectedModelId: string | null;
+	enableReasoningToggle: boolean;
+	enableWebSearchToggle: boolean;
 	contextNotes: string[];
 	selectedImages: string[];
 	selectedFiles: SelectedFile[];

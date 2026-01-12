@@ -26,6 +26,8 @@ export class ChatService {
 		isGenerating: false,
 		inputValue: '',
 		selectedModelId: null,
+		enableReasoningToggle: false,
+		enableWebSearchToggle: false,
 		contextNotes: [],
 		selectedImages: [],
 		selectedFiles: [],
@@ -155,6 +157,24 @@ export class ChatService {
 	setShouldSaveHistory(shouldSave: boolean) {
 		this.state.shouldSaveHistory = shouldSave;
 		this.emitState();
+	}
+
+	setReasoningToggle(enabled: boolean) {
+		this.state.enableReasoningToggle = enabled;
+		this.emitState();
+	}
+
+	setWebSearchToggle(enabled: boolean) {
+		this.state.enableWebSearchToggle = enabled;
+		this.emitState();
+	}
+
+	getReasoningToggle(): boolean {
+		return this.state.enableReasoningToggle;
+	}
+
+	getWebSearchToggle(): boolean {
+		return this.state.enableWebSearchToggle;
 	}
 
 	/**
@@ -874,11 +894,22 @@ export class ChatService {
 			if (!provider) {
 				throw new Error('尚未配置任何AI模型，请先在Tars设置中添加Provider。');
 			}
+
+			const providerEnableReasoning = (provider?.options as any)?.enableReasoning ?? false;
+			const providerEnableWebSearch = provider?.options.enableWebSearch ?? false;
+			const enableReasoning = this.state.enableReasoningToggle && providerEnableReasoning;
+			const enableWebSearch = this.state.enableWebSearchToggle && providerEnableWebSearch;
+			const providerOptions = {
+				...(provider.options as any),
+				enableReasoning,
+				enableWebSearch
+			};
+
 			const vendor = availableVendors.find((item) => item.name === provider.vendor);
 			if (!vendor) {
 				throw new Error(`无法找到供应商 ${provider.vendor}`);
 			}
-			const sendRequest = vendor.sendRequestFunc(provider.options);
+			const sendRequest = vendor.sendRequestFunc(providerOptions);
 			const messages = await this.buildProviderMessages(session);
 			DebugLogger.logLlmMessages('ChatService.generateAssistantResponse', messages, { level: 'debug' });
 			const assistantMessage = this.messageService.createMessage('assistant', '');

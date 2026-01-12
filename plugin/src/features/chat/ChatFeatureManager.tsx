@@ -446,6 +446,8 @@ export class ChatFeatureManager {
 					settings={settingsWithCachedSkills}
 					onOpenChat={(selection) => this.openChatWithSelection(selection, triggerSource, fullText)}
 					onModify={() => this.openModifyModal(triggerSource, fullText)}
+					onCopy={() => this.copySelection()}
+					onCut={() => this.cutSelection()}
 					onExecuteSkill={(skill, selection) => this.executeSkill(skill, selection, triggerSource, fullText)}
 					onClose={() => this.hideSelectionToolbar()}
 				/>
@@ -478,12 +480,60 @@ export class ChatFeatureManager {
 						settings={settingsWithCachedSkills}
 						onOpenChat={() => {}}
 						onModify={() => {}}
+						onCopy={() => {}}
+						onCut={() => {}}
 						onExecuteSkill={() => {}}
 						onClose={() => {}}
 					/>
 				</StrictMode>
 			);
 		}
+	}
+
+	/**
+	 * 复制选中的文本
+	 */
+	private copySelection() {
+		if (!this.currentSelectionInfo || !this.currentSelectionInfo.text) {
+			return;
+		}
+
+		const text = this.currentSelectionInfo.text;
+		navigator.clipboard.writeText(text).then(() => {
+			new Notice('已复制到剪贴板');
+		}).catch(() => {
+			new Notice('复制失败');
+		});
+
+		this.hideSelectionToolbar();
+	}
+
+	/**
+	 * 剪切选中的文本
+	 */
+	private cutSelection() {
+		if (!this.currentEditorView || !this.currentSelectionInfo) {
+			return;
+		}
+
+		const { from, to, text } = this.currentSelectionInfo;
+
+		// 复制到剪贴板
+		navigator.clipboard.writeText(text).then(() => {
+			// 删除选中的文本
+			this.currentEditorView?.dispatch({
+				changes: {
+					from,
+					to,
+					insert: ''
+				}
+			});
+			new Notice('已剪切到剪贴板');
+		}).catch(() => {
+			new Notice('剪切失败');
+		});
+
+		this.hideSelectionToolbar();
 	}
 
 	private getFrontmatterLength(docText: string): number {

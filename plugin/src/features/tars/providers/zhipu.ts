@@ -2,7 +2,7 @@ import OpenAI from 'openai'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { DebugLogger } from '../../../utils/DebugLogger'
-import { CALLOUT_BLOCK_START, CALLOUT_BLOCK_END } from './utils'
+import { buildReasoningBlockStart, buildReasoningBlockEnd } from './utils'
 
 export type ZhipuThinkingType = 'enabled' | 'disabled' | 'auto'
 
@@ -72,8 +72,8 @@ const sendRequestFunc = (settings: ZhipuOptions): SendRequest =>
 		})
 
 		let reasoningActive = false
-		let reasoningBuffer = ''
 		let blockStarted = false
+		let reasoningStartMs: number | null = null
 
 		for await (const part of stream as any) {
 			const delta = part.choices[0]?.delta
@@ -85,21 +85,11 @@ const sendRequestFunc = (settings: ZhipuOptions): SendRequest =>
 				if (reasoningText) {
 					if (!reasoningActive) {
 						reasoningActive = true
-						reasoningBuffer = '🤔 **推理过程：** '
-						blockStarted = false
+						reasoningStartMs = Date.now()
+						yield buildReasoningBlockStart(reasoningStartMs)
+						blockStarted = true
 					}
-					reasoningBuffer += reasoningText.replace(/\n/g, '\n> ')
-
-					// 缓冲到一定长度或包含句号时才输出，减少 yield 频率
-					if (reasoningBuffer.length > 50 || reasoningText.includes('。') || reasoningText.includes('.')) {
-						if (!blockStarted) {
-							yield CALLOUT_BLOCK_START + reasoningBuffer
-							blockStarted = true
-						} else {
-							yield reasoningBuffer
-						}
-						reasoningBuffer = ''
-					}
+					yield reasoningText // 直接输出，不加任何前缀
 				}
 				continue
 			}
@@ -107,35 +97,22 @@ const sendRequestFunc = (settings: ZhipuOptions): SendRequest =>
 			// 处理普通文本内容
 			const text = delta?.content
 			if (text) {
-				// 如果有缓冲的推理内容，先输出
-				if (reasoningBuffer && reasoningActive) {
-					if (!blockStarted) {
-						yield CALLOUT_BLOCK_START + reasoningBuffer
-					} else {
-						yield reasoningBuffer
-					}
-					reasoningBuffer = ''
-					yield CALLOUT_BLOCK_END
+				if (reasoningActive) {
+					const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+					yield buildReasoningBlockEnd(durationMs)
+					reasoningActive = false
+					reasoningStartMs = null
 					blockStarted = false
 				}
-
-				if (reasoningActive) {
-					reasoningActive = false
-					yield '\n\n**回答：**\n\n' + text
-				} else {
-					yield text
-				}
+				yield text
 			}
 		}
 
-		// 处理剩余的推理内容
-		if (reasoningBuffer && reasoningActive) {
-			if (!blockStarted) {
-				yield CALLOUT_BLOCK_START + reasoningBuffer
-			} else {
-				yield reasoningBuffer
-			}
-			yield CALLOUT_BLOCK_END
+		// 处理剩余的推理内容（流结束时推理还在进行）
+		if (reasoningActive) {
+			const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+			yield buildReasoningBlockEnd(durationMs)
+			reasoningStartMs = null
 		}
 	}
 

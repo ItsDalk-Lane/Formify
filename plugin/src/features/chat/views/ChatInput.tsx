@@ -1,4 +1,4 @@
-import { CornerDownLeft, StopCircle, X, FileText, Folder, Palette, Zap, Highlighter } from 'lucide-react';
+import { Brain, CornerDownLeft, Search, StopCircle, X, FileText, Folder, Palette, Zap, Highlighter } from 'lucide-react';
 import { FormEvent, useEffect, useState, useRef, Fragment } from 'react';
 import { ChatService } from '../services/ChatService';
 import type { ChatState, SelectedFile, SelectedFolder } from '../types/chat';
@@ -299,6 +299,38 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 									value={state.selectedModelId ?? ''}
 									onChange={(modelId) => service.setModel(modelId)}
 								/>
+								<div className="tw-flex tw-items-center tw-gap-2">
+									<button
+										type="button"
+										aria-label="模型推理"
+										onClick={() => service.setReasoningToggle(!state.enableReasoningToggle)}
+										className={`tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-p-1 tw-cursor-pointer hover:tw-text-accent ${
+											state.enableReasoningToggle ? 'tw-rounded' : ''
+										} ${state.enableReasoningToggle ? '' : 'tw-text-muted'}`}
+										style={
+											state.enableReasoningToggle
+												? { background: 'var(--interactive-accent)', color: 'var(--text-on-accent)' }
+												: { background: 'transparent' }
+										}
+									>
+										<Brain className="tw-size-4" />
+									</button>
+									<button
+										type="button"
+										aria-label="联网搜索"
+										onClick={() => service.setWebSearchToggle(!state.enableWebSearchToggle)}
+										className={`tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-p-1 tw-cursor-pointer hover:tw-text-accent ${
+											state.enableWebSearchToggle ? 'tw-rounded' : ''
+										} ${state.enableWebSearchToggle ? '' : 'tw-text-muted'}`}
+										style={
+											state.enableWebSearchToggle
+												? { background: 'var(--interactive-accent)', color: 'var(--text-on-accent)' }
+												: { background: 'transparent' }
+										}
+									>
+										<Search className="tw-size-4" />
+									</button>
+								</div>
 							</div>
 							<div className="tw-flex tw-items-center tw-gap-2">
 								<span
@@ -471,6 +503,38 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 									value={state.selectedModelId ?? ''}
 									onChange={(modelId) => service.setModel(modelId)}
 								/>
+								<div className="tw-flex tw-items-center tw-gap-2">
+									<button
+										type="button"
+										aria-label="模型推理"
+										onClick={() => service.setReasoningToggle(!state.enableReasoningToggle)}
+										className={`tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-p-1 tw-cursor-pointer hover:tw-text-accent ${
+											state.enableReasoningToggle ? 'tw-rounded' : ''
+										} ${state.enableReasoningToggle ? '' : 'tw-text-muted'}`}
+										style={
+											state.enableReasoningToggle
+												? { background: 'var(--interactive-accent)', color: 'var(--text-on-accent)' }
+												: { background: 'transparent' }
+										}
+									>
+										<Brain className="tw-size-4" />
+									</button>
+									<button
+										type="button"
+										aria-label="联网搜索"
+										onClick={() => service.setWebSearchToggle(!state.enableWebSearchToggle)}
+										className={`tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-p-1 tw-cursor-pointer hover:tw-text-accent ${
+											state.enableWebSearchToggle ? 'tw-rounded' : ''
+										} ${state.enableWebSearchToggle ? '' : 'tw-text-muted'}`}
+										style={
+											state.enableWebSearchToggle
+												? { background: 'var(--interactive-accent)', color: 'var(--text-on-accent)' }
+												: { background: 'transparent' }
+										}
+									>
+										<Search className="tw-size-4" />
+									</button>
+								</div>
 							</div>
 							<div className="tw-flex tw-items-center tw-gap-2">
 								<span

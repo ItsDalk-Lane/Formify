@@ -310,12 +310,27 @@ const ChatPersistentModalApp = ({ service, app }: ChatPersistentModalAppProps) =
 
 	const session = state.activeSession;
 
+	// 判断是否有消息
+	const hasMessages = session && session.messages.length > 0;
+
+	// 动态控制模态框高度
+	useEffect(() => {
+		const modalEl = document.querySelector('.chat-persistent-modal');
+		if (modalEl) {
+			if (!hasMessages) {
+				modalEl.classList.add('auto-height');
+			} else {
+				modalEl.classList.remove('auto-height');
+			}
+		}
+	}, [hasMessages]);
+
 	return (
 		<div className="chat-persistent-modal-app tw-flex tw-h-full tw-flex-col tw-overflow-hidden tw-gap-2">
-			<div className="chat-persistent-modal-body tw-flex tw-flex-col tw-flex-1 tw-overflow-hidden tw-gap-2">
+			<div className={`chat-persistent-modal-body tw-flex tw-flex-col tw-overflow-hidden tw-gap-2 ${hasMessages ? 'tw-flex-1' : ''}`}>
 				{session ? (
 					<>
-						<ChatMessages service={service} state={state} />
+						{hasMessages && <ChatMessages service={service} state={state} />}
 						<ChatControls service={service} state={state} app={app} />
 						<ChatInput service={service} state={state} app={app} />
 					</>

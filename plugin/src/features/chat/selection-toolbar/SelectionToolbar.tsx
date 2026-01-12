@@ -11,7 +11,7 @@ import {
 } from '@floating-ui/react';
 import { EditorView } from '@codemirror/view';
 import { TFile, Notice } from 'obsidian';
-import { MessageSquare, ChevronDown } from 'lucide-react';
+import { MessageSquare, ChevronDown, Edit, Copy, Scissors } from 'lucide-react';
 import type { Skill, ChatSettings } from '../types/chat';
 import type { SelectionInfo } from './SelectionToolbarExtension';
 import { localInstance } from 'src/i18n/locals';
@@ -23,6 +23,8 @@ interface SelectionToolbarProps {
 	settings: ChatSettings;
 	onOpenChat: (selection: string) => void;
 	onModify: () => void;
+	onCopy: () => void;
+	onCut: () => void;
 	onExecuteSkill: (skill: Skill, selection: string) => void;
 	onClose: () => void;
 }
@@ -33,21 +35,20 @@ export const SelectionToolbar = ({
 	settings,
 	onOpenChat,
 	onModify,
+	onCopy,
+	onCut,
 	onExecuteSkill,
 	onClose
 }: SelectionToolbarProps) => {
 	const [openMenu, setOpenMenu] = useState<
 		| { type: 'more' }
-		| { type: 'chat' }
 		| { type: 'group'; groupId: string }
 		| null
 	>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 	const toolbarRootRef = useRef<HTMLDivElement>(null);
 	const moreButtonRef = useRef<HTMLButtonElement>(null);
-	const chatButtonRef = useRef<HTMLButtonElement>(null);
 	const dropdownMenuRef = useRef<HTMLDivElement>(null);
-	const chatMenuRef = useRef<HTMLDivElement>(null);
 	const groupButtonRefs = useRef(new Map<string, HTMLButtonElement>());
 	const groupMenuRefs = useRef(new Map<string, HTMLDivElement>());
 	const groupSubmenuAnchorRefs = useRef(new Map<string, HTMLDivElement>());
@@ -110,7 +111,6 @@ export const SelectionToolbar = ({
 	}, [settings.skills, settings.maxToolbarButtons]);
 
 	const isMoreDropdownOpen = openMenu?.type === 'more';
-	const isChatDropdownOpen = openMenu?.type === 'chat';
 	const openGroupId = openMenu?.type === 'group' ? openMenu.groupId : null;
 
 	const groupHasVisibleSkill = useMemo(() => {
@@ -320,19 +320,11 @@ export const SelectionToolbar = ({
 		return spaceAbove >= estimatedMenuHeight + 8;
 	}, []);
 
-	const [chatMenuOpenUp, setChatMenuOpenUp] = useState(false);
-
 	// 鼠标悬停在"更多"按钮上时打开下拉菜单
 	const handleMoreButtonMouseEnter = useCallback(() => {
 		clearCloseTimer();
 		setOpenMenu({ type: 'more' });
 	}, [clearCloseTimer]);
-
-	const handleChatButtonMouseEnter = useCallback(() => {
-		clearCloseTimer();
-		setChatMenuOpenUp(computeMenuShouldOpenUp(96));
-		setOpenMenu({ type: 'chat' });
-	}, [clearCloseTimer, computeMenuShouldOpenUp]);
 
 	// 鼠标悬停在下拉菜单列表上时取消关闭
 	const handleDropdownMenuMouseEnter = useCallback(() => {
@@ -379,15 +371,6 @@ export const SelectionToolbar = ({
 						clearCloseTimer();
 						return;
 					}
-				}
-				scheduleClose();
-				return;
-			}
-
-			if (openMenu.type === 'chat') {
-				if (isInEl(chatButtonRef.current) || isInEl(chatMenuRef.current)) {
-					clearCloseTimer();
-					return;
 				}
 				scheduleClose();
 				return;
@@ -443,52 +426,38 @@ export const SelectionToolbar = ({
 			style={{ ...floatingStyles, gap: '1px' }}
 			{...getFloatingProps()}
 		>
-			{/* AI Chat 下拉菜单（对话/修改） */}
-			<div className="selection-toolbar-dropdown" onMouseLeave={handleDropdownMouseLeave}>
-				<button
-					ref={chatButtonRef}
-					className="selection-toolbar-btn selection-toolbar-btn-primary"
-					onClick={(e) => {
-						e.stopPropagation();
-						clearCloseTimer();
-						setChatMenuOpenUp(computeMenuShouldOpenUp(96));
-						setOpenMenu(prev => (prev?.type === 'chat' ? null : { type: 'chat' }));
-					}}
-					onMouseEnter={handleChatButtonMouseEnter}
-					title={localInstance.selection_toolbar_ai_chat || 'AI Chat'}
-				>
-					<MessageSquare size={14} />
-				</button>
+			{/* 左侧固定按钮：修改、对话、复制、剪切 */}
+			<button
+				className="selection-toolbar-btn"
+				onClick={() => onModify()}
+				title={localInstance.modify || '修改'}
+			>
+				<Edit size={14} />
+			</button>
 
-				{isChatDropdownOpen && (
-					<div
-						className={`selection-toolbar-dropdown-menu ${chatMenuOpenUp ? 'selection-toolbar-dropdown-menu-up' : ''}`}
-						ref={chatMenuRef}
-						onMouseEnter={handleDropdownMenuMouseEnter}
-					>
-						<div
-							className="selection-toolbar-dropdown-item"
-							onClick={(e) => {
-								e.stopPropagation();
-								setOpenMenu(null);
-								onModify();
-							}}
-						>
-							{localInstance.modify || '修改'}
-						</div>
-						<div
-							className="selection-toolbar-dropdown-item"
-							onClick={(e) => {
-								e.stopPropagation();
-								setOpenMenu(null);
-								handleChatClick();
-							}}
-						>
-							{localInstance.chat || '对话'}
-						</div>
-					</div>
-				)}
-			</div>
+			<button
+				className="selection-toolbar-btn"
+				onClick={() => handleChatClick()}
+				title={localInstance.chat || '对话'}
+			>
+				<MessageSquare size={14} />
+			</button>
+
+			<button
+				className="selection-toolbar-btn"
+				onClick={() => onCopy()}
+				title="复制"
+			>
+				<Copy size={14} />
+			</button>
+
+			<button
+				className="selection-toolbar-btn"
+				onClick={() => onCut()}
+				title="剪切"
+			>
+				<Scissors size={14} />
+			</button>
 
 			{/* 技能按钮 */}
 			{toolbarItems.map((item) => {
