@@ -2,6 +2,7 @@ import {
     Bot,
     Code,
     CornerDownRight,
+    Database,
     File,
     FileJson,
     Hourglass,
@@ -38,7 +39,7 @@ export default function ActionTypeSelect(props: {
 }
 
 // 所有动作类型选项（包含循环控制动作）
-const allFormActionTypeOptions = [
+export const allFormActionTypeOptions = [
 	{
 		value: FormActionType.CREATE_FILE,
 		label: localInstance.create_file,
@@ -105,6 +106,11 @@ const allFormActionTypeOptions = [
 		icon: <CornerDownRight />,
 	},
 	{
+		value: FormActionType.COLLECT_DATA,
+		label: localInstance.collect_data,
+		icon: <Database />,
+	},
+	{
 		value: FormActionType.BUTTON,
 		label: localInstance.button,
 		icon: <Mouse />,
@@ -125,7 +131,8 @@ export const getFormActionTypeOptions = (isInsideLoop: boolean = false) => {
 		return allFormActionTypeOptions.filter(
 			(option) =>
 				option.value !== FormActionType.BREAK &&
-				option.value !== FormActionType.CONTINUE
+				option.value !== FormActionType.CONTINUE &&
+				option.value !== FormActionType.COLLECT_DATA
 		);
 	}
 };

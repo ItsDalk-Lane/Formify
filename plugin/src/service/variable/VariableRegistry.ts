@@ -5,10 +5,12 @@ import { GenerateFormAction } from "src/model/action/OpenFormAction";
 import { SuggestModalFormAction } from "src/model/action/SuggestModalFormAction";
 import { LoopFormAction } from "src/model/action/LoopFormAction";
 import { AIFormAction } from "src/model/action/AIFormAction";
+import { CollectDataFormAction } from "src/model/action/CollectDataFormAction";
 import { VariableCollectOptions, VariableInfo, VariableSource } from "src/types/variable";
 import { IFormAction } from "src/model/action/IFormAction";
 import { LoopVariableScope } from "src/utils/LoopVariableScope";
 import { INTERNAL_VARIABLE_NAMES, SYSTEM_RESERVED_LOOP_VARIABLES } from "./VariableConstants";
+import { localInstance } from "src/i18n/locals";
 
 const DEFAULT_COLLECT_OPTIONS: Required<VariableCollectOptions> = {
     includeInternal: true,
@@ -243,6 +245,27 @@ export class VariableRegistry {
                                 actionId: aiAction.id,
                                 actionType: action.type,
                                 index
+                            }
+                        });
+                    }
+                    break;
+                }
+                case FormActionType.COLLECT_DATA: {
+                    const collectAction = action as CollectDataFormAction;
+                    if (this.shouldInclude(collectAction.outputVariableName, opts)) {
+                        result.push({
+                            name: collectAction.outputVariableName!,
+                            source: VariableSource.COLLECT_DATA,
+                            sourceId: collectAction.id,
+                            description: localInstance.collect_data_variable_description,
+                            location: {
+                                actionId: collectAction.id,
+                                actionType: action.type,
+                                index
+                            },
+                            meta: {
+                                storageMode: collectAction.storageMode,
+                                variableType: collectAction.variableType
                             }
                         });
                     }

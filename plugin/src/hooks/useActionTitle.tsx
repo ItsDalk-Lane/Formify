@@ -15,12 +15,13 @@ import { AIFormAction } from "../model/action/AIFormAction";
 import { AI_MODEL_SELECT_ON_SUBMIT } from "../model/action/AIFormActionConstants";
 import { LoopFormAction } from "src/model/action/LoopFormAction";
 import { RunCommandFormAction } from "src/model/action/RunCommandFormAction";
+import { CollectDataFormAction } from "src/model/action/CollectDataFormAction";
 import { LoopType } from "src/model/enums/LoopType";
 import { CommandSourceMode } from "src/model/enums/CommandSourceMode";
 import { FormActionType } from "../model/enums/FormActionType";
 import { ButtonActionType } from "../model/enums/ButtonActionType";
 import { TargetFileType } from "../model/enums/TargetFileType";
-import { formActionTypeOptions } from "../view/edit/setting/action/common/ActionTypeSelect";
+import { allFormActionTypeOptions } from "../view/edit/setting/action/common/ActionTypeSelect";
 import { allFormInsertPositionOptions } from "../view/edit/setting/action/common/InsertPositionSelect";
 import { localInstance } from "src/i18n/locals";
 import { Strings } from "src/utils/Strings";
@@ -29,7 +30,7 @@ import { TextCleanupType } from "src/model/enums/TextCleanupType";
 export function useActionTitle(value: IFormAction) {
 	const heading = useMemo(() => {
 		const typeLabel =
-			formActionTypeOptions.find((t) => t.value === value.type)?.label ||
+			allFormActionTypeOptions.find((t) => t.value === value.type)?.label ||
 			"";
 
 		// 优先使用自定义标题
@@ -223,6 +224,15 @@ export function useActionTitle(value: IFormAction) {
 
 		if (value.type === FormActionType.CONTINUE) {
 			title = localInstance.continue_loop;
+		}
+
+		if (value.type === FormActionType.COLLECT_DATA) {
+			const collectDataAction = value as CollectDataFormAction;
+			if (collectDataAction.outputVariableName && collectDataAction.outputVariableName.trim()) {
+				title = collectDataAction.outputVariableName.trim();
+			} else {
+				title = localInstance.unnamed;
+			}
 		}
 
 		return {

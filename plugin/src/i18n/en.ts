@@ -462,6 +462,7 @@ export class En implements Local {
 	pagination_has_next_condition = "Has next page condition";
 	break_loop = "Break loop";
 	continue_loop = "Continue loop";
+	collect_data = "Collect Data";	collect_data_output_variable_name = "Output Variable Name";	collect_data_output_variable_name_placeholder = "Enter variable name, e.g.: collectedData";	collect_data_variable_type = "Variable Type";	collect_data_variable_type_string = "String";	collect_data_variable_type_array = "Array";	collect_data_storage_mode = "Storage Mode";	collect_data_storage_mode_append = "Append";	collect_data_storage_mode_replace = "Replace";	collect_data_content = "Content to Collect";	collect_data_content_placeholder = "Enter content to collect, supports form variables, loop variables, etc.";	collect_data_variable_description = "Collect data action output variable";	collect_data_outside_loop_error = "Collect data action can only be used inside loops";	collect_data_variable_name_required = "Output variable name is required";
 	extract_file_content = "Extract file content";
 	include_file_metadata = "Include file metadata";
 	limit_folder_path = "Limit folder path";

@@ -3,6 +3,7 @@ export enum VariableSource {
     LOOP_VAR = "loopVar",
     AI_OUTPUT = "aiOutput",
     SUGGEST_MODAL = "suggestModal",
+    COLLECT_DATA = "collectData",
     INTERNAL = "internal",
     SYSTEM_RESERVED = "systemReserved"
 }

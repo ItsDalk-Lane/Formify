@@ -8,6 +8,7 @@ import { FormConfig } from "src/model/FormConfig";
 import { FormActionType } from "src/model/enums/FormActionType";
 import { LoopType } from "src/model/enums/LoopType";
 import { AIFormAction } from "src/model/action/AIFormAction";
+import { CollectDataFormAction } from "src/model/action/CollectDataFormAction";
 import { Objects } from "src/utils/Objects";
 import { LoopVariableScope, LoopVariableMeta } from "src/utils/LoopVariableScope";
 import { useLoopContext } from "src/context/LoopContext";
@@ -134,7 +135,7 @@ export default function FormVariableQuotePanel(props: {
 		});
 
 	// 收集 AI 动作的输出变量
-	const outputVariables = actions
+	const aiOutputVariables = actions
 		.filter((action) => action.type === FormActionType.AI)
 		.map((action) => action as AIFormAction)
 		.filter((aiAction) => aiAction.outputVariableName && aiAction.outputVariableName.trim() !== "")
@@ -145,6 +146,22 @@ export default function FormVariableQuotePanel(props: {
 				data: { type: 'output', name: aiAction.outputVariableName! }
 			};
 		});
+
+	// 收集数据收集动作的输出变量
+	const collectDataOutputVariables = actions
+		.filter((action) => action.type === FormActionType.COLLECT_DATA)
+		.map((action) => action as CollectDataFormAction)
+		.filter((collectAction) => collectAction.outputVariableName && collectAction.outputVariableName.trim() !== "")
+		.map((collectAction) => {
+			return {
+				label: `output:${collectAction.outputVariableName}`,
+				value: `output_${collectAction.outputVariableName}`,
+				data: { type: 'output', name: collectAction.outputVariableName! }
+			};
+		});
+
+	// 合并所有输出变量
+	const outputVariables = [...aiOutputVariables, ...collectDataOutputVariables];
 
 	// 收集循环变量（仅在循环内部显示）
 	let loopVariables: any[] = [];

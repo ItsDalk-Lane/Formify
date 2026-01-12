@@ -13,6 +13,7 @@ import { AIFormAction } from "./AIFormAction";
 import { LoopFormAction } from "./LoopFormAction";
 import { BreakFormAction } from "./BreakFormAction";
 import { ContinueFormAction } from "./ContinueFormAction";
+import { CollectDataFormAction } from "./CollectDataFormAction";
 
 export class FormActionFactory {
     static create(type: FormActionType, partial?: Partial<IFormAction>): IFormAction {
@@ -81,6 +82,11 @@ export class FormActionFactory {
                 return new ContinueFormAction({
                     ...partial,
                     type: FormActionType.CONTINUE
+                });
+            case FormActionType.COLLECT_DATA:
+                return new CollectDataFormAction({
+                    ...partial,
+                    type: FormActionType.COLLECT_DATA
                 });
             default:
                 throw new Error(`Unsupported FormActionType: ${type}`);

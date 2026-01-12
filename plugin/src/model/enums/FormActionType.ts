@@ -13,4 +13,5 @@ export enum FormActionType {
     LOOP = "loop",
     BREAK = "break",
     CONTINUE = "continue",
+    COLLECT_DATA = "collectData",
 }

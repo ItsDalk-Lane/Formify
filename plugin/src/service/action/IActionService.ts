@@ -18,6 +18,7 @@ import AIActionService from "./ai/AIActionService";
 import LoopActionService from "./loop/LoopActionService";
 import { BreakActionService } from "./loop/BreakActionService";
 import { ContinueActionService } from "./loop/ContinueActionService";
+import CollectDataActionService from "./collect-data/CollectDataActionService";
 import { LoopVariableScope } from "../../utils/LoopVariableScope";
 import type { ExtendedConditionContext } from "../filter/ExtendedConditionEvaluator";
 import { ConditionVariableResolver } from "../../utils/ConditionVariableResolver";
@@ -84,6 +85,7 @@ export class ActionChain {
         new LoopActionService(),
         new BreakActionService(),
         new ContinueActionService(),
+        new CollectDataActionService(),
     ]
 
     constructor(actions: IFormAction[]) {

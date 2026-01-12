@@ -474,6 +474,7 @@ export class Zh implements Local {
 	pagination_has_next_condition = "是否存在下一页的条件";
 	break_loop = "中断循环";
 	continue_loop = "跳过本次循环";
+	collect_data = "数据收集";	collect_data_output_variable_name = "输出变量名称";	collect_data_output_variable_name_placeholder = "输入变量名称，例如: collectedData";	collect_data_variable_type = "变量类型";	collect_data_variable_type_string = "字符串";	collect_data_variable_type_array = "数组";	collect_data_storage_mode = "存储模式";	collect_data_storage_mode_append = "追加";	collect_data_storage_mode_replace = "替换";	collect_data_content = "收集内容";	collect_data_content_placeholder = "输入要收集的内容，支持引用表单变量、循环变量等";	collect_data_variable_description = "数据收集动作输出变量";	collect_data_outside_loop_error = "数据收集动作只能在循环内部使用";	collect_data_variable_name_required = "输出变量名称不能为空";
 	extract_file_content = "提取文件内容";
 	include_file_metadata = "包含文件元数据";
 	limit_folder_path = "限制文件夹范围";

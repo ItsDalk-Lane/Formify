@@ -462,6 +462,7 @@ export class ZhTw implements Local {
 	pagination_has_next_condition = "是否存在下一頁條件";
 	break_loop = "中斷循環";
 	continue_loop = "跳過本次循環";
+	collect_data = "資料收集";	collect_data_output_variable_name = "輸出變數名稱";	collect_data_output_variable_name_placeholder = "輸入變數名稱，例如: collectedData";	collect_data_variable_type = "變數類型";	collect_data_variable_type_string = "字串";	collect_data_variable_type_array = "陣列";	collect_data_storage_mode = "儲存模式";	collect_data_storage_mode_append = "追加";	collect_data_storage_mode_replace = "替換";	collect_data_content = "收集內容";	collect_data_content_placeholder = "輸入要收集的內容，支援引用表單變數、循環變數等";	collect_data_variable_description = "資料收集動作輸出變數";	collect_data_outside_loop_error = "資料收集動作只能在循環內部使用";	collect_data_variable_name_required = "輸出變數名稱不能為空";
 	extract_file_content = "提取文件內容";
 	include_file_metadata = "包含文件元數據";
 	limit_folder_path = "限制文件夾範圍";

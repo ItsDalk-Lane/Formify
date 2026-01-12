@@ -14,6 +14,7 @@ import { ButtonSetting } from "./button/ButtonSetting";
 import { TextSetting } from "./text/TextSetting";
 import { AISetting } from "./ai/AISetting";
 import { LoopSetting } from "./loop/LoopSetting";
+import { CollectDataSetting } from "./collect-data/CollectDataSetting";
 import { FormConfig } from "src/model/FormConfig";
 
 export default function CpsFormActionDetailSetting(props: {
@@ -38,6 +39,7 @@ export default function CpsFormActionDetailSetting(props: {
 			<WaitSetting value={value} onChange={onChange} />
 			<ButtonSetting value={value} onChange={onChange} />
 			<LoopSetting value={value} onChange={onChange} formConfig={formConfig} />
+			<CollectDataSetting value={value} onChange={onChange} />
 		</CpsForm>
 	);
 }
