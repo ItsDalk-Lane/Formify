@@ -3314,6 +3314,11 @@ export class TarsSettingTab {
 			this.addGrokSections(container, settings.options as GrokOptions, index, settings)
 		}
 
+		// Ollama 推理功能开关
+		if (vendor.name === ollamaVendor.name) {
+			this.addOllamaSections(container, settings.options, index, settings)
+		}
+
 		this.addBaseURLSection(container, settings.options, vendor.defaultOptions.baseURL)
 
 		if ('endpoint' in settings.options)
@@ -4649,6 +4654,20 @@ export class TarsSettingTab {
 	}
 
 	addDeepSeekSections = (details: HTMLElement, options: DeepSeekOptions, index: number, settings: ProviderSettings) => {
+		new Setting(details)
+			.setName('启用推理功能')
+			.setDesc('启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示')
+			.addToggle((toggle) =>
+				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
+					options.enableReasoning = value
+					await this.saveSettings()
+					// 更新功能显示
+					this.updateProviderCapabilities(index, settings)
+				})
+			)
+	}
+
+	addOllamaSections = (details: HTMLElement, options: any, index: number, settings: ProviderSettings) => {
 		new Setting(details)
 			.setName('启用推理功能')
 			.setDesc('启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示')
