@@ -1,0 +1,416 @@
+/* FileMenuPopup 样式 - 参考 Obsidian 原生文件浏览器风格 */
+
+.file-menu-popup {
+	font-family: var(--font-interface);
+	font-size: 13px;
+}
+
+/* ==========  公共头部 ========== */
+.ff-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ff-header-left {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.ff-back-btn {
+	border: none;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	padding: 4px 8px;
+	border-radius: 4px;
+	font-size: 0.875rem;
+	transition: all 0.15s ease;
+}
+
+.ff-back-btn:hover {
+	color: var(--text-normal);
+	background-color: var(--background-modifier-hover);
+}
+
+.ff-title {
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: var(--text-normal);
+}
+
+.ff-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.ff-btn-secondary {
+	padding: 4px 12px;
+	font-size: 0.75rem;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.ff-btn-secondary:hover {
+	color: var(--text-normal);
+	background-color: var(--background-modifier-hover);
+}
+
+.ff-btn-primary {
+	padding: 4px 12px;
+	font-size: 0.75rem;
+	border: none;
+	border-radius: 4px;
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.ff-btn-primary:hover {
+	opacity: 0.9;
+}
+
+/* ========== 搜索框 ========== */
+.ff-search-container {
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ff-search-input {
+	width: 100%;
+	padding: 8px 12px;
+	font-size: 0.875rem;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	background-color: var(--background-primary);
+	color: var(--text-normal);
+	transition: all 0.15s ease;
+}
+
+.ff-search-input:focus {
+	outline: none;
+	border-color: var(--background-modifier-border-focus);
+	box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+}
+
+.ff-search-input::placeholder {
+	color: var(--text-muted);
+}
+
+/* ========== 主菜单视图 ========== */
+.ff-menu-item {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px;
+	cursor: pointer;
+	border-bottom: 1px solid var(--background-modifier-border);
+	transition: background-color 0.15s ease;
+}
+
+.ff-menu-item:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.ff-menu-item:last-child {
+	border-bottom: none;
+}
+
+.ff-menu-icon {
+	flex-shrink: 0;
+	color: var(--text-muted);
+}
+
+.ff-menu-content {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.ff-menu-title {
+	font-weight: 500;
+	color: var(--text-normal);
+}
+
+.ff-menu-desc {
+	font-size: 0.75rem;
+	color: var(--text-muted);
+}
+
+/* ========== 搜索结果列表 ========== */
+.ff-result-list {
+	padding: 8px;
+}
+
+.ff-result-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background-color 0.15s ease;
+}
+
+.ff-result-item:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.ff-result-icon {
+	flex-shrink: 0;
+	color: var(--text-muted);
+}
+
+.ff-result-info {
+	flex: 1;
+	min-width: 0;
+}
+
+.ff-result-name {
+	font-weight: 500;
+	color: var(--text-normal);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ff-result-path {
+	font-size: 0.75rem;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ========== 文件/文件夹列表 ========== */
+.ff-list-container {
+	flex: 1;
+	overflow-y: auto;
+	max-height: 400px;
+}
+
+.ff-list {
+	padding: 8px;
+}
+
+.ff-file-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 8px;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background-color 0.15s ease, transform 0.05s ease;
+}
+
+.ff-file-item:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.ff-file-item:active {
+	transform: scale(0.98);
+}
+
+.ff-file-item.ff-selected {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.ff-icon {
+	flex-shrink: 0;
+	width: 16px;
+	height: 16px;
+}
+
+.ff-icon-xs {
+	width: 12px;
+	height: 12px;
+}
+
+.ff-file-info {
+	flex: 1;
+	min-width: 0;
+}
+
+.ff-file-name {
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ff-file-path {
+	font-size: 0.75rem;
+	opacity: 0.7;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ========== 文件夹选择器 ========== */
+.ff-folder-item {
+	display: flex;
+	align-items: center;
+	padding: 4px 8px;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background-color 0.15s ease;
+}
+
+.ff-folder-item:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.ff-folder-item.ff-selected {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.ff-folder-toggle {
+	flex-shrink: 0;
+	width: 16px;
+	height: 16px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.ff-toggle-btn {
+	padding: 2px;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 2px;
+	color: currentColor;
+	transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.ff-toggle-btn:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.ff-toggle-spacer {
+	width: 16px;
+	height: 16px;
+}
+
+.ff-folder-content {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	padding: 4px 8px;
+	border-radius: 4px;
+	transition: background-color 0.15s ease;
+}
+
+.ff-folder-content:hover {
+	background-color: rgba(var(--interactive-accent-rgb), 0.1);
+}
+
+.ff-folder-info {
+	flex: 1;
+	min-width: 0;
+}
+
+.ff-folder-name {
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ff-folder-path {
+	font-size: 0.75rem;
+	opacity: 0.7;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ff-check-container {
+	flex-shrink: 0;
+	width: 24px;
+	height: 24px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.ff-check-mark {
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background-color: currentColor;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.75rem;
+	animation: checkmark-appear 0.2s ease;
+}
+
+@keyframes checkmark-appear {
+	from {
+		opacity: 0;
+		transform: scale(0.5);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+/* ========== 空状态 ========== */
+.ff-empty-message {
+	text-align: center;
+	padding: 2rem;
+	color: var(--text-muted);
+	font-size: 0.875rem;
+}
+
+/* ========== 底部提示 ========== */
+.ff-footer {
+	padding: 12px;
+	border-top: 1px solid var(--background-modifier-border);
+	text-align: center;
+	font-size: 0.75rem;
+	color: var(--text-muted);
+}
+
+/* ========== 滚动条样式 ========== */
+.ff-list-container::-webkit-scrollbar {
+	width: 8px;
+}
+
+.ff-list-container::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.ff-list-container::-webkit-scrollbar-thumb {
+	background: var(--scrollbar-thumb-bg);
+	border-radius: 4px;
+}
+
+.ff-list-container::-webkit-scrollbar-thumb:hover {
+	background: var(--scrollbar-active-thumb-bg);
+}
+
+/* ========== 通用过渡效果 ========== */
+.file-menu-popup button,
+.file-menu-popup input {
+	transition: all 0.15s ease;
+}

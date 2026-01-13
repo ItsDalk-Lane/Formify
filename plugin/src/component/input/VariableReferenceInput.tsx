@@ -235,10 +235,7 @@ export function VariableReferenceInput(props: VariableReferenceInputProps) {
               onClick={() => selectFile(file)}
             >
               <File size={14} />
-              <div className="form--FilePathItemContent">
-                <span className="form--FilePathItemName">{file.name}</span>
-                <span className="form--FilePathItemPath">{file.path}</span>
-              </div>
+              <span className="form--FilePathItemName">{file.path}</span>
             </div>
           ))}
         </div>,

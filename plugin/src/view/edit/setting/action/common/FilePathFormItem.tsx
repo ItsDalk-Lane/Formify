@@ -234,10 +234,7 @@ function MarkdownFileList(props: {
 									<div className="form--FilePathItemContent">
 										{icon}
 										<div className="form--FilePathText">
-											<div className="form--FilePathName">{item.name}</div>
-											{item.type === 'file' && item.extension && (
-												<div className="form--FilePathExtension">.{item.extension}</div>
-											)}
+
 											<div className="form--FilePathPath">{item.value}</div>
 										</div>
 									</div>

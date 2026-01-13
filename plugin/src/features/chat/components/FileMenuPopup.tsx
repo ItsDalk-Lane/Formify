@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { File, Folder, ChevronRight, ChevronDown } from 'lucide-react';
 import { App, TFile, TFolder, CachedMetadata } from 'obsidian';
+import './FileMenuPopup.css';
 
 interface FileMenuPopupProps {
 	isOpen: boolean;
@@ -300,52 +301,50 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 	};
 
 	return createPortal(
-		<div ref={popupRef} className="file-menu-popup" style={popupStyle}>
-			<div className="tw-bg-background tw-border tw-border-border tw-rounded-lg tw-shadow-lg tw-flex tw-flex-col">
+		<div ref={popupRef} className="file-menu-popup ff-native-style" style={popupStyle}>
+			<div className="ff-popup-content">
 				{currentView === 'menu' && (
 					<>
 						{/* 菜单选项 */}
-						<div className="tw-flex tw-flex-col tw-gap-1 tw-p-2">
+						<div className="ff-menu-options">
 							<div
 								onClick={() => setCurrentView('fileSelector')}
-								className="tw-flex tw-items-center tw-gap-2 tw-px-3 tw-py-2 tw-text-sm tw-rounded hover:tw-bg-accent hover:tw-text-accent-foreground tw-cursor-pointer tw-text-left"
+								className="ff-menu-item"
 							>
-								<File className="tw-size-4" />
+								<File className="ff-icon" />
 								<span>选择文件</span>
 							</div>
 							<div
 								onClick={() => setCurrentView('folderSelector')}
-								className="tw-flex tw-items-center tw-gap-2 tw-px-3 tw-py-2 tw-text-sm tw-rounded hover:tw-bg-accent hover:tw-text-accent-foreground tw-cursor-pointer tw-text-left"
+								className="ff-menu-item"
 							>
-								<Folder className="tw-size-4" />
+								<Folder className="ff-icon" />
 								<span>选择文件夹</span>
 							</div>
 						</div>
 
 						{/* 分隔线 */}
-						<div className="tw-border-t tw-border-border tw-my-2"></div>
+						<div className="ff-divider"></div>
 
 						{/* 搜索框 */}
-						<div className="tw-px-3 tw-pb-2">
+						<div className="ff-search-container">
 							<input
 								type="text"
 								value={searchQuery}
 								onChange={(e) => setSearchQuery(e.target.value)}
-								placeholder="搜索仓库中的文件和文件夹..."
-								className="tw-w-full tw-pl-4 tw-pr-4 tw-py-2 tw-text-sm tw-border tw-border-border tw-rounded-md focus:tw-outline-none focus:tw-ring-2 focus:tw-ring-primary"
+								placeholder="搜索文件和文件夹..."
+								className="ff-search-input"
 								autoFocus
 							/>
 						</div>
 
 						{/* 搜索结果 */}
 						{searchQuery && (
-							<div className="tw-max-h-48 tw-overflow-y-auto tw-px-2 tw-pb-2">
+							<div className="ff-search-results">
 								{isSearching ? (
-									<div className="tw-text-center tw-py-4 tw-text-muted-foreground tw-text-sm">
-										搜索中...
-									</div>
+									<div className="ff-empty-message">搜索中...</div>
 								) : searchResults && searchResults.length > 0 ? (
-									<div className="tw-flex tw-flex-col tw-gap-1">
+									<div className="ff-results-list">
 										{searchResults.map((result) => (
 											<div
 												key={result.type === 'folder' ? result.folder?.path : result.file?.path}
@@ -357,29 +356,32 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 													}
 													onClose();
 												}}
-												className="tw-p-2 tw-text-sm tw-rounded hover:tw-bg-accent hover:tw-text-accent-foreground tw-cursor-pointer"
+												className="ff-result-item"
 											>
-												<div className="tw-font-medium tw-text-foreground">
-													{result.type === 'folder'
-														? `📁 ${result.folder?.name}`
-														: `📄 ${result.file?.basename}`
-													}
-												</div>
-												<div className="tw-text-xs tw-text-muted-foreground tw-mt-1">
-													{result.matches.slice(0, 2).map((match, index) => (
-														<div key={index} className="tw-truncate">{match}</div>
-													))}
-													{result.matches.length > 2 && (
-														<div className="tw-text-muted-foreground">还有 {result.matches.length - 2} 个匹配...</div>
-													)}
-												</div>
+												{result.type === 'folder' ? (
+													<>
+														<Folder className="ff-icon" />
+														<div className="ff-result-info">
+															<div className="ff-result-name">{result.folder?.name}</div>
+															<div className="ff-result-path">{result.folder?.path}</div>
+														</div>
+													</>
+												) : (
+													<>
+														<File className="ff-icon" />
+														<div className="ff-result-info">
+															<div className="ff-result-name">{result.file?.basename}</div>
+															<div className="ff-result-path">
+																{result.matches.length > 0 ? result.matches.join(' · ') : result.file?.path}
+															</div>
+														</div>
+													</>
+												)}
 											</div>
 										))}
 									</div>
 								) : (
-									<div className="tw-text-center tw-py-4 tw-text-muted-foreground tw-text-sm">
-										未找到匹配的文件或文件夹
-									</div>
+									<div className="ff-empty-message">未找到匹配的文件或文件夹</div>
 								)}
 							</div>
 						)}
@@ -389,87 +391,60 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 				{currentView === 'fileSelector' && (
 					<>
 						{/* 返回按钮和标题 */}
-						<div className="tw-flex tw-items-center tw-justify-between tw-p-3 tw-border-b tw-border-border">
-							<div className="tw-flex tw-items-center tw-gap-2">
-								<button
-									onClick={goBackToMenu}
-									className="tw-text-muted-foreground hover:tw-text-foreground tw-cursor-pointer"
-								>
-									← 返回
-								</button>
-								<span className="tw-text-sm tw-font-medium">选择文件</span>
+						<div className="ff-header">
+							<div className="ff-header-left">
+								<button onClick={goBackToMenu} className="ff-back-btn">← 返回</button>
+								<span className="ff-title">选择文件</span>
 							</div>
 							{selectedFiles.size > 0 && (
-								<div className="tw-flex tw-items-center tw-gap-2">
-									<button
-										onClick={() => setSelectedFiles(new Set())}
-										className="tw-px-3 tw-py-1 tw-text-xs tw-border tw-border-border tw-rounded hover:tw-bg-accent tw-text-muted-foreground hover:tw-text-foreground"
-									>
-										取消
-									</button>
-									<button
-										onClick={handleFileSelect}
-										className="tw-px-3 tw-py-1 tw-text-xs tw-bg-primary tw-text-primary-foreground tw-rounded hover:tw-bg-primary/90"
-									>
-										确认 ({selectedFiles.size})
-									</button>
+								<div className="ff-header-actions">
+									<button onClick={() => setSelectedFiles(new Set())} className="ff-btn-secondary">取消</button>
+									<button onClick={handleFileSelect} className="ff-btn-primary">确认 ({selectedFiles.size})</button>
 								</div>
 							)}
 						</div>
 
 						{/* 搜索框 */}
-						<div className="tw-px-3 tw-pb-2 tw-pt-2 tw-border-b tw-border-border">
+						<div className="ff-search-container">
 							<input
 								type="text"
 								value={fileSearchQuery}
 								onChange={(e) => setFileSearchQuery(e.target.value)}
 								placeholder="搜索文件名..."
-								className="tw-w-full tw-pl-4 tw-pr-4 tw-py-2 tw-text-sm tw-border tw-border-border tw-rounded-md focus:tw-outline-none focus:tw-ring-2 focus:tw-ring-primary"
+								className="ff-search-input"
 								autoFocus
 							/>
 						</div>
 
 						{/* 文件列表 */}
-						<div className="tw-flex-1 tw-overflow-y-auto" style={{ maxHeight: '400px' }}>
+						<div className="ff-list-container">
 							{getFilteredFiles().length === 0 ? (
-								<div className="tw-text-center tw-py-8 tw-text-muted-foreground tw-text-sm">
+								<div className="ff-empty-message">
 									{fileSearchQuery ? '未找到匹配的文件' : '没有可选择的文件'}
 								</div>
 							) : (
-								<div className="tw-p-2">
+								<div className="ff-list">
 									{getFilteredFiles().map(file => (
 										<div
 											key={file.path}
 											onClick={() => handleFileToggle(file)}
-											className={`tw-flex tw-items-center tw-gap-3 tw-p-3 tw-rounded-lg tw-cursor-pointer transition-colors ${
-												selectedFiles.has(file.path)
-													? 'tw-bg-primary tw-text-primary-foreground'
-													: 'hover:tw-bg-accent hover:tw-text-accent-foreground'
-											}`}
+											className={`ff-file-item ${selectedFiles.has(file.path) ? 'ff-selected' : ''}`}
 										>
-											<File className="tw-size-4 tw-flex-shrink-0" />
-											<div className="tw-flex-1 tw-min-w-0">
-												<div className="tw-font-medium tw-truncate">{file.name}</div>
-												<div className="tw-text-xs tw-opacity-70 tw-truncate">{file.path}</div>
+											<File className="ff-icon" />
+											<div className="ff-file-info">
+												<div className="ff-file-name">{file.name}</div>
+												<div className="ff-file-path">{file.path}</div>
 											</div>
-											{selectedFiles.has(file.path) && (
-												<div className="tw-w-4 tw-h-4 tw-rounded-full tw-bg-current tw-flex tw-items-center tw-justify-center">
-													<span className="tw-text-xs">✓</span>
-												</div>
-											)}
+											{selectedFiles.has(file.path) && <div className="ff-check-mark">✓</div>}
 										</div>
 									))}
 								</div>
 							)}
 						</div>
 
-						{/* 底部操作按钮 */}
+						{/* 底部提示 */}
 						{selectedFiles.size === 0 && (
-							<div className="tw-p-3 tw-border-t tw-border-border">
-								<div className="tw-text-center tw-text-xs tw-text-muted-foreground">
-									请选择要上传的文件
-								</div>
-							</div>
+							<div className="ff-footer">请选择要上传的文件</div>
 						)}
 					</>
 				)}
@@ -477,101 +452,78 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 				{currentView === 'folderSelector' && (
 					<>
 						{/* 返回按钮和标题 */}
-						<div className="tw-flex tw-items-center tw-justify-between tw-p-3 tw-border-b tw-border-border">
-							<div className="tw-flex tw-items-center tw-gap-2">
-								<button
-									onClick={goBackToMenu}
-									className="tw-text-muted-foreground hover:tw-text-foreground tw-cursor-pointer"
-								>
-									← 返回
-								</button>
-								<span className="tw-text-sm tw-font-medium">选择文件夹</span>
+						<div className="ff-header">
+							<div className="ff-header-left">
+								<button onClick={goBackToMenu} className="ff-back-btn">← 返回</button>
+								<span className="ff-title">选择文件夹</span>
 							</div>
 							{selectedFolders.size > 0 && (
-								<div className="tw-flex tw-items-center tw-gap-2">
-									<button
-										onClick={() => setSelectedFolders(new Set())}
-										className="tw-px-3 tw-py-1 tw-text-xs tw-border tw-border-border tw-rounded hover:tw-bg-accent tw-text-muted-foreground hover:tw-text-foreground"
-									>
-										取消
-									</button>
-									<button
-										onClick={handleFolderSelect}
-										className="tw-px-3 tw-py-1 tw-text-xs tw-bg-primary tw-text-primary-foreground tw-rounded hover:tw-bg-primary/90"
-									>
-										确认 ({selectedFolders.size})
-									</button>
+								<div className="ff-header-actions">
+									<button onClick={() => setSelectedFolders(new Set())} className="ff-btn-secondary">取消</button>
+									<button onClick={handleFolderSelect} className="ff-btn-primary">确认 ({selectedFolders.size})</button>
 								</div>
 							)}
 						</div>
 
 						{/* 搜索框 */}
-						<div className="tw-px-3 tw-pb-2 tw-pt-2 tw-border-b tw-border-border">
+						<div className="ff-search-container">
 							<input
 								type="text"
 								value={folderSearchQuery}
 								onChange={(e) => setFolderSearchQuery(e.target.value)}
 								placeholder="搜索文件夹..."
-								className="tw-w-full tw-pl-4 tw-pr-4 tw-py-2 tw-text-sm tw-border tw-border-border tw-rounded-md focus:tw-outline-none focus:tw-ring-2 focus:tw-ring-primary"
+								className="ff-search-input"
 								autoFocus
 							/>
 						</div>
 
 						{/* 文件夹列表 */}
-						<div className="tw-flex-1 tw-overflow-y-auto" style={{ maxHeight: '400px' }}>
+						<div className="ff-list-container">
 							{getFolderTree().length === 0 ? (
-								<div className="tw-text-center tw-py-8 tw-text-muted-foreground tw-text-sm">
+								<div className="ff-empty-message">
 									{folderSearchQuery ? '未找到匹配的文件夹' : '没有可选择的文件夹'}
 								</div>
 							) : (
-								<div className="tw-p-2">
+								<div className="ff-list">
 									{getFolderTree().map(({ folder, level, isExpanded }) => (
 										<div key={folder.path}>
-											<div className={`tw-flex tw-items-center tw-py-2 tw-px-3 tw-rounded-lg transition-colors ${
-												selectedFolders.has(folder.path)
-													? 'tw-bg-primary tw-text-primary-foreground'
-													: 'hover:tw-bg-accent hover:tw-text-accent-foreground'
-											}`} style={{ paddingLeft: `${8 + level * 16}px` }}>
+											<div 
+												className={`ff-folder-item ${selectedFolders.has(folder.path) ? 'ff-selected' : ''}`}
+												style={{ paddingLeft: `${8 + level * 16}px` }}
+											>
 												{/* 展开/折叠按钮区域 */}
-												<div className="tw-flex-shrink-0 tw-w-4 tw-h-4 tw-flex tw-items-center tw-justify-center">
+												<div className="ff-folder-toggle">
 													{folder.children.some(child => child instanceof TFolder) ? (
 														<button
 															onClick={(e) => {
 																e.stopPropagation();
 																toggleFolder(folder.path);
 															}}
-															className="tw-p-1 tw-rounded hover:tw-bg-accent/50 tw-cursor-pointer tw-text-current"
+															className="ff-toggle-btn"
 														>
 															{isExpanded ? (
-																<ChevronDown className="tw-size-3" />
+																<ChevronDown className="ff-icon-xs" />
 															) : (
-																<ChevronRight className="tw-size-3" />
+																<ChevronRight className="ff-icon-xs" />
 															)}
 														</button>
 													) : (
-														<div className="tw-w-4 tw-h-4" />
+														<div className="ff-toggle-spacer" />
 													)}
 												</div>
 
-												{/* 文件夹图标 */}
-												<Folder className="tw-size-4 tw-flex-shrink-0 tw-mx-2" />
-
-												{/* 选择区域 */}
-												<div
-													onClick={() => handleFolderToggle(folder)}
-													className="tw-flex-1 tw-min-w-0 tw-cursor-pointer tw-py-1 tw-px-2 tw-rounded hover:tw-bg-accent/30"
-												>
-													<div className="tw-font-medium tw-truncate">{folder.name === '' ? '根目录' : folder.name}</div>
-													<div className="tw-text-xs tw-opacity-70 tw-truncate">{folder.path}</div>
+												{/* 文件夹内容区域 */}
+												<div className="ff-folder-content" onClick={() => handleFolderToggle(folder)}>
+													<Folder className="ff-icon" />
+													<div className="ff-folder-info">
+														<div className="ff-folder-name">{folder.name === '' ? '根目录' : folder.name}</div>
+														<div className="ff-folder-path">{folder.path}</div>
+													</div>
 												</div>
 
 												{/* 选中状态指示器 */}
-												<div className="tw-flex-shrink-0 tw-w-6 tw-h-6 tw-flex tw-items-center tw-justify-center">
-													{selectedFolders.has(folder.path) && (
-														<div className="tw-w-4 tw-h-4 tw-rounded-full tw-bg-current tw-flex tw-items-center tw-justify-center">
-															<span className="tw-text-xs">✓</span>
-														</div>
-													)}
+												<div className="ff-check-container">
+													{selectedFolders.has(folder.path) && <div className="ff-check-mark">✓</div>}
 												</div>
 											</div>
 										</div>
@@ -580,13 +532,9 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 							)}
 						</div>
 
-						{/* 底部操作按钮 */}
+						{/* 底部提示 */}
 						{selectedFolders.size === 0 && (
-							<div className="tw-p-3 tw-border-t tw-border-border">
-								<div className="tw-text-center tw-text-xs tw-text-muted-foreground">
-									请选择要上传的文件夹
-								</div>
-							</div>
+							<div className="ff-footer">请选择要上传的文件夹</div>
 						)}
 					</>
 				)}
