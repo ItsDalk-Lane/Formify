@@ -15,6 +15,7 @@ import { qianFanVendor } from './providers/qianFan'
 import { qwenVendor } from './providers/qwen'
 import { siliconFlowVendor } from './providers/siliconflow'
 import { zhipuVendor } from './providers/zhipu'
+import type { ToolDefinition } from 'src/features/chat/types/tools'
 
 export const APP_FOLDER = 'Tars'
 
@@ -62,6 +63,13 @@ export interface TarsSettings {
 	tabCompletionProviderTag: string // 使用的 AI provider 标签
 	/** Tab 补全用户提示词模板（支持 {{rules}} 与 {{context}}） */
 	tabCompletionPromptTemplate: string
+
+	/** 全局工具配置（Tool Calling） */
+	tools?: {
+		globalTools: ToolDefinition[]
+		executionMode: 'manual' | 'auto'
+		enabled: boolean
+	}
 }
 
 export const DEFAULT_TARS_SETTINGS: TarsSettings = {
@@ -91,7 +99,12 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 	tabCompletionContextLengthAfter: 500, // 默认获取光标后 500 字符
 	tabCompletionTimeout: 5000, // 默认 5 秒超时
 	tabCompletionProviderTag: '', // 默认为空，使用第一个可用的 provider
-	tabCompletionPromptTemplate: '{{rules}}\n\n{{context}}'
+	tabCompletionPromptTemplate: '{{rules}}\n\n{{context}}',
+	tools: {
+		globalTools: [],
+		executionMode: 'manual',
+		enabled: false
+	}
 }
 
 export const availableVendors: Vendor[] = [

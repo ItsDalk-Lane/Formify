@@ -7,6 +7,7 @@ import { ChatService } from '../services/ChatService';
 import { MessageService } from '../services/MessageService';
 import { renderMarkdownContent, parseContentBlocks, hasReasoningBlock, ContentBlock } from '../utils/markdown';
 import { Notice } from 'obsidian';
+import { ToolCallBadge } from './ToolCallBadge';
 
 interface MessageItemProps {
 	message: ChatMessage;
@@ -313,6 +314,15 @@ export const MessageItem = ({ message, service, isGenerating }: MessageItemProps
 									: message.metadata.selectedText}
 							</span>
 						</div>
+					</div>
+				)}
+
+				{/* 工具调用徽章 */}
+				{message.toolCalls && message.toolCalls.length > 0 && (
+					<div className="tw-mb-2 tw-flex tw-flex-wrap tw-gap-1">
+						{message.toolCalls.map((call) => (
+							<ToolCallBadge key={call.id} call={call} />
+						))}
 					</div>
 				)}
 

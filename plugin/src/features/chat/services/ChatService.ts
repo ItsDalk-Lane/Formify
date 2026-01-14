@@ -13,6 +13,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { InternalLinkParserService } from '../../../service/InternalLinkParserService';
 import { DebugLogger } from 'src/utils/DebugLogger';
 import { SystemPromptAssembler } from 'src/service/SystemPromptAssembler';
+import { TOOL_CALLS_END_MARKER, TOOL_CALLS_START_MARKER } from 'src/features/tars/providers/utils';
+import type { ToolCall, ToolDefinition, ToolExecution } from '../types/tools';
+import { ToolRegistryService } from './ToolRegistryService';
+import { ToolExecutionManager } from './ToolExecutionManager';
+import { createWriteFileTool } from '../tools';
 
 type ChatSubscriber = (state: ChatState) => void;
 
@@ -21,6 +26,8 @@ export class ChatService {
 	private readonly messageService: MessageService;
 	private readonly historyService: HistoryService;
 	private readonly fileContentService: FileContentService;
+	private readonly toolRegistry: ToolRegistryService;
+	private readonly toolExecutionManager: ToolExecutionManager;
 	private state: ChatState = {
 		activeSession: null,
 		isGenerating: false,
@@ -34,7 +41,10 @@ export class ChatService {
 		selectedFolders: [],
 		selectedText: undefined,
 		showTemplateSelector: false,
-		shouldSaveHistory: true // 默认保存历史记录
+		shouldSaveHistory: true, // 默认保存历史记录
+		enableToolsToggle: false,
+		toolExecutionMode: 'manual',
+		pendingToolExecutions: []
 	};
 	private subscribers: Set<ChatSubscriber> = new Set();
 	private controller: AbortController | null = null;
@@ -47,6 +57,11 @@ export class ChatService {
 		this.fileContentService = new FileContentService(plugin.app);
 		this.messageService = new MessageService(plugin.app, this.fileContentService);
 		this.historyService = new HistoryService(plugin.app, DEFAULT_CHAT_SETTINGS.chatFolder);
+		this.toolRegistry = new ToolRegistryService();
+		this.toolExecutionManager = new ToolExecutionManager(this.toolRegistry, (executions) => {
+			this.state.pendingToolExecutions = executions.filter((e) => e.status === 'pending');
+			this.emitState();
+		});
 	}
 
 	private get app() {
@@ -55,6 +70,9 @@ export class ChatService {
 
 	initialize(initialSettings?: Partial<ChatSettings>) {
 		this.updateSettings(initialSettings ?? {});
+		this.loadBuiltinTools();
+		this.loadGlobalTools();
+		this.syncToolSettingsFromTars();
 		if (!this.state.selectedModelId) {
 			this.state.selectedModelId = this.getDefaultProviderTag();
 		}
@@ -175,6 +193,147 @@ export class ChatService {
 
 	getWebSearchToggle(): boolean {
 		return this.state.enableWebSearchToggle;
+	}
+
+	private getTarsToolSettings() {
+		const tools = this.plugin.settings.tars.settings.tools;
+		return (
+			tools ?? {
+				globalTools: [],
+				executionMode: 'manual' as const,
+				enabled: false
+			}
+		);
+	}
+
+	private async updateTarsToolSettings(update: Partial<{ globalTools: ToolDefinition[]; executionMode: 'manual' | 'auto'; enabled: boolean }>) {
+		const current = this.getTarsToolSettings();
+		this.plugin.settings.tars.settings.tools = {
+			...current,
+			...update
+		};
+		await this.plugin.saveSettings();
+	}
+
+	private syncToolSettingsFromTars() {
+		const tools = this.getTarsToolSettings();
+		this.state.enableToolsToggle = tools.enabled;
+		this.state.toolExecutionMode = tools.executionMode;
+		this.state.pendingToolExecutions = this.toolExecutionManager.getPending();
+	}
+
+	loadBuiltinTools() {
+		this.toolRegistry.register(createWriteFileTool(this.app), 'builtin');
+	}
+
+	loadGlobalTools() {
+		const tools = this.getTarsToolSettings();
+		for (const def of tools.globalTools ?? []) {
+			// 如果是内置工具，只应用 enabled 覆盖（避免用 user 工具覆盖内置实现）
+			if (this.toolRegistry.isBuiltin(def.id)) {
+				this.toolRegistry.setToolEnabled(def.id, def.enabled);
+				continue;
+			}
+			this.toolRegistry.upsertUserTool(def);
+		}
+	}
+
+	getTools(): ToolDefinition[] {
+		return this.toolRegistry.list();
+	}
+
+	isBuiltinTool(id: string): boolean {
+		return this.toolRegistry.isBuiltin(id);
+	}
+
+	async setToolsToggle(enabled: boolean) {
+		this.state.enableToolsToggle = enabled;
+		this.emitState();
+		await this.updateTarsToolSettings({ enabled });
+	}
+
+	async setToolExecutionMode(mode: 'manual' | 'auto') {
+		this.state.toolExecutionMode = mode;
+		this.emitState();
+		await this.updateTarsToolSettings({ executionMode: mode });
+	}
+
+	async upsertToolDefinition(tool: ToolDefinition) {
+		if (this.toolRegistry.isBuiltin(tool.id)) {
+			new Notice(`不能创建/覆盖内置工具：${tool.id}`);
+			return;
+		}
+		this.toolRegistry.upsertUserTool(tool);
+		const tools = this.getTarsToolSettings();
+		const list = tools.globalTools ?? [];
+		const next = [...list.filter((t) => t.id !== tool.id), tool];
+		await this.updateTarsToolSettings({ globalTools: next });
+		this.emitState();
+	}
+
+	async deleteToolDefinition(id: string) {
+		if (!this.toolRegistry.remove(id)) return;
+		const tools = this.getTarsToolSettings();
+		await this.updateTarsToolSettings({ globalTools: (tools.globalTools ?? []).filter((t) => t.id !== id) });
+		this.emitState();
+	}
+
+	async setToolEnabled(id: string, enabled: boolean) {
+		this.toolRegistry.setToolEnabled(id, enabled);
+		const tools = this.getTarsToolSettings();
+		const list = tools.globalTools ?? [];
+		const now = Date.now();
+		const hasEntry = list.some((t) => t.id === id);
+		let next: ToolDefinition[];
+		if (hasEntry) {
+			next = list.map((t) => (t.id === id ? { ...t, enabled, updatedAt: now } : t));
+		} else {
+			const def = this.toolRegistry.get(id);
+			next = def ? [...list, { ...def, enabled, updatedAt: now }] : list;
+		}
+		await this.updateTarsToolSettings({ globalTools: next });
+		this.emitState();
+	}
+
+	getPendingToolExecutions(): ToolExecution[] {
+		return this.toolExecutionManager.getPending();
+	}
+
+	async approveToolExecution(id: string) {
+		const exec = await this.toolExecutionManager.approve(id);
+		this.applyExecutionResultToMessage(exec);
+		this.emitState();
+	}
+
+	rejectToolExecution(id: string) {
+		const exec = this.toolExecutionManager.reject(id);
+		this.applyExecutionResultToMessage(exec);
+		this.emitState();
+	}
+
+	private applyExecutionResultToMessage(exec: ToolExecution) {
+		const session = this.state.activeSession;
+		if (!session) return;
+		const msg = session.messages.find((m) => m.id === exec.messageId);
+		if (!msg || !msg.toolCalls?.length) return;
+		if (!exec.toolCallId) return;
+		const call = msg.toolCalls.find((c) => c.id === exec.toolCallId);
+		if (!call) return;
+
+		if (exec.status === 'completed') {
+			call.status = 'completed';
+			call.result = exec.result;
+			// 追加一个简短的结果摘要到消息中，避免用户找不到执行反馈
+			msg.content += `\n\n> [!info] 工具 ${call.name} 已完成\n> ${String(exec.result ?? '')}`;
+		} else if (exec.status === 'failed') {
+			call.status = 'failed';
+			call.result = exec.error;
+			msg.content += `\n\n> [!danger] 工具 ${call.name} 执行失败\n> ${String(exec.error ?? '')}`;
+		} else if (exec.status === 'rejected') {
+			call.status = 'failed';
+			call.result = '用户已拒绝';
+			msg.content += `\n\n> [!warning] 工具 ${call.name} 已被拒绝`;
+		}
 	}
 
 	/**
@@ -918,6 +1077,25 @@ export class ChatService {
 			if (!vendor) {
 				throw new Error(`无法找到供应商 ${provider.vendor}`);
 			}
+
+			// 注入全局工具（仅对支持 Tool Calling 的 vendor 生效）
+			if (this.state.enableToolsToggle && vendor.capabilities.includes('Tool Calling')) {
+				const tools = this.toolRegistry.toOpenAICompatibleTools(true);
+				if (tools.length > 0) {
+					const rawParams = (providerOptions as any).parameters ?? {};
+					const nextParams: Record<string, unknown> = {
+						...rawParams,
+						tools
+					};
+
+					// OpenAI/OpenRouter 支持 tool_choice；Ollama 侧避免注入未知字段导致请求失败
+					if (vendor.name !== 'Ollama') {
+						(nextParams as any).tool_choice = 'auto';
+					}
+
+					(providerOptions as any).parameters = nextParams;
+				}
+			}
 			const sendRequest = vendor.sendRequestFunc(providerOptions);
 			const messages = await this.buildProviderMessages(session);
 			DebugLogger.logLlmMessages('ChatService.generateAssistantResponse', messages, { level: 'debug' });
@@ -984,6 +1162,80 @@ export class ChatService {
 
 			// 创建一个临时消息对象用于流式更新
 			let accumulatedContent = '';
+			let toolMarkerBuffer = '';
+
+			const handleToolCallsPayload = async (payloadText: string) => {
+				let payload: any;
+				try {
+					payload = JSON.parse(payloadText);
+				} catch (e) {
+					console.warn('[ChatService] tool_calls 解析失败', e);
+					return;
+				}
+
+				if (!Array.isArray(payload)) return;
+
+				for (const raw of payload) {
+					const id = String(raw?.id ?? `tool-call-${uuidv4()}`);
+					const name = String(raw?.name ?? '');
+					const args = (raw?.arguments ?? {}) as Record<string, any>;
+					if (!name) continue;
+
+					const toolCall: ToolCall = {
+						id,
+						name,
+						arguments: args,
+						status: 'pending',
+						timestamp: Date.now()
+					};
+
+					assistantMessage.toolCalls = [...(assistantMessage.toolCalls ?? []), toolCall];
+					this.emitState();
+
+					const exec = this.toolExecutionManager.createPending({
+						toolId: name,
+						toolCallId: id,
+						sessionId: session.id,
+						messageId: assistantMessage.id,
+						args
+					});
+
+					if (this.state.toolExecutionMode === 'auto') {
+						await this.approveToolExecution(exec.id);
+					} else {
+						new Notice(`工具调用待审批：${name}`);
+					}
+				}
+			};
+
+			const processStreamChunk = async (chunk: string): Promise<string> => {
+				const combined = toolMarkerBuffer + chunk;
+				let rest = combined;
+				let output = '';
+
+				while (true) {
+					const start = rest.indexOf(TOOL_CALLS_START_MARKER);
+					if (start === -1) {
+						output += rest;
+						toolMarkerBuffer = '';
+						break;
+					}
+
+					output += rest.slice(0, start);
+					const afterStart = rest.slice(start + TOOL_CALLS_START_MARKER.length);
+					const end = afterStart.indexOf(TOOL_CALLS_END_MARKER);
+					if (end === -1) {
+						toolMarkerBuffer = rest.slice(start);
+						break;
+					}
+
+					const jsonText = afterStart.slice(0, end);
+					await handleToolCallsPayload(jsonText);
+					rest = afterStart.slice(end + TOOL_CALLS_END_MARKER.length);
+				}
+
+				return output;
+			};
 			
 			// 检测是否是图片生成请求
 			const isImageGenerationRequest = this.detectImageGenerationIntent(
@@ -997,8 +1249,9 @@ export class ChatService {
 			if (isModelSupportImageGeneration) {
 				try {
 					for await (const chunk of sendRequest(messages, this.controller, resolveEmbed, saveAttachment)) {
-						assistantMessage.content += chunk;
-						accumulatedContent += chunk;
+						const text = await processStreamChunk(chunk);
+						assistantMessage.content += text;
+						accumulatedContent += text;
 						session.updatedAt = Date.now();
 						this.emitState();
 					}
@@ -1057,8 +1310,9 @@ export class ChatService {
 			} else {
 				// 不支持图像生成的模型，不传递saveAttachment函数
 				for await (const chunk of sendRequest(messages, this.controller, resolveEmbed)) {
-					assistantMessage.content += chunk;
-					accumulatedContent += chunk;
+					const text = await processStreamChunk(chunk);
+					assistantMessage.content += text;
+					accumulatedContent += text;
 					session.updatedAt = Date.now();
 					this.emitState();
 				}

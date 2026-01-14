@@ -1,4 +1,5 @@
 import { App, TFile, TFolder } from 'obsidian';
+import type { ToolCall, ToolExecution } from './tools';
 
 export type ChatRole = 'user' | 'assistant' | 'system';
 
@@ -28,6 +29,7 @@ export interface ChatMessage {
 	images?: string[];
 	isError?: boolean;
 	metadata?: Record<string, unknown>;
+	toolCalls?: ToolCall[];
 }
 
 export interface ChatSession {
@@ -155,6 +157,11 @@ export interface ChatState {
 	showTemplateSelector: boolean;
 	// 是否应该保存历史记录（用于模态框模式，模态框中的对话不需要保存历史）
 	shouldSaveHistory: boolean;
+
+	// 工具相关状态
+	enableToolsToggle: boolean;
+	toolExecutionMode: 'manual' | 'auto';
+	pendingToolExecutions: ToolExecution[];
 }
 
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {

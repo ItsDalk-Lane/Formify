@@ -34,6 +34,7 @@ export type Capability =
 	| 'Image Generation'
 	| 'Image Editing'
 	| 'Web Search'
+	| 'Tool Calling'
 	| 'Reasoning'
 
 export interface Vendor {

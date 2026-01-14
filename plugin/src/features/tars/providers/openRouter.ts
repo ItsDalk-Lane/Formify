@@ -1,7 +1,7 @@
 import { EmbedCache, Notice } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SaveAttachment, SendRequest, Vendor } from '.'
-import { arrayBufferToBase64, buildReasoningBlockStart, buildReasoningBlockEnd, getCapabilityEmoji, getMimeTypeFromFilename } from './utils'
+import { arrayBufferToBase64, buildReasoningBlockStart, buildReasoningBlockEnd, buildToolCallsBlock, getCapabilityEmoji, getMimeTypeFromFilename } from './utils'
 
 // OpenRouter Reasoning Effort 级别
 export type OpenRouterReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
@@ -70,6 +70,16 @@ interface WebSearchPlugin {
 
 const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary, saveAttachment?: SaveAttachment) {
+		const toolCalls: Array<{ id: string; name: string; argumentsText: string }> = []
+		const ensureToolCall = (id: string, name: string) => {
+			let existing = toolCalls.find((t) => t.id === id)
+			if (!existing) {
+				existing = { id, name, argumentsText: '' }
+				toolCalls.push(existing)
+			}
+			return existing
+		}
+
 		const { parameters, ...optionsExcludingParams } = settings
 		const options = { ...optionsExcludingParams, ...parameters }
 		const { 
@@ -397,6 +407,19 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 									yield content
 								}
 
+								// 处理 Chat Completions API 的工具调用（OpenAI 风格 tool_calls）
+								const deltaToolCalls: any[] | undefined = parsed.choices?.[0]?.delta?.tool_calls
+								if (Array.isArray(deltaToolCalls)) {
+									for (const tc of deltaToolCalls) {
+										const id = String(tc?.id ?? '')
+										const name = String(tc?.function?.name ?? '')
+										const argsChunk = String(tc?.function?.arguments ?? '')
+										if (!id || !name) continue
+										const acc = ensureToolCall(id, name)
+										acc.argumentsText += argsChunk
+									}
+								}
+
 						// 处理图像内容（流式）- 根据官方文档
 						const delta = parsed.choices?.[0]?.delta
 
@@ -486,6 +509,23 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 					const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
 					reasoningStartMs = null
 					yield buildReasoningBlockEnd(durationMs)
+				}
+
+				if (toolCalls.length > 0) {
+					const payload = toolCalls.map((tc) => {
+						let parsedArgs: any = null
+						try {
+							parsedArgs = tc.argumentsText ? JSON.parse(tc.argumentsText) : {}
+						} catch {
+							parsedArgs = { __raw: tc.argumentsText }
+						}
+						return {
+							id: tc.id,
+							name: tc.name,
+							arguments: parsedArgs
+						}
+					})
+					yield buildToolCallsBlock(payload)
 				}
 				reader.cancel()
 			}
@@ -923,6 +963,6 @@ export const openRouterVendor: Vendor = {
 	sendRequestFunc,
 	models: [],
 	websiteToObtainKey: 'https://openrouter.ai',
-	capabilities: ['Text Generation', 'Image Vision', 'PDF Vision', 'Web Search', 'Image Generation', 'Reasoning']
+	capabilities: ['Text Generation', 'Image Vision', 'PDF Vision', 'Web Search', 'Image Generation', 'Tool Calling', 'Reasoning']
 }
 
