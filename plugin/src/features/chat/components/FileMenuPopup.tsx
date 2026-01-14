@@ -23,7 +23,20 @@ interface FolderItem {
 
 export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, app, buttonRef }: FileMenuPopupProps) => {
 	const popupRef = useRef<HTMLDivElement>(null);
+	const menuSearchInputRef = useRef<HTMLInputElement>(null);
+	const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
 	const [currentView, setCurrentView] = useState<ViewType>('menu');
+
+	const getFileSecondaryText = (file: TFile): string => {
+		// 避免“文件名 + 含文件名的完整路径”导致的重复观感：第二行仅显示父目录
+		return file.parent?.path ?? '/';
+	};
+
+	const getFolderSecondaryText = (folder: TFolder): string => {
+		// 避免“文件夹名 + 顶层同名路径”重复：第二行显示父目录（根目录显示 /）
+		if (folder.path === '/') return '/';
+		return folder.parent?.path ?? '/';
+	};
 
 	// 主菜单搜索状态
 	const [searchQuery, setSearchQuery] = useState('');
@@ -62,6 +75,19 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 		};
 	}, [isOpen, onClose, buttonRef]);
 
+	// 选择 Portal 宿主：优先挂载到触发按钮所在的模态框容器内，避免 Obsidian focus trap 阻止 input 获得焦点
+	useEffect(() => {
+		if (!isOpen) {
+			setPortalContainer(null);
+			return;
+		}
+
+		const anchorEl = buttonRef.current;
+		const modalContainer = anchorEl?.closest('.modal-container') as HTMLElement | null;
+		const modalEl = anchorEl?.closest('.modal') as HTMLElement | null;
+		setPortalContainer(modalContainer ?? modalEl ?? document.body);
+	}, [isOpen, buttonRef]);
+
 	// 重置视图状态的useEffect
 	useEffect(() => {
 		if (isOpen) {
@@ -74,6 +100,15 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 			setSelectedFolders(new Set());
 		}
 	}, [isOpen]);
+
+	// 兜底：确保主菜单搜索框在 Obsidian 环境下稳定获得焦点
+	useEffect(() => {
+		if (!isOpen || currentView !== 'menu') return;
+		const rafId = window.requestAnimationFrame(() => {
+			menuSearchInputRef.current?.focus();
+		});
+		return () => window.cancelAnimationFrame(rafId);
+	}, [isOpen, currentView]);
 
 	// 搜索文件和文件夹功能
 	useEffect(() => {
@@ -329,9 +364,19 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 						{/* 搜索框 */}
 						<div className="ff-search-container">
 							<input
+								ref={menuSearchInputRef}
 								type="text"
 								value={searchQuery}
 								onChange={(e) => setSearchQuery(e.target.value)}
+								onMouseDown={(e) => {
+									// 某些 Obsidian/Workspace 全局监听会在 mousedown 阶段阻止默认聚焦，这里显式聚焦做兜底
+									e.stopPropagation();
+									menuSearchInputRef.current?.focus();
+								}}
+								onClick={(e) => {
+									e.stopPropagation();
+									menuSearchInputRef.current?.focus();
+								}}
 								placeholder="搜索文件和文件夹..."
 								className="ff-search-input"
 								autoFocus
@@ -363,7 +408,9 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 														<Folder className="ff-icon" />
 														<div className="ff-result-info">
 															<div className="ff-result-name">{result.folder?.name}</div>
-															<div className="ff-result-path">{result.folder?.path}</div>
+															{result.folder && (
+																<div className="ff-result-path">{getFolderSecondaryText(result.folder)}</div>
+															)}
 														</div>
 													</>
 												) : (
@@ -372,7 +419,14 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 														<div className="ff-result-info">
 															<div className="ff-result-name">{result.file?.basename}</div>
 															<div className="ff-result-path">
-																{result.matches.length > 0 ? result.matches.join(' · ') : result.file?.path}
+																{(() => {
+																	if (!result.file) return '';
+																	if (!result.matches || result.matches.length === 0) return getFileSecondaryText(result.file);
+
+																	// 顶部已展示 basename，避免第二行再显示“文件名: xxx”造成重复
+																	const filteredMatches = result.matches.filter((m) => !m.startsWith('文件名:'));
+																	return (filteredMatches.length > 0 ? filteredMatches : [getFileSecondaryText(result.file)]).join(' · ');
+																})()}
 															</div>
 														</div>
 													</>
@@ -433,7 +487,7 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 											<File className="ff-icon" />
 											<div className="ff-file-info">
 												<div className="ff-file-name">{file.name}</div>
-												<div className="ff-file-path">{file.path}</div>
+												<div className="ff-file-path">{getFileSecondaryText(file)}</div>
 											</div>
 											{selectedFiles.has(file.path) && <div className="ff-check-mark">✓</div>}
 										</div>
@@ -517,7 +571,7 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 													<Folder className="ff-icon" />
 													<div className="ff-folder-info">
 														<div className="ff-folder-name">{folder.name === '' ? '根目录' : folder.name}</div>
-														<div className="ff-folder-path">{folder.path}</div>
+														<div className="ff-folder-path">{getFolderSecondaryText(folder)}</div>
 													</div>
 												</div>
 
@@ -540,6 +594,6 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 				)}
 			</div>
 		</div>,
-		document.body
+		portalContainer ?? document.body
 	);
 };

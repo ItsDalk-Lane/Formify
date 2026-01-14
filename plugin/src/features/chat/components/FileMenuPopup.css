@@ -3,6 +3,42 @@
 .file-menu-popup {
 	font-family: var(--font-interface);
 	font-size: 13px;
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+	display: flex;
+	flex-direction: column;
+}
+
+.ff-popup-content {
+	display: flex;
+	flex-direction: column;
+	background-color: var(--background-primary);
+	flex: 1;
+	min-height: 0;
+}
+
+.ff-menu-options {
+	display: flex;
+	flex-direction: column;
+}
+
+.ff-divider {
+	height: 1px;
+	background-color: var(--background-modifier-border);
+}
+
+.ff-search-results {
+	border-top: 1px solid var(--background-modifier-border);
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
+.ff-results-list {
+	padding: 8px;
 }
 
 /* ==========  公共头部 ========== */

@@ -10,6 +10,7 @@ export type PopoverProps = {
 	open?: boolean;
 	onOpenChange?: (open: boolean) => void;
 	defaultOpen?: boolean;
+	modal?: boolean;
 };
 
 export function Popover(props: PopoverProps) {
@@ -21,6 +22,7 @@ export function Popover(props: PopoverProps) {
 		sideOffset = 16,
 		onOpenChange,
 		defaultOpen,
+		modal = false,
 	} = props;
 
 	const triggerElement = Array.isArray(children) ? children[0] : null;
@@ -31,6 +33,7 @@ export function Popover(props: PopoverProps) {
 			open={open}
 			onOpenChange={onOpenChange}
 			defaultOpen={defaultOpen}
+			modal={modal}
 		>
 			<RadixPopover.Trigger asChild>
 				{triggerElement}
@@ -41,6 +44,14 @@ export function Popover(props: PopoverProps) {
 					side={side}
 					align={align}
 					className="form--PopoverContent"
+					onOpenAutoFocus={(event) => {
+						// 阻止自动聚焦，防止意外触发关闭逻辑
+						event.preventDefault();
+					}}
+					onInteractOutside={(event) => {
+						// 阻止点击外部立即关闭，给用户时间操作
+						event.preventDefault();
+					}}
 					collisionPadding={{
 						left: 16,
 						right: 16,

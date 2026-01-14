@@ -6,6 +6,7 @@ import { ObsidianAppContext } from 'src/context/obsidianAppContext';
 import { localInstance } from 'src/i18n/locals';
 import { ConfirmPopover } from 'src/component/confirm/ConfirmPopover';
 import { InteractiveList, InteractiveListItem } from 'src/component/interactive-list/InteractiveList';
+import { ToggleSwitch } from 'src/component/toggle-switch/ToggleSwitch';
 import { SystemPromptDataService } from './SystemPromptDataService';
 import type { AiFeatureId, SystemPromptItem } from './types';
 import { SystemPromptEditorModal } from './SystemPromptEditorModal';
@@ -19,10 +20,21 @@ export class SystemPromptManagerModal extends Modal {
 	}
 
 	onOpen(): void {
-		const { contentEl, titleEl } = this;
+		const { contentEl, titleEl, modalEl } = this;
 		contentEl.empty();
 		contentEl.addClass('system-prompt-modal-content');
 		this.modalEl.addClass('system-prompt-modal');
+
+		// 阻止点击事件冒泡，防止干扰 Popover
+		contentEl.addEventListener('click', (e) => {
+			e.stopPropagation();
+		});
+
+		// 阻止 Modal 遮罩层点击关闭
+		modalEl.addEventListener('click', (e) => {
+			e.stopPropagation();
+			e.preventDefault();
+		});
 
 		titleEl.textContent = localInstance.system_prompt_manager_title || '系统提示词管理';
 
@@ -152,59 +164,59 @@ function SystemPromptManagerApp(props: { app: App; onRequestClose: () => void })
 					>
 						{(item) => (
 							<InteractiveListItem key={item.id} item={item}>
-								<div className="system-prompt-row">
-									<div className="system-prompt-row-left">
-										<div className="system-prompt-name">{item.name}</div>
-										<div className="system-prompt-meta">
-											{item.sourceType === 'template'
-												? (localInstance.system_prompt_source_template || '引入模板')
-												: (localInstance.system_prompt_source_custom || '自定义')}
+								<div className="system-prompt-card" onClick={(e) => e.stopPropagation()}>
+									{/* 卡片头部:标题 + 操作区 */}
+									<div className="system-prompt-card-header">
+										<div className="system-prompt-card-title">{item.name}</div>
+										<div className="system-prompt-card-actions" onClick={(e) => e.stopPropagation()}>
+											<ToggleSwitch
+												checked={item.enabled}
+												onChange={(checked) => handleToggleEnabled(item.id, checked)}
+												ariaLabel={item.enabled ? '禁用' : '启用'}
+											/>
+											<button
+												className="system-prompt-icon-btn"
+												onClick={(e) => {
+													e.stopPropagation();
+													openEdit(item);
+												}}
+												title={localInstance.skill_edit || '编辑'}
+												type="button"
+											>
+												<Pencil size={20} />
+											</button>
+											<ConfirmPopover
+												title={localInstance.system_prompt_delete_confirm_title || '确认删除'}
+												message={localInstance.system_prompt_delete_confirm_message || '删除后无法恢复，是否继续？'}
+												onConfirm={() => handleDelete(item.id)}
+												modal={false}
+											>
+												<button
+													className="system-prompt-icon-btn danger"
+													title={localInstance.delete || '删除'}
+													type="button"
+													onClick={(e) => {
+														e.stopPropagation();
+													}}
+												>
+													<Trash2 size={20} />
+												</button>
+											</ConfirmPopover>
 										</div>
 									</div>
 
-									<div className="system-prompt-row-right">
-										<div className="system-prompt-enabled-radio">
-											<label>
-												<input
-													type="radio"
-													name={`enabled_${item.id}`}
-													checked={item.enabled === true}
-													onChange={() => handleToggleEnabled(item.id, true)}
-												/>
-												<span>{localInstance.system_prompt_enabled || '启用'}</span>
-											</label>
-											<label>
-												<input
-													type="radio"
-													name={`enabled_${item.id}`}
-													checked={item.enabled === false}
-													onChange={() => handleToggleEnabled(item.id, false)}
-												/>
-												<span>{localInstance.system_prompt_disabled || '禁用'}</span>
-											</label>
-										</div>
+									{/* 元数据:来源标签 */}
+									<div className="system-prompt-card-meta">
+										<span className="system-prompt-source-badge">
+											{item.sourceType === 'template'
+												? (localInstance.system_prompt_source_template || '引入模板')
+												: (localInstance.system_prompt_source_custom || '自定义')}
+										</span>
+									</div>
 
-										<button
-											className="system-prompt-icon-btn"
-											onClick={() => openEdit(item)}
-											title={localInstance.skill_edit || '编辑'}
-										>
-											<Pencil size={16} />
-										</button>
-
-										<ConfirmPopover
-											title={localInstance.system_prompt_delete_confirm_title || '确认删除'}
-											message={localInstance.system_prompt_delete_confirm_message || '删除后无法恢复，是否继续？'}
-											onConfirm={() => handleDelete(item.id)}
-										>
-											<button
-												className="system-prompt-icon-btn danger"
-												title={localInstance.delete || '删除'}
-												type="button"
-											>
-												<Trash2 size={16} />
-											</button>
-										</ConfirmPopover>
+									{/* 内容预览 */}
+									<div className="system-prompt-card-preview">
+										{getSourceContentPreview(item)}
 									</div>
 								</div>
 							</InteractiveListItem>
@@ -280,4 +292,14 @@ async function buildExportMarkdown(app: App, prompts: SystemPromptItem[]): Promi
 	}
 
 	return lines.join('\n');
+}
+
+function getSourceContentPreview(item: SystemPromptItem): string {
+	if (item.sourceType === 'template') {
+		return item.templatePath
+			? `模板文件: ${item.templatePath}`
+			: '暂无内容';
+	} else {
+		return (item.content || '暂无内容').trim();
+	}
 }
