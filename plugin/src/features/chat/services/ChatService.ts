@@ -895,13 +895,22 @@ export class ChatService {
 				throw new Error('尚未配置任何AI模型，请先在Tars设置中添加Provider。');
 			}
 
-			const providerEnableReasoning = (provider?.options as any)?.enableReasoning ?? false;
+			const providerOptionsRaw = (provider?.options as any) ?? {};
+			const providerEnableReasoning =
+				typeof providerOptionsRaw.enableReasoning === 'boolean'
+					? providerOptionsRaw.enableReasoning
+					: provider.vendor === 'Doubao'
+						? ((providerOptionsRaw.thinkingType as string | undefined) ?? 'enabled') !== 'disabled'
+						: false;
+			const providerEnableThinking = providerOptionsRaw.enableThinking ?? false;
 			const providerEnableWebSearch = provider?.options.enableWebSearch ?? false;
 			const enableReasoning = this.state.enableReasoningToggle && providerEnableReasoning;
+			const enableThinking = this.state.enableReasoningToggle && providerEnableThinking;
 			const enableWebSearch = this.state.enableWebSearchToggle && providerEnableWebSearch;
 			const providerOptions = {
-				...(provider.options as any),
+				...providerOptionsRaw,
 				enableReasoning,
+				enableThinking,
 				enableWebSearch
 			};
 

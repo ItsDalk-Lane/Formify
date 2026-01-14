@@ -46,6 +46,7 @@ export const getDoubaoModelCapability = (model: string): DoubaoModelCapability |
 
 // Doubao图片理解配置选项
 export interface DoubaoOptions extends BaseOptions {
+	enableReasoning?: boolean // 是否启用推理功能（受聊天界面“推理”按钮控制）
 	thinkingType?: DoubaoThinkingType
 	reasoningEffort?: DoubaoReasoningEffort
 	// 图片理解精细度控制
@@ -353,6 +354,7 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			model,
 			imageDetail,
 			imagePixelLimit,
+			enableReasoning,
 			enableWebSearch,
 			webSearchConfig,
 			thinkingType,
@@ -400,19 +402,20 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 
 	const capability = getDoubaoModelCapability(model)
 	let effectiveThinkingType: DoubaoThinkingType | undefined
+	const isReasoningEnabled = enableReasoning === true
 
 	
 	if (capability) {
 		const fallbackThinking = capability.thinkingTypes.includes(DEFAULT_DOUBAO_THINKING_TYPE)
 			? DEFAULT_DOUBAO_THINKING_TYPE
 			: capability.thinkingTypes[0]
-		const requestedThinking = thinkingType ?? fallbackThinking
+		const requestedThinking = isReasoningEnabled ? (thinkingType ?? fallbackThinking) : 'disabled'
 		effectiveThinkingType = capability.thinkingTypes.includes(requestedThinking)
 			? requestedThinking
 			: fallbackThinking
 
 		
-		if (effectiveThinkingType) {
+		if (effectiveThinkingType && isReasoningEnabled && effectiveThinkingType !== 'disabled') {
 			data.thinking = { type: effectiveThinkingType }
 		}
 
@@ -458,8 +461,13 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 
 				data.tools = [webSearchTool]
 
-				// 根据配置决定是否启用思考功能
-				if (webSearchConfig?.enableThinking !== false && effectiveThinkingType) {
+				// 根据配置决定是否启用思考功能（同时受 enableReasoning 门控）
+				if (
+					isReasoningEnabled &&
+					webSearchConfig?.enableThinking !== false &&
+					effectiveThinkingType &&
+					effectiveThinkingType !== 'disabled'
+				) {
 					data.thinking = { type: effectiveThinkingType }
 					console.log('[Doubao] Web Search模式下已启用thinking参数:', data.thinking)
 				}
@@ -518,6 +526,7 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 	let thinkingActive = false
 	let thinkingStartMs: number | null = null
 	const shouldShowThinking =
+		isReasoningEnabled &&
 		(effectiveThinkingType ?? 'disabled') !== 'disabled' &&
 		(useResponsesAPI ? webSearchConfig?.enableThinking !== false : true)
 

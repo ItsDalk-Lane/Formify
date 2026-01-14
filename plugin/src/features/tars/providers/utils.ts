@@ -125,6 +125,35 @@ export const getEnabledCapabilities = (vendor: Vendor, options: BaseOptions): Ca
 	// 获取服务商支持的所有功能
 	const vendorCapabilities = [...vendor.capabilities]
 
+	const isReasoningEnabledForDisplay = (): boolean => {
+		const raw = options as any
+
+		// 通用开关（大部分 provider 使用）
+		if (raw?.enableReasoning === true) return true
+
+		// Qwen/Claude 使用 enableThinking
+		if (vendor.name === 'Qwen' || vendor.name === 'Claude') {
+			return raw?.enableThinking === true
+		}
+
+		// Doubao 使用 thinkingType: enabled/auto/disabled
+		if (vendor.name === 'Doubao') {
+			const thinkingType = raw?.thinkingType
+			if (typeof thinkingType === 'string') {
+				return thinkingType !== 'disabled'
+			}
+			// 兼容旧配置：未设置时按默认开启推理处理
+			return true
+		}
+
+		// Azure 目前没有单独的推理开关，且实现上会强制引导输出 <think>
+		if (vendor.name === 'Azure') {
+			return true
+		}
+
+		return false
+	}
+
 	// 检查并过滤掉未启用的功能
 	const enabledCapabilities: Capability[] = []
 
@@ -139,7 +168,7 @@ export const getEnabledCapabilities = (vendor: Vendor, options: BaseOptions): Ca
 
 			case 'Reasoning':
 				// 只有当enableReasoning为true时才启用推理功能
-				if ((options as any).enableReasoning === true) {
+				if (isReasoningEnabledForDisplay()) {
 					enabledCapabilities.push(capability)
 				}
 				break

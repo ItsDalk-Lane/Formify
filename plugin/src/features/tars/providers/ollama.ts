@@ -1,6 +1,8 @@
 import { Ollama } from 'ollama/browser'
+import type { EmbedCache } from 'obsidian'
+import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
-import { buildReasoningBlockStart, buildReasoningBlockEnd } from './utils'
+import { arrayBufferToBase64, getMimeTypeFromFilename, buildReasoningBlockStart, buildReasoningBlockEnd } from './utils'
 
 // Ollama 扩展选项接口
 export interface OllamaOptions extends BaseOptions {
@@ -9,16 +11,74 @@ export interface OllamaOptions extends BaseOptions {
 	thinkLevel?: 'low' | 'medium' | 'high' // 推理级别(可选)
 }
 
+/**
+ * 将 embed 数组转换为 Ollama 需要的 base64 字符串数组
+ * @param embeds embed 对象数组
+ * @param resolveEmbedAsBinary embed 转换函数
+ * @returns base64 字符串数组（不含 data URL 前缀）
+ * @throws {Error} 当遇到不支持的图像格式时
+ */
+const convertEmbedsToBase64Array = async (
+	embeds: EmbedCache[],
+	resolveEmbedAsBinary: ResolveEmbedAsBinary
+): Promise<string[]> => {
+	const base64Array: string[] = []
+
+	for (const embed of embeds) {
+		const mimeType = getMimeTypeFromFilename(embed.link)
+
+		// 验证图像格式
+		if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(mimeType)) {
+			throw new Error(t('Only PNG, JPEG, GIF, and WebP images are supported.'))
+		}
+
+		// 转换为 base64（无前缀）
+		const embedBuffer = await resolveEmbedAsBinary(embed)
+		const base64Data = arrayBufferToBase64(embedBuffer)
+		base64Array.push(base64Data)
+	}
+
+	return base64Array
+}
+
+/**
+ * 将项目消息格式转换为 Ollama API 消息格式
+ * @param msg 原始消息对象
+ * @param resolveEmbedAsBinary embed 转换函数
+ * @returns Ollama 格式的消息
+ */
+const formatMsgForOllama = async (
+	msg: Message,
+	resolveEmbedAsBinary: ResolveEmbedAsBinary
+): Promise<{ role: string; content: string; images?: string[] }> => {
+	// 提取并转换图像
+	const images = msg.embeds
+		? await convertEmbedsToBase64Array(msg.embeds, resolveEmbedAsBinary)
+		: []
+
+	// 构建消息对象
+	return {
+		role: msg.role,
+		content: msg.content,
+		images: images.length > 0 ? images : undefined
+	}
+}
+
 const sendRequestFunc = (settings: BaseOptions): SendRequest =>
-	async function* (messages: Message[], controller: AbortController, _resolveEmbedAsBinary: ResolveEmbedAsBinary) {
+	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary) {
 		const { parameters, ...optionsExcludingParams } = settings
 		const options = { ...optionsExcludingParams, ...parameters } as OllamaOptions
 		const { baseURL, model, enableReasoning, thinkLevel, ...remains } = options
 
+		// 格式化消息（处理图像 embeds）
+		const formattedMessages = await Promise.all(
+			messages.map((msg) => formatMsgForOllama(msg, resolveEmbedAsBinary))
+		)
+
 		// 构建 Ollama API 请求参数
 		const requestParams: any = {
 			model,
-			messages,
+			messages: formattedMessages,
 			stream: true,
 			...remains
 		}
@@ -89,5 +149,5 @@ export const ollamaVendor: Vendor = {
 	sendRequestFunc,
 	models: [],
 	websiteToObtainKey: 'https://ollama.com',
-	capabilities: ['Text Generation', 'Reasoning']
+	capabilities: ['Text Generation', 'Image Vision', 'Reasoning']
 }

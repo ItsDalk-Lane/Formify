@@ -2,8 +2,10 @@ import { v4 as uuidv4 } from 'uuid';
 import type { EmbedCache } from 'obsidian';
 import type { Message as ProviderMessage } from 'src/features/tars/providers';
 import type { ChatMessage, ChatRole, SelectedFile, SelectedFolder } from '../types/chat';
+import { parseContentBlocks } from '../utils/markdown';
 import { FileContentService, FileContentOptions } from './FileContentService';
 import { PromptBuilder, PromptBuilderLinkParseOptions } from 'src/service/PromptBuilder';
+import { formatReasoningDuration } from 'src/features/tars/providers/utils';
 
 export class MessageService {
 	constructor(private readonly app: any, private readonly fileContentService?: FileContentService) {}
@@ -73,6 +75,8 @@ export class MessageService {
 
 		// 确保消息内容完整，不进行任何截断或压缩
 		let content = message.content;
+		// 历史文件展示：将推理标记转换为可折叠 callout（不影响聊天界面渲染）
+		content = this.formatReasoningBlocksForHistory(content);
 
 		// 如果有错误标记，在内容前添加错误标识
 		if (message.isError) {
@@ -120,6 +124,36 @@ export class MessageService {
 		}
 
 		return fullMessage;
+	}
+
+	private formatReasoningBlocksForHistory(content: string): string {
+		if (!content || !content.includes('{{FF_REASONING_START}}')) {
+			return content;
+		}
+
+		const blocks = parseContentBlocks(content);
+		let result = '';
+
+		for (const block of blocks) {
+			if (block.type === 'text') {
+				result += block.content;
+				continue;
+			}
+
+			const title = block.durationMs
+				? `深度思考 ${formatReasoningDuration(block.durationMs)}`
+				: '深度思考';
+
+			const raw = block.content ?? '';
+			const normalized = raw.replace(/\s+$/g, '');
+			const lines = normalized.split('\n');
+			const quotedLines = lines.map((line) => (line ? `> ${line}` : '>')).join('\n');
+			const callout = `> [!danger]- ${title}\n${quotedLines}`;
+
+			result += `\n\n${callout}\n\n`;
+		}
+
+		return result.replace(/\n{3,}/g, '\n\n');
 	}
 
 	private mapRoleToLabel(role: ChatRole): string {
