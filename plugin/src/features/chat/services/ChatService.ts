@@ -42,8 +42,6 @@ export class ChatService {
 		selectedText: undefined,
 		showTemplateSelector: false,
 		shouldSaveHistory: true, // 默认保存历史记录
-		enableToolsToggle: false,
-		toolExecutionMode: 'manual',
 		pendingToolExecutions: []
 	};
 	private subscribers: Set<ChatSubscriber> = new Set();
@@ -216,9 +214,6 @@ export class ChatService {
 	}
 
 	private syncToolSettingsFromTars() {
-		const tools = this.getTarsToolSettings();
-		this.state.enableToolsToggle = tools.enabled;
-		this.state.toolExecutionMode = tools.executionMode;
 		this.state.pendingToolExecutions = this.toolExecutionManager.getPending();
 	}
 
@@ -232,9 +227,18 @@ export class ChatService {
 			// 如果是内置工具，只应用 enabled 覆盖（避免用 user 工具覆盖内置实现）
 			if (this.toolRegistry.isBuiltin(def.id)) {
 				this.toolRegistry.setToolEnabled(def.id, def.enabled);
+				// 如果有 executionMode，也应用
+				if (def.executionMode) {
+					this.toolRegistry.setToolExecutionMode(def.id, def.executionMode);
+				}
 				continue;
 			}
-			this.toolRegistry.upsertUserTool(def);
+			// 确保 executionMode 字段存在
+			const toolWithMode = {
+				...def,
+				executionMode: def.executionMode ?? 'manual'
+			};
+			this.toolRegistry.upsertUserTool(toolWithMode);
 		}
 	}
 
@@ -246,16 +250,21 @@ export class ChatService {
 		return this.toolRegistry.isBuiltin(id);
 	}
 
-	async setToolsToggle(enabled: boolean) {
-		this.state.enableToolsToggle = enabled;
+	async setToolExecutionMode(id: string, executionMode: 'manual' | 'auto') {
+		this.toolRegistry.setToolExecutionMode(id, executionMode);
+		const tools = this.getTarsToolSettings();
+		const list = tools.globalTools ?? [];
+		const now = Date.now();
+		const hasEntry = list.some((t) => t.id === id);
+		let next: ToolDefinition[];
+		if (hasEntry) {
+			next = list.map((t) => (t.id === id ? { ...t, executionMode, updatedAt: now } : t));
+		} else {
+			const def = this.toolRegistry.get(id);
+			next = def ? [...list, { ...def, executionMode, updatedAt: now }] : list;
+		}
+		await this.updateTarsToolSettings({ globalTools: next });
 		this.emitState();
-		await this.updateTarsToolSettings({ enabled });
-	}
-
-	async setToolExecutionMode(mode: 'manual' | 'auto') {
-		this.state.toolExecutionMode = mode;
-		this.emitState();
-		await this.updateTarsToolSettings({ executionMode: mode });
 	}
 
 	async upsertToolDefinition(tool: ToolDefinition) {
@@ -1079,7 +1088,7 @@ export class ChatService {
 			}
 
 			// 注入全局工具（仅对支持 Tool Calling 的 vendor 生效）
-			if (this.state.enableToolsToggle && vendor.capabilities.includes('Tool Calling')) {
+			if (vendor.capabilities.includes('Tool Calling')) {
 				const tools = this.toolRegistry.toOpenAICompatibleTools(true);
 				if (tools.length > 0) {
 					const rawParams = (providerOptions as any).parameters ?? {};
@@ -1200,7 +1209,10 @@ export class ChatService {
 						args
 					});
 
-					if (this.state.toolExecutionMode === 'auto') {
+					// 根据工具的 executionMode 决定是否自动执行
+					const tool = this.toolRegistry.get(name);
+					const toolExecutionMode = tool?.executionMode ?? 'manual';
+					if (toolExecutionMode === 'auto') {
 						await this.approveToolExecution(exec.id);
 					} else {
 						new Notice(`工具调用待审批：${name}`);

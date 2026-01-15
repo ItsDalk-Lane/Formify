@@ -3,6 +3,7 @@ export interface ToolDefinition {
 	name: string;
 	description: string;
 	enabled: boolean;
+	executionMode: 'manual' | 'auto'; // 工具的执行模式
 	parameters: {
 		type: 'object';
 		properties: Record<

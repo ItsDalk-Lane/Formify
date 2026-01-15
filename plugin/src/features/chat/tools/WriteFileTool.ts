@@ -37,6 +37,7 @@ export const createWriteFileTool = (app: App): ToolDefinition => {
 		name: 'write_file',
 		description: '向文件写入内容。如果文件不存在则创建新文件，存在则覆盖。支持 Markdown 和纯文本文件。',
 		enabled: true,
+		executionMode: 'manual',
 		category: 'file',
 		icon: 'FileText',
 		parameters: {

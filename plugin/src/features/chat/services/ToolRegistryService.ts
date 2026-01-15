@@ -55,6 +55,17 @@ export class ToolRegistryService {
 		this.tools.set(id, existing);
 	}
 
+	setToolExecutionMode(id: string, executionMode: 'manual' | 'auto') {
+		const existing = this.tools.get(id);
+		if (!existing) return;
+		existing.definition = {
+			...existing.definition,
+			executionMode,
+			updatedAt: Date.now()
+		};
+		this.tools.set(id, existing);
+	}
+
 	remove(id: string): boolean {
 		const existing = this.tools.get(id);
 		if (!existing) return false;

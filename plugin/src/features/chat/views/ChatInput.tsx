@@ -4,9 +4,6 @@ import { ChatService } from '../services/ChatService';
 import type { ChatState, SelectedFile, SelectedFolder } from '../types/chat';
 import { ModelSelector } from '../components/ModelSelector';
 import { TemplateSelector } from '../components/TemplateSelector';
-import { ToolToggle } from '../components/ToolToggle';
-import { ToolPanelPopup } from '../components/ToolPanelPopup';
-import { ToolDefinitionDialog } from '../components/ToolDefinitionDialog';
 import { App } from 'obsidian';
 
 interface ChatInputProps {
@@ -19,12 +16,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 	const [value, setValue] = useState(state.inputValue);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const [maxHeight, setMaxHeight] = useState(80); // Default minimum height
-	const toolButtonRef = useRef<HTMLSpanElement>(null);
-	const [toolPanelOpen, setToolPanelOpen] = useState(false);
-	const [createToolOpen, setCreateToolOpen] = useState(false);
-
-	const tools = service.getTools();
-	const pendingCount = state.pendingToolExecutions.length;
 
 	// 检测当前输入是否包含图片生成意图
 	const [isImageGenerationIntent, setIsImageGenerationIntent] = useState(false);
@@ -339,13 +330,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 									>
 										<Search className="tw-size-4" />
 									</button>
-									<span ref={toolButtonRef}>
-										<ToolToggle
-											enabled={state.enableToolsToggle}
-											pendingCount={pendingCount}
-											onClick={() => setToolPanelOpen((v) => !v)}
-										/>
-									</span>
 								</div>
 							</div>
 							<div className="tw-flex tw-items-center tw-gap-2">
@@ -362,27 +346,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 								</span>
 							</div>
 						</div>
-
-						<ToolPanelPopup
-							isOpen={toolPanelOpen}
-							onClose={() => setToolPanelOpen(false)}
-							anchorRef={toolButtonRef}
-							enabled={state.enableToolsToggle}
-							executionMode={state.toolExecutionMode}
-							tools={tools}
-							isBuiltin={(id) => service.isBuiltinTool(id)}
-							onToggleEnabled={(enabled) => void service.setToolsToggle(enabled)}
-							onChangeExecutionMode={(mode) => void service.setToolExecutionMode(mode)}
-							onToggleToolEnabled={(id, enabled) => void service.setToolEnabled(id, enabled)}
-							onDeleteTool={(id) => void service.deleteToolDefinition(id)}
-							onCreateTool={() => setCreateToolOpen(true)}
-						/>
-
-						<ToolDefinitionDialog
-							isOpen={createToolOpen}
-							onClose={() => setCreateToolOpen(false)}
-							onCreate={(tool) => void service.upsertToolDefinition(tool)}
-						/>
 					</>
 				) : (
 					<>

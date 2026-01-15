@@ -159,8 +159,6 @@ export interface ChatState {
 	shouldSaveHistory: boolean;
 
 	// 工具相关状态
-	enableToolsToggle: boolean;
-	toolExecutionMode: 'manual' | 'auto';
 	pendingToolExecutions: ToolExecution[];
 }
 

@@ -1,4 +1,4 @@
-import { X, Plus, Trash2 } from 'lucide-react';
+import { X } from 'lucide-react';
 import { type CSSProperties, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ToolDefinition } from '../types/tools';
@@ -8,30 +8,20 @@ interface ToolPanelPopupProps {
 	isOpen: boolean;
 	onClose: () => void;
 	anchorRef: RefObject<HTMLElement>;
-	enabled: boolean;
-	executionMode: 'manual' | 'auto';
 	tools: ToolDefinition[];
 	isBuiltin: (id: string) => boolean;
-	onToggleEnabled: (enabled: boolean) => void;
-	onChangeExecutionMode: (mode: 'manual' | 'auto') => void;
 	onToggleToolEnabled: (id: string, enabled: boolean) => void;
-	onDeleteTool: (id: string) => void;
-	onCreateTool: () => void;
+	onChangeToolExecutionMode: (id: string, mode: 'manual' | 'auto') => void;
 }
 
 export const ToolPanelPopup = ({
 	isOpen,
 	onClose,
 	anchorRef,
-	enabled,
-	executionMode,
 	tools,
 	isBuiltin,
-	onToggleEnabled,
-	onChangeExecutionMode,
 	onToggleToolEnabled,
-	onDeleteTool,
-	onCreateTool
+	onChangeToolExecutionMode
 }: ToolPanelPopupProps) => {
 	const popupRef = useRef<HTMLDivElement>(null);
 	const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
@@ -91,34 +81,6 @@ export const ToolPanelPopup = ({
 				</button>
 			</div>
 			<div className="ff-tool-panel__body">
-				<div className="ff-tool-panel__row">
-					<div className="ff-tool-panel__label">工具总开关</div>
-					<button
-						type="button"
-						className="ff-tool-panel__btn ff-tool-panel__btn--primary"
-						onClick={() => onToggleEnabled(!enabled)}
-					>
-						{enabled ? '已启用' : '已关闭'}
-					</button>
-				</div>
-				<div className="ff-tool-panel__row">
-					<div className="ff-tool-panel__label">执行模式</div>
-					<select
-						className="ff-tool-panel__select"
-						value={executionMode}
-						onChange={(e) => onChangeExecutionMode(e.target.value as 'manual' | 'auto')}
-					>
-						<option value="manual">手动审批</option>
-						<option value="auto">自动执行</option>
-					</select>
-				</div>
-				<div className="ff-tool-panel__row">
-					<div className="ff-tool-panel__label">工具列表</div>
-					<button type="button" className="ff-tool-panel__btn" onClick={onCreateTool}>
-						<Plus className="tw-size-4" />
-					</button>
-				</div>
-
 				<div className="ff-tool-panel__list">
 					{tools.map((tool) => {
 						const builtin = isBuiltin(tool.id);
@@ -139,15 +101,14 @@ export const ToolPanelPopup = ({
 									>
 										{tool.enabled ? '开' : '关'}
 									</button>
-									<button
-										type="button"
-										className={`ff-tool-panel__btn ff-tool-panel__btn--danger ${builtin ? 'tw-opacity-40 tw-cursor-not-allowed' : ''}`}
-										disabled={builtin}
-										onClick={() => onDeleteTool(tool.id)}
-										title={builtin ? '内置工具不可删除' : '删除工具'}
+									<select
+										className="ff-tool-panel__select"
+										value={tool.executionMode}
+										onChange={(e) => onChangeToolExecutionMode(tool.id, e.target.value as 'manual' | 'auto')}
 									>
-										<Trash2 className="tw-size-4" />
-									</button>
+										<option value="manual">手动审批</option>
+										<option value="auto">自动执行</option>
+									</select>
 								</div>
 							</div>
 						);
