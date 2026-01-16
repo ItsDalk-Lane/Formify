@@ -3,16 +3,18 @@ import { Component, Platform } from 'obsidian';
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
 import type { ChatMessage } from '../types/chat';
+import type { ToolExecution } from '../types/tools';
 import { ChatService } from '../services/ChatService';
 import { MessageService } from '../services/MessageService';
 import { renderMarkdownContent, parseContentBlocks, hasReasoningBlock, ContentBlock } from '../utils/markdown';
 import { Notice } from 'obsidian';
-import { ToolCallBadge } from './ToolCallBadge';
+import { EmbeddedToolApproval } from './EmbeddedToolApproval';
 
 interface MessageItemProps {
 	message: ChatMessage;
 	service?: ChatService;
 	isGenerating?: boolean;
+	pendingToolExecutions?: ToolExecution[];
 }
 
 // 格式化推理耗时
@@ -28,6 +30,85 @@ interface ReasoningBlockProps {
 	durationMs?: number;
 	isGenerating: boolean;
 }
+
+const getToolCallSummary = (call: { arguments?: Record<string, any>; result?: string }): string => {
+	const args = call.arguments ?? {};
+	const filePath = args.filePath ?? args.path ?? args.file ?? args.target;
+	if (typeof filePath === 'string' && filePath.trim().length > 0) {
+		const content = args.content;
+		if (typeof content === 'string') {
+			return `${filePath}（${content.length}字）`;
+		}
+		return filePath;
+	}
+	const url = args.url ?? args.uri ?? args.link;
+	if (typeof url === 'string' && url.trim().length > 0) {
+		return url;
+	}
+	const name = args.name ?? args.title ?? args.query;
+	if (typeof name === 'string' && name.trim().length > 0) {
+		return name;
+	}
+	if (typeof call.result === 'string' && call.result.trim().length > 0) {
+		return call.result.length > 60 ? `${call.result.slice(0, 60)}...` : call.result;
+	}
+	try {
+		const text = JSON.stringify(args);
+		return text.length > 60 ? `${text.slice(0, 60)}...` : text;
+	} catch {
+		return '';
+	}
+};
+
+const ToolCallItem = ({ call }: { call: { name: string; status: string; arguments?: Record<string, any>; result?: string } }) => {
+	const [collapsed, setCollapsed] = useState(true);
+	const summary = useMemo(() => getToolCallSummary(call), [call]);
+	const dotStatus =
+		call.status === 'completed' ? 'success' : call.status === 'failed' ? 'error' : 'pending';
+	const contentText = useMemo(() => {
+		const raw = (call.arguments ?? {}).content;
+		if (typeof raw === 'string') return raw;
+		try {
+			const text = JSON.stringify(raw ?? {}, null, 2);
+			return text === '{}' ? '' : text;
+		} catch {
+			return '';
+		}
+	}, [call]);
+
+	return (
+		<div className="ff-tool-call">
+			<div className="ff-tool-call__header" onClick={() => setCollapsed((prev) => !prev)}>
+				<span className={`ff-tool-call__dot ff-tool-call__dot--${dotStatus}`} />
+				<span className="ff-tool-call__toggle">
+					{collapsed ? <ChevronRight className="tw-size-4" /> : <ChevronDown className="tw-size-4" />}
+				</span>
+				<span className="ff-tool-call__name" title={call.name}>
+					{call.name}
+				</span>
+				{summary && (
+					<span className="ff-tool-call__summary" title={summary}>
+						{summary}
+					</span>
+				)}
+			</div>
+			{!collapsed && (
+				<div className="ff-tool-call__body">
+					<div className="ff-tool-call__section">
+						<div className="ff-tool-call__label">内容</div>
+						<pre className="ff-tool-call__code">{contentText || '（无内容）'}</pre>
+					</div>
+					{typeof call.result === 'string' && call.result.trim().length > 0 && (
+						<div className="ff-tool-call__section">
+							<div className="ff-tool-call__label">结果</div>
+							<pre className="ff-tool-call__code">{call.result}</pre>
+						</div>
+					)}
+				</div>
+			)}
+		</div>
+	);
+};
 
 const ReasoningBlockComponent = ({ content, startMs, durationMs, isGenerating }: ReasoningBlockProps) => {
 	const [collapsed, setCollapsed] = useState(false);
@@ -99,6 +180,7 @@ interface MessageItemProps {
 	message: ChatMessage;
 	service?: ChatService;
 	isGenerating?: boolean;
+	pendingToolExecutions?: ToolExecution[];
 }
 
 // 文本块组件 - 用于渲染 Markdown 内容
@@ -127,7 +209,7 @@ const TextBlockComponent = ({ content, app }: TextBlockProps) => {
 	return <div ref={containerRef}></div>;
 };
 
-export const MessageItem = ({ message, service, isGenerating }: MessageItemProps) => {
+export const MessageItem = ({ message, service, isGenerating, pendingToolExecutions }: MessageItemProps) => {
 	const app = useObsidianApp();
 	const helper = useMemo(() => new MessageService(), []);
 	const [copied, setCopied] = useState(false);
@@ -319,11 +401,21 @@ export const MessageItem = ({ message, service, isGenerating }: MessageItemProps
 
 				{/* 工具调用徽章 */}
 				{message.toolCalls && message.toolCalls.length > 0 && (
-					<div className="tw-mb-2 tw-flex tw-flex-wrap tw-gap-1">
+					<div className="ff-tool-call-list">
 						{message.toolCalls.map((call) => (
-							<ToolCallBadge key={call.id} call={call} />
+							<ToolCallItem key={call.id} call={call} />
 						))}
 					</div>
+				)}
+
+				{/* 内嵌审批界面 */}
+				{message.toolCalls && message.toolCalls.length > 0 && pendingToolExecutions && (
+					<EmbeddedToolApproval
+						toolCalls={message.toolCalls}
+						pendingExecutions={pendingToolExecutions}
+						onApprove={(executionId) => service?.approveToolExecution(executionId)}
+						onReject={(executionId) => service?.rejectToolExecution(executionId)}
+					/>
 				)}
 
 				<div className="chat-message__content tw-break-words">

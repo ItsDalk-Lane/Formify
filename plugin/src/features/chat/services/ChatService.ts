@@ -332,16 +332,12 @@ export class ChatService {
 		if (exec.status === 'completed') {
 			call.status = 'completed';
 			call.result = exec.result;
-			// 追加一个简短的结果摘要到消息中，避免用户找不到执行反馈
-			msg.content += `\n\n> [!info] 工具 ${call.name} 已完成\n> ${String(exec.result ?? '')}`;
 		} else if (exec.status === 'failed') {
 			call.status = 'failed';
 			call.result = exec.error;
-			msg.content += `\n\n> [!danger] 工具 ${call.name} 执行失败\n> ${String(exec.error ?? '')}`;
 		} else if (exec.status === 'rejected') {
 			call.status = 'failed';
 			call.result = '用户已拒绝';
-			msg.content += `\n\n> [!warning] 工具 ${call.name} 已被拒绝`;
 		}
 	}
 

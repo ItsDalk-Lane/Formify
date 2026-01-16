@@ -26,7 +26,7 @@ export const parseContentBlocks = (content: string): ContentBlock[] => {
 	// 匹配推理块：{{FF_REASONING_START}}:timestamp:...内容...:{{FF_REASONING_END}}:duration
 	// 或者未结束的推理块：{{FF_REASONING_START}}:timestamp:...内容...
 	const startPattern = new RegExp(`${REASONING_START_MARKER.replace(/[{}]/g, '\\$&')}:(\\d+):`, 'g')
-	const endPattern = new RegExp(`:${REASONING_END_MARKER.replace(/[{}]/g, '\\$&')}:(\\d+)`)
+	const endPattern = new RegExp(`:${REASONING_END_MARKER.replace(/[{}]/g, '\\$&')}:(\\d+):?`)
 	
 	let lastIndex = 0
 	let match: RegExpExecArray | null

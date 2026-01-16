@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useCallback } from 'react';
 import type { ChatState } from '../types/chat';
 import { ChatService } from '../services/ChatService';
 import { MessageItem } from '../components/MessageItem';
-import { ToolApprovalNotification } from '../components/ToolApprovalNotification';
 
 interface ChatMessagesProps {
 	service: ChatService;
@@ -74,12 +73,7 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 		<div className={containerClasses}>
 			{/* 注释掉RelevantNotes组件，不再显示"Relevant Notes"区域 */}
 			{/* <RelevantNotes notes={contextNotes} /> */}
-			<ToolApprovalNotification
-				pending={state.pendingToolExecutions}
-				onApprove={(id) => void service.approveToolExecution(id)}
-				onReject={(id) => service.rejectToolExecution(id)}
-			/>
-				<div
+			<div
 				ref={scrollRef}
 				className="tw-flex tw-flex-1 tw-flex-col tw-overflow-y-auto tw-scroll-smooth tw-select-text tw-break-words tw-gap-2"
 			>
@@ -89,6 +83,7 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 						message={message}
 						service={service}
 						isGenerating={message.role === 'assistant' && index === messages.length - 1 && state.isGenerating}
+						pendingToolExecutions={state.pendingToolExecutions}
 					/>
 				))}
 			</div>

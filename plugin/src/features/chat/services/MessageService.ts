@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { EmbedCache } from 'obsidian';
 import type { Message as ProviderMessage } from 'src/features/tars/providers';
 import type { ChatMessage, ChatRole, SelectedFile, SelectedFolder } from '../types/chat';
+import type { ToolCall } from '../types/tools';
 import { parseContentBlocks } from '../utils/markdown';
 import { FileContentService, FileContentOptions } from './FileContentService';
 import { PromptBuilder, PromptBuilderLinkParseOptions } from 'src/service/PromptBuilder';
@@ -19,7 +20,8 @@ export class MessageService {
 			timestamp: extras?.timestamp ?? now,
 			images: extras?.images ?? [],
 			isError: extras?.isError ?? false,
-			metadata: extras?.metadata ?? {}
+			metadata: extras?.metadata ?? {},
+			toolCalls: extras?.toolCalls ?? []
 		};
 	}
 
@@ -118,12 +120,204 @@ export class MessageService {
 			}
 		}
 
+
+		// 如果有工具调用，追加历史展示块
+		if (message.toolCalls && message.toolCalls.length > 0) {
+			const displayBlock = this.formatToolCallsForHistory(message.toolCalls);
+			if (displayBlock) {
+				fullMessage += `\n\n${displayBlock}`;
+			}
+		}
+
 		// 如果有图片，添加到消息末尾
 		if (images) {
 			fullMessage += `\n\n${images}`;
 		}
 
 		return fullMessage;
+	}
+
+	public extractToolCallsFromHistory(content: string): { content: string; toolCalls?: ToolCall[] } {
+		if (!content) {
+			return { content };
+		}
+
+		const { cleanedContent, toolCalls } = this.parseToolCallsFromCallout(content);
+		return { content: cleanedContent, toolCalls };
+	}
+
+	private formatToolCallsForHistory(toolCalls: ToolCall[]): string {
+		if (!toolCalls.length) return '';
+
+		const lines: string[] = [];
+		const first = toolCalls[0];
+		const firstSummary = this.buildToolCallSummary(first);
+		const title = `**${first.name}**${firstSummary ? ` ${firstSummary}` : ''}`;
+		lines.push(`> [!info]- ${title}`);
+
+		for (let index = 0; index < toolCalls.length; index += 1) {
+			const call = toolCalls[index];
+			if (index > 0) {
+				const summary = this.buildToolCallSummary(call);
+				lines.push(`> **${call.name}**${summary ? ` ${summary}` : ''}`);
+			}
+
+			const content = this.getToolCallContent(call);
+			if (content) {
+				lines.push('> ```text');
+				for (const line of content.split('\n')) {
+					lines.push(`> ${line}`);
+				}
+				lines.push('> ```');
+			}
+
+			if (call.result && String(call.result).trim()) {
+				lines.push(`> 结果: ${String(call.result).trim()}`);
+			}
+			lines.push('>');
+		}
+
+		return lines.join('\n').trim();
+	}
+
+	private buildToolCallSummary(call: ToolCall): string {
+		const args = call.arguments ?? {};
+		const filePath = args.filePath ?? args.path ?? args.file ?? args.target;
+		if (typeof filePath === 'string' && filePath.trim().length > 0) {
+			const content = args.content;
+			if (typeof content === 'string') {
+				return `${filePath}（${content.length}字）`;
+			}
+			return filePath;
+		}
+		const url = args.url ?? args.uri ?? args.link;
+		if (typeof url === 'string' && url.trim().length > 0) {
+			return url;
+		}
+		const name = args.name ?? args.title ?? args.query;
+		if (typeof name === 'string' && name.trim().length > 0) {
+			return name;
+		}
+		return '';
+	}
+
+	private getToolCallContent(call: ToolCall): string {
+		const raw = (call.arguments ?? {}).content;
+		if (typeof raw === 'string') return raw;
+		try {
+			const text = JSON.stringify(raw ?? {}, null, 2);
+			return text === '{}' ? '' : text;
+		} catch {
+			return '';
+		}
+	}
+
+	private parseToolCallsFromCallout(content: string): { cleanedContent: string; toolCalls?: ToolCall[] } {
+		const lines = content.split('\n');
+		const output: string[] = [];
+		const toolCalls: ToolCall[] = [];
+		let index = 0;
+
+		const parseSummaryToArgs = (summary: string): Record<string, any> => {
+			const trimmed = summary.trim();
+			if (!trimmed) return {};
+			const match = trimmed.match(/^(.*?)(?:（(\d+)字）)?$/);
+			if (!match) return {};
+			const filePath = match[1]?.trim();
+			if (filePath) {
+				return { filePath };
+			}
+			return {};
+		};
+
+			const parseBlock = (blockLines: string[]) => {
+			let current: ToolCall | null = null;
+			let inCode = false;
+			let codeLines: string[] = [];
+				let currentArgs: Record<string, any> = {};
+
+				const flush = () => {
+				if (!current) return;
+					if (Object.keys(currentArgs).length > 0) {
+						current.arguments = { ...(current.arguments ?? {}), ...currentArgs };
+					}
+				if (codeLines.length > 0) {
+					current.arguments = {
+						...(current.arguments ?? {}),
+						content: codeLines.join('\n')
+					};
+				}
+				toolCalls.push(current);
+				current = null;
+					currentArgs = {};
+				codeLines = [];
+			};
+
+			for (const rawLine of blockLines) {
+				const line = rawLine.replace(/^>\s?/, '');
+				const headerLine = line.startsWith('[!info]- ') ? line.replace('[!info]- ', '') : line;
+				const entryMatch = headerLine.match(/^\*\*(.+?)\*\*(.*)$/);
+				if (entryMatch) {
+					flush();
+					const summaryText = entryMatch[2] ? entryMatch[2].trim() : '';
+					currentArgs = parseSummaryToArgs(summaryText);
+					current = {
+						id: uuidv4(),
+						name: entryMatch[1].trim(),
+						arguments: {},
+						status: 'completed',
+						timestamp: Date.now()
+					};
+					inCode = false;
+					continue;
+				}
+
+				if (line.trim().startsWith('```')) {
+					if (inCode) {
+						inCode = false;
+					} else {
+						inCode = true;
+						codeLines = [];
+					}
+					continue;
+				}
+
+				if (line.startsWith('结果:')) {
+					const resultText = line.replace(/^结果:\s*/, '').trim();
+					if (current) {
+						current.result = resultText;
+					}
+					continue;
+				}
+
+				if (inCode) {
+					codeLines.push(line);
+				}
+			}
+
+			flush();
+		};
+
+		while (index < lines.length) {
+			const line = lines[index];
+			if (line.startsWith('> [!info]- **')) {
+				let endIndex = index;
+				while (endIndex + 1 < lines.length && lines[endIndex + 1].startsWith('>')) {
+					endIndex += 1;
+				}
+
+				const blockLines = lines.slice(index, endIndex + 1);
+				parseBlock(blockLines);
+				index = endIndex + 1;
+				continue;
+			}
+
+			output.push(line);
+			index += 1;
+		}
+
+		const cleanedContent = output.join('\n').trim();
+		return { cleanedContent, toolCalls: toolCalls.length > 0 ? toolCalls : undefined };
 	}
 
 	private formatReasoningBlocksForHistory(content: string): string {
@@ -154,6 +348,58 @@ export class MessageService {
 		}
 
 		return result.replace(/\n{3,}/g, '\n\n');
+	}
+
+	/**
+	 * 将历史文件中的 callout 格式转换回推理标记格式
+	 * 用于在加载历史消息时恢复推理块的原始格式
+	 */
+	public parseReasoningBlocksFromHistory(content: string): string {
+		if (!content || !content.includes('> [!danger]')) {
+			return content;
+		}
+
+		// 匹配 callout 格式：> [!danger]- 深度思考 或 > [!danger]- 深度思考 X.XXs
+		// 后面跟着引用内容行（以 > 开头）
+		// 允许 callout 之后出现空行或普通内容，避免漏匹配
+		const calloutPattern = /> \[!danger\]- (深度思考(?:\s+\d+\.?\d*s)?)\n((?:>[^\n]*\n)+?)(?=\n(?:[^>]|$))/g;
+		let result = content;
+		let match: RegExpExecArray | null;
+
+		while ((match = calloutPattern.exec(content)) !== null) {
+			const title = match[1];
+			const quotedContent = match[2];
+
+			// 提取时长
+			let durationMs: number | undefined;
+			const timeMatch = title.match(/(\d+\.?\d*)s/);
+			if (timeMatch) {
+				durationMs = Math.round(parseFloat(timeMatch[1]) * 1000);
+			}
+
+			// 移除引用标记，恢复原始内容
+			const reasoningContent = quotedContent
+				.split('\n')
+				.map(line => line.replace(/^>\s*/, '').trim()) // 只移除 > 和后面的空格
+				.filter(line => line.length > 0) // 过滤空行
+				.join('\n');
+
+			// 计算开始时间（使用当前时间减去时长，这样推理块会显示为已完成状态）
+			const startMs = durationMs ? Date.now() - durationMs : Date.now();
+
+			// 构建推理标记
+			let reasoningBlock: string;
+			if (durationMs !== undefined) {
+				reasoningBlock = `{{FF_REASONING_START}}:${startMs}:${reasoningContent}:{{FF_REASONING_END}}:${durationMs}`;
+			} else {
+				reasoningBlock = `{{FF_REASONING_START}}:${startMs}:${reasoningContent}`;
+			}
+
+			// 替换原内容中的 callout
+			result = result.replace(match[0], reasoningBlock);
+		}
+
+		return result;
 	}
 
 	private mapRoleToLabel(role: ChatRole): string {

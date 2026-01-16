@@ -168,6 +168,14 @@ export class HistoryService {
 		if (session.filePath) {
 			const file = this.app.vault.getAbstractFileByPath(session.filePath);
 			if (file instanceof TFile) {
+				const existingContent = await this.app.vault.read(file);
+				if (
+					existingContent.includes('FF_TOOL_CALLS_BASE64') ||
+					existingContent.includes('FF_TOOL_CALLS_BLOCK_START') ||
+					existingContent.includes('工具调用 {{FF_TOOL_CALLS}}')
+				) {
+					await this.rewriteMessagesOnly(session.filePath, session.messages);
+				}
 				await this.updateFileFrontmatter(file, {
 					title: session.title,
 					model: session.modelId,
@@ -586,6 +594,15 @@ ${body}
 			
 			// 提取内容并去除首尾空白
 			let content = body.substring(contentStart, contentEnd).trim();
+
+			// 将历史文件中的 callout 格式转换回推理标记格式
+			content = this.messageService.parseReasoningBlocksFromHistory(content);
+
+			const extracted = this.messageService.extractToolCallsFromHistory(content);
+			content = extracted.content;
+
+			// 清理转换后可能产生的多余空行（将3个或以上的连续换行缩减为2个）
+			content = content.replace(/\n{3,}/g, '\n\n').trim();
 			
 			// 尝试解析时间戳
 			let timestamp = Date.now();
@@ -617,6 +634,7 @@ ${body}
 			const message = this.messageService.createMessage(currentHeader.role, content, {
 				timestamp,
 				images,
+				toolCalls: extracted.toolCalls,
 				metadata: {
 					originalHeader: currentHeader.header.trim(),
 					originalTimestamp: currentHeader.timestampStr
@@ -641,8 +659,16 @@ ${body}
 				if (headerLineMatch) {
 					// 保存前一条消息
 					if (inMessage && currentMessage.trim()) {
-						messages.push(this.messageService.createMessage(currentRole, currentMessage.trim(), {
-							timestamp: currentTimestamp
+						let content = currentMessage.trim();
+						// 将历史文件中的 callout 格式转换回推理标记格式
+						content = this.messageService.parseReasoningBlocksFromHistory(content);
+						const extracted = this.messageService.extractToolCallsFromHistory(content);
+						content = extracted.content;
+						// 清理转换后可能产生的多余空行
+						content = content.replace(/\n{3,}/g, '\n\n').trim();
+						messages.push(this.messageService.createMessage(currentRole, content, {
+							timestamp: currentTimestamp,
+							toolCalls: extracted.toolCalls
 						}));
 					}
 					
@@ -665,7 +691,12 @@ ${body}
 			
 			// 保存最后一条消息
 			if (inMessage && currentMessage.trim()) {
-				messages.push(this.messageService.createMessage(currentRole, currentMessage.trim(), {
+				let content = currentMessage.trim();
+				// 将历史文件中的 callout 格式转换回推理标记格式
+				content = this.messageService.parseReasoningBlocksFromHistory(content);
+				// 清理转换后可能产生的多余空行
+				content = content.replace(/\n{3,}/g, '\n\n').trim();
+				messages.push(this.messageService.createMessage(currentRole, content, {
 					timestamp: currentTimestamp
 				}));
 			}
