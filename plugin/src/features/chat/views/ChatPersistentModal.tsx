@@ -43,6 +43,23 @@ export class ChatPersistentModal extends Modal {
 	private dragMouseUpHandler: ((e: MouseEvent) => void) | null = null;
 	private dragMouseMoveHandler: ((e: MouseEvent) => void) | null = null;
 
+	// 缩小功能相关
+	private isMinimized = false;
+	private originalPosition = { left: 0, top: 0, width: 0, height: 0 };
+	private floatingButton: HTMLElement | null = null;
+	private customModalBg: HTMLElement | null = null;
+	private originalStyleSnapshot: {
+		display: string;
+		position: string;
+		left: string;
+		top: string;
+		right: string;
+		bottom: string;
+		transform: string;
+		margin: string;
+	} | null = null;
+	private focusCaptureHandler: ((event: FocusEvent) => void) | null = null;
+
 	constructor(
 		app: App,
 		service: ChatService,
@@ -58,6 +75,13 @@ export class ChatPersistentModal extends Modal {
 		contentEl.empty();
 		contentEl.addClass('chat-persistent-modal-content');
 		modalEl.addClass('chat-persistent-modal');
+
+		// 打开时确保缩小状态被重置
+		this.isMinimized = false;
+		if (this.floatingButton) {
+			this.floatingButton.remove();
+			this.floatingButton = null;
+		}
 
 		// 设置模态框标题
 		titleEl.textContent = localInstance.chat_modal_title;
@@ -92,9 +116,27 @@ export class ChatPersistentModal extends Modal {
 		// 创建 React 根节点并渲染
 		this.root = createRoot(contentEl);
 		this.renderReact();
+
+		// 新增：阻止点击外部关闭
+		this.preventCloseOnOutsideClick();
+
+		// 新增：设置非模态行为
+		this.setupNonModalBehavior();
 	}
 
 	onClose() {
+		// 清理自定义遮罩层
+		if (this.customModalBg) {
+			this.customModalBg.remove();
+			this.customModalBg = null;
+		}
+
+		// 清理悬浮按钮
+		if (this.floatingButton) {
+			this.floatingButton.remove();
+			this.floatingButton = null;
+		}
+
 		// 不恢复会话状态(与ChatModal不同)
 		// 不清理文件(与ChatModal不同)
 		// 保持当前会话和文件选择状态
@@ -104,6 +146,12 @@ export class ChatPersistentModal extends Modal {
 
 		// 清理拖动事件监听器
 		this.cleanupDragListeners();
+
+		// 清理焦点捕获监听器
+		if (this.focusCaptureHandler) {
+			document.removeEventListener('focusin', this.focusCaptureHandler, true);
+			this.focusCaptureHandler = null;
+		}
 
 		// 卸载 React 组件
 		this.root?.unmount();
@@ -219,10 +267,41 @@ export class ChatPersistentModal extends Modal {
 		// 设置标题栏光标样式
 		titleEl.style.cursor = 'move';
 		titleEl.style.userSelect = 'none';
+		titleEl.style.position = 'relative'; // 确保按钮容器正确定位
+
+		// 创建关闭按钮容器
+		const closeBtnContainer = titleEl.createDiv('modal-close-button-container');
+
+		// 创建缩小按钮
+		const minimizeBtn = closeBtnContainer.createEl('button', {
+			cls: 'chat-persistent-modal-minimize-btn',
+			attr: { 'aria-label': '缩小' }
+		});
+		minimizeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+		minimizeBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.handleMinimize();
+		});
+
+		// 创建关闭按钮
+		const closeBtn = closeBtnContainer.createEl('button', {
+			cls: 'chat-persistent-modal-close-btn',
+			attr: { 'aria-label': '关闭' }
+		});
+		closeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+		closeBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.close();
+		});
 
 		// 鼠标按下开始拖动
 		titleEl.addEventListener('mousedown', (e: MouseEvent) => {
 			if (e.button !== 0) return; // 只响应左键
+
+			// 检查点击是否在按钮容器内
+			if ((e.target as HTMLElement).closest('.modal-close-button-container')) {
+				return; // 不启动拖动
+			}
 
 			this.isDragging = true;
 			this.dragStartX = e.clientX;
@@ -286,6 +365,175 @@ export class ChatPersistentModal extends Modal {
 			this.dragMouseUpHandler = null;
 		}
 		this.isDragging = false;
+	}
+
+	/**
+	 * 阻止点击外部区域关闭模态框并隐藏默认关闭按钮
+	 */
+	private preventCloseOnOutsideClick() {
+		setTimeout(() => {
+			// 隐藏 Obsidian 默认创建的关闭按钮
+			const defaultCloseBtn = this.modalEl.querySelector('.modal-close-button') as HTMLElement;
+			if (defaultCloseBtn) {
+				defaultCloseBtn.style.display = 'none';
+			}
+
+			// 处理遮罩层
+			const modalContainer = this.modalEl?.closest('.modal-container') as HTMLElement | null;
+			const modalBg = modalContainer?.querySelector('.modal-bg') as HTMLElement | null;
+			if (modalBg) {
+				// 阻止点击遮罩层事件
+				modalBg.addEventListener('click', (e: MouseEvent) => {
+					e.preventDefault();
+					e.stopPropagation();
+					e.stopImmediatePropagation();
+				}, true);
+
+				// 完全移除遮罩层的交互
+				modalBg.style.pointerEvents = 'none';
+				modalBg.style.backgroundColor = 'transparent';
+				modalBg.style.opacity = '0';
+				modalBg.style.display = 'none';
+			}
+		}, 0);
+	}
+
+	/**
+	 * 设置非模态行为（允许与其他UI元素交互）
+	 */
+	private setupNonModalBehavior() {
+		setTimeout(() => {
+			// 处理遮罩层，确保不阻止其他操作
+			const modalContainer = this.modalEl?.closest('.modal-container') as HTMLElement | null;
+			const modalBg = modalContainer?.querySelector('.modal-bg') as HTMLElement | null;
+			if (modalBg) {
+				modalBg.style.pointerEvents = 'none';
+				modalBg.style.backgroundColor = 'transparent';
+				modalBg.style.opacity = '0';
+				modalBg.style.display = 'none';
+			}
+
+			// 确保模态框本身可以交互
+			const modalEl = this.modalEl;
+			if (modalEl) {
+				modalEl.style.pointerEvents = 'auto';
+			}
+
+			// 移除模态容器的模态行为限制
+			if (modalContainer) {
+				modalContainer.style.pointerEvents = 'none';
+			}
+
+			// 防止模态框抢回编辑器焦点
+			if (!this.focusCaptureHandler) {
+				this.focusCaptureHandler = (event: FocusEvent) => {
+					const target = event.target as Node | null;
+					if (target && this.modalEl?.contains(target)) {
+						return;
+					}
+					event.stopImmediatePropagation();
+				};
+				document.addEventListener('focusin', this.focusCaptureHandler, true);
+			}
+		}, 0);
+	}
+
+	/**
+	 * 处理缩小操作
+	 */
+	private handleMinimize() {
+		if (this.isMinimized) {
+			this.restoreFromMinimize();
+		} else {
+			this.minimizeToFloatingButton();
+		}
+	}
+
+	/**
+	 * 缩小到悬浮按钮
+	 */
+	private minimizeToFloatingButton() {
+		const modalEl = this.modalEl;
+		if (!modalEl) return;
+
+		// 保存当前状态
+		const rect = modalEl.getBoundingClientRect();
+		this.originalPosition = {
+			left: rect.left,
+			top: rect.top,
+			width: rect.width,
+			height: rect.height
+		};
+		this.originalStyleSnapshot = {
+			display: modalEl.style.display,
+			position: modalEl.style.position,
+			left: modalEl.style.left,
+			top: modalEl.style.top,
+			right: modalEl.style.right,
+			bottom: modalEl.style.bottom,
+			transform: modalEl.style.transform,
+			margin: modalEl.style.margin
+		};
+
+		// 隐藏模态框
+		modalEl.style.display = 'none';
+
+		// 创建悬浮按钮
+		this.createFloatingButton();
+
+		this.isMinimized = true;
+	}
+
+	/**
+	 * 创建悬浮按钮
+	 */
+	private createFloatingButton() {
+		if (this.floatingButton) return;
+
+		const floatBtn = document.createElement('div');
+		floatBtn.className = 'chat-persistent-modal-floating-btn';
+		floatBtn.innerHTML = `
+			<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+			</svg>
+		`;
+
+		// 点击恢复
+		floatBtn.addEventListener('click', () => this.restoreFromMinimize());
+
+		// 添加到文档
+		document.body.appendChild(floatBtn);
+		this.floatingButton = floatBtn;
+	}
+
+	/**
+	 * 从悬浮按钮恢复
+	 */
+	private restoreFromMinimize() {
+		const modalEl = this.modalEl;
+		if (!modalEl || !this.floatingButton) return;
+
+		// 移除悬浮按钮
+		this.floatingButton.remove();
+		this.floatingButton = null;
+
+		// 恢复模态框
+		if (this.originalStyleSnapshot) {
+			modalEl.style.display = this.originalStyleSnapshot.display;
+			modalEl.style.position = this.originalStyleSnapshot.position;
+			modalEl.style.left = this.originalStyleSnapshot.left;
+			modalEl.style.top = this.originalStyleSnapshot.top;
+			modalEl.style.right = this.originalStyleSnapshot.right;
+			modalEl.style.bottom = this.originalStyleSnapshot.bottom;
+			modalEl.style.transform = this.originalStyleSnapshot.transform;
+			modalEl.style.margin = this.originalStyleSnapshot.margin;
+		} else {
+			modalEl.style.display = 'flex';
+			modalEl.style.left = `${this.originalPosition.left}px`;
+			modalEl.style.top = `${this.originalPosition.top}px`;
+		}
+
+		this.isMinimized = false;
 	}
 }
 

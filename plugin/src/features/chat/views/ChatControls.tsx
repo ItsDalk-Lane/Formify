@@ -41,10 +41,14 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 		if (!historyOpen) return;
 
 		const handleClickOutside = (event: MouseEvent) => {
-			// 检查点击是否在历史面板外部
-			if (historyPanelRef.current && !historyPanelRef.current.contains(event.target as Node)) {
-				setHistoryOpen(false);
+			const target = event.target as Node;
+			if (historyPanelRef.current?.contains(target)) {
+				return;
 			}
+			if (historyButtonRef.current?.contains(target)) {
+				return;
+			}
+			setHistoryOpen(false);
 		};
 
 		// 延迟添加事件监听，避免立即触发

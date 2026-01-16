@@ -1,6 +1,6 @@
 import { X, RotateCcw, ExternalLink, Trash2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { ChatHistoryEntry } from '../services/HistoryService';
 
 interface ChatHistoryPanelProps {
@@ -15,7 +15,23 @@ interface ChatHistoryPanelProps {
 }
 
 export const ChatHistoryPanel = ({ items, onSelect, onOpenFile, onClose, onRefresh, onDelete, anchorRef, panelRef }: ChatHistoryPanelProps) => {
-	const [position, setPosition] = useState({ right: 24, bottom: 80 });
+	const getPanelPosition = () => {
+		if (anchorRef?.current) {
+			const buttonRect = anchorRef.current.getBoundingClientRect();
+			const gap = 8;
+
+			// 计算水平位置：尽量靠右对齐按钮右侧
+			const right = Math.max(12, window.innerWidth - buttonRect.right);
+
+			// 计算垂直位置：显示在按钮上方
+			const bottom = Math.max(12, window.innerHeight - buttonRect.top + gap);
+
+			return { right, bottom };
+		}
+		return { right: 24, bottom: 80 };
+	};
+
+	const [position, setPosition] = useState(getPanelPosition);
 	const internalPanelRef = useRef<HTMLDivElement>(null);
 
 	// 将内部 ref 同步到外部 ref
@@ -26,21 +42,8 @@ export const ChatHistoryPanel = ({ items, onSelect, onOpenFile, onClose, onRefre
 	}, [panelRef]);
 
 	// 根据按钮位置动态计算面板位置
-	useEffect(() => {
-		if (anchorRef?.current) {
-			const buttonRect = anchorRef.current.getBoundingClientRect();
-			const panelWidth = 320;
-			const panelHeight = 420;
-			const gap = 8;
-
-			// 计算水平位置：尽量靠右对齐按钮右侧
-			const right = Math.max(12, window.innerWidth - buttonRect.right);
-			
-			// 计算垂直位置：显示在按钮上方
-			const bottom = Math.max(12, window.innerHeight - buttonRect.top + gap);
-
-			setPosition({ right, bottom });
-		}
+	useLayoutEffect(() => {
+		setPosition(getPanelPosition());
 	}, [anchorRef]);
 
 	const panelContent = (
