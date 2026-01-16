@@ -1,5 +1,7 @@
-# vscode
+# Visual Studio Code
 .vscode 
+.cursor
+.qoder
 
 # Intellij
 *.iml
@@ -27,3 +29,4 @@ data.json
 
 # Exclude the 'docs' directory from version control
 docs/
+System/
