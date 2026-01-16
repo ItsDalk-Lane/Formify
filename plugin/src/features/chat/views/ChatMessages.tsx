@@ -84,6 +84,7 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 						service={service}
 						isGenerating={message.role === 'assistant' && index === messages.length - 1 && state.isGenerating}
 						pendingToolExecutions={state.pendingToolExecutions}
+						currentMultiStepTask={state.currentMultiStepTask}
 					/>
 				))}
 			</div>

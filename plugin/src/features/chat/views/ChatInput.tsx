@@ -87,7 +87,16 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 
 	const handleSubmit = async (event?: FormEvent) => {
 		event?.preventDefault();
-		await service.sendMessage(value);
+
+		// 检查是否开启了多步骤任务模式
+		if (state.multiStepTaskEnabled) {
+			// 使用多步骤任务模式
+			await service.startMultiStepTask(value);
+			setValue('');
+		} else {
+			// 普通消息发送
+			await service.sendMessage(value);
+		}
 	};
 
 	const handleRemoveImage = (image: string) => {

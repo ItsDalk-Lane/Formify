@@ -15,9 +15,12 @@ import { DebugLogger } from 'src/utils/DebugLogger';
 import { SystemPromptAssembler } from 'src/service/SystemPromptAssembler';
 import { TOOL_CALLS_END_MARKER, TOOL_CALLS_START_MARKER } from 'src/features/tars/providers/utils';
 import type { ToolCall, ToolDefinition, ToolExecution } from '../types/tools';
+import type { MultiStepTask, MultiStepTaskSettings } from '../types/multiStepTask';
+import { DEFAULT_MULTI_STEP_TASK_SETTINGS } from '../types/multiStepTask';
 import { ToolRegistryService } from './ToolRegistryService';
 import { ToolExecutionManager } from './ToolExecutionManager';
-import { createWriteFileTool } from '../tools';
+import { MultiStepTaskService } from './MultiStepTaskService';
+import { createWriteFileTool, createCreateFolderTool, createReadFileTool, createListFilesTool } from '../tools';
 
 type ChatSubscriber = (state: ChatState) => void;
 
@@ -28,6 +31,7 @@ export class ChatService {
 	private readonly fileContentService: FileContentService;
 	private readonly toolRegistry: ToolRegistryService;
 	private readonly toolExecutionManager: ToolExecutionManager;
+	private multiStepTaskService: MultiStepTaskService | null = null;
 	private state: ChatState = {
 		activeSession: null,
 		isGenerating: false,
@@ -42,7 +46,10 @@ export class ChatService {
 		selectedText: undefined,
 		showTemplateSelector: false,
 		shouldSaveHistory: true, // 默认保存历史记录
-		pendingToolExecutions: []
+		pendingToolExecutions: [],
+		// 多步骤任务状态
+		multiStepTaskEnabled: false,
+		currentMultiStepTask: null
 	};
 	private subscribers: Set<ChatSubscriber> = new Set();
 	private controller: AbortController | null = null;
@@ -71,6 +78,7 @@ export class ChatService {
 		this.loadBuiltinTools();
 		this.loadGlobalTools();
 		this.syncToolSettingsFromTars();
+		this.initializeMultiStepTaskService();
 		if (!this.state.selectedModelId) {
 			this.state.selectedModelId = this.getDefaultProviderTag();
 		}
@@ -78,6 +86,58 @@ export class ChatService {
 			this.createNewSession();
 		}
 		this.emitState();
+	}
+
+	/**
+	 * 初始化多步骤任务服务
+	 */
+	private initializeMultiStepTaskService() {
+		// 创建AI请求函数
+		const sendAIRequest = async (prompt: string, systemPrompt?: string): Promise<string> => {
+			const provider = this.resolveProvider();
+			if (!provider) {
+				throw new Error('尚未配置任何AI模型');
+			}
+
+			const vendor = availableVendors.find((item) => item.name === provider.vendor);
+			if (!vendor) {
+				throw new Error(`无法找到供应商 ${provider.vendor}`);
+			}
+
+			const providerOptions = { ...provider.options };
+			const sendRequest = vendor.sendRequestFunc(providerOptions);
+
+			const messages: ProviderMessage[] = [];
+			if (systemPrompt) {
+				messages.push({ role: 'system', content: systemPrompt });
+			}
+			messages.push({ role: 'user', content: prompt });
+
+			const controller = new AbortController();
+			let response = '';
+
+			for await (const chunk of sendRequest(messages, controller)) {
+				response += chunk;
+			}
+
+			return response;
+		};
+
+		this.multiStepTaskService = new MultiStepTaskService(
+			this.toolRegistry,
+			sendAIRequest
+		);
+
+		// 订阅任务状态变化
+		this.multiStepTaskService.subscribe((task) => {
+			this.state.currentMultiStepTask = task;
+			this.emitState();
+		});
+
+		// 更新多步骤任务设置
+		if (this.settings.multiStepTask) {
+			this.multiStepTaskService.updateSettings(this.settings.multiStepTask);
+		}
 	}
 
 	getState(): ChatState {
@@ -219,6 +279,9 @@ export class ChatService {
 
 	loadBuiltinTools() {
 		this.toolRegistry.register(createWriteFileTool(this.app), 'builtin');
+		this.toolRegistry.register(createCreateFolderTool(this.app), 'builtin');
+		this.toolRegistry.register(createReadFileTool(this.app), 'builtin');
+		this.toolRegistry.register(createListFilesTool(this.app), 'builtin');
 	}
 
 	loadGlobalTools() {
@@ -319,6 +382,163 @@ export class ChatService {
 		this.applyExecutionResultToMessage(exec);
 		this.emitState();
 	}
+
+	// ==================== 多步骤任务相关方法 ====================
+
+	/**
+	 * 获取多步骤任务模式是否启用
+	 */
+	isMultiStepTaskEnabled(): boolean {
+		return this.state.multiStepTaskEnabled;
+	}
+
+	/**
+	 * 设置多步骤任务模式
+	 */
+	setMultiStepTaskEnabled(enabled: boolean) {
+		this.state.multiStepTaskEnabled = enabled;
+		this.emitState();
+	}
+
+	/**
+	 * 切换多步骤任务模式
+	 */
+	toggleMultiStepTaskMode(): boolean {
+		this.state.multiStepTaskEnabled = !this.state.multiStepTaskEnabled;
+		this.emitState();
+		return this.state.multiStepTaskEnabled;
+	}
+
+	/**
+	 * 获取当前多步骤任务
+	 */
+	getCurrentMultiStepTask(): MultiStepTask | null {
+		return this.multiStepTaskService?.getCurrentTask() ?? null;
+	}
+
+	/**
+	 * 更新多步骤任务设置
+	 */
+	updateMultiStepTaskSettings(settings: Partial<MultiStepTaskSettings>) {
+		if (this.settings.multiStepTask) {
+			this.settings.multiStepTask = { ...this.settings.multiStepTask, ...settings };
+		} else {
+			this.settings.multiStepTask = { ...DEFAULT_MULTI_STEP_TASK_SETTINGS, ...settings };
+		}
+		this.multiStepTaskService?.updateSettings(this.settings.multiStepTask);
+	}
+
+	/**
+	 * 开始多步骤任务
+	 */
+	async startMultiStepTask(taskDescription: string): Promise<MultiStepTask | null> {
+		if (!this.multiStepTaskService) {
+			new Notice('多步骤任务服务未初始化');
+			return null;
+		}
+
+		const session = this.state.activeSession ?? this.createNewSession();
+
+		// 创建用户消息
+		const userMessage = this.messageService.createMessage('user', taskDescription, {
+			metadata: {
+				isMultiStepTask: true
+			}
+		});
+		session.messages.push(userMessage);
+		session.updatedAt = Date.now();
+		this.emitState();
+
+		try {
+			const task = await this.multiStepTaskService.startTask(
+				session.id,
+				userMessage.id,
+				taskDescription
+			);
+
+			// 创建AI响应消息，显示任务计划
+			if (task.plan) {
+				const planMessage = this.messageService.createMessage('assistant', '', {
+					metadata: {
+						isMultiStepTaskPlan: true,
+						taskId: task.id
+					}
+				});
+				session.messages.push(planMessage);
+				session.updatedAt = Date.now();
+				this.emitState();
+			}
+
+			return task;
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			new Notice(`任务分析失败: ${errorMsg}`);
+
+			// 创建错误消息
+			const errorMessage = this.messageService.createMessage('assistant', `任务分析失败: ${errorMsg}`, {
+				isError: true
+			});
+			session.messages.push(errorMessage);
+			session.updatedAt = Date.now();
+			this.emitState();
+
+			return null;
+		}
+	}
+
+	/**
+	 * 确认并执行多步骤任务
+	 */
+	async confirmMultiStepTask() {
+		if (!this.multiStepTaskService) {
+			new Notice('多步骤任务服务未初始化');
+			return;
+		}
+
+		try {
+			await this.multiStepTaskService.confirmAndExecute();
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			new Notice(`任务执行失败: ${errorMsg}`);
+		}
+	}
+
+	/**
+	 * 取消多步骤任务
+	 */
+	cancelMultiStepTask() {
+		this.multiStepTaskService?.cancelTask();
+		new Notice('任务已取消');
+	}
+
+	/**
+	 * 暂停多步骤任务
+	 */
+	pauseMultiStepTask() {
+		this.multiStepTaskService?.pauseTask();
+		new Notice('任务已暂停');
+	}
+
+	/**
+	 * 恢复多步骤任务
+	 */
+	async resumeMultiStepTask() {
+		try {
+			await this.multiStepTaskService?.resumeTask();
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			new Notice(`恢复任务失败: ${errorMsg}`);
+		}
+	}
+
+	/**
+	 * 清除当前多步骤任务
+	 */
+	clearMultiStepTask() {
+		this.multiStepTaskService?.clearTask();
+	}
+
+	// ==================== 多步骤任务相关方法结束 ====================
 
 	private applyExecutionResultToMessage(exec: ToolExecution) {
 		const session = this.state.activeSession;

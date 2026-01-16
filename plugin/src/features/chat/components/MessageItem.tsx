@@ -1,14 +1,16 @@
-import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download, Highlighter, ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download, Highlighter, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import { Component, Platform } from 'obsidian';
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
 import type { ChatMessage } from '../types/chat';
 import type { ToolExecution } from '../types/tools';
+import type { MultiStepTask } from '../types/multiStepTask';
 import { ChatService } from '../services/ChatService';
 import { MessageService } from '../services/MessageService';
 import { renderMarkdownContent, parseContentBlocks, hasReasoningBlock, ContentBlock } from '../utils/markdown';
 import { Notice } from 'obsidian';
 import { EmbeddedToolApproval } from './EmbeddedToolApproval';
+import { MultiStepTaskProgress } from './MultiStepTaskProgress';
 
 interface MessageItemProps {
 	message: ChatMessage;
@@ -181,6 +183,7 @@ interface MessageItemProps {
 	service?: ChatService;
 	isGenerating?: boolean;
 	pendingToolExecutions?: ToolExecution[];
+	currentMultiStepTask?: MultiStepTask | null;
 }
 
 // 文本块组件 - 用于渲染 Markdown 内容
@@ -209,7 +212,7 @@ const TextBlockComponent = ({ content, app }: TextBlockProps) => {
 	return <div ref={containerRef}></div>;
 };
 
-export const MessageItem = ({ message, service, isGenerating, pendingToolExecutions }: MessageItemProps) => {
+export const MessageItem = ({ message, service, isGenerating, pendingToolExecutions, currentMultiStepTask }: MessageItemProps) => {
 	const app = useObsidianApp();
 	const helper = useMemo(() => new MessageService(), []);
 	const [copied, setCopied] = useState(false);
@@ -416,6 +419,29 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 						onApprove={(executionId) => service?.approveToolExecution(executionId)}
 						onReject={(executionId) => service?.rejectToolExecution(executionId)}
 					/>
+				)}
+
+				{/* 多步骤任务进度组件 */}
+				{message.metadata?.isMultiStepTaskPlan && currentMultiStepTask && (
+					<div className="tw-mb-3">
+						<MultiStepTaskProgress
+							task={currentMultiStepTask}
+							onConfirm={() => service?.confirmMultiStepTask()}
+							onCancel={() => service?.cancelMultiStepTask()}
+							onPause={() => service?.pauseMultiStepTask()}
+							onResume={() => service?.resumeMultiStepTask()}
+						/>
+					</div>
+				)}
+
+				{/* 多步骤任务标记 */}
+				{message.metadata?.isMultiStepTask && (
+					<div className="tw-mb-2">
+						<div className="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-blue-100 tw-text-blue-700 tw-rounded tw-text-xs">
+							<Layers className="tw-size-3 tw-flex-shrink-0" />
+							<span>多步骤任务</span>
+						</div>
+					</div>
 				)}
 
 				<div className="chat-message__content tw-break-words">

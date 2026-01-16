@@ -1,4 +1,4 @@
-import { History, MessageCirclePlus, Save, Zap, Paperclip, ImageUp, Wrench } from 'lucide-react';
+import { History, MessageCirclePlus, Save, Zap, Paperclip, ImageUp, Wrench, Layers } from 'lucide-react';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { ChatService } from '../services/ChatService';
 import type { ChatState } from '../types/chat';
@@ -29,6 +29,9 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 	// 获取工具数据
 	const tools = service.getTools();
 	const pendingCount = state.pendingToolExecutions.length;
+
+	// 多步骤任务模式状态
+	const isMultiStepTaskEnabled = state.multiStepTaskEnabled;
 
 	useEffect(() => {
 		if (historyOpen) {
@@ -186,6 +189,23 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 							{pendingCount > 99 ? '99+' : pendingCount}
 						</span>
 					)}
+				</span>
+				<span
+					onClick={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						service.toggleMultiStepTaskMode();
+					}}
+					className={`tw-cursor-pointer tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-rounded tw-text-xs tw-border-none tw-transition-colors ${
+						isMultiStepTaskEnabled
+							? 'tw-bg-blue-500 tw-text-white hover:tw-bg-blue-600'
+							: 'tw-bg-gray-100 tw-text-gray-600 hover:tw-bg-gray-200'
+					}`}
+					aria-label="多步骤任务模式"
+					title={isMultiStepTaskEnabled ? '多步骤任务模式已开启 - 点击关闭' : '多步骤任务模式已关闭 - 点击开启'}
+				>
+					<Layers className="tw-size-3" />
+					<span>多步骤</span>
 				</span>
 			</div>
 			<div className="tw-flex-1"></div>
