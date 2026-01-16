@@ -1,7 +1,8 @@
 # Visual Studio Code
-.vscode 
+.vscode
 .cursor
 .qoder
+.trae
 
 # Intellij
 *.iml
