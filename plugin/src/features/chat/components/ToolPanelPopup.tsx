@@ -50,11 +50,11 @@ export const ToolPanelPopup = ({
 		};
 
 		if (isOpen) {
-			document.addEventListener('mousedown', handleClickOutside);
+			document.addEventListener('click', handleClickOutside);
 		}
 
 		return () => {
-			document.removeEventListener('mousedown', handleClickOutside);
+			document.removeEventListener('click', handleClickOutside);
 		};
 	}, [isOpen, onClose, anchorRef]);
 
@@ -63,11 +63,7 @@ export const ToolPanelPopup = ({
 			setPortalContainer(null);
 			return;
 		}
-
-		const anchorEl = anchorRef.current;
-		const modalContainer = anchorEl?.closest('.modal-container') as HTMLElement | null;
-		const modalEl = anchorEl?.closest('.modal') as HTMLElement | null;
-		setPortalContainer(modalContainer ?? modalEl ?? document.body);
+		setPortalContainer(document.body);
 	}, [isOpen, anchorRef]);
 
 	if (!isOpen || !portalContainer) return null;

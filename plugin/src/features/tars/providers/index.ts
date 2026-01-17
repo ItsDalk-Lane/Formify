@@ -18,6 +18,7 @@ export interface Message {
 	readonly role: MsgRole
 	readonly content: string
 	readonly embeds?: EmbedCache[]
+	readonly prefix?: boolean
 }
 
 export type SendRequest = (
@@ -36,6 +37,7 @@ export type Capability =
 	| 'Web Search'
 	| 'Tool Calling'
 	| 'Reasoning'
+	| 'Structured Output'
 
 export interface Vendor {
 	readonly name: string

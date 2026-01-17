@@ -122,6 +122,8 @@ export const getCapabilityEmoji = (capability: Capability): string => {
 			return '🛠️'
 		case 'Reasoning':
 			return '🧠'
+		case 'Structured Output':
+			return '📋'
 	}
 }
 
@@ -164,6 +166,22 @@ export const getEnabledCapabilities = (vendor: Vendor, options: BaseOptions): Ca
 		return false
 	}
 
+	// 检查是否启用了结构化输出
+	const isStructuredOutputEnabled = (): boolean => {
+		const raw = options as any
+		// Ollama 使用 format 参数（可能在 options 上或 parameters 中）
+		if (vendor.name === 'Ollama') {
+			return raw?.format !== undefined || raw?.parameters?.format !== undefined
+		}
+		// DeepSeek 使用 response_format: { type: 'json_object' }
+		if (vendor.name === 'DeepSeek') {
+			const responseFormat = raw?.response_format ?? raw?.parameters?.response_format
+			return responseFormat?.type === 'json_object'
+		}
+		// 可以在这里添加其他服务商的结构化输出检查
+		return false
+	}
+
 	// 检查并过滤掉未启用的功能
 	const enabledCapabilities: Capability[] = []
 
@@ -179,6 +197,13 @@ export const getEnabledCapabilities = (vendor: Vendor, options: BaseOptions): Ca
 			case 'Reasoning':
 				// 只有当enableReasoning为true时才启用推理功能
 				if (isReasoningEnabledForDisplay()) {
+					enabledCapabilities.push(capability)
+				}
+				break
+
+			case 'Structured Output':
+				// 只有当配置了 format 参数时才启用结构化输出
+				if (isStructuredOutputEnabled()) {
 					enabledCapabilities.push(capability)
 				}
 				break

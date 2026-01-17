@@ -4,11 +4,17 @@ import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { arrayBufferToBase64, getMimeTypeFromFilename, buildReasoningBlockStart, buildReasoningBlockEnd, buildToolCallsBlock } from './utils'
 
+// Structured Output Format 类型
+export type StructuredOutputFormat = 'json' | Record<string, unknown>
+
 // Ollama 扩展选项接口
 export interface OllamaOptions extends BaseOptions {
 	// 推理功能配置
 	enableReasoning?: boolean // 是否启用推理功能
 	thinkLevel?: 'low' | 'medium' | 'high' // 推理级别(可选)
+
+	// 结构化输出配置
+	format?: StructuredOutputFormat // 输出格式：'json' 或 JSON Schema 对象
 }
 
 /**
@@ -68,7 +74,7 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary) {
 		const { parameters, ...optionsExcludingParams } = settings
 		const options = { ...optionsExcludingParams, ...parameters } as OllamaOptions
-		const { baseURL, model, enableReasoning, thinkLevel, ...remains } = options
+		const { baseURL, model, enableReasoning, thinkLevel, format, ...remains } = options
 
 		// 格式化消息（处理图像 embeds）
 		const formattedMessages = await Promise.all(
@@ -90,6 +96,11 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		} else {
 			// 明确禁用推理
 			requestParams.think = false
+		}
+
+		// 添加结构化输出格式参数（如果配置）
+		if (format !== undefined) {
+			requestParams.format = format
 		}
 
 		const ollama = new Ollama({ host: baseURL })
@@ -186,5 +197,5 @@ export const ollamaVendor: Vendor = {
 	sendRequestFunc,
 	models: [],
 	websiteToObtainKey: 'https://ollama.com',
-	capabilities: ['Text Generation', 'Image Vision', 'Tool Calling', 'Reasoning']
+	capabilities: ['Text Generation', 'Image Vision', 'Tool Calling', 'Reasoning', 'Structured Output']
 }

@@ -16,6 +16,7 @@ export interface ChatPersistentModalOptions {
 	width: number;
 	height: number;
 	activeFile?: TFile | null;
+	onClose?: () => void;
 }
 
 /**
@@ -30,6 +31,7 @@ export class ChatPersistentModal extends Modal {
 	private root: Root | null = null;
 	private readonly service: ChatService;
 	private readonly options: ChatPersistentModalOptions;
+	private readonly onCloseCallback?: () => void;
 
 	// 事件监听器引用(用于清理)
 	private eventRefs: EventRef[] = [];
@@ -68,6 +70,7 @@ export class ChatPersistentModal extends Modal {
 		super(app);
 		this.service = service;
 		this.options = options;
+		this.onCloseCallback = options.onClose;
 	}
 
 	onOpen() {
@@ -125,6 +128,9 @@ export class ChatPersistentModal extends Modal {
 	}
 
 	onClose() {
+		// 调用关闭回调
+		this.onCloseCallback?.();
+
 		// 清理自定义遮罩层
 		if (this.customModalBg) {
 			this.customModalBg.remove();
@@ -534,6 +540,28 @@ export class ChatPersistentModal extends Modal {
 		}
 
 		this.isMinimized = false;
+	}
+
+	/**
+	 * 聚焦模态框
+	 * 用于单例模式下恢复已有模态框的显示
+	 */
+	public focus() {
+		// 如果处于最小化状态，先恢复
+		if (this.isMinimized) {
+			this.restoreFromMinimize();
+		}
+
+		// 确保模态框可见
+		const modalEl = this.modalEl;
+		if (modalEl) {
+			modalEl.style.display = 'flex';
+			modalEl.style.zIndex = '1000';
+
+			// 聚焦到输入框
+			const inputElement = modalEl.querySelector('textarea, input') as HTMLElement;
+			inputElement?.focus();
+		}
 	}
 }
 

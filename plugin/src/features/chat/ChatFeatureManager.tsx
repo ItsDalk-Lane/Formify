@@ -67,6 +67,9 @@ export class ChatFeatureManager {
 	private resultModalContainer: HTMLElement | null = null;
 	private resultModalRoot: Root | null = null;
 
+	// 持久化模态框单例
+	private persistentModal: ChatPersistentModal | null = null;
+
 	constructor(private readonly plugin: FormPlugin) {
 		this.service = new ChatService(plugin);
 	}
@@ -135,11 +138,36 @@ export class ChatFeatureManager {
 		}
 	}
 
+	/**
+	 * 查找已存在的指定类型的视图
+	 * @param viewType 视图类型
+	 * @returns 已存在的视图 leaf，如果不存在则返回 null
+	 */
+	private findExistingView(viewType: string): WorkspaceLeaf | null {
+		let existingLeaf: WorkspaceLeaf | null = null;
+
+		this.plugin.app.workspace.iterateAllLeaves((leaf) => {
+			if (leaf.view.getViewType() === viewType) {
+				existingLeaf = leaf;
+				return true; // 停止迭代
+			}
+			return false;
+		});
+
+		return existingLeaf;
+	}
+
 	async activateChatView(mode: ChatOpenMode) {
 		try {
 			if (mode === 'window') {
-				// 在新窗口中打开 - Obsidian 不直接支持新窗口，使用弹出窗口方式
-				await this.openInWindow();
+				// 在新窗口中打开 - 首先检查是否已存在
+				const existingLeaf = this.findExistingView(VIEW_TYPE_CHAT_TAB);
+				if (existingLeaf) {
+					// 如果已存在，聚焦该窗口
+					this.plugin.app.workspace.revealLeaf(existingLeaf);
+				} else {
+					await this.openInWindow();
+				}
 			} else if (mode === 'persistent-modal') {
 				// 打开持久化模态框
 				this.openChatInPersistentModal();
@@ -147,36 +175,59 @@ export class ChatFeatureManager {
 				// 添加延迟确保工作区完全加载
 				await this.waitForWorkspaceReady();
 
-				const leaf = this.plugin.app.workspace.getRightLeaf(false);
-				if (!leaf) {
-					console.warn('FormFlow Chat: 无法获取右侧边栏，可能工作区还未完全初始化');
-					// 尝试使用左侧边栏作为备选方案
-					const leftLeaf = this.plugin.app.workspace.getLeftLeaf(false);
-					if (leftLeaf) {
-						await this.openLeaf(leftLeaf, VIEW_TYPE_CHAT_SIDEBAR, true);
+				// 首先检查是否已存在侧边栏视图
+				const existingLeaf = this.findExistingView(VIEW_TYPE_CHAT_SIDEBAR);
+				if (existingLeaf) {
+					// 如果已存在，聚焦该视图
+					this.plugin.app.workspace.revealLeaf(existingLeaf);
+				} else {
+					// 创建新的侧边栏视图
+					const leaf = this.plugin.app.workspace.getRightLeaf(false);
+					if (!leaf) {
+						console.warn('FormFlow Chat: 无法获取右侧边栏，可能工作区还未完全初始化');
+						// 尝试使用左侧边栏作为备选方案
+						const leftLeaf = this.plugin.app.workspace.getLeftLeaf(false);
+						if (leftLeaf) {
+							await this.openLeaf(leftLeaf, VIEW_TYPE_CHAT_SIDEBAR, true);
+						}
+						return;
 					}
-					return;
+					await this.openLeaf(leaf, VIEW_TYPE_CHAT_SIDEBAR, true);
 				}
-				await this.openLeaf(leaf, VIEW_TYPE_CHAT_SIDEBAR, true);
 			} else if (mode === 'left-sidebar') {
 				// 添加延迟确保工作区完全加载
 				await this.waitForWorkspaceReady();
 
-				const leaf = this.plugin.app.workspace.getLeftLeaf(false);
-				if (!leaf) {
-					console.warn('FormFlow Chat: 无法获取左侧边栏，可能工作区还未完全初始化');
-					// 尝试使用右侧边栏作为备选方案
-					const rightLeaf = this.plugin.app.workspace.getRightLeaf(false);
-					if (rightLeaf) {
-						await this.openLeaf(rightLeaf, VIEW_TYPE_CHAT_SIDEBAR, true);
+				// 首先检查是否已存在侧边栏视图
+				const existingLeaf = this.findExistingView(VIEW_TYPE_CHAT_SIDEBAR);
+				if (existingLeaf) {
+					// 如果已存在，聚焦该视图
+					this.plugin.app.workspace.revealLeaf(existingLeaf);
+				} else {
+					// 创建新的左侧边栏视图
+					const leaf = this.plugin.app.workspace.getLeftLeaf(false);
+					if (!leaf) {
+						console.warn('FormFlow Chat: 无法获取左侧边栏，可能工作区还未完全初始化');
+						// 尝试使用右侧边栏作为备选方案
+						const rightLeaf = this.plugin.app.workspace.getRightLeaf(false);
+						if (rightLeaf) {
+							await this.openLeaf(rightLeaf, VIEW_TYPE_CHAT_SIDEBAR, true);
+						}
+						return;
 					}
-					return;
+					await this.openLeaf(leaf, VIEW_TYPE_CHAT_SIDEBAR, true);
 				}
-				await this.openLeaf(leaf, VIEW_TYPE_CHAT_SIDEBAR, true);
 			} else {
-				// tab mode
-				const leaf = this.plugin.app.workspace.getLeaf(true);
-				await this.openLeaf(leaf, VIEW_TYPE_CHAT_TAB, true);
+				// tab mode - 首先检查是否已存在标签页视图
+				const existingLeaf = this.findExistingView(VIEW_TYPE_CHAT_TAB);
+				if (existingLeaf) {
+					// 如果已存在，聚焦该标签页
+					this.plugin.app.workspace.revealLeaf(existingLeaf);
+				} else {
+					// 创建新的标签页视图
+					const leaf = this.plugin.app.workspace.getLeaf(true);
+					await this.openLeaf(leaf, VIEW_TYPE_CHAT_TAB, true);
+				}
 			}
 		} catch (error) {
 			console.error('FormFlow Chat: 激活聊天视图失败:', error);
@@ -188,10 +239,16 @@ export class ChatFeatureManager {
 		this.plugin.app.workspace.detachLeavesOfType(VIEW_TYPE_CHAT_SIDEBAR);
 		this.plugin.app.workspace.detachLeavesOfType(VIEW_TYPE_CHAT_TAB);
 		this.service.dispose();
-		
+
 		// 清理选区工具栏
 		this.hideSelectionToolbar();
 		this.hideResultModal();
+
+		// 清理持久化模态框
+		if (this.persistentModal) {
+			this.persistentModal.close();
+			this.persistentModal = null;
+		}
 	}
 
 	/**
@@ -224,23 +281,40 @@ export class ChatFeatureManager {
 	/**
 	 * 在持久化模态框中打开 AI Chat
 	 * 与临时模态框的区别:保存历史、不创建新会话、与侧边栏共享会话
+	 * 使用单例模式，确保同一时间只有一个持久化模态框实例
 	 * @param activeFile 当前活动的文件（可选）
 	 */
 	openChatInPersistentModal(activeFile?: TFile | null) {
+		// 如果已存在持久化模态框，聚焦它并更新当前文件
+		if (this.persistentModal) {
+			this.persistentModal.focus();
+
+			// 如果指定了新的活动文件，更新上下文
+			const file = activeFile ?? this.plugin.app.workspace.getActiveFile();
+			if (file) {
+				this.service.addActiveFile(file);
+			}
+			return;
+		}
+
+		// 创建新的持久化模态框
 		const settings = this.plugin.settings.chat;
 		const file = activeFile ?? this.plugin.app.workspace.getActiveFile();
 
-		// 创建并打开持久化模态框
-		const modal = new ChatPersistentModal(
+		this.persistentModal = new ChatPersistentModal(
 			this.plugin.app,
 			this.service,
 			{
 				width: settings.chatModalWidth ?? 700,
 				height: settings.chatModalHeight ?? 500,
-				activeFile: file
+				activeFile: file,
+				onClose: () => {
+					// 模态框关闭时清除引用
+					this.persistentModal = null;
+				}
 			}
 		);
-		modal.open();
+		this.persistentModal.open();
 	}
 
 	/**
