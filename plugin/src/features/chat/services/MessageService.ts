@@ -171,8 +171,9 @@ export class MessageService {
 				lines.push('> ```');
 			}
 
-			if (call.result && String(call.result).trim()) {
-				lines.push(`> 结果: ${String(call.result).trim()}`);
+			if (call.result && call.result.trim()) {
+				const formattedResult = this.formatToolResultForHistory(call.result);
+				lines.push(`> 结果: ${formattedResult}`);
 			}
 			lines.push('>');
 		}
@@ -209,6 +210,32 @@ export class MessageService {
 			return text === '{}' ? '' : text;
 		} catch {
 			return '';
+		}
+	}
+
+	/**
+	 * 格式化工具结果用于历史文件显示
+	 * 如果是 JSON 对象，尝试提取关键信息或格式化为单行
+	 */
+	private formatToolResultForHistory(result: string): string {
+		try {
+			const parsed = JSON.parse(result);
+			if (typeof parsed === 'object' && parsed !== null) {
+				// 如果有 message 字段，优先显示
+				if (parsed.message && typeof parsed.message === 'string') {
+					// 如果是空文件，添加标识
+					let message = parsed.message;
+					if (parsed.characterCount === 0) {
+						return message + ' (空文件)';
+					}
+					return message;
+				}
+				// 否则格式化为单行 JSON
+				return JSON.stringify(parsed);
+			}
+			return result;
+		} catch {
+			return result;
 		}
 	}
 

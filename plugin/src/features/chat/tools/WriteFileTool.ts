@@ -27,6 +27,13 @@ interface WriteFileArgs {
 	targetFolder?: string;
 }
 
+interface WriteFileResult {
+	writeType: 'create' | 'overwrite';
+	path: string;
+	characterCount: number;
+	message: string;
+}
+
 const normalizeVaultPath = (input: string): string => {
 	const trimmed = String(input ?? '').trim();
 	return trimmed.replace(/^[/\\]+/, '').replace(/\\/g, '/');
@@ -133,11 +140,16 @@ export const createWriteFileTool = (app: App): ToolDefinition => {
 			const createFolders = args.createFolders !== false;
 
 			if (!filePath) {
-				throw new Error('filePath 不能为空');
+				throw new Error('filePath 不能为空。示例: "notes/my-note.md" 或 fileName: "my-note", folderPath: "notes"');
 			}
-			if (!content) {
-				throw new Error('content 不能为空');
+
+			// 非法字符检测
+			const invalidChars = /[<>:"|?*]/;
+			if (invalidChars.test(filePath)) {
+				throw new Error('文件路径包含非法字符: < > : " | ? *');
 			}
+
+			const isEmpty = !content || content.trim().length === 0;
 
 			const parent = filePath.includes('/') ? filePath.split('/').slice(0, -1).join('/') : '';
 
@@ -150,11 +162,23 @@ export const createWriteFileTool = (app: App): ToolDefinition => {
 				const existing = app.vault.getAbstractFileByPath(filePath);
 				if (existing instanceof TFile) {
 					await app.vault.modify(existing, content);
-					return `已覆盖写入: ${filePath}`;
+					const result: WriteFileResult = {
+						writeType: 'overwrite',
+						path: filePath,
+						characterCount: content.length,
+						message: isEmpty ? 'Content write successful (empty file)' : 'Content write successful'
+					};
+					return result;
 				}
 
 				await app.vault.create(filePath, content);
-				return `已创建并写入: ${filePath}`;
+				const result: WriteFileResult = {
+					writeType: 'create',
+					path: filePath,
+					characterCount: content.length,
+					message: isEmpty ? 'Content write successful (empty file)' : 'Content write successful'
+				};
+				return result;
 			} catch (error) {
 				// 2) 降级到 Node.js API
 				try {
@@ -168,8 +192,15 @@ export const createWriteFileTool = (app: App): ToolDefinition => {
 					if (createFolders) {
 						fs.mkdirSync(path.dirname(absPath), { recursive: true });
 					}
+					const exists = fs.existsSync(absPath);
 					fs.writeFileSync(absPath, content, { encoding: 'utf-8' });
-					return `已写入（降级模式）: ${filePath}`;
+					const result: WriteFileResult = {
+						writeType: exists ? 'overwrite' : 'create',
+						path: filePath,
+						characterCount: content.length,
+						message: isEmpty ? 'Content write successful (empty file)' : 'Content write successful'
+					};
+					return result;
 				} catch (fallbackError) {
 					const primary = error instanceof Error ? error.message : String(error);
 					const fallback = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);

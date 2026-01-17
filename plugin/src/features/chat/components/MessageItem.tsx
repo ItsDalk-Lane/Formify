@@ -23,6 +23,19 @@ const formatDuration = (durationMs: number): string => {
 	return `${(centiSeconds / 100).toFixed(2)}s`
 }
 
+// 格式化工具结果（支持 JSON 对象美化显示）
+const formatToolResult = (result: string): string => {
+	try {
+		const parsed = JSON.parse(result);
+		if (typeof parsed === 'object' && parsed !== null) {
+			return JSON.stringify(parsed, null, 2);
+		}
+		return result;
+	} catch {
+		return result;
+	}
+}
+
 // 推理块组件
 interface ReasoningBlockProps {
 	content: string;
@@ -49,8 +62,20 @@ const getToolCallSummary = (call: { arguments?: Record<string, any>; result?: st
 	if (typeof name === 'string' && name.trim().length > 0) {
 		return name;
 	}
-	if (typeof call.result === 'string' && call.result.trim().length > 0) {
-		return call.result.length > 60 ? `${call.result.slice(0, 60)}...` : call.result;
+	// 尝试从结果中提取路径信息（针对 write_file 等返回对象的情况）
+	if (call.result && call.result.trim().length > 0) {
+		try {
+			const parsed = JSON.parse(call.result);
+			if (parsed.path && typeof parsed.path === 'string') {
+				return parsed.path;
+			}
+		} catch {
+			// 不是 JSON，当作字符串处理
+		}
+		if (call.result.length > 60) {
+			return `${call.result.slice(0, 60)}...`;
+		}
+		return call.result;
 	}
 	try {
 		const text = JSON.stringify(args);
@@ -98,10 +123,10 @@ const ToolCallItem = ({ call }: { call: { name: string; status: string; argument
 						<div className="ff-tool-call__label">内容</div>
 						<pre className="ff-tool-call__code">{contentText || '（无内容）'}</pre>
 					</div>
-					{typeof call.result === 'string' && call.result.trim().length > 0 && (
+					{call.result && call.result.trim().length > 0 && (
 						<div className="ff-tool-call__section">
 							<div className="ff-tool-call__label">结果</div>
-							<pre className="ff-tool-call__code">{call.result}</pre>
+							<pre className="ff-tool-call__code">{formatToolResult(call.result)}</pre>
 						</div>
 					)}
 				</div>

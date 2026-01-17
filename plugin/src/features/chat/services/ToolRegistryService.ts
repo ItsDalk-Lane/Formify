@@ -95,10 +95,12 @@ export class ToolRegistryService {
 		}
 		if (tool.handler) {
 			const result = await tool.handler(args);
-			return typeof result === 'string' ? result : String(result);
+			// 如果返回值是字符串，直接返回；如果是对象，序列化为 JSON
+			return typeof result === 'string' ? result : JSON.stringify(result);
 		}
 		if (tool.serverHandler) {
-			return await tool.serverHandler(args);
+			const result = await tool.serverHandler(args);
+			return typeof result === 'string' ? result : JSON.stringify(result);
 		}
 		throw new Error(`工具未实现执行器: ${tool.name}`);
 	}
