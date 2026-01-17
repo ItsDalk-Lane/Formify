@@ -89,15 +89,19 @@ export const createWriteFileTool = (app: App): ToolDefinition => {
 		name: 'write_file',
 		description: '向文件写入内容。如果文件不存在则创建新文件，存在则覆盖。支持 Markdown 和纯文本文件。',
 		enabled: true,
-		executionMode: 'manual',
+			executionMode: 'auto',
 		category: 'file',
 		icon: 'FileText',
 		parameters: {
 			type: 'object',
 			properties: {
-				filePath: {
+				path: {
 					type: 'string',
 					description: '文件路径，相对于 vault 根目录。例如: notes/我的笔记.md'
+				},
+				filePath: {
+					type: 'string',
+					description: '文件路径（兼容字段），相对于 vault 根目录。例如: notes/我的笔记.md'
 				},
 				fileName: {
 					type: 'string',
@@ -124,23 +128,22 @@ export const createWriteFileTool = (app: App): ToolDefinition => {
 					description: '如果父文件夹不存在，是否自动创建。默认 true。'
 				}
 			},
-			required: ['content']
+			required: ['path', 'content']
 		},
 		handler: async (rawArgs: Record<string, any>) => {
 			const args = rawArgs as WriteFileArgs;
 			const filePath = normalizeVaultPath(
 				coalesceString(
-					args.filePath,
 					args.path,
-					args.file_path,
-					args.filePath
+					args.filePath,
+					args.file_path
 				)
-			) || buildFallbackPath(args);
+			);
 			const content = coalesceString(args.content, args.text, args.body, args.data, args.translation);
 			const createFolders = args.createFolders !== false;
 
 			if (!filePath) {
-				throw new Error('filePath 不能为空。示例: "notes/my-note.md" 或 fileName: "my-note", folderPath: "notes"');
+				throw new Error('path 不能为空。示例: "notes/my-note.md"');
 			}
 
 			// 非法字符检测

@@ -74,40 +74,71 @@ function groupHistoryByTime(items: ChatHistoryEntry[]): GroupedHistory[] {
 		month: [],
 		older: []
 	};
-	
+
 	// 按 updatedAt 分组（如果没有 updatedAt 则使用 createdAt）
 	for (const item of items) {
 		const timestamp = item.updatedAt || item.createdAt;
 		const group = getTimeGroup(timestamp);
 		groups[group].push(item);
 	}
-	
+
 	// 按时间分组顺序返回非空分组
 	const orderedGroups: TimeGroup[] = ['today', 'yesterday', 'week', 'month', 'older'];
 	return orderedGroups
 		.filter(group => groups[group].length > 0)
-		.map(group => ({
-			group,
-			label: getGroupLabel(group),
-			items: groups[group]
-		}));
+		.map(group => {
+			// 创建副本并按时间倒序排列（最新的在最上面）
+			const sortedItems = [...groups[group]].sort((a, b) => {
+				const timestampA = a.updatedAt || a.createdAt;
+				const timestampB = b.updatedAt || b.createdAt;
+				return timestampB - timestampA;
+			});
+			return {
+				group,
+				label: getGroupLabel(group),
+				items: sortedItems
+			};
+		});
 }
 
 export const ChatHistoryPanel = ({ items, onSelect, onOpenFile, onClose, onRefresh, onDelete, anchorRef, panelRef }: ChatHistoryPanelProps) => {
 	const getPanelPosition = () => {
 		if (anchorRef?.current) {
 			const buttonRect = anchorRef.current.getBoundingClientRect();
+			const estimatedWidth = 320;
+			const estimatedHeight = 420;
 			const gap = 8;
+			const padding = 12;
 
-			// 计算水平位置：尽量靠右对齐按钮右侧
-			const right = Math.max(12, window.innerWidth - buttonRect.right);
+			// 计算水平位置
+			const right = Math.max(
+				padding,
+				Math.min(window.innerWidth - buttonRect.right, window.innerWidth - padding)
+			);
 
-			// 计算垂直位置：显示在按钮上方
-			const bottom = Math.max(12, window.innerHeight - buttonRect.top + gap);
+			// 计算垂直方向可用空间
+			const spaceAbove = buttonRect.top;
+			const spaceBelow = window.innerHeight - buttonRect.bottom;
+			const canPlaceBelow = spaceBelow >= estimatedHeight + gap;
 
-			return { right, bottom };
+			// 根据可用空间决定弹出方向
+			if (canPlaceBelow) {
+				// 向下弹出，使用 top 定位
+				return {
+					right,
+					top: buttonRect.bottom + gap,
+					bottom: undefined
+				};
+			} else {
+				// 向上弹出，使用 bottom 定位
+				return {
+					right,
+					top: undefined,
+					bottom: Math.max(padding, window.innerHeight - buttonRect.top + gap)
+				};
+			}
 		}
-		return { right: 24, bottom: 80 };
+		return { right: 24, top: undefined, bottom: 80 };
 	};
 
 	const [position, setPosition] = useState(getPanelPosition);
@@ -129,7 +160,11 @@ export const ChatHistoryPanel = ({ items, onSelect, onOpenFile, onClose, onRefre
 	const groupedItems = useMemo(() => groupHistoryByTime(items), [items]);
 
 	const panelContent = (
-		<div ref={internalPanelRef} className="chat-history-panel" style={{ right: `${position.right}px`, bottom: `${position.bottom}px` }}>
+		<div ref={internalPanelRef} className="chat-history-panel" style={{
+			right: `${position.right}px`,
+			top: position.top !== undefined ? `${position.top}px` : undefined,
+			bottom: position.bottom !== undefined ? `${position.bottom}px` : undefined
+		}}>
 			<header className="chat-history-panel__header">
 				<h3>聊天历史</h3>
 				<div className="chat-history-panel__header-actions">

@@ -17,7 +17,19 @@ import { TOOL_CALLS_END_MARKER, TOOL_CALLS_START_MARKER } from 'src/features/tar
 import type { ToolCall, ToolDefinition, ToolExecution } from '../types/tools';
 import { ToolRegistryService } from './ToolRegistryService';
 import { ToolExecutionManager } from './ToolExecutionManager';
-import { createWriteFileTool } from '../tools';
+import {
+	createDeleteFileTool,
+	createExecuteScriptTool,
+	createListDirectoryTool,
+	createMoveFileTool,
+	createOpenFileTool,
+	createReadFileTool,
+	createSearchContentTool,
+	createSearchFilesTool,
+	createWebFetchTool,
+	createWriteFileTool,
+	createWritePlanTool
+} from '../tools';
 
 type ChatSubscriber = (state: ChatState) => void;
 
@@ -219,6 +231,16 @@ export class ChatService {
 
 	loadBuiltinTools() {
 		this.toolRegistry.register(createWriteFileTool(this.app), 'builtin');
+		this.toolRegistry.register(createReadFileTool(this.app), 'builtin');
+		this.toolRegistry.register(createDeleteFileTool(this.app), 'builtin');
+		this.toolRegistry.register(createMoveFileTool(this.app), 'builtin');
+		this.toolRegistry.register(createListDirectoryTool(this.app), 'builtin');
+		this.toolRegistry.register(createSearchFilesTool(this.app), 'builtin');
+		this.toolRegistry.register(createSearchContentTool(this.app), 'builtin');
+		this.toolRegistry.register(createOpenFileTool(this.app), 'builtin');
+		this.toolRegistry.register(createWritePlanTool(), 'builtin');
+		this.toolRegistry.register(createWebFetchTool(), 'builtin');
+		this.toolRegistry.register(createExecuteScriptTool(), 'builtin');
 	}
 
 	loadGlobalTools() {

@@ -32,8 +32,32 @@ export const ToolPanelPopup = ({
 			return { left: 0, top: 0 };
 		}
 		const rect = anchor.getBoundingClientRect();
-		const left = Math.min(rect.left, window.innerWidth - 460);
-		const top = rect.bottom + 8;
+		const estimatedWidth = 420;
+		const estimatedHeight = 400;
+		const gap = 8;
+		const padding = 12;
+
+		// 计算水平位置
+		const left = Math.max(
+			padding,
+			Math.min(rect.left, window.innerWidth - estimatedWidth - padding)
+		);
+
+		// 计算垂直方向可用空间
+		const spaceAbove = rect.top;
+		const spaceBelow = window.innerHeight - rect.bottom;
+		const canPlaceBelow = spaceBelow >= estimatedHeight + gap;
+
+		// 根据可用空间决定弹出方向
+		let top: number;
+		if (canPlaceBelow) {
+			// 向下弹出
+			top = rect.bottom + gap;
+		} else {
+			// 向上弹出
+			top = Math.max(padding, rect.top - estimatedHeight - gap);
+		}
+
 		return { left, top };
 	}, [anchorRef, isOpen]);
 

@@ -49,8 +49,24 @@ export class HistoryService {
 		const hours = String(date.getHours()).padStart(2, '0');
 		const minutes = String(date.getMinutes()).padStart(2, '0');
 		const seconds = String(date.getSeconds()).padStart(2, '0');
-		
+
 		return `${year}${month}${day}${hours}${minutes}${seconds}`;
+	}
+
+	/**
+	 * 解析时间戳（支持数字和字符串格式）
+	 */
+	private parseTimestamp(value: unknown): number {
+		if (typeof value === 'number') return value;
+		if (typeof value === 'string' && value.trim()) {
+			// 尝试解析 YYYY-MM-DD HH:mm:ss 格式
+			const match = value.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
+			if (match) {
+				const [_, year, month, day, hour, minute, second] = match.map(Number);
+				return new Date(year, month - 1, day, hour, minute, second).getTime();
+			}
+		}
+		return 0;
 	}
 
 	/**
@@ -150,8 +166,8 @@ export class HistoryService {
 							title: (frontmatter.title as string) ?? child.basename,
 							filePath: child.path,
 							modelId: frontmatter.model as string,
-							createdAt: frontmatter.created ?? child.stat.ctime,
-							updatedAt: frontmatter.updated ?? child.stat.mtime
+							createdAt: this.parseTimestamp(frontmatter.created ?? child.stat.ctime),
+							updatedAt: this.parseTimestamp(frontmatter.updated ?? child.stat.mtime)
 						});
 					}
 				}
@@ -241,7 +257,7 @@ ${body}
 
 			const data = await this.app.vault.read(file);
 			const { frontmatter, body } = this.extractFrontmatter(data);
-			
+
 			if (!frontmatter || !frontmatter.id) {
 				return null;
 			}
@@ -253,8 +269,8 @@ ${body}
 				modelId: (frontmatter.model as string) ?? '',
 				messages,
 				contextNotes: (frontmatter.contextNotes as string[]) ?? [],
-				createdAt: (frontmatter.created as number) ?? file.stat.ctime,
-				updatedAt: (frontmatter.updated as number) ?? file.stat.mtime,
+				createdAt: this.parseTimestamp(frontmatter.created ?? file.stat.ctime),
+				updatedAt: this.parseTimestamp(frontmatter.updated ?? file.stat.mtime),
 				selectedImages: [],
 				filePath: filePath // 设置文件路径
 			};

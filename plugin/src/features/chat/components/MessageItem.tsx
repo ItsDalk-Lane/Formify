@@ -44,62 +44,178 @@ interface ReasoningBlockProps {
 	isGenerating: boolean;
 }
 
-const getToolCallSummary = (call: { arguments?: Record<string, any>; result?: string }): string => {
-	const args = call.arguments ?? {};
-	const filePath = args.filePath ?? args.path ?? args.file ?? args.target;
-	if (typeof filePath === 'string' && filePath.trim().length > 0) {
-		const content = args.content;
-		if (typeof content === 'string') {
-			return `${filePath}（${content.length}字）`;
-		}
-		return filePath;
-	}
-	const url = args.url ?? args.uri ?? args.link;
-	if (typeof url === 'string' && url.trim().length > 0) {
-		return url;
-	}
-	const name = args.name ?? args.title ?? args.query;
-	if (typeof name === 'string' && name.trim().length > 0) {
-		return name;
-	}
-	// 尝试从结果中提取路径信息（针对 write_file 等返回对象的情况）
-	if (call.result && call.result.trim().length > 0) {
-		try {
-			const parsed = JSON.parse(call.result);
-			if (parsed.path && typeof parsed.path === 'string') {
-				return parsed.path;
-			}
-		} catch {
-			// 不是 JSON，当作字符串处理
-		}
-		if (call.result.length > 60) {
-			return `${call.result.slice(0, 60)}...`;
-		}
-		return call.result;
-	}
+const formatArgsValue = (value: unknown): string => {
+	if (typeof value === 'string') return value;
+	if (typeof value === 'number' || typeof value === 'boolean') return String(value);
 	try {
-		const text = JSON.stringify(args);
-		return text.length > 60 ? `${text.slice(0, 60)}...` : text;
+		return JSON.stringify(value, null, 2);
 	} catch {
 		return '';
 	}
 };
 
+const buildArgsText = (pairs: Array<[string, unknown]>): string => {
+	return pairs
+		.filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+		.map(([label, value]) => `${label}: ${formatArgsValue(value)}`)
+		.join('\n');
+};
+
+const getToolCallDisplay = (call: { name: string; arguments?: Record<string, any>; result?: string }) => {
+	const args = call.arguments ?? {};
+	const toolName = String(call.name ?? '').trim();
+	const lowerName = toolName.toLowerCase();
+
+	switch (lowerName) {
+		case 'write_file': {
+			const filePath = args.filePath ?? args.path ?? args.file_path;
+			const content = args.content ?? args.text ?? args.body ?? args.data;
+			const summaryPath = typeof filePath === 'string' && filePath.trim() ? filePath : '';
+			const length = typeof content === 'string' ? `${content.length}字` : '';
+			return {
+				title: '写入文件',
+				summary: summaryPath ? `${summaryPath}${length ? `（${length}）` : ''}` : '',
+				contentLabel: '写入内容',
+				contentText: typeof content === 'string' ? content : formatArgsValue(content),
+				resultLabel: '写入结果'
+			};
+		}
+		case 'read_file': {
+			const filePath = args.path ?? args.filePath ?? args.file_path;
+			return {
+				title: '读取文件',
+				summary: typeof filePath === 'string' ? filePath : '',
+				contentLabel: '读取路径',
+				contentText: buildArgsText([['path', filePath]]),
+				resultLabel: '读取结果'
+			};
+		}
+		case 'delete_file': {
+			const filePath = args.path ?? args.filePath ?? args.file_path;
+			return {
+				title: '删除文件',
+				summary: typeof filePath === 'string' ? filePath : '',
+				contentLabel: '删除路径',
+				contentText: buildArgsText([['path', filePath]]),
+				resultLabel: '删除结果'
+			};
+		}
+		case 'move_file': {
+			return {
+				title: '移动文件',
+				summary: args.from && args.to ? `${args.from} -> ${args.to}` : '',
+				contentLabel: '移动信息',
+				contentText: buildArgsText([
+					['from', args.from],
+					['to', args.to]
+				]),
+				resultLabel: '移动结果'
+			};
+		}
+		case 'list_directory': {
+			return {
+				title: '列出目录',
+				summary: typeof args.path === 'string' ? args.path : '/',
+				contentLabel: '目录路径',
+				contentText: buildArgsText([['path', args.path || '/']]),
+				resultLabel: '目录条目'
+			};
+		}
+		case 'search_files': {
+			return {
+				title: '文件名搜索',
+				summary: typeof args.query === 'string' ? args.query : '',
+				contentLabel: '搜索参数',
+				contentText: buildArgsText([
+					['query', args.query],
+					['scope', args.scope ?? 'vault'],
+					['limit', args.limit ?? 100]
+				]),
+				resultLabel: '搜索结果'
+			};
+		}
+		case 'search_content': {
+			return {
+				title: '内容搜索',
+				summary: typeof args.query === 'string' ? args.query : '',
+				contentLabel: '搜索参数',
+				contentText: buildArgsText([
+					['query', args.query],
+					['scope', args.scope ?? 'vault'],
+					['limit', args.limit ?? 10]
+				]),
+				resultLabel: '匹配内容'
+			};
+		}
+		case 'open_file': {
+			return {
+				title: '打开文件',
+				summary: typeof args.path === 'string' ? args.path : '',
+				contentLabel: '打开路径',
+				contentText: buildArgsText([['path', args.path]]),
+				resultLabel: '打开结果'
+			};
+		}
+		case 'write_plan': {
+			const tasks = Array.isArray(args.tasks) ? args.tasks.length : 0;
+			return {
+				title: '更新计划',
+				summary: tasks ? `任务数: ${tasks}` : '',
+				contentLabel: '计划任务',
+				contentText: formatArgsValue(args.tasks ?? []),
+				resultLabel: '计划结果'
+			};
+		}
+		case 'web_fetch': {
+			return {
+				title: '抓取网页',
+				summary: typeof args.url === 'string' ? args.url : '',
+				contentLabel: '抓取地址',
+				contentText: buildArgsText([
+					['url', args.url],
+					['maxLength', args.maxLength ?? 50000]
+				]),
+				resultLabel: '抓取结果'
+			};
+		}
+		case 'execute_script': {
+			return {
+				title: '执行脚本',
+				summary: typeof args.script === 'string' ? args.script.slice(0, 30) : '',
+				contentLabel: '执行脚本',
+				contentText: typeof args.script === 'string' ? args.script : '',
+				resultLabel: '执行结果'
+			};
+		}
+		default: {
+			const filePath = args.filePath ?? args.path ?? args.file ?? args.target;
+			const url = args.url ?? args.uri ?? args.link;
+			const name = args.name ?? args.title ?? args.query;
+			const summary =
+				(typeof filePath === 'string' && filePath.trim().length > 0)
+					? filePath
+					: (typeof url === 'string' && url.trim().length > 0)
+						? url
+						: (typeof name === 'string' && name.trim().length > 0)
+							? name
+							: '';
+			return {
+				title: toolName || '工具调用',
+				summary,
+				contentLabel: '参数',
+				contentText: formatArgsValue(args),
+				resultLabel: '结果'
+			};
+		}
+	}
+};
+
 const ToolCallItem = ({ call }: { call: { name: string; status: string; arguments?: Record<string, any>; result?: string } }) => {
 	const [collapsed, setCollapsed] = useState(true);
-	const summary = useMemo(() => getToolCallSummary(call), [call]);
+	const display = useMemo(() => getToolCallDisplay(call), [call]);
 	const dotStatus =
 		call.status === 'completed' ? 'success' : call.status === 'failed' ? 'error' : 'pending';
-	const contentText = useMemo(() => {
-		const raw = (call.arguments ?? {}).content;
-		if (typeof raw === 'string') return raw;
-		try {
-			const text = JSON.stringify(raw ?? {}, null, 2);
-			return text === '{}' ? '' : text;
-		} catch {
-			return '';
-		}
-	}, [call]);
+	const contentText = display.contentText;
 
 	return (
 		<div className="ff-tool-call">
@@ -108,24 +224,24 @@ const ToolCallItem = ({ call }: { call: { name: string; status: string; argument
 				<span className="ff-tool-call__toggle">
 					{collapsed ? <ChevronRight className="tw-size-4" /> : <ChevronDown className="tw-size-4" />}
 				</span>
-				<span className="ff-tool-call__name" title={call.name}>
-					{call.name}
+				<span className="ff-tool-call__name" title={display.title}>
+					{display.title}
 				</span>
-				{summary && (
-					<span className="ff-tool-call__summary" title={summary}>
-						{summary}
+				{display.summary && (
+					<span className="ff-tool-call__summary" title={display.summary}>
+						{display.summary}
 					</span>
 				)}
 			</div>
 			{!collapsed && (
 				<div className="ff-tool-call__body">
 					<div className="ff-tool-call__section">
-						<div className="ff-tool-call__label">内容</div>
+						<div className="ff-tool-call__label">{display.contentLabel}</div>
 						<pre className="ff-tool-call__code">{contentText || '（无内容）'}</pre>
 					</div>
 					{call.result && call.result.trim().length > 0 && (
 						<div className="ff-tool-call__section">
-							<div className="ff-tool-call__label">结果</div>
+							<div className="ff-tool-call__label">{display.resultLabel}</div>
 							<pre className="ff-tool-call__code">{formatToolResult(call.result)}</pre>
 						</div>
 					)}
