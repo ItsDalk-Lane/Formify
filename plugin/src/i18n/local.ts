@@ -752,4 +752,8 @@ export interface Local {
 	form_display_mode_merged: string;
 	form_display_mode_merged_desc: string;
 	form_display_mode_locked_hint: string;
+	// === 自定义模板插入 ===
+	custom_template: string;
+	position_template: string;
+	position_template_hint: string;
 }

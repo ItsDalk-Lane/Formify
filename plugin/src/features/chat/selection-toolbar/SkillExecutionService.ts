@@ -7,6 +7,7 @@ import { getFormSkillService } from './FormSkillService';
 import { localInstance } from 'src/i18n/locals';
 import { DebugLogger } from 'src/utils/DebugLogger';
 import { SystemPromptAssembler } from 'src/service/SystemPromptAssembler';
+import { buildProviderOptionsWithReasoningDisabled } from '../../tars/providers/utils';
 
 /**
  * 技能执行结果接口
@@ -340,7 +341,12 @@ export class SkillExecutionService {
 		// 创建新的 AbortController 并保存到实例变量
 		this.currentAbortController = new AbortController();
 		const controller = this.currentAbortController;
-		const sendRequest = vendor.sendRequestFunc(providerSettings.options);
+		// 禁用推理功能
+		const providerOptions = buildProviderOptionsWithReasoningDisabled(
+			providerSettings.options,
+			providerSettings.vendor
+		);
+		const sendRequest = vendor.sendRequestFunc(providerOptions);
 		DebugLogger.logLlmMessages('SkillExecutionService.callAIWithMessages', messages, { level: 'debug' });
 
 		const resolveEmbed = async () => new ArrayBuffer(0);
@@ -421,7 +427,12 @@ export class SkillExecutionService {
 			// 创建新的 AbortController 并保存到实例变量
 			this.currentAbortController = new AbortController();
 			const controller = this.currentAbortController;
-			const sendRequest = vendor.sendRequestFunc(providerSettings.options);
+			// 禁用推理功能
+			const providerOptions = buildProviderOptionsWithReasoningDisabled(
+				providerSettings.options,
+				providerSettings.vendor
+			);
+			const sendRequest = vendor.sendRequestFunc(providerOptions);
 			DebugLogger.logLlmMessages('SkillExecutionService.executeSkillStream', messages, { level: 'debug' });
 
 			const resolveEmbed = async () => new ArrayBuffer(0);

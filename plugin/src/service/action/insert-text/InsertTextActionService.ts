@@ -101,6 +101,15 @@ export default class InsertTextActionService implements IActionService {
             } else if (position === TextInsertPosition.AT_CURSOR && formAction.targetFileType === TargetFileType.CURRENT_FILE) {
                 await insertionService.insertToCurrentCursor(app, content);
                 return Promise.resolve();
+            } else if (position === TextInsertPosition.CUSTOM_TEMPLATE && formAction.positionTemplate) {
+                // 处理自定义模板位置
+                const template = await this.validateAndProcessContent(
+                    formAction.positionTemplate,
+                    state,
+                    context.app,
+                    "position template"
+                );
+                await insertionService.insertByTemplate(app, filePath, template, content);
             } else {
                 // Default fallback
                 await insertionService.insertToBottomOfNote(app, filePath, content);

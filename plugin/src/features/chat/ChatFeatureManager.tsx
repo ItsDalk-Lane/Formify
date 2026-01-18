@@ -32,6 +32,7 @@ import { ModifyTextModal } from './selection-toolbar/ModifyTextModal';
 import { createModifyGhostTextExtension, setModifyGhostEffect } from './selection-toolbar/ModifyGhostTextExtension';
 import { availableVendors } from '../tars/settings';
 import type { Message, ProviderSettings } from '../tars/providers';
+import { buildProviderOptionsWithReasoningDisabled } from '../tars/providers/utils';
 
 export class ChatFeatureManager {
 	private readonly service: ChatService;
@@ -832,7 +833,12 @@ export class ChatFeatureManager {
 
 		const controller = new AbortController();
 		const resolveEmbed = async () => new ArrayBuffer(0);
-		const sendRequest = vendor.sendRequestFunc(provider.options);
+		// 禁用推理功能
+		const providerOptions = buildProviderOptionsWithReasoningDisabled(
+			provider.options,
+			provider.vendor
+		);
+		const sendRequest = vendor.sendRequestFunc(providerOptions);
 		DebugLogger.logLlmMessages('ChatFeatureManager.requestModifyText', messages, { level: 'debug' });
 		let output = '';
 		for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {

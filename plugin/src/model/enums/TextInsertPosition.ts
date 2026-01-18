@@ -3,5 +3,6 @@ export enum TextInsertPosition {
     TOP_BELOW_TITLE = 'topBelowTitle',
     BOTTOM_BELOW_TITLE = 'bottomBelowTitle',
     TOP_OF_CONTENT = 'topOfContent',
-    END_OF_CONTENT = 'endOfContent'
+    END_OF_CONTENT = 'endOfContent',
+    CUSTOM_TEMPLATE = 'customTemplate'
 }

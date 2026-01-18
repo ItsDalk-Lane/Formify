@@ -817,4 +817,8 @@ export class En implements Local {
 	form_display_mode_merged = "Merged View";
 	form_display_mode_merged_desc = "All form fields merged into a single modal";
 	form_display_mode_locked_hint = "Parallel execution requires Merged View";
+	// === Custom template insertion ===
+	custom_template = "Custom template";
+	position_template = "Position template";
+	position_template_hint = "Use {{{content}}} as placeholder, the system will find this template in the file and insert content at the placeholder position";
 }

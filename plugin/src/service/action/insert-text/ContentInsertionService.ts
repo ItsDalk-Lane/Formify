@@ -192,7 +192,7 @@ export default class {
         if (!file) {
             throw new Error(localInstance.file_not_found + ": " + filePath);
         }
-        
+
         await app.vault.process(file as any, (rawContent) => {
             const insertingText = `${content}`;
             const rawContentLines = rawContent.split('\n');
@@ -226,6 +226,72 @@ export default class {
                 } else {
                     return rawContent + '\n' + heading + '\n' + insertingText;
                 }
+            }
+        });
+    }
+
+    /**
+     * 使用自定义模板插入内容
+     * @param app Obsidian App 实例
+     * @param filePath 文件路径
+     * @param template 定位模板（包含 {{{content}}} 占位符）
+     * @param content 要插入的内容
+     */
+    async insertByTemplate(
+        app: App,
+        filePath: string,
+        template: string,
+        content: string
+    ): Promise<void> {
+        const file = app.vault.getAbstractFileByPath(filePath);
+        if (!file) {
+            throw new Error(localInstance.file_not_found + ": " + filePath);
+        }
+
+        await app.vault.process(file as any, (rawContent: string) => {
+            // 在文件内容中查找模板
+            const placeholder = '{{{content}}}';
+
+            // 移除模板中的占位符，用于匹配
+            const templateWithoutPlaceholder = template.replace(placeholder, '');
+
+            // 尝试在文件中找到匹配模板的位置
+            let templateStartIndex = rawContent.indexOf(templateWithoutPlaceholder);
+
+            // 如果未找到精确匹配，尝试模糊匹配（处理换行符差异）
+            if (templateStartIndex === -1) {
+                // 标准化换行符后再次尝试
+                const normalizedFileContent = rawContent.replace(/\r\n/g, '\n');
+                const normalizedTemplate = templateWithoutPlaceholder.replace(/\r\n/g, '\n');
+                const normalizedIndex = normalizedFileContent.indexOf(normalizedTemplate);
+
+                if (normalizedIndex !== -1) {
+                    // 找到匹配，使用标准化后的索引
+                    templateStartIndex = normalizedIndex;
+                }
+            }
+
+            if (templateStartIndex !== -1) {
+                // 找到了模板匹配位置
+                const templateEndIndex = templateStartIndex + templateWithoutPlaceholder.length;
+
+                // 替换模板中的占位符为实际内容
+                const before = rawContent.substring(0, templateStartIndex);
+                const after = rawContent.substring(templateEndIndex);
+
+                // 查找占位符在模板中的位置
+                const placeholderIndexInTemplate = template.indexOf(placeholder);
+
+                // 重新构建内容：模板前部分 + 实际内容 + 模板后部分
+                const templateBefore = template.substring(0, placeholderIndexInTemplate);
+                const templateAfter = template.substring(placeholderIndexInTemplate + placeholder.length);
+
+                return before + templateBefore + content + templateAfter + after;
+            } else {
+                // 未找到模板匹配，直接追加到文件末尾
+                // 或者可以根据模板创建新结构
+                const replacedTemplate = template.replace(placeholder, content);
+                return rawContent + '\n' + replacedTemplate + '\n';
             }
         });
     }

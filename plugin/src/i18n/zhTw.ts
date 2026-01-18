@@ -842,4 +842,8 @@ export class ZhTw implements Local {
 	form_display_mode_merged = "合併顯示";
 	form_display_mode_merged_desc = "所有表單欄位合併到一個模態框中";
 	form_display_mode_locked_hint = "同時執行模式下強制使用合併顯示";
+	// === 自定義模板插入 ===
+	custom_template = "自定義模板";
+	position_template = "位置模板";
+	position_template_hint = "使用 {{{content}}} 作為佔位符，系統會在文件中查找此模板並將內容插入到佔位符位置";
 }

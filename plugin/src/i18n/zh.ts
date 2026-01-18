@@ -826,4 +826,8 @@ export class Zh implements Local {
 	form_display_mode_merged = "合并显示";
 	form_display_mode_merged_desc = "所有表单字段合并到一个模态框中";
 	form_display_mode_locked_hint = "同时执行模式下强制使用合并显示";
+	// === 自定义模板插入 ===
+	custom_template = "自定义模板";
+	position_template = "位置模板";
+	position_template_hint = "使用 {{{content}}} 作为占位符，系统会在文件中查找此模板并将内容插入到占位符位置";
 }

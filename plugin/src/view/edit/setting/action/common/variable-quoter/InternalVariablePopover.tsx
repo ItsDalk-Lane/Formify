@@ -60,6 +60,11 @@ export const internalFieldNames = [
 		name: "{{currentFile:metadata:plain}}",
 		description: "当前活动Markdown文件的纯文本内容（含元数据）",
 	},
+	{
+		name: "{{{content}}}",
+		description: "插入内容占位符，用于自定义模板定位插入内容的位置",
+		tooltip: "用于在自定义模板中定位插入内容的位置。\n使用方式：\n1. 选择插入位置为\"自定义模板\"\n2. 在模板中使用 {{{content}}} 作为占位符\n3. 系统会在文件中查找模板并替换占位符为实际内容",
+	},
 ];
 
 export default function InternalVariablePopover(props: { onSelect: (value: string) => void }) {

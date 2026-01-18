@@ -48,6 +48,10 @@ const formInsertPositionOptions = [
 		value: TextInsertPosition.TOP_BELOW_TITLE,
 		label: localInstance.top_below_title,
 	},
+	{
+		value: TextInsertPosition.CUSTOM_TEMPLATE,
+		label: localInstance.custom_template,
+	},
 ];
 
 export const allFormInsertPositionOptions = [

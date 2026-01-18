@@ -23,6 +23,13 @@ export class InsertTextFormAction extends FileBaseFormAction {
 
     content: string;
 
+    /**
+     * 自定义位置模板
+     * 用于定位插入位置，使用 {{{content}}} 作为占位符
+     * 例如: "## 我的代码\n```javascript\n{{{content}}}\n```"
+     */
+    positionTemplate: string;
+
     constructor(partial?: Partial<InsertTextFormAction>) {
         super(partial);
         this.type = FormActionType.INSERT_TEXT;
@@ -32,6 +39,7 @@ export class InsertTextFormAction extends FileBaseFormAction {
         this.position = TextInsertPosition.END_OF_CONTENT;
         this.heading = "";
         this.content = "";
+        this.positionTemplate = "";
         Object.assign(this, partial);
     }
 }

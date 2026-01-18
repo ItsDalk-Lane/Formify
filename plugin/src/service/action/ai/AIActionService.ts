@@ -9,7 +9,7 @@ import { ActionChain, ActionContext, IActionService } from "../IActionService";
 import { FormTemplateProcessEngine } from "src/service/engine/FormTemplateProcessEngine";
 import { availableVendors } from "src/features/tars/settings";
 import { Message } from "src/features/tars/providers";
-import { CALLOUT_BLOCK_END, CALLOUT_BLOCK_START } from "src/features/tars/providers/utils";
+import { CALLOUT_BLOCK_END, CALLOUT_BLOCK_START, buildProviderOptionsWithReasoningDisabled } from "src/features/tars/providers/utils";
 import { localInstance } from "src/i18n/locals";
 import { DebugLogger } from "src/utils/DebugLogger";
 import CommonSuggestModal from "src/component/modal/CommonSuggestModal";
@@ -313,8 +313,12 @@ export default class AIActionService implements IActionService {
 
         DebugLogger.debug(`[AIAction] 调用AI模型: ${provider.options.model} (${provider.vendor})`);
 
-        // 创建请求函数
-        const sendRequest = vendor.sendRequestFunc(provider.options);
+        // 创建请求函数（禁用推理功能）
+        const providerOptions = buildProviderOptionsWithReasoningDisabled(
+            provider.options,
+            provider.vendor
+        );
+        const sendRequest = vendor.sendRequestFunc(providerOptions);
         
         // 创建中断控制器
         const controller = new AbortController();
@@ -394,8 +398,12 @@ export default class AIActionService implements IActionService {
 
         DebugLogger.debug(`[AIAction] 使用流式输出模态框调用AI模型: ${provider.options.model} (${provider.vendor})`);
 
-        // 创建请求函数
-        const sendRequest = vendor.sendRequestFunc(provider.options);
+        // 创建请求函数（禁用推理功能）
+        const providerOptions = buildProviderOptionsWithReasoningDisabled(
+            provider.options,
+            provider.vendor
+        );
+        const sendRequest = vendor.sendRequestFunc(providerOptions);
         
         // 创建中断控制器
         const controller = new AbortController();

@@ -27,6 +27,9 @@ export function InsertTextSetting(props: {
 		TextInsertPosition.BOTTOM_BELOW_TITLE,
 	].includes(action.position);
 
+	// 需要自定义模板
+	const needsCustomTemplate = action.position === TextInsertPosition.CUSTOM_TEMPLATE;
+
 	const targetFilePath = getFilePathCompatible(action);
 	const showFileTemplateSuggeest =
 		action.targetFileType !== TargetFileType.CURRENT_FILE &&
@@ -113,6 +116,39 @@ export function InsertTextSetting(props: {
 							const newAction = {
 								...action,
 								heading: e.target.value,
+							};
+							props.onChange(newAction);
+						}}
+					/>
+				</CpsFormItem>
+			)}
+
+			{needsCustomTemplate && (
+				<CpsFormItem
+					label={localInstance.position_template}
+					description={localInstance.position_template_hint}
+					layout="vertical"
+					style={{
+						flexDirection: "column",
+						alignItems: "initial",
+					}}
+				>
+					<textarea
+						style={{
+							width: "100%",
+							minHeight: "167px",
+							fontFamily: "monospace",
+							padding: "8px",
+							border: "1px solid var(--background-modifier-border)",
+							borderRadius: "4px",
+							resize: "vertical",
+						}}
+						placeholder={localInstance.position_template_hint}
+						value={action.positionTemplate || ""}
+						onChange={(e) => {
+							const newAction = {
+								...action,
+								positionTemplate: e.target.value,
 							};
 							props.onChange(newAction);
 						}}

@@ -273,3 +273,37 @@ export const getCapabilityDisplayText = (vendor: Vendor, options: BaseOptions): 
 	return enabledCapabilities.map((cap) => getCapabilityEmoji(cap)).join('  ')
 }
 
+/**
+ * 构建禁用推理的 provider options
+ *
+ * 该函数用于在非聊天场景（如 Tab 补全、技能执行、AI 动作等）中禁用推理功能，
+ * 避免推理内容意外输出到最终结果中。
+ *
+ * @param originalOptions - 原始的 provider options
+ * @param vendorName - 供应商名称（用于判断参数类型）
+ * @returns 新的 options 对象，所有推理相关参数都设置为禁用状态
+ */
+export const buildProviderOptionsWithReasoningDisabled = (
+	originalOptions: Record<string, unknown>,
+	vendorName: string
+): Record<string, unknown> => {
+	// 创建浅拷贝，避免修改原始对象
+	const newOptions = { ...originalOptions }
+
+	// 通用推理参数禁用（适用于大部分 provider）
+	newOptions.enableReasoning = false
+	newOptions.enableThinking = false
+
+	// Doubao 特殊处理：使用 thinkingType: 'disabled'
+	if (vendorName === 'Doubao') {
+		newOptions.thinkingType = 'disabled'
+	}
+
+	// Zhipu 特殊处理：同时需要禁用 enableReasoning 和设置 thinkingType
+	if (vendorName === 'Zhipu') {
+		newOptions.thinkingType = 'disabled'
+	}
+
+	return newOptions
+}
+

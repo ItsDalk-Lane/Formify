@@ -1,18 +1,19 @@
 import { App, Notice, MarkdownView } from 'obsidian'
 import { EditorView } from '@codemirror/view'
 import { setSuggestionEffect, clearSuggestionEffect, setLoadingEffect } from './TabCompletionState'
-import { 
-    buildEditorContext, 
-    generateContextPrompt, 
+import {
+    buildEditorContext,
+    generateContextPrompt,
     EditorContext,
     postProcessSuggestion,
-    limitSuggestionLength 
+    limitSuggestionLength
 } from './ContextBuilder'
 import { ProviderSettings, Message } from '../providers'
 import { availableVendors } from '../settings'
 import { t } from '../lang/helper'
 import { DebugLogger } from '../../../utils/DebugLogger'
 import { SystemPromptAssembler } from '../../../service/SystemPromptAssembler'
+import { buildProviderOptionsWithReasoningDisabled } from '../providers/utils'
 
 /**
  * Tab 补全设置接口
@@ -273,8 +274,12 @@ export class TabCompletionService {
             const messages = await this.buildMessages(context, maxSentences)
 			DebugLogger.logLlmMessages('TabCompletionService.requestAISuggestion', messages, { level: 'debug' })
 
-            // 获取发送函数
-            const sendRequest = vendor.sendRequestFunc(provider.options)
+            // 获取发送函数（禁用推理功能）
+            const providerOptions = buildProviderOptionsWithReasoningDisabled(
+                provider.options,
+                provider.vendor
+            )
+            const sendRequest = vendor.sendRequestFunc(providerOptions)
 
             // 收集响应
             let rawSuggestion = ''
