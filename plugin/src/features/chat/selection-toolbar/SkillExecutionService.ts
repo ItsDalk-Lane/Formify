@@ -43,11 +43,24 @@ function getSkillType(skill: Skill): 'normal' | 'group' | 'form' {
  * 负责处理技能的执行逻辑，包括提示词解析、模板引用和AI调用
  */
 export class SkillExecutionService {
+	// 用于管理当前执行的 AbortController
+	private currentAbortController: AbortController | null = null;
+
 	constructor(
 		private readonly app: App,
 		private readonly getTarsSettings: () => TarsSettings,
 		private readonly getPromptTemplateFolder: () => string
 	) {}
+
+	/**
+	 * 取消当前正在执行的技能
+	 */
+	cancelCurrentExecution(): void {
+		if (this.currentAbortController) {
+			this.currentAbortController.abort();
+			this.currentAbortController = null;
+		}
+	}
 
 	/**
 	 * 执行技能
@@ -121,20 +134,15 @@ export class SkillExecutionService {
 		modelTag?: string
 	): Promise<SkillExecutionResult> {
 		try {
-			// 1. 获取提示词内容
+			// 1. 获取提示词内容（保持原逻辑）
 			let promptContent = '';
 			if (skill.promptSource === 'template' && skill.templateFile) {
-				// 从模板文件加载提示词
 				promptContent = await this.loadTemplateFile(skill.templateFile);
 			} else {
-				// 使用自定义提示词
 				promptContent = skill.prompt;
 			}
 
-			// 2. 解析提示词（处理模板引用和占位符）
-			const resolvedPrompt = await this.resolvePrompt(promptContent, selection);
-
-			// 3. 获取AI模型配置（优先使用传入的 modelTag，其次使用技能配置的 modelTag）
+			// 2. 获取AI模型配置
 			const tarsSettings = this.getTarsSettings();
 			const effectiveModelTag = modelTag || skill.modelTag;
 			const providerSettings = this.getProviderSettings(tarsSettings, effectiveModelTag);
@@ -147,8 +155,16 @@ export class SkillExecutionService {
 				};
 			}
 
+			// 3. 构建消息（使用新的统一方法）
+			const useDefaultSystemPrompt = skill.useDefaultSystemPrompt ?? true;
+			const messages = await this.buildMessages(
+				useDefaultSystemPrompt,
+				promptContent,
+				selection
+			);
+
 			// 4. 调用AI模型
-			const result = await this.callAI(providerSettings, resolvedPrompt);
+			const result = await this.callAIWithMessages(providerSettings, messages);
 
 			return {
 				success: true,
@@ -274,46 +290,76 @@ export class SkillExecutionService {
 	}
 
 	/**
-	 * 调用AI模型
+	 * 构建 AI 调用的消息结构
+	 * @param useDefaultSystemPrompt 是否使用默认系统提示词
+	 * @param promptContent 提示词内容（已加载但未解析）
+	 * @param selection 选中的文本
+	 * @returns 消息数组
 	 */
-	private async callAI(
+	private async buildMessages(
+		useDefaultSystemPrompt: boolean,
+		promptContent: string,
+		selection: string
+	): Promise<Message[]> {
+		const messages: Message[] = [];
+
+		if (useDefaultSystemPrompt) {
+			// 原有逻辑：使用系统提示词 + 解析后的提示词
+			const assembler = new SystemPromptAssembler(this.app);
+			const globalSystemPrompt = (await assembler.buildGlobalSystemPrompt('selection_toolbar')).trim();
+
+			if (globalSystemPrompt.length > 0) {
+				messages.push({ role: 'system', content: globalSystemPrompt });
+			}
+
+			// 解析提示词（处理占位符和模板引用）
+			const resolvedPrompt = await this.resolvePrompt(promptContent, selection);
+			messages.push({ role: 'user', content: resolvedPrompt });
+		} else {
+			// 新逻辑：不使用系统提示词，直接使用原始提示词
+			messages.push({ role: 'system', content: promptContent });
+			messages.push({ role: 'user', content: selection });
+		}
+
+		return messages;
+	}
+
+	/**
+	 * 调用AI模型（使用预构建的消息）
+	 */
+	private async callAIWithMessages(
 		providerSettings: ProviderSettings,
-		prompt: string
+		messages: Message[]
 	): Promise<string> {
 		const vendor = this.getVendor(providerSettings.vendor);
-		
+
 		if (!vendor) {
 			throw new Error(`未找到AI提供商: ${providerSettings.vendor}`);
 		}
 
-		const assembler = new SystemPromptAssembler(this.app);
-		const globalSystemPrompt = (await assembler.buildGlobalSystemPrompt('selection_toolbar')).trim();
-
-		// 构建消息
-		const messages: Message[] = [];
-		if (globalSystemPrompt.length > 0) {
-			messages.push({ role: 'system', content: globalSystemPrompt });
-		}
-		messages.push({ role: 'user', content: prompt });
-
-		// 创建 AbortController
-		const controller = new AbortController();
-
-		// 获取发送函数
+		// 创建新的 AbortController 并保存到实例变量
+		this.currentAbortController = new AbortController();
+		const controller = this.currentAbortController;
 		const sendRequest = vendor.sendRequestFunc(providerSettings.options);
-		DebugLogger.logLlmMessages('SkillExecutionService.callAI', messages, { level: 'debug' });
+		DebugLogger.logLlmMessages('SkillExecutionService.callAIWithMessages', messages, { level: 'debug' });
 
-		// 创建空的 resolveEmbed 函数
 		const resolveEmbed = async () => new ArrayBuffer(0);
 
-		// 收集响应
-		let result = '';
-		for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
-			result += chunk;
+		try {
+			let result = '';
+			for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
+				// 检查是否已取消
+				if (controller.signal.aborted) {
+					break;
+				}
+				result += chunk;
+			}
+			DebugLogger.logLlmResponsePreview('SkillExecutionService.callAIWithMessages', result, { level: 'debug', previewChars: 100 });
+			return result;
+		} finally {
+			// 执行完成后清理 AbortController
+			this.currentAbortController = null;
 		}
-		DebugLogger.logLlmResponsePreview('SkillExecutionService.callAI', result, { level: 'debug', previewChars: 100 });
-
-		return result;
 	}
 
 	/**
@@ -344,17 +390,12 @@ export class SkillExecutionService {
 			// 1. 获取提示词内容
 			let promptContent = '';
 			if (skill.promptSource === 'template' && skill.templateFile) {
-				// 从模板文件加载提示词
 				promptContent = await this.loadTemplateFile(skill.templateFile);
 			} else {
-				// 使用自定义提示词
 				promptContent = skill.prompt;
 			}
 
-			// 2. 解析提示词
-			const resolvedPrompt = await this.resolvePrompt(promptContent, selection);
-
-			// 3. 获取AI模型配置（优先使用传入的 modelTag，其次使用技能配置的 modelTag）
+			// 2. 获取AI模型配置
 			const tarsSettings = this.getTarsSettings();
 			const effectiveModelTag = modelTag || skill.modelTag;
 			const providerSettings = this.getProviderSettings(tarsSettings, effectiveModelTag);
@@ -363,46 +404,57 @@ export class SkillExecutionService {
 				throw new Error('未找到可用的AI模型配置');
 			}
 
+			// 3. 构建消息（复用 buildMessages 方法）
+			const useDefaultSystemPrompt = skill.useDefaultSystemPrompt ?? true;
+			const messages = await this.buildMessages(
+				useDefaultSystemPrompt,
+				promptContent,
+				selection
+			);
+
 			// 4. 流式调用AI
 			const vendor = this.getVendor(providerSettings.vendor);
-			
 			if (!vendor) {
 				throw new Error(`未找到AI提供商: ${providerSettings.vendor}`);
 			}
 
-
-			const assembler = new SystemPromptAssembler(this.app);
-			const globalSystemPrompt = (await assembler.buildGlobalSystemPrompt('selection_toolbar')).trim();
-
-			const messages: Message[] = [];
-			if (globalSystemPrompt.length > 0) {
-				messages.push({ role: 'system', content: globalSystemPrompt });
-			}
-			messages.push({ role: 'user', content: resolvedPrompt });
-
-			// 创建 AbortController
-			const controller = new AbortController();
-
-			// 获取发送函数
+			// 创建新的 AbortController 并保存到实例变量
+			this.currentAbortController = new AbortController();
+			const controller = this.currentAbortController;
 			const sendRequest = vendor.sendRequestFunc(providerSettings.options);
 			DebugLogger.logLlmMessages('SkillExecutionService.executeSkillStream', messages, { level: 'debug' });
 
-			// 创建空的 resolveEmbed 函数
 			const resolveEmbed = async () => new ArrayBuffer(0);
 
-			// 流式返回结果
 			let preview = '';
-			for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
-				if (preview.length < 100) {
-					preview += chunk;
-					if (preview.length > 100) {
-						preview = preview.slice(0, 100);
+			try {
+				// 流式输出循环，添加取消检查
+				for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
+					// 检查是否已取消
+					if (controller.signal.aborted) {
+						DebugLogger.debug('[SkillExecutionService] 技能执行已被取消');
+						break;
 					}
+
+					if (preview.length < 100) {
+						preview += chunk;
+						if (preview.length > 100) {
+							preview = preview.slice(0, 100);
+						}
+					}
+					yield chunk;
 				}
-				yield chunk;
+				DebugLogger.logLlmResponsePreview('SkillExecutionService.executeSkillStream', preview, { level: 'debug', previewChars: 100 });
+			} finally {
+				// 执行完成后清理 AbortController
+				this.currentAbortController = null;
 			}
-			DebugLogger.logLlmResponsePreview('SkillExecutionService.executeSkillStream', preview, { level: 'debug', previewChars: 100 });
 		} catch (error) {
+			// 如果是取消错误，不记录为错误
+			if (error instanceof Error && error.name === 'AbortError') {
+				DebugLogger.debug('[SkillExecutionService] 技能执行已取消');
+				return;
+			}
 			console.error('[SkillExecutionService] 流式执行技能失败:', error);
 			throw error;
 		}

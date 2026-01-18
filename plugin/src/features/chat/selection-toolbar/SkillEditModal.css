@@ -247,11 +247,57 @@
 		max-width: 100%;
 		border-radius: 8px;
 	}
-	
+
 	.skill-edit-modal-header,
 	.skill-edit-modal-body,
 	.skill-edit-modal-footer {
 		padding-left: 16px;
 		padding-right: 16px;
 	}
+}
+
+/* 复选框行样式 */
+.skill-edit-checkbox-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.skill-edit-checkbox {
+	width: 16px;
+	height: 16px;
+	cursor: pointer;
+	accent-color: var(--interactive-accent);
+}
+
+.skill-edit-checkbox-label {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+/* 模型选择器样式 */
+.skill-edit-select {
+	width: 100%;
+	padding: 10px 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+	transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.skill-edit-select:focus {
+	outline: none;
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.skill-edit-model-hint {
+	margin-top: 6px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
 }

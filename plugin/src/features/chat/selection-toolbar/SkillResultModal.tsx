@@ -1,9 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { App, Notice, MarkdownRenderer, Component, MarkdownView } from 'obsidian';
-import { X, Copy, Replace, Plus, RefreshCw, Check } from 'lucide-react';
+import { X, Copy, Replace, Plus, RefreshCw, Check, Square } from 'lucide-react';
 import type { Skill } from '../types/chat';
+import type { ProviderSettings } from '../../tars/providers';
 import { localInstance } from 'src/i18n/locals';
+import { ModelSelector } from '../components/ModelSelector';
 import './SkillResultModal.css';
 
 interface SkillResultModalProps {
@@ -14,7 +16,12 @@ interface SkillResultModalProps {
 	result: string;
 	isLoading: boolean;
 	error?: string;
+	providers: ProviderSettings[];
+	selectedModelTag?: string;
+	onModelChange?: (tag: string) => void;
+	requiresModelSelection?: boolean;
 	onClose: () => void;
+	onStop?: () => void;
 	onRegenerate: () => void;
 	onInsert: (mode: 'replace' | 'append' | 'insert') => void;
 	onCopy: () => void;
@@ -28,7 +35,12 @@ export const SkillResultModal = ({
 	result,
 	isLoading,
 	error,
+	providers,
+	selectedModelTag,
+	onModelChange,
+	requiresModelSelection,
 	onClose,
+	onStop,
 	onRegenerate,
 	onInsert,
 	onCopy
@@ -125,26 +137,58 @@ export const SkillResultModal = ({
 			<div className="skill-result-modal" onClick={(e) => e.stopPropagation()}>
 				{/* 头部 */}
 				<div className="skill-result-modal-header">
-					<div className="skill-result-modal-title">
+					<div className="skill-result-modal-title-section">
 						<span className="skill-result-modal-skill-name">{skill.name}</span>
+
+						{/* 模型选择器 */}
+						{requiresModelSelection && (
+							<div className="skill-result-model-selector">
+								<ModelSelector
+									providers={providers}
+									value={selectedModelTag || ''}
+									onChange={onModelChange || (() => {})}
+								/>
+							</div>
+						)}
+
 						{isLoading && (
 							<span className="skill-result-modal-loading">
 								{localInstance.handling || '处理中...'}
 							</span>
 						)}
 					</div>
-					<button
-						className="skill-result-modal-close"
-						onClick={onClose}
-						title={localInstance.close || '关闭'}
-					>
-						<X size={18} />
-					</button>
+					<div className="skill-result-modal-header-actions">
+						{isLoading && onStop && (
+							<button
+								className="skill-result-modal-stop"
+								onClick={onStop}
+								title={localInstance.skill_result_stop || '停止生成'}
+							>
+								<Square size={14} />
+								<span>{localInstance.skill_result_stop || '停止'}</span>
+							</button>
+						)}
+						<button
+							className="skill-result-modal-close"
+							onClick={onClose}
+							title={localInstance.close || '关闭'}
+						>
+							<X size={18} />
+						</button>
+					</div>
 				</div>
 
 				{/* 内容区域 */}
 				<div className="skill-result-modal-body">
-					{error ? (
+					{requiresModelSelection && !selectedModelTag ? (
+						<div className="skill-result-modal-waiting-model">
+							<div className="skill-result-modal-waiting-icon">🤖</div>
+							<span>{localInstance.skill_result_waiting_model || '请选择模型以开始执行'}</span>
+							<span className="skill-result-modal-hint-text">
+								{localInstance.skill_result_select_model_hint || '在上方选择AI模型后，将自动开始处理'}
+							</span>
+						</div>
+					) : error ? (
 						<div className="skill-result-modal-error">
 							<span className="skill-result-modal-error-icon">⚠️</span>
 							<span>{error}</span>

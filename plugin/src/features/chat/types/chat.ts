@@ -107,6 +107,13 @@ export interface Skill {
 	order: number;             // 排序顺序
 	createdAt: number;         // 创建时间戳
 	updatedAt: number;         // 更新时间戳
+	/**
+	 * 是否使用默认系统提示词（默认 true 保持向下兼容）
+	 * - true: 使用全局系统提示词 + 解析后的提示词作为用户消息
+	 * - false: 仅使用自定义提示词内容作为系统消息，选中文本作为用户消息
+	 * @default true
+	 */
+	useDefaultSystemPrompt?: boolean;
 }
 
 export interface ChatSettings {

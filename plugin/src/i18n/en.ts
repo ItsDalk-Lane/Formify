@@ -763,6 +763,7 @@ export class En implements Local {
 	skill_edit_deleted = "Skill deleted";
 	// Skill Result Modal
 	skill_result_regenerate = "Regenerate";
+	skill_result_stop = "Stop";
 	skill_result_replace = "Replace";
 	skill_result_append = "Append";
 	skill_result_insert = "Insert";
@@ -784,6 +785,11 @@ export class En implements Local {
 	selection_toolbar_stream_output_desc = "When enabled, AI will output results word by word, otherwise waits for complete response";
 	skill_show_in_toolbar = "Shown in toolbar";
 	skill_not_show_in_toolbar = "Not shown in toolbar";
+	skill_edit_use_default_system_prompt = "Use default system prompt";
+	skill_edit_use_default_system_prompt_hint = "When enabled, global system prompts will be used; when disabled, only custom prompt content will be used";
+	skill_edit_model_exec_time = "Select Model at Execution";
+	skill_result_waiting_model = "Please select a model to start execution";
+	skill_result_select_model_hint = "After selecting an AI model above, processing will start automatically";
 	// Form Skill
 	skill_type_label = "Skill Type";
 	skill_type_normal = "Normal Skill";

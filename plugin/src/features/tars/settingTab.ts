@@ -2526,6 +2526,15 @@ export class TarsSettingTab {
 		defaultOption.textContent = '使用默认模型'
 		modelSelect.appendChild(defaultOption)
 
+		// 添加"执行时选择模型"选项
+		const execTimeOption = document.createElement('option')
+		execTimeOption.value = '__EXEC_TIME__'
+		execTimeOption.textContent = '执行时选择模型'
+		if (skill?.modelTag === '__EXEC_TIME__') {
+			execTimeOption.selected = true
+		}
+		modelSelect.appendChild(execTimeOption)
+
 		// 添加所有可用的 AI 模型
 		const providers = this.settings.providers || []
 		providers.forEach(provider => {
@@ -2701,6 +2710,43 @@ export class TarsSettingTab {
 		promptSourceField.appendChild(templateSection)
 		promptSourceField.appendChild(promptError)
 
+		// 使用默认系统提示词设置（仅普通技能显示）
+		const useDefaultSystemPromptField = document.createElement('div')
+		useDefaultSystemPromptField.style.cssText = 'margin-bottom: 20px; pointer-events: auto;'
+
+		const useDefaultSystemPromptLabel = document.createElement('label')
+		useDefaultSystemPromptLabel.style.cssText = `
+			display: block;
+			margin-bottom: 8px;
+			font-size: var(--font-ui-small);
+			font-weight: 500;
+			color: var(--text-normal);
+		`
+		useDefaultSystemPromptLabel.textContent = '使用默认系统提示词'
+
+		const useDefaultSystemPromptCheckboxRow = document.createElement('div')
+		useDefaultSystemPromptCheckboxRow.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-top: 8px; pointer-events: auto;'
+
+		const useDefaultSystemPromptCheckbox = document.createElement('input')
+		useDefaultSystemPromptCheckbox.type = 'checkbox'
+		useDefaultSystemPromptCheckbox.id = 'useDefaultSystemPrompt'
+		useDefaultSystemPromptCheckbox.checked = skill?.useDefaultSystemPrompt ?? true
+		useDefaultSystemPromptCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer; accent-color: var(--interactive-accent);'
+
+		const useDefaultSystemPromptHint = document.createElement('label')
+		useDefaultSystemPromptHint.htmlFor = 'useDefaultSystemPrompt'
+		useDefaultSystemPromptHint.style.cssText = `
+			font-size: var(--font-ui-smaller);
+			color: var(--text-muted);
+			cursor: pointer;
+		`
+		useDefaultSystemPromptHint.textContent = '启用后将使用全局系统提示词，禁用则仅使用自定义提示词内容'
+
+		useDefaultSystemPromptCheckboxRow.appendChild(useDefaultSystemPromptCheckbox)
+		useDefaultSystemPromptCheckboxRow.appendChild(useDefaultSystemPromptHint)
+		useDefaultSystemPromptField.appendChild(useDefaultSystemPromptLabel)
+		useDefaultSystemPromptField.appendChild(useDefaultSystemPromptCheckboxRow)
+
 		// 切换提示词来源时更新显示
 		const updatePromptSourceDisplay = () => {
 			const isCustom = customRadio.checked
@@ -2717,17 +2763,19 @@ export class TarsSettingTab {
 		body.appendChild(groupMembersSection)
 		body.appendChild(modelField)
 		body.appendChild(promptSourceField)
+		body.appendChild(useDefaultSystemPromptField)
 
 		// 根据技能类型更新显示
 		const updateSkillTypeDisplay = () => {
 			const isGroup = currentSkillType === 'group'
 			const isForm = currentSkillType === 'form'
 			const isNormal = currentSkillType === 'normal'
-			
+
 			formSkillSection.style.display = isForm ? 'block' : 'none'
 			groupMembersSection.style.display = isGroup ? 'block' : 'none'
 			modelField.style.display = isNormal ? 'block' : 'none'
 			promptSourceField.style.display = isNormal ? 'block' : 'none'
+			useDefaultSystemPromptField.style.display = isNormal ? 'block' : 'none'
 			
 			// 清理提示词错误显示，避免切换后残留
 			if (!isNormal) {
@@ -2875,6 +2923,7 @@ export class TarsSettingTab {
 				formCommandIds: isForm ? pendingFormCommandIds.slice(0, 1) : undefined,
 				// 通用字段
 				showInToolbar: skill?.showInToolbar ?? true,
+				useDefaultSystemPrompt: isNormal ? useDefaultSystemPromptCheckbox.checked : (skill?.useDefaultSystemPrompt ?? true),
 				order: skill?.order ?? allSkills.length,
 				createdAt: skill?.createdAt || now,
 				updatedAt: now

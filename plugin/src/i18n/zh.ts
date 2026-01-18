@@ -772,6 +772,7 @@ export class Zh implements Local {
 	skill_edit_deleted = "技能已删除";
 	// 技能结果模态框
 	skill_result_regenerate = "重新生成";
+	skill_result_stop = "停止";
 	skill_result_replace = "替换";
 	skill_result_append = "追加";
 	skill_result_insert = "插入";
@@ -793,6 +794,11 @@ export class Zh implements Local {
 	selection_toolbar_stream_output_desc = "启用后 AI 将逐字输出结果，关闭则等待完整响应后一次性显示";
 	skill_show_in_toolbar = "显示在工具栏";
 	skill_not_show_in_toolbar = "未显示在工具栏";
+	skill_edit_use_default_system_prompt = "使用默认系统提示词";
+	skill_edit_use_default_system_prompt_hint = "启用后将使用全局系统提示词，禁用则仅使用自定义提示词内容";
+	skill_edit_model_exec_time = "执行时选择模型";
+	skill_result_waiting_model = "请选择模型以开始执行";
+	skill_result_select_model_hint = "在上方选择AI模型后，将自动开始处理";
 	// 表单技能相关
 	skill_type_label = "技能类型";
 	skill_type_normal = "普通技能";

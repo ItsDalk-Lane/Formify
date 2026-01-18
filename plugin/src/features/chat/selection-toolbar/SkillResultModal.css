@@ -52,6 +52,33 @@
 	color: var(--text-muted);
 }
 
+/* 头部操作按钮区域 */
+.skill-result-modal-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+/* 停止按钮 */
+.skill-result-modal-stop {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	border: none;
+	border-radius: 6px;
+	background: var(--background-modifier-error);
+	color: var(--text-error);
+	font-size: var(--font-ui-small);
+	font-weight: 500;
+	cursor: pointer;
+	transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.skill-result-modal-stop:hover {
+	background: var(--background-modifier-error-hover);
+}
+
 .skill-result-modal-close {
 	display: flex;
 	align-items: center;
@@ -213,19 +240,55 @@
 		max-height: 90vh;
 		border-radius: 8px;
 	}
-	
+
 	.skill-result-modal-footer {
 		flex-direction: column;
 		gap: 8px;
 	}
-	
+
 	.skill-result-modal-actions-left,
 	.skill-result-modal-actions-right {
 		width: 100%;
 		justify-content: center;
 	}
-	
+
 	.skill-result-modal-btn span {
 		display: none;
 	}
+}
+
+/* 标题区域布局调整 */
+.skill-result-modal-title-section {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex: 1;
+	min-width: 0;
+}
+
+/* 模型选择器容器 */
+.skill-result-model-selector {
+	display: flex;
+	align-items: center;
+}
+
+/* 等待模型选择状态 */
+.skill-result-modal-waiting-model {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	height: 200px;
+	gap: 12px;
+	color: var(--text-muted);
+}
+
+.skill-result-modal-waiting-icon {
+	font-size: 48px;
+	opacity: 0.5;
+}
+
+.skill-result-modal-hint-text {
+	font-size: var(--font-ui-smaller);
+	opacity: 0.7;
 }

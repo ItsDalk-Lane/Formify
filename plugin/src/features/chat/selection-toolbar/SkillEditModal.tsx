@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { App, Notice, TFile } from 'obsidian';
 import { X, FileText, Heart } from 'lucide-react';
 import type { Skill } from '../types/chat';
+import type { ProviderSettings } from '../../tars/providers';
 import { localInstance } from 'src/i18n/locals';
 import { v4 as uuidv4 } from 'uuid';
 import './SkillEditModal.css';
@@ -13,6 +14,7 @@ interface SkillEditModalProps {
 	skill?: Skill; // 如果是编辑模式则提供
 	existingSkillNames: string[]; // 现有技能名称列表，用于验证重复
 	promptTemplateFolder: string;
+	providers: ProviderSettings[]; // 可用的AI模型列表
 	onSave: (skill: Skill) => void;
 	onClose: () => void;
 }
@@ -23,6 +25,7 @@ export const SkillEditModal = ({
 	skill,
 	existingSkillNames,
 	promptTemplateFolder,
+	providers,
 	onSave,
 	onClose
 }: SkillEditModalProps) => {
@@ -31,7 +34,9 @@ export const SkillEditModal = ({
 	// 表单状态
 	const [name, setName] = useState(skill?.name || '');
 	const [prompt, setPrompt] = useState(skill?.prompt || '');
+	const [modelTag, setModelTag] = useState(skill?.modelTag ?? '');
 	const [showInToolbar, setShowInToolbar] = useState(skill?.showInToolbar ?? true);
+	const [useDefaultSystemPrompt, setUseDefaultSystemPrompt] = useState(skill?.useDefaultSystemPrompt ?? true);
 	const [errors, setErrors] = useState<{ name?: string; prompt?: string }>({});
 	
 	const nameInputRef = useRef<HTMLInputElement>(null);
@@ -42,9 +47,11 @@ export const SkillEditModal = ({
 		if (visible) {
 			setName(skill?.name || '');
 			setPrompt(skill?.prompt || '');
+			setModelTag(skill?.modelTag ?? '');
 			setShowInToolbar(skill?.showInToolbar ?? true);
+			setUseDefaultSystemPrompt(skill?.useDefaultSystemPrompt ?? true);
 			setErrors({});
-			
+
 			// 自动聚焦到名称输入框
 			setTimeout(() => {
 				nameInputRef.current?.focus();
@@ -85,25 +92,28 @@ export const SkillEditModal = ({
 		if (!validateForm()) {
 			return;
 		}
-		
+
 		const now = Date.now();
 		const savedSkill: Skill = {
 			id: skill?.id || uuidv4(),
 			name: name.trim(),
 			prompt: prompt.trim(),
+			promptSource: 'custom',
+			modelTag: modelTag || undefined,
 			showInToolbar,
+			useDefaultSystemPrompt,
 			order: skill?.order ?? existingSkillNames.length,
 			createdAt: skill?.createdAt || now,
 			updatedAt: now
 		};
-		
+
 		onSave(savedSkill);
 		new Notice(
 			isEditMode
 				? (localInstance.skill_edit_updated || '技能已更新')
 				: (localInstance.skill_edit_created || '技能已创建')
 		);
-	}, [name, prompt, showInToolbar, skill, existingSkillNames.length, validateForm, onSave, isEditMode]);
+	}, [name, prompt, showInToolbar, useDefaultSystemPrompt, skill, existingSkillNames.length, validateForm, onSave, isEditMode]);
 
 	// 插入模板引用
 	const handleInsertTemplate = useCallback(async () => {
@@ -232,6 +242,52 @@ export const SkillEditModal = ({
 						{errors.prompt && (
 							<span className="skill-edit-error">{errors.prompt}</span>
 						)}
+					</div>
+
+					{/* 使用默认系统提示词设置 */}
+					<div className="skill-edit-field">
+						<label className="skill-edit-label">
+							{localInstance.skill_edit_use_default_system_prompt || '使用默认系统提示词'}
+						</label>
+						<div className="skill-edit-checkbox-row">
+							<input
+								type="checkbox"
+								id="useDefaultSystemPrompt"
+								checked={useDefaultSystemPrompt}
+								onChange={(e) => setUseDefaultSystemPrompt(e.target.checked)}
+								className="skill-edit-checkbox"
+							/>
+							<label htmlFor="useDefaultSystemPrompt" className="skill-edit-checkbox-label">
+								{localInstance.skill_edit_use_default_system_prompt_hint || '启用后将使用全局系统提示词，禁用则仅使用自定义提示词内容'}
+							</label>
+						</div>
+					</div>
+
+					{/* AI模型选择 */}
+					<div className="skill-edit-field">
+						<label className="skill-edit-label">
+							{localInstance.skill_edit_model_label || 'AI 模型'}
+						</label>
+						<select
+							className="skill-edit-select"
+							value={modelTag ?? ''}
+							onChange={(e) => setModelTag(e.target.value)}
+						>
+							<option value="">
+								{localInstance.skill_edit_model_default || '使用默认模型'}
+							</option>
+							<option value="__EXEC_TIME__">
+								{localInstance.skill_edit_model_exec_time || '执行时选择模型'}
+							</option>
+							{providers.map(provider => (
+								<option key={provider.tag} value={provider.tag}>
+									{provider.tag}
+								</option>
+							))}
+						</select>
+						<div className="skill-edit-model-hint">
+							{localInstance.skill_edit_model_hint || '选择执行此技能时使用的 AI 模型'}
+						</div>
 					</div>
 				</div>
 

@@ -66,6 +66,12 @@ export class ChatFeatureManager {
 	// 技能结果模态框状态
 	private resultModalContainer: HTMLElement | null = null;
 	private resultModalRoot: Root | null = null;
+	private currentIsLoading: boolean = false;
+	private currentRenderModal: (() => void) | null = null;
+	private isResultModalVisible: boolean = false;
+	private selectedSkillModelTag: string = ''; // 当前技能执行的模型选择
+	private currentResult: string = ''; // 当前执行结果
+	private currentError: string | undefined = undefined; // 当前错误信息
 
 	// 持久化模态框单例
 	private persistentModal: ChatPersistentModal | null = null;
@@ -936,6 +942,11 @@ export class ChatFeatureManager {
 	 * 显示技能结果模态框
 	 */
 	private showResultModal(skill: Skill, selection: string, triggerSource?: 'selection' | 'symbol', fullText?: string) {
+		this.isResultModalVisible = true;
+
+		// 判断是否需要执行时选择模型
+		const requiresModelSelection = skill.modelTag === '__EXEC_TIME__';
+
 		// 创建结果模态框容器
 		if (!this.resultModalContainer) {
 			this.resultModalContainer = document.createElement('div');
@@ -946,12 +957,17 @@ export class ChatFeatureManager {
 
 		// 根据触发来源决定实际使用的文本
 		const actualSelection = triggerSource === 'symbol' ? (fullText || '') : selection;
+		const providers = this.service.getProviders();
 
-		let result = '';
-		let isLoading = true;
-		let error: string | undefined;
+		// 重置状态
+		this.currentResult = '';
+		this.currentError = undefined;
+
+		// 初始化加载状态（如果需要选择模型，初始不显示加载）
+		this.currentIsLoading = !requiresModelSelection;
 
 		const renderModal = () => {
+			if (!this.isResultModalVisible) return;
 			if (!this.resultModalRoot) return;
 
 			this.resultModalRoot.render(
@@ -961,51 +977,126 @@ export class ChatFeatureManager {
 						visible={true}
 						skill={skill}
 						selection={selection}
-						result={result}
-						isLoading={isLoading}
-						error={error}
+						result={this.currentResult}
+						isLoading={this.currentIsLoading}
+						error={this.currentError}
+						providers={providers}
+						selectedModelTag={this.selectedSkillModelTag}
+						onModelChange={(tag) => this.handleSkillModelChange(tag, skill, actualSelection)}
+						requiresModelSelection={requiresModelSelection}
 						onClose={() => this.hideResultModal()}
+						onStop={() => {
+							this.cancelCurrentSkillExecution();
+							this.currentIsLoading = false;
+							renderModal();
+						}}
 						onRegenerate={() => this.regenerateSkillResult(skill, selection, triggerSource, fullText)}
-						onInsert={(mode) => this.insertSkillResult(result, mode, triggerSource, fullText)}
+						onInsert={(mode) => this.insertSkillResult(this.currentResult, mode, triggerSource, fullText)}
 						onCopy={() => {}}
 					/>
 				</StrictMode>
 			);
 		};
 
+		// 保存渲染函数引用
+		this.currentRenderModal = renderModal;
+
 		// 初始渲染（加载状态）
 		renderModal();
 
-		// 根据设置决定使用流式输出还是非流式输出
+		// 如果不需要选择模型，立即执行（现有逻辑）
+		if (!requiresModelSelection) {
+			// 根据设置决定使用流式输出还是非流式输出
+			const useStreamOutput = this.plugin.settings.chat.selectionToolbarStreamOutput ?? true;
+
+			if (useStreamOutput) {
+				// 执行技能并流式更新结果
+				this.executeSkillAndStream(skill, actualSelection, {
+					onChunk: (chunk) => {
+							if (!this.isResultModalVisible) return;
+							this.currentResult += chunk;
+							renderModal();
+					},
+					onComplete: () => {
+							if (!this.isResultModalVisible) return;
+							this.currentIsLoading = false;
+							renderModal();
+					},
+					onError: (err) => {
+							if (!this.isResultModalVisible) return;
+							this.currentIsLoading = false;
+							this.currentError = err;
+							renderModal();
+					}
+				});
+			} else {
+				// 非流式输出：等待完整响应
+				this.executeSkillNonStream(skill, actualSelection).then((response) => {
+					if (!this.isResultModalVisible) return;
+					this.currentResult = response;
+					this.currentIsLoading = false;
+					renderModal();
+				}).catch((err) => {
+					if (!this.isResultModalVisible) return;
+					this.currentIsLoading = false;
+					this.currentError = err instanceof Error ? err.message : String(err);
+					renderModal();
+				});
+			}
+		}
+		// 如果需要选择模型，等待用户选择后再执行（在handleSkillModelChange中处理）
+	}
+
+	/**
+	 * 处理技能模型切换
+	 */
+	private handleSkillModelChange(modelTag: string, skill: Skill, selection: string): void {
+		this.selectedSkillModelTag = modelTag;
+
+		// 如果未选择模型，仅更新UI
+		if (!modelTag) {
+			this.currentRenderModal?.();
+			return;
+		}
+
+		// 开始执行
+		this.currentIsLoading = true;
+		this.currentResult = '';
+		this.currentError = undefined;
+		this.currentRenderModal?.();
+
 		const useStreamOutput = this.plugin.settings.chat.selectionToolbarStreamOutput ?? true;
 
 		if (useStreamOutput) {
-			// 执行技能并流式更新结果
-			this.executeSkillAndStream(skill, actualSelection, {
+			this.executeSkillAndStream(skill, selection, {
 				onChunk: (chunk) => {
-					result += chunk;
-					renderModal();
+					if (!this.isResultModalVisible) return;
+					this.currentResult += chunk;
+					this.currentRenderModal?.();
 				},
 				onComplete: () => {
-					isLoading = false;
-					renderModal();
+					if (!this.isResultModalVisible) return;
+					this.currentIsLoading = false;
+					this.currentRenderModal?.();
 				},
 				onError: (err) => {
-					isLoading = false;
-					error = err;
-					renderModal();
+					if (!this.isResultModalVisible) return;
+					this.currentIsLoading = false;
+					this.currentError = err;
+					this.currentRenderModal?.();
 				}
-			});
+			}, modelTag);
 		} else {
-			// 非流式输出：等待完整响应
-			this.executeSkillNonStream(skill, actualSelection).then((response) => {
-				result = response;
-				isLoading = false;
-				renderModal();
+			this.executeSkillNonStream(skill, selection, modelTag).then((response) => {
+				if (!this.isResultModalVisible) return;
+				this.currentResult = response;
+				this.currentIsLoading = false;
+				this.currentRenderModal?.();
 			}).catch((err) => {
-				isLoading = false;
-				error = err instanceof Error ? err.message : String(err);
-				renderModal();
+				if (!this.isResultModalVisible) return;
+				this.currentIsLoading = false;
+				this.currentError = err instanceof Error ? err.message : String(err);
+				this.currentRenderModal?.();
 			});
 		}
 	}
@@ -1013,13 +1104,13 @@ export class ChatFeatureManager {
 	/**
 	 * 非流式执行技能
 	 */
-	private async executeSkillNonStream(skill: Skill, selection: string): Promise<string> {
+	private async executeSkillNonStream(skill: Skill, selection: string, overrideModelTag?: string): Promise<string> {
 		if (!this.skillExecutionService) {
 			throw new Error('技能执行服务未初始化');
 		}
 
-		const result = await this.skillExecutionService.executeSkill(skill, selection);
-		
+		const result = await this.skillExecutionService.executeSkill(skill, selection, overrideModelTag);
+
 		if (!result.success) {
 			throw new Error(result.error || '执行失败');
 		}
@@ -1037,7 +1128,8 @@ export class ChatFeatureManager {
 			onChunk: (chunk: string) => void;
 			onComplete: () => void;
 			onError: (error: string) => void;
-		}
+		},
+		overrideModelTag?: string
 	) {
 		if (!this.skillExecutionService) {
 			callbacks.onError('技能执行服务未初始化');
@@ -1045,7 +1137,7 @@ export class ChatFeatureManager {
 		}
 
 		try {
-			const generator = this.skillExecutionService.executeSkillStream(skill, selection);
+			const generator = this.skillExecutionService.executeSkillStream(skill, selection, overrideModelTag);
 			for await (const chunk of generator) {
 				callbacks.onChunk(chunk);
 			}
@@ -1118,9 +1210,30 @@ export class ChatFeatureManager {
 	}
 
 	/**
+	 * 取消当前正在执行的技能
+	 */
+	cancelCurrentSkillExecution(): void {
+		if (this.skillExecutionService) {
+			this.skillExecutionService.cancelCurrentExecution();
+		}
+	}
+
+	/**
 	 * 隐藏结果模态框
 	 */
 	private hideResultModal() {
+		this.isResultModalVisible = false;
+		this.currentIsLoading = false;
+		this.selectedSkillModelTag = ''; // 清空模型选择
+		this.currentResult = ''; // 清空结果
+		this.currentError = undefined; // 清空错误
+
+		// 清理渲染函数引用
+		this.currentRenderModal = null;
+
+		// 取消正在执行的技能
+		this.cancelCurrentSkillExecution();
+
 		if (this.resultModalRoot) {
 			this.resultModalRoot.render(
 				<StrictMode>

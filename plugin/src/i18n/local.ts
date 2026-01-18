@@ -711,8 +711,14 @@ export interface Local {
 	skill_edit_created: string;
 	skill_edit_updated: string;
 	skill_edit_deleted: string;
+	skill_edit_use_default_system_prompt: string;
+	skill_edit_use_default_system_prompt_hint: string;
+	skill_edit_model_exec_time: string;
+	skill_result_waiting_model: string;
+	skill_result_select_model_hint: string;
 	// Skill Result Modal
 	skill_result_regenerate: string;
+	skill_result_stop: string;
 	skill_result_replace: string;
 	skill_result_append: string;
 	skill_result_insert: string;

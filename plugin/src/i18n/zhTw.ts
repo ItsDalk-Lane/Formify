@@ -788,6 +788,7 @@ export class ZhTw implements Local {
 	skill_edit_deleted = "技能已刪除";
 	// 技能結果模態框
 	skill_result_regenerate = "重新生成";
+	skill_result_stop = "停止";
 	skill_result_replace = "替換";
 	skill_result_append = "追加";
 	skill_result_insert = "插入";
@@ -809,6 +810,11 @@ export class ZhTw implements Local {
 	selection_toolbar_stream_output_desc = "啟用後 AI 將逐字輸出結果，關閉則等待完整響應後一次性顯示";
 	skill_show_in_toolbar = "顯示在工具列";
 	skill_not_show_in_toolbar = "未顯示在工具列";
+	skill_edit_use_default_system_prompt = "使用預設系統提示詞";
+	skill_edit_use_default_system_prompt_hint = "啟用後將使用全域系統提示詞，停用則僅使用自訂提示詞內容";
+	skill_edit_model_exec_time = "執行時選擇模型";
+	skill_result_waiting_model = "請選擇模型以開始執行";
+	skill_result_select_model_hint = "在上方選擇AI模型後，將自動開始處理";
 	// 表單技能相關
 	skill_type_label = "技能類型";
 	skill_type_normal = "普通技能";
