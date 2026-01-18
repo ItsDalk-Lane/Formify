@@ -1,13 +1,13 @@
-import { TFile, TFolder } from 'obsidian';
 import type { App } from 'obsidian';
-import * as fs from 'fs';
-import * as path from 'path';
 import type { ToolDefinition } from '../types/tools';
+import { FileOperationService } from 'src/service/FileOperationService';
 
 interface DeleteFileArgs {
 	path?: string;
 	filePath?: string;
 	file_path?: string;
+	paths?: string[];
+	recursive?: boolean;
 }
 
 interface DeleteFileResult {
@@ -45,81 +45,50 @@ export const createDeleteFileTool = (app: App): ToolDefinition => {
 				path: {
 					type: 'string',
 					description: '要删除的文件或文件夹路径，相对于 vault 根目录'
+			},
+			paths: {
+				type: 'array',
+				description: '（可选）要删除的多个路径'
+			},
+			recursive: {
+				type: 'boolean',
+				description: '是否递归删除文件夹。默认 true。'
 				}
 			},
-			required: ['path']
+		required: []
 		},
 		handler: async (rawArgs: Record<string, any>) => {
 			const args = rawArgs as DeleteFileArgs;
-			const filePath = normalizeVaultPath(
-				coalesceString(args.path, args.filePath, args.file_path)
-			);
-
-			if (!filePath) {
-				throw new Error('path 不能为空。示例: "notes/my-note.md"');
-			}
-
-			const invalidChars = /[<>:"|?*]/;
-			if (invalidChars.test(filePath)) {
-				throw new Error('文件路径包含非法字符: < > : " | ? *');
-			}
-
-			const existing = app.vault.getAbstractFileByPath(filePath);
-		if (!existing) {
-			const result: DeleteFileResult = {
-				path: filePath,
-				existed: false,
-				message: 'File/Folder not found, nothing to delete'
-			};
-			return result;
+		const filePath = normalizeVaultPath(
+			coalesceString(args.path, args.filePath, args.file_path)
+		);
+		const normalizedPaths = (args.paths ?? [])
+			.map((item) => normalizeVaultPath(item))
+			.filter((item) => item);
+		const paths = normalizedPaths.length > 0 ? normalizedPaths : (filePath ? [filePath] : []);
+		if (paths.length === 0) {
+			throw new Error('必须提供 path 或 paths 参数');
 		}
 
-		// 1) 优先使用 Obsidian API（支持文件和文件夹）
-		try {
-			await app.vault.delete(existing);
-			const result: DeleteFileResult = {
-				path: filePath,
-				existed: true,
-				message: existing instanceof TFolder ? 'Folder deleted successfully' : 'File deleted successfully'
-			};
-			return result;
-		} catch (error) {
-			// 2) 降级到 Node.js API（支持文件和文件夹）
-			try {
-				const adapter: any = app.vault.adapter as any;
-				const basePath: string | undefined = adapter?.basePath;
-				if (!basePath) {
-					throw new Error('无法获取 vault 物理路径（basePath）');
-				}
-				const absPath = path.join(basePath, filePath);
-				if (!fs.existsSync(absPath)) {
-					const result: DeleteFileResult = {
-						path: filePath,
-						existed: false,
-						message: 'File/Folder not found, nothing to delete'
-					};
-					return result;
-				}
-				const stat = fs.statSync(absPath);
-				if (stat.isDirectory()) {
-					// 递归删除文件夹
-					fs.rmSync(absPath, { recursive: true, force: true });
-				} else {
-					// 删除文件
-					fs.unlinkSync(absPath);
-				}
-				const result: DeleteFileResult = {
-					path: filePath,
-					existed: true,
-					message: stat.isDirectory() ? 'Folder deleted successfully' : 'File deleted successfully'
-				};
-				return result;
-			} catch (fallbackError) {
-				const primary = error instanceof Error ? error.message : String(error);
-				const fallback = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-				throw new Error(`删除失败（Obsidian API）: ${primary}\n删除失败（Node 降级）: ${fallback}`);
-			}
+		const service = new FileOperationService(app);
+		const result = await service.deleteFile({
+			paths,
+			folderMode: args.recursive === false ? 'files-only' : 'recursive',
+			silent: true
+		});
+
+		if (!result.success && result.deletedFiles.length === 0 && result.deletedFolders.length === 0) {
+			const reason = result.errors.map((item) => item.error).join('; ');
+			throw new Error(`删除失败: ${reason || '未知错误'}`);
 		}
+
+		const summaryPath = paths.length === 1 ? paths[0] : `${paths.length} items`;
+		const response: DeleteFileResult = {
+			path: summaryPath,
+			existed: result.deletedFiles.length > 0 || result.deletedFolders.length > 0,
+			message: `成功删除 ${result.deletedFiles.length} 个文件和 ${result.deletedFolders.length} 个文件夹`
+		};
+		return response;
 		},
 		createdAt: now,
 		updatedAt: now

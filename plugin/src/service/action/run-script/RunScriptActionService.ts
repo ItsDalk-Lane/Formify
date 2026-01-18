@@ -2,9 +2,7 @@ import { IFormAction } from "src/model/action/IFormAction";
 import { RunScriptFormAction, ScriptSourceType } from "src/model/action/RunScriptFormAction";
 import { FormActionType } from "src/model/enums/FormActionType";
 import { ActionChain, ActionContext, IActionService } from "../IActionService";
-import { FormScriptComipler } from "src/service/extend/FormScriptComipler";
-import { FormScriptRunner } from "src/service/extend/FormScriptRunner";
-import { getServiceContainer } from "src/service/ServiceContainer";
+import { ScriptExecutionService } from "src/service/ScriptExecutionService";
 
 export default class RunScriptActionService implements IActionService {
 
@@ -18,18 +16,26 @@ export default class RunScriptActionService implements IActionService {
         const extraContext = {
             form: state.values,
         }
+        const scriptService = new ScriptExecutionService(context.app);
 
         if (scriptAction.scriptSource === ScriptSourceType.INLINE) {
-            const code = scriptAction.code;
-            const extension = await FormScriptComipler.compile(action.id, code, {
-                name: "entry"
+            const result = await scriptService.executeScript({
+                source: "form-inline",
+                script: scriptAction.code,
+                context: extraContext,
             });
-            if (!extension) {
-                throw new Error("Invalid script code");
+            if (!result.success) {
+                throw new Error(result.error || "Invalid script code");
             }
-            await FormScriptRunner.runFunction(context.app, extension, extraContext)
         } else {
-            await getServiceContainer().formScriptService.run(scriptAction.expression, extraContext);
+            const result = await scriptService.executeScript({
+                source: "form-expression",
+                script: scriptAction.expression,
+                context: extraContext,
+            });
+            if (!result.success) {
+                throw new Error(result.error || "Invalid script expression");
+            }
         }
 
         // do next

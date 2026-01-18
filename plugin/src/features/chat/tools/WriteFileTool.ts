@@ -1,8 +1,6 @@
-import { TFile } from 'obsidian';
 import type { App } from 'obsidian';
-import * as fs from 'fs';
-import * as path from 'path';
 import type { ToolDefinition } from '../types/tools';
+import { FileOperationService } from 'src/service/FileOperationService';
 
 interface WriteFileArgs {
 	filePath: string;
@@ -25,10 +23,13 @@ interface WriteFileArgs {
 	dir?: string;
 	directory?: string;
 	targetFolder?: string;
+	template?: string;
+	variables?: Record<string, any>;
+	conflictStrategy?: 'error' | 'overwrite' | 'rename' | 'skip';
 }
 
 interface WriteFileResult {
-	writeType: 'create' | 'overwrite';
+	writeType: 'create' | 'overwrite' | 'skipped';
 	path: string;
 	characterCount: number;
 	message: string;
@@ -65,21 +66,6 @@ const buildFallbackPath = (args: WriteFileArgs): string => {
 	if (!ensuredName) return '';
 	const combined = folder ? `${folder}/${ensuredName}` : ensuredName;
 	return normalizeVaultPath(combined);
-};
-
-const ensureFolderExists = async (app: App, folderPath: string) => {
-	const normalized = normalizeVaultPath(folderPath);
-	if (!normalized || normalized === '.') return;
-
-	const parts = normalized.split('/').filter(Boolean);
-	let current = '';
-	for (const part of parts) {
-		current = current ? `${current}/${part}` : part;
-		const existing = app.vault.getAbstractFileByPath(current);
-		if (!existing) {
-			await app.vault.createFolder(current);
-		}
-	}
 };
 
 export const createWriteFileTool = (app: App): ToolDefinition => {
@@ -123,12 +109,24 @@ export const createWriteFileTool = (app: App): ToolDefinition => {
 					type: 'string',
 					description: '要写入的内容'
 				},
+				template: {
+					type: 'string',
+					description: '（可选）模板文件路径，如果指定则从模板创建'
+				},
+				variables: {
+					type: 'object',
+					description: '（可选）变量替换，用于模板中的变量替换'
+				},
+				conflictStrategy: {
+					type: 'string',
+					description: '冲突解决策略，可选：overwrite、rename、skip、error。默认 overwrite'
+				},
 				createFolders: {
 					type: 'boolean',
 					description: '如果父文件夹不存在，是否自动创建。默认 true。'
 				}
 			},
-			required: ['path', 'content']
+			required: ['path']
 		},
 		handler: async (rawArgs: Record<string, any>) => {
 			const args = rawArgs as WriteFileArgs;
@@ -141,75 +139,47 @@ export const createWriteFileTool = (app: App): ToolDefinition => {
 			);
 			const content = coalesceString(args.content, args.text, args.body, args.data, args.translation);
 			const createFolders = args.createFolders !== false;
+			const template = coalesceString(args.template);
+			const variables = args.variables ?? {};
+			const conflictStrategy = args.conflictStrategy ?? 'overwrite';
 
-			if (!filePath) {
-				throw new Error('path 不能为空。示例: "notes/my-note.md"');
+			let resolvedPath = filePath;
+			if (!resolvedPath) {
+				const fallback = buildFallbackPath(args);
+				if (!fallback) {
+					throw new Error('path 不能为空。示例: "notes/my-note.md"');
+				}
+				resolvedPath = fallback;
 			}
 
 			// 非法字符检测
 			const invalidChars = /[<>:"|?*]/;
-			if (invalidChars.test(filePath)) {
+			if (invalidChars.test(resolvedPath)) {
 				throw new Error('文件路径包含非法字符: < > : " | ? *');
 			}
 
 			const isEmpty = !content || content.trim().length === 0;
-
-			const parent = filePath.includes('/') ? filePath.split('/').slice(0, -1).join('/') : '';
-
-			// 1) 优先使用 Obsidian API
-			try {
-				if (createFolders && parent) {
-					await ensureFolderExists(app, parent);
-				}
-
-				const existing = app.vault.getAbstractFileByPath(filePath);
-				if (existing instanceof TFile) {
-					await app.vault.modify(existing, content);
-					const result: WriteFileResult = {
-						writeType: 'overwrite',
-						path: filePath,
-						characterCount: content.length,
-						message: isEmpty ? 'Content write successful (empty file)' : 'Content write successful'
-					};
-					return result;
-				}
-
-				await app.vault.create(filePath, content);
-				const result: WriteFileResult = {
-					writeType: 'create',
-					path: filePath,
-					characterCount: content.length,
-					message: isEmpty ? 'Content write successful (empty file)' : 'Content write successful'
-				};
-				return result;
-			} catch (error) {
-				// 2) 降级到 Node.js API
-				try {
-					const adapter: any = app.vault.adapter as any;
-					const basePath: string | undefined = adapter?.basePath;
-					if (!basePath) {
-						throw new Error('无法获取 vault 物理路径（basePath）');
-					}
-
-					const absPath = path.join(basePath, filePath);
-					if (createFolders) {
-						fs.mkdirSync(path.dirname(absPath), { recursive: true });
-					}
-					const exists = fs.existsSync(absPath);
-					fs.writeFileSync(absPath, content, { encoding: 'utf-8' });
-					const result: WriteFileResult = {
-						writeType: exists ? 'overwrite' : 'create',
-						path: filePath,
-						characterCount: content.length,
-						message: isEmpty ? 'Content write successful (empty file)' : 'Content write successful'
-					};
-					return result;
-				} catch (fallbackError) {
-					const primary = error instanceof Error ? error.message : String(error);
-					const fallback = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-					throw new Error(`写入失败（Obsidian API）: ${primary}\n写入失败（Node 降级）: ${fallback}`);
-				}
+			const service = new FileOperationService(app);
+			const result = await service.writeFile({
+				path: resolvedPath,
+				content,
+				template,
+				variables,
+				createFolders,
+				conflictStrategy,
+				silent: true
+			});
+			if (!result.success) {
+				throw new Error(result.error || '写入失败');
 			}
+			const finalPath = result.actualPath || result.path;
+			const writeType = result.action === 'skipped' ? 'skipped' : result.action;
+			return {
+				writeType,
+				path: finalPath,
+				characterCount: result.bytesWritten ?? content.length,
+				message: isEmpty ? 'Content write successful (empty file)' : 'Content write successful'
+			};
 		},
 		createdAt: now,
 		updatedAt: now

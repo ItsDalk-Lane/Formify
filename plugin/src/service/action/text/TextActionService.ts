@@ -25,6 +25,7 @@ import { ActionChain, ActionContext, IActionService } from "../IActionService";
 import { localInstance } from "src/i18n/locals";
 import { TextConverter } from "src/utils/TextConverter";
 import * as fs from "fs/promises";
+import { FileOperationService, FolderDeleteMode } from "src/service/FileOperationService";
 
 type CleanupResult = {
     processed: string[];
@@ -456,32 +457,26 @@ export class TextActionService implements IActionService {
             }
         }
 
-        for (const path of paths) {
-            const abstractFile = context.app.vault.getAbstractFileByPath(path);
-            if (!abstractFile) {
-                throw new Error(`${localInstance.file_not_found}: ${path}`);
-            }
+        const fileService = new FileOperationService(context.app);
+        const folderMode = this.mapFolderDeleteOption(config.folderDeleteOption);
+        const deleteType =
+            config.targetMode === TargetMode.CURRENT
+                ? "file"
+                : (config.deleteType === DeleteType.FILE ? "file" : "folder");
 
-            // 当前文件模式下,仅删除文件本身
-            if (config.targetMode === TargetMode.CURRENT) {
-                if (!(abstractFile instanceof TFile)) {
-                    throw new Error(`${path} ${localInstance.file_not_found}`);
-                }
-                await context.app.vault.delete(abstractFile);
-            } else {
-                // 指定文件模式下,根据 deleteType 决定删除行为
-                if (config.deleteType === DeleteType.FILE) {
-                    if (!(abstractFile instanceof TFile)) {
-                        throw new Error(`${path} ${localInstance.file_not_found}`);
-                    }
-                    await context.app.vault.delete(abstractFile);
-                } else {
-                    if (!(abstractFile instanceof TFolder)) {
-                        throw new Error(`${path} ${localInstance.folder_path_required}`);
-                    }
-                    await this.deleteFolder(abstractFile, config.folderDeleteOption ?? FolderDeleteOption.RECURSIVE, context);
-                }
+        const result = await fileService.deleteFile({
+            paths,
+            deleteType,
+            folderMode,
+            state: context.state,
+        });
+
+        if (!result.success) {
+            const firstError = result.errors[0];
+            if (firstError) {
+                throw new Error(`${firstError.path} ${firstError.error}`);
             }
+            throw new Error(localInstance.unknown_error);
         }
         return true;
     }
@@ -645,30 +640,14 @@ export class TextActionService implements IActionService {
         return Array.from(new Set(resolved));
     }
 
-    private async deleteFolder(folder: TFolder, option: FolderDeleteOption, context: ActionContext): Promise<void> {
-        const vault = context.app.vault;
-        if (option === FolderDeleteOption.RECURSIVE) {
-            await vault.delete(folder, true);
-            return;
-        }
-
+    private mapFolderDeleteOption(option?: FolderDeleteOption): FolderDeleteMode {
         if (option === FolderDeleteOption.FILES_ONLY) {
-            const promises: Promise<void>[] = [];
-            folder.children.forEach((child) => {
-                if (child instanceof TFile) {
-                    promises.push(vault.delete(child));
-                }
-            });
-            await Promise.all(promises);
-            return;
+            return "files-only";
         }
-
         if (option === FolderDeleteOption.FOLDERS_ONLY) {
-            const folders = folder.children.filter((child): child is TFolder => child instanceof TFolder);
-            for (const childFolder of folders) {
-                await vault.delete(childFolder, true);
-            }
+            return "folder-only";
         }
+        return "recursive";
     }
 
     private async showConfirm(context: ActionContext, message: string): Promise<boolean> {

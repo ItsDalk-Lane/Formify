@@ -1,4 +1,4 @@
-import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download, Highlighter, ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download, Highlighter, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Repeat, Clock3 } from 'lucide-react';
 import { Component, Platform } from 'obsidian';
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
@@ -15,6 +15,7 @@ interface MessageItemProps {
 	service?: ChatService;
 	isGenerating?: boolean;
 	pendingToolExecutions?: ToolExecution[];
+	toolExecutions?: ToolExecution[];
 }
 
 // 格式化推理耗时
@@ -210,12 +211,53 @@ const getToolCallDisplay = (call: { name: string; arguments?: Record<string, any
 	}
 };
 
-const ToolCallItem = ({ call }: { call: { name: string; status: string; arguments?: Record<string, any>; result?: string } }) => {
+const ToolCallItem = ({
+	call,
+	execution,
+	canRetry,
+	onRetry,
+	onApprove,
+	onReject
+}: {
+	call: { id: string; name: string; status: string; arguments?: Record<string, any>; result?: string };
+	execution?: ToolExecution;
+	canRetry: boolean;
+	onRetry?: () => void;
+	onApprove?: () => void;
+	onReject?: () => void;
+}) => {
 	const [collapsed, setCollapsed] = useState(true);
 	const display = useMemo(() => getToolCallDisplay(call), [call]);
+	const resolvedStatus = execution?.status ?? call.status;
 	const dotStatus =
-		call.status === 'completed' ? 'success' : call.status === 'failed' ? 'error' : 'pending';
+		resolvedStatus === 'completed'
+			? 'success'
+			: resolvedStatus === 'failed' || resolvedStatus === 'rejected'
+				? 'error'
+				: 'pending';
+	const statusText =
+		execution?.status === 'pending'
+			? '待审批'
+			: execution?.status === 'approved' || execution?.status === 'executing'
+				? '执行中'
+				: execution?.status === 'completed' || call.status === 'completed'
+					? '已完成'
+					: execution?.status === 'failed' || call.status === 'failed'
+						? '执行失败'
+						: execution?.status === 'rejected'
+							? '已拒绝'
+							: '待处理';
 	const contentText = display.contentText;
+	const statusIcon =
+		statusText === '执行中' ? (
+			<Loader2 className="tw-size-3 tw-animate-spin" />
+		) : statusText === '已完成' ? (
+			<CheckCircle2 className="tw-size-3" />
+		) : statusText === '执行失败' || statusText === '已拒绝' ? (
+			<AlertCircle className="tw-size-3" />
+		) : (
+			<Clock3 className="tw-size-3" />
+		);
 
 	return (
 		<div className="ff-tool-call">
@@ -223,6 +265,10 @@ const ToolCallItem = ({ call }: { call: { name: string; status: string; argument
 				<span className={`ff-tool-call__dot ff-tool-call__dot--${dotStatus}`} />
 				<span className="ff-tool-call__toggle">
 					{collapsed ? <ChevronRight className="tw-size-4" /> : <ChevronDown className="tw-size-4" />}
+				</span>
+				<span className="ff-tool-call__status">
+					{statusIcon}
+					<span>{statusText}</span>
 				</span>
 				<span className="ff-tool-call__name" title={display.title}>
 					{display.title}
@@ -232,6 +278,20 @@ const ToolCallItem = ({ call }: { call: { name: string; status: string; argument
 						{display.summary}
 					</span>
 				)}
+				{canRetry && onRetry && (
+					<button
+						type="button"
+						className="ff-tool-call__retry"
+						onClick={(event) => {
+							event.stopPropagation();
+							onRetry();
+						}}
+						title="重试"
+					>
+						<Repeat className="tw-size-3" />
+						<span>重试</span>
+					</button>
+				)}
 			</div>
 			{!collapsed && (
 				<div className="ff-tool-call__body">
@@ -239,6 +299,30 @@ const ToolCallItem = ({ call }: { call: { name: string; status: string; argument
 						<div className="ff-tool-call__label">{display.contentLabel}</div>
 						<pre className="ff-tool-call__code">{contentText || '（无内容）'}</pre>
 					</div>
+					{execution?.status === 'pending' && (
+						<div className="ff-tool-call__section ff-tool-call__actions">
+							<button
+								type="button"
+								className="ff-tool-call__action"
+								onClick={(event) => {
+									event.stopPropagation();
+									onApprove?.();
+								}}
+							>
+								允许
+							</button>
+							<button
+								type="button"
+								className="ff-tool-call__action ff-tool-call__action--danger"
+								onClick={(event) => {
+									event.stopPropagation();
+									onReject?.();
+								}}
+							>
+								拒绝
+							</button>
+						</div>
+					)}
 					{call.result && call.result.trim().length > 0 && (
 						<div className="ff-tool-call__section">
 							<div className="ff-tool-call__label">{display.resultLabel}</div>
@@ -322,6 +406,7 @@ interface MessageItemProps {
 	service?: ChatService;
 	isGenerating?: boolean;
 	pendingToolExecutions?: ToolExecution[];
+	toolExecutions?: ToolExecution[];
 }
 
 // 文本块组件 - 用于渲染 Markdown 内容
@@ -350,7 +435,7 @@ const TextBlockComponent = ({ content, app }: TextBlockProps) => {
 	return <div ref={containerRef}></div>;
 };
 
-export const MessageItem = ({ message, service, isGenerating, pendingToolExecutions }: MessageItemProps) => {
+export const MessageItem = ({ message, service, isGenerating, pendingToolExecutions, toolExecutions }: MessageItemProps) => {
 	const app = useObsidianApp();
 	const helper = useMemo(() => new MessageService(), []);
 	const [copied, setCopied] = useState(false);
@@ -358,6 +443,7 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 	const [draft, setDraft] = useState(message.content);
 	const [previewImage, setPreviewImage] = useState<string | null>(null);
 	const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
+	const [thoughtCollapsed, setThoughtCollapsed] = useState(false);
 
 	const timestamp = useMemo(() => helper.formatTimestamp(message.timestamp), [helper, message.timestamp]);
 
@@ -366,6 +452,10 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 		const blocks = parseContentBlocks(message.content);
 		setContentBlocks(blocks);
 	}, [message.content]);
+
+	useEffect(() => {
+		setThoughtCollapsed(false);
+	}, [message.id]);
 
 	const handleCopy = async () => {
 		try {
@@ -482,6 +572,27 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 			: message.role === 'assistant'
 				? 'chat-message--assistant'
 				: 'chat-message--system';
+	const toolCalls = message.toolCalls ?? [];
+	const shouldRenderAsThought = message.role === 'assistant' && toolCalls.length > 0 && message.content.trim().length > 0;
+	const executionMap = useMemo(() => {
+		const map = new Map<string, ToolExecution>();
+		(toolExecutions ?? []).forEach((exec) => {
+			if (exec.toolCallId) {
+				map.set(exec.toolCallId, exec);
+			}
+		});
+		return map;
+	}, [toolExecutions]);
+	const completedCount = toolCalls.filter((call) => {
+		const exec = executionMap.get(call.id);
+		return exec?.status === 'completed' || call.status === 'completed';
+	}).length;
+	const failedCount = toolCalls.filter((call) => {
+		const exec = executionMap.get(call.id);
+		return exec?.status === 'failed' || exec?.status === 'rejected' || call.status === 'failed';
+	}).length;
+	const totalCount = toolCalls.length;
+	const inProgressCount = Math.max(totalCount - completedCount - failedCount, 0);
 
 	return (
 		<>
@@ -541,18 +652,45 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 				)}
 
 				{/* 工具调用徽章 */}
-				{message.toolCalls && message.toolCalls.length > 0 && (
+				{toolCalls.length > 0 && (
 					<div className="ff-tool-call-list">
-						{message.toolCalls.map((call) => (
-							<ToolCallItem key={call.id} call={call} />
-						))}
+						<div className="ff-tool-call__progress">
+							{inProgressCount > 0 ? (
+								<span>执行中 {completedCount}/{totalCount} 个工具</span>
+							) : (
+								<span>已完成 {completedCount}/{totalCount} 个工具</span>
+							)}
+						</div>
+						{toolCalls.map((call) => {
+							const exec = executionMap.get(call.id);
+							const canRetry = call.status === 'failed' || exec?.status === 'failed' || exec?.status === 'rejected';
+							return (
+								<ToolCallItem
+									key={call.id}
+									call={call}
+									execution={exec}
+									canRetry={!!service && canRetry}
+									onRetry={
+										service
+											? () => void service.retryToolCall(message.id, call.id)
+											: undefined
+									}
+									onApprove={
+										exec && service ? () => void service.approveToolExecution(exec.id) : undefined
+									}
+									onReject={
+										exec && service ? () => void service.rejectToolExecution(exec.id) : undefined
+									}
+								/>
+							);
+						})}
 					</div>
 				)}
 
 				{/* 内嵌审批界面 */}
-				{message.toolCalls && message.toolCalls.length > 0 && pendingToolExecutions && (
+				{toolCalls.length > 0 && pendingToolExecutions && (
 					<EmbeddedToolApproval
-						toolCalls={message.toolCalls}
+						toolCalls={toolCalls}
 						pendingExecutions={pendingToolExecutions}
 						onApprove={(executionId) => service?.approveToolExecution(executionId)}
 						onReject={(executionId) => service?.rejectToolExecution(executionId)}
@@ -569,19 +707,61 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 						/>
 					) : (
 						<>
-							{/* 按顺序渲染所有内容块 */}
-							{contentBlocks.map((block, index) => {
-								if (block.type === 'reasoning') {
-									return (
-										<ReasoningBlockComponent
-											key={`reasoning-${index}`}
-											content={block.content}
-											startMs={block.startMs}
-											durationMs={block.durationMs}
-											isGenerating={isGenerating ?? false}
-										/>
-									);
-								} else {
+							{shouldRenderAsThought ? (
+								<div className="ff-tool-thought">
+									<div
+										className="ff-tool-thought__header"
+										onClick={(event) => {
+											event.stopPropagation();
+											setThoughtCollapsed((prev) => !prev);
+										}}
+									>
+										<span className="ff-tool-thought__toggle">
+											{thoughtCollapsed ? (
+												<ChevronRight className="tw-size-4" />
+											) : (
+												<ChevronDown className="tw-size-4" />
+											)}
+										</span>
+										<span className="ff-tool-thought__icon">
+											<Loader2 className="tw-size-3 tw-animate-spin" />
+										</span>
+										<span className="ff-tool-thought__title">分析中...</span>
+									</div>
+									{!thoughtCollapsed && (
+										<div className="ff-tool-thought__body">
+										{contentBlocks.map((block, index) => {
+											if (block.type === 'reasoning') {
+												return (
+													<ReasoningBlockComponent
+														key={`reasoning-${index}`}
+														content={block.content}
+														startMs={block.startMs}
+														durationMs={block.durationMs}
+														isGenerating={isGenerating ?? false}
+													/>
+												);
+											}
+											return (
+												<TextBlockComponent key={`text-${index}`} content={block.content} app={app} />
+											);
+										})}
+										</div>
+									)}
+								</div>
+							) : (
+								contentBlocks.map((block, index) => {
+									if (block.type === 'reasoning') {
+										return (
+											<ReasoningBlockComponent
+												key={`reasoning-${index}`}
+												content={block.content}
+												startMs={block.startMs}
+												durationMs={block.durationMs}
+												isGenerating={isGenerating ?? false}
+											/>
+										);
+									}
 									return (
 										<TextBlockComponent
 											key={`text-${index}`}
@@ -589,8 +769,8 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 											app={app}
 										/>
 									);
-								}
-							})}
+								})
+							)}
 						</>
 					)}
 				</div>

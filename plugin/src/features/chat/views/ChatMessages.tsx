@@ -73,6 +73,42 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 		<div className={containerClasses}>
 			{/* 注释掉RelevantNotes组件，不再显示"Relevant Notes"区域 */}
 			{/* <RelevantNotes notes={contextNotes} /> */}
+			{state.isAgentLoopPaused && (
+				<div className="ff-agent-loop-paused">
+					<div className="ff-agent-loop-paused__header">
+						<span>工具调用需要审批，审批完成后将自动继续</span>
+						<div className="ff-agent-loop-paused__actions">
+							<button
+								type="button"
+								className="ff-agent-loop-paused__btn"
+								onClick={() => void service.approveAllPendingToolExecutions()}
+							>
+								全部允许
+							</button>
+							<button
+								type="button"
+								className="ff-agent-loop-paused__btn ff-agent-loop-paused__btn--danger"
+								onClick={() => service.rejectAllPendingToolExecutions()}
+							>
+								全部拒绝
+							</button>
+						</div>
+					</div>
+					{state.pendingToolExecutions.length > 0 && (
+						<div className="ff-agent-loop-paused__list">
+							{state.pendingToolExecutions.map((execution) => (
+								<div key={execution.id} className="ff-agent-loop-paused__item">
+									<span className="ff-agent-loop-paused__name">{execution.toolId}</span>
+									<span className="ff-agent-loop-paused__args">
+										{JSON.stringify(execution.arguments).slice(0, 120)}
+										{JSON.stringify(execution.arguments).length > 120 ? '...' : ''}
+									</span>
+								</div>
+							))}
+						</div>
+					)}
+				</div>
+			)}
 			<div
 				ref={scrollRef}
 				className="tw-flex tw-flex-1 tw-flex-col tw-overflow-y-auto tw-scroll-smooth tw-select-text tw-break-words tw-gap-2"
@@ -84,6 +120,7 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 						service={service}
 						isGenerating={message.role === 'assistant' && index === messages.length - 1 && state.isGenerating}
 						pendingToolExecutions={state.pendingToolExecutions}
+						toolExecutions={state.toolExecutions}
 					/>
 				))}
 			</div>

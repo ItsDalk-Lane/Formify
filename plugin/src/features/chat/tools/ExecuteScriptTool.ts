@@ -1,5 +1,6 @@
-import * as vm from 'vm';
+import type { App } from 'obsidian';
 import type { ToolDefinition } from '../types/tools';
+import { ScriptExecutionService } from 'src/service/ScriptExecutionService';
 
 interface ExecuteScriptArgs {
 	script?: string;
@@ -16,7 +17,7 @@ interface ExecuteScriptResult {
 	message: string;
 }
 
-export const createExecuteScriptTool = (): ToolDefinition => {
+export const createExecuteScriptTool = (app?: App): ToolDefinition => {
 	const now = Date.now();
 	return {
 		id: 'execute_script',
@@ -44,56 +45,27 @@ export const createExecuteScriptTool = (): ToolDefinition => {
 			},
 			required: ['script']
 		},
-		handler: (rawArgs: Record<string, any>) => {
+		handler: async (rawArgs: Record<string, any>) => {
 			const args = rawArgs as ExecuteScriptArgs;
 			const code = String(args.script ?? args.code ?? '');
 			const timeout = Number.isFinite(args.timeout) ? Number(args.timeout) : 5000;
 			const scriptArgs = args.args ?? {};
 
-			if (!code.trim()) {
-				throw new Error('script 不能为空。请提供要执行的脚本代码或脚本名称');
-			}
-
-			const outputLines: string[] = [];
-			const safeConsole = {
-				log: (...items: unknown[]) => outputLines.push(items.map(String).join(' ')),
-				info: (...items: unknown[]) => outputLines.push(items.map(String).join(' ')),
-				warn: (...items: unknown[]) => outputLines.push(items.map(String).join(' ')),
-				error: (...items: unknown[]) => outputLines.push(items.map(String).join(' '))
+			const service = new ScriptExecutionService(app);
+			const result = await service.executeScript({
+				source: 'snippet',
+				script: code,
+				args: scriptArgs,
+				timeout
+			});
+			const response: ExecuteScriptResult = {
+				success: result.success,
+				result: result.returnValue,
+				output: result.stdout ?? '',
+				executionTime: result.duration,
+				message: result.success ? 'Script executed successfully' : (result.error || '执行失败')
 			};
-
-			const sandbox = {
-				console: safeConsole,
-				args: scriptArgs
-			};
-
-			const start = Date.now();
-			try {
-				const context = vm.createContext(sandbox);
-				const wrappedCode = `"use strict";\n(() => {\n${code}\n})()`;
-				const script = new vm.Script(wrappedCode);
-				const resultValue = script.runInContext(context, { timeout });
-				const executionTime = Date.now() - start;
-				const result: ExecuteScriptResult = {
-					success: true,
-					result: resultValue,
-					output: outputLines.join('\n'),
-					executionTime,
-					message: 'Script executed successfully'
-				};
-				return result;
-			} catch (error) {
-				const executionTime = Date.now() - start;
-				const message = error instanceof Error ? error.message : String(error);
-				const result: ExecuteScriptResult = {
-					success: false,
-					result: null,
-					output: outputLines.join('\n'),
-					executionTime,
-					message: `执行失败: ${message}`
-				};
-				return result;
-			}
+			return response;
 		},
 		createdAt: now,
 		updatedAt: now

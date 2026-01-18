@@ -1,4 +1,4 @@
-import { TFile, Notice, WorkspaceLeaf } from "obsidian";
+import { TFile, Notice } from "obsidian";
 import { IFormAction } from "src/model/action/IFormAction";
 import { ButtonFormAction } from "src/model/action/ButtonFormAction";
 import { FormActionType } from "src/model/enums/FormActionType";
@@ -9,7 +9,6 @@ import { localInstance } from "src/i18n/locals";
 import { FormService } from "src/service/FormService";
 import { FormConfig } from "src/model/FormConfig";
 import { FormTemplateProcessEngine } from "../../engine/FormTemplateProcessEngine";
-import { FileModalWindow } from "src/component/modal/FileModalWIndow";
 import { FormExecutionMode } from "src/model/enums/FormExecutionMode";
 import { FormDisplayMode } from "src/model/enums/FormDisplayMode";
 import MultiSubmitFormsModal, {
@@ -19,6 +18,7 @@ import { FormDisplayRules } from "src/utils/FormDisplayRules";
 import { resolveDefaultFormIdValues } from "src/utils/resolveDefaultFormIdValues";
 import { AIRuntimeFieldsGenerator } from "src/utils/AIRuntimeFieldsGenerator";
 import { CommandRuntimeFieldsGenerator } from "src/utils/CommandRuntimeFieldsGenerator";
+import { FileOperationService } from "src/service/FileOperationService";
 
 export class ButtonActionService implements IActionService {
 
@@ -71,46 +71,15 @@ export class ButtonActionService implements IActionService {
             return;
         }
 
-        const file = app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) {
-            new Notice(`${localInstance.file_not_found}: ${filePath}`);
-            return;
-        }
-
         const openPageIn = action.openPageIn || OpenPageInType.tab;
-
-        switch (openPageIn) {
-            case OpenPageInType.none:
-                // 不打开
-                break;
-            case OpenPageInType.modal:
-                // 在模态窗口中打开
-                FileModalWindow.open(app, file);
-                break;
-            case OpenPageInType.tab:
-                // 在新标签页中打开
-                const newLeaf = app.workspace.getLeaf('tab');
-                await newLeaf.openFile(file);
-                break;
-            case OpenPageInType.current:
-                // 在当前页打开
-                const activeLeaf = app.workspace.getLeaf(false);
-                await activeLeaf.openFile(file);
-                break;
-            case OpenPageInType.split:
-                // 分屏打开（默认右侧分屏）
-                const splitLeaf = app.workspace.getLeaf('split');
-                await splitLeaf.openFile(file);
-                break;
-            case OpenPageInType.window:
-                // 在新窗口中打开
-                const windowLeaf = app.workspace.getLeaf('window');
-                await windowLeaf.openFile(file);
-                break;
-            default:
-                const defaultLeaf = app.workspace.getLeaf('tab');
-                await defaultLeaf.openFile(file);
-                break;
+        const fileService = new FileOperationService(app);
+        const result = await fileService.openFile({
+            path: filePath,
+            mode: openPageIn,
+            state: context.state,
+        });
+        if (!result.success) {
+            new Notice(result.error || `${localInstance.file_not_found}: ${filePath}`);
         }
     }
 

@@ -33,6 +33,20 @@ import {
 
 type ChatSubscriber = (state: ChatState) => void;
 
+class ManualApprovalRequired extends Error {
+	readonly toolCalls: ToolCall[];
+	readonly sessionId: string;
+	readonly messageId: string;
+
+	constructor(params: { toolCalls: ToolCall[]; sessionId: string; messageId: string }) {
+		super('工具调用需要手动审批');
+		this.name = 'ManualApprovalRequired';
+		this.toolCalls = params.toolCalls;
+		this.sessionId = params.sessionId;
+		this.messageId = params.messageId;
+	}
+}
+
 export class ChatService {
 	private settings: ChatSettings = DEFAULT_CHAT_SETTINGS;
 	private readonly messageService: MessageService;
@@ -52,9 +66,14 @@ export class ChatService {
 		selectedFiles: [],
 		selectedFolders: [],
 		selectedText: undefined,
+		enableAgentLoop: undefined,
+		agentLoopIteration: 0,
+		agentLoopMaxIterations: DEFAULT_CHAT_SETTINGS.agentLoopMaxIterations,
+		isAgentLoopPaused: false,
 		showTemplateSelector: false,
 		shouldSaveHistory: true, // 默认保存历史记录
-		pendingToolExecutions: []
+		pendingToolExecutions: [],
+		toolExecutions: []
 	};
 	private subscribers: Set<ChatSubscriber> = new Set();
 	private controller: AbortController | null = null;
@@ -70,6 +89,7 @@ export class ChatService {
 		this.toolRegistry = new ToolRegistryService();
 		this.toolExecutionManager = new ToolExecutionManager(this.toolRegistry, (executions) => {
 			this.state.pendingToolExecutions = executions.filter((e) => e.status === 'pending');
+			this.state.toolExecutions = executions;
 			this.emitState();
 		});
 	}
@@ -119,7 +139,7 @@ export class ChatService {
 			createdAt: now,
 			updatedAt: now,
 			contextNotes: [],
-			selectedImages: []
+			selectedImages: [],
 		};
 		this.state.activeSession = session;
 		this.state.contextNotes = [];
@@ -127,6 +147,10 @@ export class ChatService {
 		this.state.selectedFiles = [];
 		this.state.selectedFolders = [];
 		this.state.selectedText = undefined;
+		this.state.enableAgentLoop = undefined;
+		this.state.agentLoopIteration = 0;
+		this.state.agentLoopMaxIterations = this.settings.agentLoopMaxIterations ?? DEFAULT_CHAT_SETTINGS.agentLoopMaxIterations;
+		this.state.isAgentLoopPaused = false;
 		this.state.inputValue = '';
 		this.state.selectedPromptTemplate = undefined;
 		this.state.showTemplateSelector = false;
@@ -205,6 +229,80 @@ export class ChatService {
 		return this.state.enableWebSearchToggle;
 	}
 
+	setAgentLoopEnabled(enabled: boolean) {
+		this.state.enableAgentLoop = enabled;
+		this.emitState();
+	}
+
+	getAgentLoopEnabled(): boolean {
+		if (typeof this.state.enableAgentLoop === 'boolean') {
+			return this.state.enableAgentLoop;
+		}
+		return this.settings.enableAgentLoop;
+	}
+
+	private clearAgentLoopPauseState(session?: ChatSession) {
+		this.state.isAgentLoopPaused = false;
+		this.state.agentLoopIteration = 0;
+		if (session) {
+			session.agentLoopState = undefined;
+		}
+	}
+
+	private async persistAgentLoopState(session: ChatSession) {
+		if (!this.state.shouldSaveHistory || !session.filePath) return;
+		try {
+			await this.historyService.updateSessionFrontmatter(session.filePath, {
+				agentLoopState: session.agentLoopState ?? undefined
+			});
+		} catch (error) {
+			console.error('[ChatService] 更新Agent Loop状态失败:', error);
+		}
+	}
+
+	private async appendAgentLoopMessages(session: ChatSession, startIndex: number) {
+		if (!session.filePath) return;
+		const newMessages = session.messages.slice(startIndex);
+		if (newMessages.length === 0) return;
+		for (const message of newMessages) {
+			try {
+				await this.historyService.appendMessageToFile(session.filePath, message);
+			} catch (error) {
+				console.error('[ChatService] 追加Agent Loop消息失败:', error);
+				break;
+			}
+		}
+	}
+
+	private async resumeAgentLoop(session: ChatSession): Promise<void> {
+		const loopState = session.agentLoopState;
+		if (!loopState || !loopState.isPaused) return;
+		const pending = this.toolExecutionManager.getPending();
+		if (pending.length > 0) return;
+
+		const provider = this.resolveProvider();
+		if (!provider) {
+			new Notice('尚未配置任何AI模型，请先在Tars设置中添加Provider。');
+			return;
+		}
+		const vendor = availableVendors.find((item) => item.name === provider.vendor);
+		if (!vendor?.capabilities.includes('Tool Calling')) {
+			new Notice('当前模型不支持工具调用，无法继续 Agent Loop。');
+			return;
+		}
+
+		this.state.isAgentLoopPaused = false;
+		this.emitState();
+		new Notice('继续 Agent Loop...');
+
+		const startIndex = session.messages.length;
+		const controller = new AbortController();
+		await this.runAgentLoop(session, provider, loopState.maxIterations, controller, loopState.currentIteration);
+		if (this.state.shouldSaveHistory && session.filePath) {
+			await this.appendAgentLoopMessages(session, startIndex);
+		}
+	}
+
 	private getTarsToolSettings() {
 		const tools = this.plugin.settings.tars.settings.tools;
 		return (
@@ -240,7 +338,7 @@ export class ChatService {
 		this.toolRegistry.register(createOpenFileTool(this.app), 'builtin');
 		this.toolRegistry.register(createWritePlanTool(), 'builtin');
 		this.toolRegistry.register(createWebFetchTool(), 'builtin');
-		this.toolRegistry.register(createExecuteScriptTool(), 'builtin');
+		this.toolRegistry.register(createExecuteScriptTool(this.app), 'builtin');
 	}
 
 	loadGlobalTools() {
@@ -333,13 +431,39 @@ export class ChatService {
 	async approveToolExecution(id: string) {
 		const exec = await this.toolExecutionManager.approve(id);
 		this.applyExecutionResultToMessage(exec);
+		if (this.state.isAgentLoopPaused) {
+			const pending = this.toolExecutionManager.getPending();
+			if (pending.length === 0 && this.state.activeSession) {
+				await this.resumeAgentLoop(this.state.activeSession);
+			}
+		}
 		this.emitState();
 	}
 
 	rejectToolExecution(id: string) {
 		const exec = this.toolExecutionManager.reject(id);
 		this.applyExecutionResultToMessage(exec);
+		if (this.state.isAgentLoopPaused) {
+			const pending = this.toolExecutionManager.getPending();
+			if (pending.length === 0 && this.state.activeSession) {
+				void this.resumeAgentLoop(this.state.activeSession);
+			}
+		}
 		this.emitState();
+	}
+
+	async approveAllPendingToolExecutions() {
+		const pending = this.toolExecutionManager.getPending();
+		for (const exec of pending) {
+			await this.approveToolExecution(exec.id);
+		}
+	}
+
+	rejectAllPendingToolExecutions() {
+		const pending = this.toolExecutionManager.getPending();
+		for (const exec of pending) {
+			this.rejectToolExecution(exec.id);
+		}
 	}
 
 	private applyExecutionResultToMessage(exec: ToolExecution) {
@@ -361,6 +485,36 @@ export class ChatService {
 			call.status = 'failed';
 			call.result = '用户已拒绝';
 		}
+	}
+
+	async retryToolCall(messageId: string, toolCallId: string) {
+		const session = this.state.activeSession;
+		if (!session) return;
+		const message = session.messages.find((msg) => msg.id === messageId);
+		if (!message?.toolCalls?.length) return;
+		const call = message.toolCalls.find((item) => item.id === toolCallId);
+		if (!call) return;
+
+		call.status = 'pending';
+		call.result = undefined;
+		call.timestamp = Date.now();
+
+		const exec = this.toolExecutionManager.createPending({
+			toolId: call.name,
+			toolCallId: call.id,
+			sessionId: session.id,
+			messageId: message.id,
+			args: call.arguments ?? {}
+		});
+
+		const tool = this.toolRegistry.get(call.name);
+		const executionMode = tool?.executionMode ?? 'manual';
+		if (executionMode === 'auto') {
+			await this.approveToolExecution(exec.id);
+		} else {
+			new Notice(`工具调用待审批：${call.name}`);
+		}
+		this.emitState();
 	}
 
 	/**
@@ -465,7 +619,6 @@ export class ChatService {
 			this.emitState();
 		}
 	}
-
 	// 移除所有自动添加的文件
 	removeAllAutoAddedFiles() {
 		this.state.selectedFiles = this.state.selectedFiles.filter(file => !file.isAutoAdded);
@@ -598,7 +751,21 @@ export class ChatService {
 		if (this.state.activeSession) {
 			this.state.activeSession.modelId = tag;
 		}
+		if (this.state.isAgentLoopPaused) {
+			const session = this.state.activeSession ?? undefined;
+			this.clearAgentLoopPauseState(session);
+			if (session) {
+				void this.persistAgentLoopState(session);
+			}
+		}
 		this.emitState();
+	}
+
+	getCurrentVendorSupportsToolCalling(): boolean {
+		const provider = this.resolveProvider();
+		if (!provider) return false;
+		const vendor = availableVendors.find((item) => item.name === provider.vendor);
+		return !!vendor?.capabilities.includes('Tool Calling');
 	}
 
 	async sendMessage(content?: string) {
@@ -634,6 +801,10 @@ export class ChatService {
 		}
 
 		const session = this.state.activeSession ?? this.createNewSession();
+		if (this.state.isAgentLoopPaused) {
+			this.clearAgentLoopPauseState(session);
+			await this.persistAgentLoopState(session);
+		}
 
 		// 保存文件和文件夹到会话中
 		session.selectedFiles = [...this.state.selectedFiles];
@@ -768,6 +939,54 @@ export class ChatService {
 			new Notice(`🎨 正在使用模型 ${modelName} 生成图片，请稍候...`);
 		}
 
+		const provider = this.resolveProvider();
+		if (!provider) {
+			new Notice('尚未配置任何AI模型，请先在Tars设置中添加Provider。');
+			return;
+		}
+
+		const vendor = availableVendors.find((item) => item.name === provider.vendor);
+		const supportsToolCalling = !!vendor?.capabilities.includes('Tool Calling');
+		const isAgentLoopEnabled = this.getAgentLoopEnabled();
+		const agentLoopMaxIterations =
+			this.state.agentLoopMaxIterations ??
+			this.settings.agentLoopMaxIterations ??
+			DEFAULT_CHAT_SETTINGS.agentLoopMaxIterations;
+
+		if (isAgentLoopEnabled && supportsToolCalling) {
+			const startIndex = session.messages.length;
+			const controller = new AbortController();
+			try {
+				await this.runAgentLoop(session, provider, agentLoopMaxIterations, controller, 0);
+			} catch (error) {
+				if (error instanceof ManualApprovalRequired) {
+					this.state.isAgentLoopPaused = true;
+					this.emitState();
+					new Notice('工具调用需要手动审批，请在下方进行审批');
+				} else {
+					console.error('[Chat][ChatService] runAgentLoop error', error);
+					this.state.isGenerating = false;
+					this.controller = null;
+					const errorMessage = error instanceof Error ? error.message : `生成过程中发生未知错误: ${String(error)}`;
+					this.state.error = errorMessage;
+					const last = session.messages[session.messages.length - 1];
+					if (last?.role === 'assistant') {
+						last.isError = true;
+						if (!last.content) {
+							last.content = errorMessage;
+						}
+					}
+					this.emitState();
+					new Notice(errorMessage, 10000);
+				}
+			} finally {
+				if (this.state.shouldSaveHistory && session.filePath) {
+					await this.appendAgentLoopMessages(session, startIndex);
+				}
+			}
+			return;
+		}
+
 		await this.generateAssistantResponse(session);
 	}
 
@@ -775,7 +994,14 @@ export class ChatService {
 		if (this.controller) {
 			this.controller.abort();
 			this.controller = null;
+		}
+		if (this.state.isGenerating || this.state.isAgentLoopPaused) {
 			this.state.isGenerating = false;
+			const session = this.state.activeSession ?? undefined;
+			this.clearAgentLoopPauseState(session);
+			if (session) {
+				void this.persistAgentLoopState(session);
+			}
 			this.emitState();
 		}
 	}
@@ -795,6 +1021,9 @@ export class ChatService {
 			this.state.selectedFiles = session.selectedFiles ?? [];
 			this.state.selectedFolders = session.selectedFolders ?? [];
 			this.state.selectedModelId = session.modelId || this.getDefaultProviderTag();
+			this.state.isAgentLoopPaused = session.agentLoopState?.isPaused ?? false;
+			this.state.agentLoopIteration = session.agentLoopState?.currentIteration ?? 0;
+			this.state.agentLoopMaxIterations = session.agentLoopState?.maxIterations ?? this.settings.agentLoopMaxIterations;
 			// 重置模板选择状态
 			this.state.selectedPromptTemplate = undefined;
 			this.state.showTemplateSelector = false;
@@ -1072,6 +1301,302 @@ export class ChatService {
 		
 		// 其他供应商，只要支持图像生成功能就返回true
 		return true;
+	}
+
+	private async runAgentLoop(
+		session: ChatSession,
+		provider: ProviderSettings,
+		maxIterations: number,
+		controller: AbortController,
+		startIteration: number = 0
+	): Promise<void> {
+		const providerOptionsRaw = (provider?.options as any) ?? {};
+		const providerEnableReasoning =
+			typeof providerOptionsRaw.enableReasoning === 'boolean'
+				? providerOptionsRaw.enableReasoning
+				: provider.vendor === 'Doubao'
+					? ((providerOptionsRaw.thinkingType as string | undefined) ?? 'enabled') !== 'disabled'
+					: false;
+		const providerEnableThinking = providerOptionsRaw.enableThinking ?? false;
+		const providerEnableWebSearch = provider?.options.enableWebSearch ?? false;
+		const enableReasoning = this.state.enableReasoningToggle && providerEnableReasoning;
+		const enableThinking = this.state.enableReasoningToggle && providerEnableThinking;
+		const enableWebSearch = this.state.enableWebSearchToggle && providerEnableWebSearch;
+		const providerOptions = {
+			...providerOptionsRaw,
+			enableReasoning,
+			enableThinking,
+			enableWebSearch
+		};
+
+		const vendor = availableVendors.find((item) => item.name === provider.vendor);
+		if (!vendor) {
+			throw new Error(`无法找到供应商 ${provider.vendor}`);
+		}
+
+		// 注入全局工具（仅对支持 Tool Calling 的 vendor 生效）
+		if (vendor.capabilities.includes('Tool Calling')) {
+			const tools = this.toolRegistry.toOpenAICompatibleTools(true);
+			if (tools.length > 0) {
+				const rawParams = (providerOptions as any).parameters ?? {};
+				const nextParams: Record<string, unknown> = {
+					...rawParams,
+					tools
+				};
+
+				// OpenAI/OpenRouter 支持 tool_choice；Ollama 侧避免注入未知字段导致请求失败
+				if (vendor.name !== 'Ollama') {
+					(nextParams as any).tool_choice = 'auto';
+				}
+
+				(providerOptions as any).parameters = nextParams;
+			}
+		}
+
+		const sendRequest = vendor.sendRequestFunc(providerOptions);
+		const resolveEmbed: ResolveEmbedAsBinary = async (embed) => {
+			// 检查是否是我们的虚拟EmbedCache对象
+			if (embed && (embed as any)[Symbol.for('originalBase64')]) {
+				const base64Data = (embed as any)[Symbol.for('originalBase64')] as string;
+				return this.base64ToArrayBuffer(base64Data);
+			}
+			// 对于其他情况，返回空缓冲区
+			return new ArrayBuffer(0);
+		};
+
+		const buildToolResultPrompt = (calls: ToolCall[]) => {
+			const blocks = calls.map((call) => {
+				const args = call.arguments ? JSON.stringify(call.arguments) : '{}';
+				const result = call.result ?? '';
+				return `工具名称: ${call.name}\n参数: ${args}\n状态: ${call.status}\n返回结果: ${result}`;
+			});
+			return `以下是工具执行结果：\n\n${blocks.join('\n\n')}`.trim();
+		};
+
+		this.state.isGenerating = true;
+		this.state.error = undefined;
+		this.controller = controller;
+		this.state.agentLoopMaxIterations = maxIterations;
+		this.emitState();
+
+		let iteration = startIteration;
+		let paused = false;
+		try {
+			for (iteration = startIteration; iteration < maxIterations; iteration += 1) {
+				this.state.agentLoopIteration = iteration + 1;
+				this.emitState();
+				const messages = await this.buildProviderMessages(session);
+				DebugLogger.logLlmMessages('ChatService.runAgentLoop', messages, { level: 'debug' });
+
+				const assistantMessage = this.messageService.createMessage('assistant', '');
+				session.messages.push(assistantMessage);
+				session.updatedAt = Date.now();
+				this.emitState();
+
+				let toolMarkerBuffer = '';
+				const pendingExecutionMap = new Map<string, ToolExecution>();
+
+				const handleToolCallsPayload = async (payloadText: string) => {
+					let payload: any;
+					try {
+						payload = JSON.parse(payloadText);
+					} catch (e) {
+						console.warn('[ChatService] tool_calls 解析失败', e);
+						return;
+					}
+
+					if (!Array.isArray(payload)) return;
+
+					for (const raw of payload) {
+						const id = String(raw?.id ?? `tool-call-${uuidv4()}`);
+						const name = String(raw?.name ?? '');
+						const args = (raw?.arguments ?? {}) as Record<string, any>;
+						if (!name) continue;
+
+						const toolCall: ToolCall = {
+							id,
+							name,
+							arguments: args,
+							status: 'pending',
+							timestamp: Date.now()
+						};
+
+						assistantMessage.toolCalls = [...(assistantMessage.toolCalls ?? []), toolCall];
+						this.emitState();
+
+						const exec = this.toolExecutionManager.createPending({
+							toolId: name,
+							toolCallId: id,
+							sessionId: session.id,
+							messageId: assistantMessage.id,
+							args
+						});
+						pendingExecutionMap.set(id, exec);
+					}
+				};
+
+				const processStreamChunk = async (chunk: string): Promise<string> => {
+					const combined = toolMarkerBuffer + chunk;
+					let rest = combined;
+					let output = '';
+
+					while (true) {
+						const start = rest.indexOf(TOOL_CALLS_START_MARKER);
+						if (start === -1) {
+							output += rest;
+							toolMarkerBuffer = '';
+							break;
+						}
+
+						output += rest.slice(0, start);
+						const afterStart = rest.slice(start + TOOL_CALLS_START_MARKER.length);
+						const end = afterStart.indexOf(TOOL_CALLS_END_MARKER);
+						if (end === -1) {
+							toolMarkerBuffer = rest.slice(start);
+							break;
+						}
+
+						const jsonText = afterStart.slice(0, end);
+						await handleToolCallsPayload(jsonText);
+						rest = afterStart.slice(end + TOOL_CALLS_END_MARKER.length);
+					}
+
+					return output;
+				};
+
+				for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
+					const text = await processStreamChunk(chunk);
+					if (text) {
+						assistantMessage.content += text;
+						session.updatedAt = Date.now();
+						this.emitState();
+					}
+				}
+
+				DebugLogger.logLlmResponsePreview('ChatService.runAgentLoop', assistantMessage.content, { level: 'debug', previewChars: 100 });
+
+				const toolCalls = assistantMessage.toolCalls ?? [];
+				if (toolCalls.length === 0) {
+					break;
+				}
+
+				const hasManualTool = toolCalls.some((call) => {
+					const tool = this.toolRegistry.get(call.name);
+					const executionMode = tool?.executionMode ?? 'manual';
+					return executionMode === 'manual';
+				});
+
+				if (hasManualTool) {
+					throw new ManualApprovalRequired({
+						toolCalls,
+						sessionId: session.id,
+						messageId: assistantMessage.id
+					});
+				}
+
+				const resultCalls: ToolCall[] = [];
+				for (const call of toolCalls) {
+					const exec = pendingExecutionMap.get(call.id);
+					if (!exec) {
+						const failedCall: ToolCall = {
+							...call,
+							status: 'failed',
+							result: '未找到工具执行记录',
+							timestamp: Date.now()
+						};
+						resultCalls.push(failedCall);
+						continue;
+					}
+
+					let nextExec: ToolExecution;
+					try {
+						nextExec = await this.toolExecutionManager.approve(exec.id);
+					} catch (error) {
+						const errorMessage = error instanceof Error ? error.message : String(error);
+						const failedCall: ToolCall = {
+							...call,
+							status: 'failed',
+							result: errorMessage,
+							timestamp: Date.now()
+						};
+						resultCalls.push(failedCall);
+						continue;
+					}
+
+					this.applyExecutionResultToMessage(nextExec);
+					const status: ToolCall['status'] = nextExec.status === 'completed' ? 'completed' : 'failed';
+					const result = nextExec.status === 'completed' ? nextExec.result : nextExec.error ?? '工具执行失败';
+					const completedCall: ToolCall = {
+						...call,
+						status,
+						result,
+						timestamp: Date.now()
+					};
+					resultCalls.push(completedCall);
+				}
+
+				const toolResultMessage = this.messageService.createMessage('assistant', '', {
+					toolCalls: resultCalls,
+					metadata: {
+						parsedContent: buildToolResultPrompt(resultCalls)
+					}
+				});
+				session.messages.push(toolResultMessage);
+				session.updatedAt = Date.now();
+				this.emitState();
+
+				if (iteration === maxIterations - 1) {
+					new Notice('已达到最大迭代次数，已停止继续执行工具调用。');
+				}
+			}
+		} catch (error) {
+			if (error instanceof ManualApprovalRequired) {
+				paused = true;
+				this.state.isAgentLoopPaused = true;
+				session.agentLoopState = {
+					isPaused: true,
+					currentIteration: iteration + 1,
+					maxIterations,
+					pausedMessageId: error.messageId
+				};
+				session.updatedAt = Date.now();
+				this.emitState();
+				await this.persistAgentLoopState(session);
+				throw error;
+			}
+			console.error('[Chat][ChatService] runAgentLoop error', error);
+			this.state.isGenerating = false;
+			this.controller = null;
+			let errorMessage = '生成失败，请稍后再试。';
+			if (error instanceof Error) {
+				errorMessage = error.message;
+			} else {
+				errorMessage = `生成过程中发生未知错误: ${String(error)}`;
+			}
+			this.state.error = errorMessage;
+			const last = session.messages[session.messages.length - 1];
+			if (last?.role === 'assistant') {
+				last.isError = true;
+				if (!last.content) {
+					last.content = errorMessage;
+				}
+			}
+			this.emitState();
+			new Notice(errorMessage, 10000);
+		} finally {
+			if (!paused) {
+				this.state.isGenerating = false;
+				this.controller = null;
+				this.state.agentLoopIteration = 0;
+				this.state.isAgentLoopPaused = false;
+				session.agentLoopState = undefined;
+				session.updatedAt = Date.now();
+				this.emitState();
+				await this.persistAgentLoopState(session);
+			} else {
+				this.controller = null;
+			}
+		}
 	}
 
 	private async generateAssistantResponse(session: ChatSession) {

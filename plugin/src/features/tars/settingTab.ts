@@ -1,4 +1,4 @@
-import { App, DropdownComponent, Notice, requestUrl, Setting } from 'obsidian'
+import { App, DropdownComponent, Notice, requestUrl, Setting, TextComponent } from 'obsidian'
 import { t } from './lang/helper'
 import { SelectModelModal, SelectVendorModal, ProviderSettingModal } from './modal'
 import { BaseOptions, Message, Optional, ProviderSettings, ResolveEmbedAsBinary, Vendor } from './providers'
@@ -320,6 +320,45 @@ export class TarsSettingTab {
 				toggle.onChange(async (value) => {
 					await this.updateChatSettings({ autosaveChat: value });
 				});
+			});
+
+		let agentLoopIterationsInput: TextComponent | null = null;
+
+		new Setting(chatSection)
+			.setName("启用 Agent Loop")
+			.setDesc("启用后，AI 将能够自动调用工具并多轮对话，直到任务完成或达到最大迭代次数")
+			.addToggle((toggle) => {
+				toggle.setValue(this.chatSettings.enableAgentLoop ?? false);
+				toggle.onChange(async (value) => {
+					await this.updateChatSettings({ enableAgentLoop: value });
+					if (agentLoopIterationsInput) {
+						agentLoopIterationsInput.setDisabled(!value);
+					}
+				});
+			});
+
+		new Setting(chatSection)
+			.setName("Agent Loop 最大迭代次数")
+			.setDesc("控制 AI 在单次对话中最多可以进行多少轮工具调用，防止无限循环")
+			.addText((text) => {
+				agentLoopIterationsInput = text;
+				text
+					.setValue(String(this.chatSettings.agentLoopMaxIterations ?? 30))
+					.onChange(async (value) => {
+						const parsed = Number.parseInt(value, 10);
+						if (!Number.isFinite(parsed)) {
+							return;
+						}
+						const clamped = Math.min(100, Math.max(1, parsed));
+						if (String(clamped) !== value) {
+							text.setValue(String(clamped));
+						}
+						await this.updateChatSettings({ agentLoopMaxIterations: clamped });
+					});
+				text.inputEl.type = 'number';
+				text.inputEl.min = '1';
+				text.inputEl.max = '100';
+				text.setDisabled(!(this.chatSettings.enableAgentLoop ?? false));
 			});
 
 		// 动态获取打开方式的描述

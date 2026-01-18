@@ -1,9 +1,10 @@
-import { TFile } from 'obsidian';
 import type { App } from 'obsidian';
 import type { ToolDefinition } from '../types/tools';
+import { FileOperationService } from 'src/service/FileOperationService';
 
 interface OpenFileArgs {
 	path: string;
+	mode?: 'none' | 'modal' | 'new-tab' | 'current' | 'split' | 'new-window';
 }
 
 interface OpenFileResult {
@@ -32,6 +33,11 @@ export const createOpenFileTool = (app: App): ToolDefinition => {
 				path: {
 					type: 'string',
 					description: '要打开的文件路径，相对于 vault 根目录'
+				},
+				mode: {
+					type: 'string',
+					enum: ['none', 'modal', 'new-tab', 'current', 'split', 'new-window'],
+					description: '打开模式。默认: new-tab'
 				}
 			},
 			required: ['path']
@@ -49,28 +55,19 @@ export const createOpenFileTool = (app: App): ToolDefinition => {
 				throw new Error('文件路径包含非法字符: < > : " | ? *');
 			}
 
-			const existing = app.vault.getAbstractFileByPath(filePath);
-			if (!existing || !(existing instanceof TFile)) {
-				throw new Error(`文件未找到: ${filePath}`);
-			}
-
-			const active = app.workspace.getActiveFile();
-			if (active?.path === existing.path) {
-				const result: OpenFileResult = {
-					path: filePath,
-					message: 'File already open'
-				};
-				return result;
-			}
-
-			const leaf = app.workspace.getLeaf(true);
-			await leaf.openFile(existing);
-
-			const result: OpenFileResult = {
+			const service = new FileOperationService(app);
+			const result = await service.openFile({
 				path: filePath,
+				mode: args.mode || 'new-tab',
+				silent: true
+			});
+			if (!result.success) {
+				throw new Error(result.error || '打开文件失败');
+			}
+			return {
+				path: result.path,
 				message: 'File opened successfully'
 			};
-			return result;
 		},
 		createdAt: now,
 		updatedAt: now

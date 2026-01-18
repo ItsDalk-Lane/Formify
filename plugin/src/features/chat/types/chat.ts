@@ -45,6 +45,12 @@ export interface ChatSession {
 	selectedFolders?: SelectedFolder[];
 	filePath?: string; // 添加文件路径字段，用于跟踪会话文件
 	systemPrompt?: string; // 添加系统提示词字段，用于内部存储
+	agentLoopState?: {
+		isPaused: boolean;
+		currentIteration: number;
+		maxIterations: number;
+		pausedMessageId: string;
+	};
 }
 
 export type ChatOpenMode = 'sidebar' | 'left-sidebar' | 'tab' | 'window' | 'persistent-modal';
@@ -110,6 +116,9 @@ export interface ChatSettings {
 	showSidebarByDefault: boolean;
 	openMode: ChatOpenMode;
 	enableSystemPrompt: boolean; // 是否启用系统提示词功能
+	// Agent Loop 配置
+	enableAgentLoop: boolean; // 是否启用 Agent Loop 功能
+	agentLoopMaxIterations: number; // Agent Loop 最大迭代次数
 	// 内链解析配置（已迁移到 Tars 设置中的 internalLinkParsing）
 	/** @deprecated 已迁移到 Tars 设置中的 internalLinkParsing.enabled */
 	enableInternalLinkParsing?: boolean;
@@ -148,6 +157,11 @@ export interface ChatState {
 	selectedFolders: SelectedFolder[];
 	selectedText?: string; // 划词选中的文本内容
 	error?: string;
+	// Agent Loop 状态控制
+	enableAgentLoop?: boolean; // 当前会话是否启用 Agent Loop（覆盖全局设置）
+	agentLoopIteration?: number; // 当前 Agent Loop 迭代次数（用于UI展示）
+	agentLoopMaxIterations?: number; // 当前会话的最大迭代次数
+	isAgentLoopPaused?: boolean; // Agent Loop 是否处于暂停状态（等待手动审批）
 	// 添加模板选择相关状态
 	selectedPromptTemplate?: {
 		path: string;
@@ -160,6 +174,7 @@ export interface ChatState {
 
 	// 工具相关状态
 	pendingToolExecutions: ToolExecution[];
+	toolExecutions?: ToolExecution[];
 }
 
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
@@ -169,6 +184,9 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	showSidebarByDefault: true,
 	openMode: 'sidebar',
 	enableSystemPrompt: true, // 默认启用系统提示词功能
+	// Agent Loop 默认配置
+	enableAgentLoop: false, // 默认关闭 Agent Loop
+	agentLoopMaxIterations: 30, // 默认最大迭代次数为 30
 	// 内链解析默认配置
 	enableInternalLinkParsing: true, // 默认启用内链解析
 	parseLinksInTemplates: true, // 默认解析模板中的内链
