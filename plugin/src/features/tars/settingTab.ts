@@ -322,44 +322,6 @@ export class TarsSettingTab {
 				});
 			});
 
-		let agentLoopIterationsInput: TextComponent | null = null;
-
-		new Setting(chatSection)
-			.setName("启用 Agent Loop")
-			.setDesc("启用后，AI 将能够自动调用工具并多轮对话，直到任务完成或达到最大迭代次数")
-			.addToggle((toggle) => {
-				toggle.setValue(this.chatSettings.enableAgentLoop ?? false);
-				toggle.onChange(async (value) => {
-					await this.updateChatSettings({ enableAgentLoop: value });
-					if (agentLoopIterationsInput) {
-						agentLoopIterationsInput.setDisabled(!value);
-					}
-				});
-			});
-
-		new Setting(chatSection)
-			.setName("Agent Loop 最大迭代次数")
-			.setDesc("控制 AI 在单次对话中最多可以进行多少轮工具调用，防止无限循环")
-			.addText((text) => {
-				agentLoopIterationsInput = text;
-				text
-					.setValue(String(this.chatSettings.agentLoopMaxIterations ?? 30))
-					.onChange(async (value) => {
-						const parsed = Number.parseInt(value, 10);
-						if (!Number.isFinite(parsed)) {
-							return;
-						}
-						const clamped = Math.min(100, Math.max(1, parsed));
-						if (String(clamped) !== value) {
-							text.setValue(String(clamped));
-						}
-						await this.updateChatSettings({ agentLoopMaxIterations: clamped });
-					});
-				text.inputEl.type = 'number';
-				text.inputEl.min = '1';
-				text.inputEl.max = '100';
-				text.setDisabled(!(this.chatSettings.enableAgentLoop ?? false));
-			});
 
 		// 动态获取打开方式的描述
 		const getOpenModeDescription = (mode: string) => {
@@ -2747,6 +2709,71 @@ export class TarsSettingTab {
 		useDefaultSystemPromptField.appendChild(useDefaultSystemPromptLabel)
 		useDefaultSystemPromptField.appendChild(useDefaultSystemPromptCheckboxRow)
 
+		// 新增：高级配置选项（当禁用"使用默认系统提示词"时显示）
+		const advancedPromptOptions = document.createElement('div')
+		advancedPromptOptions.id = 'advancedPromptOptions'
+		advancedPromptOptions.style.cssText = `
+			margin-top: 12px;
+			padding-left: 24px;
+			border-left: 2px solid var(--background-modifier-border);
+			display: ${skill?.useDefaultSystemPrompt !== false ? 'none' : 'block'};
+		`
+
+		// 子选项1：自定义提示词角色
+		const promptRoleField = document.createElement('div')
+		promptRoleField.style.cssText = 'margin-bottom: 12px;'
+
+		const promptRoleLabel = document.createElement('label')
+		promptRoleLabel.style.cssText = `
+			display: block;
+			margin-bottom: 6px;
+			font-size: var(--font-ui-smaller);
+			font-weight: 500;
+			color: var(--text-normal);
+		`
+		promptRoleLabel.textContent = '自定义提示词角色'
+
+		const promptRoleRadios = document.createElement('div')
+		promptRoleRadios.style.cssText = 'display: flex; gap: 16px;'
+
+		// 创建单选按钮辅助函数
+		const createRadioOption = (name: string, value: string, checkedValue: string | undefined, labelText: string): HTMLElement => {
+			const wrapper = document.createElement('div')
+			wrapper.style.cssText = 'display: flex; align-items: center; gap: 6px;'
+
+			const radio = document.createElement('input')
+			radio.type = 'radio'
+			radio.name = name
+			radio.value = value
+			radio.checked = value === (checkedValue ?? 'system')
+			radio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
+
+			const label = document.createElement('label')
+			label.style.cssText = 'font-size: var(--font-ui-smaller); color: var(--text-normal); cursor: pointer;'
+			label.textContent = labelText
+
+			wrapper.appendChild(radio)
+			wrapper.appendChild(label)
+			return wrapper
+		}
+
+		const systemRoleRadio = createRadioOption('customPromptRole', 'system', skill?.customPromptRole, '系统消息')
+		const userRoleRadio = createRadioOption('customPromptRole', 'user', skill?.customPromptRole, '用户消息')
+
+		promptRoleRadios.appendChild(systemRoleRadio)
+		promptRoleRadios.appendChild(userRoleRadio)
+		promptRoleField.appendChild(promptRoleLabel)
+		promptRoleField.appendChild(promptRoleRadios)
+
+		// 组装子选项
+		advancedPromptOptions.appendChild(promptRoleField)
+		useDefaultSystemPromptField.appendChild(advancedPromptOptions)
+
+		// 切换显示子选项
+		useDefaultSystemPromptCheckbox.addEventListener('change', () => {
+			advancedPromptOptions.style.display = useDefaultSystemPromptCheckbox.checked ? 'none' : 'block'
+		})
+
 		// 切换提示词来源时更新显示
 		const updatePromptSourceDisplay = () => {
 			const isCustom = customRadio.checked
@@ -2924,6 +2951,9 @@ export class TarsSettingTab {
 				// 通用字段
 				showInToolbar: skill?.showInToolbar ?? true,
 				useDefaultSystemPrompt: isNormal ? useDefaultSystemPromptCheckbox.checked : (skill?.useDefaultSystemPrompt ?? true),
+				customPromptRole: isNormal && !useDefaultSystemPromptCheckbox.checked
+					? ((document.querySelector('input[name="customPromptRole"]:checked') as HTMLInputElement)?.value as 'system' | 'user' ?? 'system')
+					: (skill?.customPromptRole ?? 'system'),
 				order: skill?.order ?? allSkills.length,
 				createdAt: skill?.createdAt || now,
 				updatedAt: now

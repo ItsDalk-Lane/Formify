@@ -16,15 +16,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 	const [value, setValue] = useState(state.inputValue);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const [maxHeight, setMaxHeight] = useState(80); // Default minimum height
-	const agentLoopEnabled = service.getAgentLoopEnabled();
-	const supportsToolCalling = service.getCurrentVendorSupportsToolCalling();
-	const agentLoopToggleDisabled = !supportsToolCalling;
-	const showAgentLoopProgress =
-		state.isGenerating &&
-		typeof state.agentLoopIteration === 'number' &&
-		state.agentLoopIteration > 0 &&
-		typeof state.agentLoopMaxIterations === 'number' &&
-		state.agentLoopMaxIterations > 0;
 
 	// 检测当前输入是否包含图片生成意图
 	const [isImageGenerationIntent, setIsImageGenerationIntent] = useState(false);
@@ -130,17 +121,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 		service.clearSelectedPromptTemplate();
 	};
 
-	const handleAgentLoopToggle = () => {
-		if (agentLoopToggleDisabled) return;
-		const next = !agentLoopEnabled;
-		service.setAgentLoopEnabled(next);
-		if (next) {
-			new Notice('Agent Loop 已启用，AI 将能够自动调用工具并多轮对话');
-		} else {
-			new Notice('Agent Loop 已关闭');
-		}
-	};
-
 	const handleTemplateButtonClick = () => {
 		service.setTemplateSelectorVisibility(true);
 	};
@@ -208,25 +188,7 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 
 				{!state.isGenerating ? (
 					<>
-						{showAgentLoopProgress && (
-							<div className="ff-agent-loop-progress">
-								<div className="ff-agent-loop-progress__label">
-									第 {state.agentLoopIteration}/{state.agentLoopMaxIterations} 轮循环
-								</div>
-								<div className="ff-agent-loop-progress__bar">
-									<div
-										className="ff-agent-loop-progress__fill"
-										style={{
-											width: `${Math.min(
-												(state.agentLoopIteration ?? 0) / (state.agentLoopMaxIterations ?? 1) * 100,
-												100
-											)}%`
-										}}
-									/>
-								</div>
-							</div>
-						)}
-								<textarea
+						<textarea
 							ref={textareaRef}
 							className="tw-w-full tw-resize-none tw-p-3 tw-text-sm"
 							style={{
@@ -382,25 +344,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 									>
 										<Search className="tw-size-4" />
 									</button>
-										<button
-											type="button"
-											aria-label="Agent Loop"
-											onClick={handleAgentLoopToggle}
-											disabled={agentLoopToggleDisabled}
-											className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-px-2 tw-py-1 tw-cursor-pointer tw-rounded tw-gap-1"
-											style={{
-												backgroundColor: agentLoopEnabled ? 'var(--interactive-accent)' : 'transparent',
-												color: agentLoopEnabled ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)',
-												opacity: agentLoopToggleDisabled ? 0.5 : 1
-											}}
-											title={agentLoopToggleDisabled
-												? '当前模型不支持工具调用'
-												: '启用后，AI 将能够自动调用工具并多轮对话，直到任务完成或达到最大迭代次数'
-											}
-										>
-											<Repeat className="tw-size-4" />
-											<span className="tw-text-xs">Agent Loop</span>
-										</button>
 								</div>
 							</div>
 							<div className="tw-flex tw-items-center tw-gap-2">
@@ -459,25 +402,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 								>
 									<X className="tw-size-4" />
 								</button>
-							</div>
-						)}
-
-						{showAgentLoopProgress && (
-							<div className="ff-agent-loop-progress">
-								<div className="ff-agent-loop-progress__label">
-									第 {state.agentLoopIteration}/{state.agentLoopMaxIterations} 轮循环
-								</div>
-								<div className="ff-agent-loop-progress__bar">
-									<div
-										className="ff-agent-loop-progress__fill"
-										style={{
-											width: `${Math.min(
-												(state.agentLoopIteration ?? 0) / (state.agentLoopMaxIterations ?? 1) * 100,
-												100
-											)}%`
-										}}
-									/>
-								</div>
 							</div>
 						)}
 
@@ -638,25 +562,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 									>
 										<Search className="tw-size-4" />
 									</button>
-										<button
-											type="button"
-											aria-label="Agent Loop"
-											onClick={handleAgentLoopToggle}
-											disabled={agentLoopToggleDisabled}
-											className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-px-2 tw-py-1 tw-cursor-pointer tw-rounded tw-gap-1"
-											style={{
-												backgroundColor: agentLoopEnabled ? 'var(--interactive-accent)' : 'transparent',
-												color: agentLoopEnabled ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)',
-												opacity: agentLoopToggleDisabled ? 0.5 : 1
-											}}
-											title={agentLoopToggleDisabled
-												? '当前模型不支持工具调用'
-												: '启用后，AI 将能够自动调用工具并多轮对话，直到任务完成或达到最大迭代次数'
-											}
-										>
-											<Repeat className="tw-size-4" />
-											<span className="tw-text-xs">Agent Loop</span>
-										</button>
 								</div>
 							</div>
 							<div className="tw-flex tw-items-center tw-gap-2">

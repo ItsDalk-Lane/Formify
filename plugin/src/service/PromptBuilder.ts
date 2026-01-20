@@ -3,8 +3,9 @@ import type { Message as ProviderMessage } from 'src/features/tars/providers';
 import { SystemPromptMode } from 'src/model/enums/SystemPromptMode';
 import { PromptSourceType } from 'src/model/enums/PromptSourceType';
 import { InternalLinkParserService, ParseOptions } from 'src/service/InternalLinkParserService';
-import type { ChatMessage, ChatRole, SelectedFile, SelectedFolder } from 'src/features/chat/types/chat';
+import type { ChatMessage, ChatRole, SelectedFile, SelectedFolder, FileIntentAnalysis, FileRole } from 'src/features/chat/types/chat';
 import type { FileContentOptions, FileContentService, FileContent, FolderContent } from 'src/features/chat/services/FileContentService';
+import { FileIntentAnalyzer } from 'src/features/chat/services/FileIntentAnalyzer';
 
 export const DEFAULT_HISTORY_ROUNDS = 10;
 
@@ -26,16 +27,22 @@ export interface PromptBuilderChatContext {
 	parseLinksInTemplates?: boolean;
 	sourcePath?: string;
 	maxHistoryRounds?: number;
+	/** 任务模板内容，用于智能判断文件角色 */
+	taskTemplate?: string;
+	/** 是否启用智能文件角色判断 */
+	enableFileIntentAnalysis?: boolean;
 }
 
 export class PromptBuilder {
 	private readonly linkParser: InternalLinkParserService;
+	private readonly intentAnalyzer: FileIntentAnalyzer;
 
 	constructor(
 		private readonly app: App,
 		private readonly fileContentService?: FileContentService
 	) {
 		this.linkParser = new InternalLinkParserService(app);
+		this.intentAnalyzer = new FileIntentAnalyzer();
 	}
 
 	/**
@@ -43,7 +50,7 @@ export class PromptBuilder {
 	 * 顺序：System -> Context(User/XML) -> History(截断) -> Task(当前输入)
 	 */
 	async buildChatProviderMessages(messages: ChatMessage[], ctx?: PromptBuilderChatContext): Promise<ProviderMessage[]> {
-		const systemPrompt = ctx?.systemPrompt;
+		let systemPrompt = ctx?.systemPrompt;
 		const contextNotes = ctx?.contextNotes ?? [];
 		const selectedFiles = ctx?.selectedFiles ?? [];
 		const selectedFolders = ctx?.selectedFolders ?? [];
@@ -52,8 +59,20 @@ export class PromptBuilder {
 		const parseLinksInTemplates = ctx?.parseLinksInTemplates ?? true;
 		const sourcePath = ctx?.sourcePath ?? this.app.workspace.getActiveFile()?.path ?? '';
 		const maxHistoryRounds = ctx?.maxHistoryRounds ?? DEFAULT_HISTORY_ROUNDS;
+		const taskTemplate = ctx?.taskTemplate;
+		const enableFileIntentAnalysis = ctx?.enableFileIntentAnalysis ?? true;
 
 		const result: ProviderMessage[] = [];
+
+		// 智能文件角色判断：分析任务模板，生成文件处理指导
+		const hasFiles = selectedFiles.length > 0 || selectedFolders.length > 0;
+		if (enableFileIntentAnalysis && hasFiles && taskTemplate && systemPrompt) {
+			const analysis = this.intentAnalyzer.analyzePromptIntent(taskTemplate);
+			const fileRoleGuidance = this.buildFileRoleGuidance(analysis);
+			if (fileRoleGuidance) {
+				systemPrompt = systemPrompt + '\n\n' + fileRoleGuidance;
+			}
+		}
 
 		// 1) System
 		if (systemPrompt && systemPrompt.trim().length > 0) {
@@ -520,5 +539,44 @@ export class PromptBuilder {
 				files: await this.parseFilesWithInternalLinks(folder.files, options)
 			}))
 		);
+	}
+
+	/**
+	 * 根据文件意图分析结果，生成文件角色指导提示词
+	 * 返回空字符串表示不需要额外指导
+	 */
+	private buildFileRoleGuidance(analysis: FileIntentAnalysis): string {
+		// 仅对高置信度的 processing_target 生成指导
+		// 其他角色（reference/example/context）使用系统提示词的默认行为
+		if (analysis.role !== 'processing_target' || analysis.confidence === 'low') {
+			return '';
+		}
+
+		return `<file_processing_guidance>
+当前任务检测结果：文件为【待处理数据】（置信度：${analysis.confidence === 'high' ? '高' : '中'}）
+
+处理指导：
+- 用户提供的文件是需要分析和处理的**核心数据**
+- 请立即对文件内容执行提示词要求的任务
+- 不要等待用户额外的"请分析"指令
+- 直接基于文件内容生成结果
+
+当您收到以下结构时：
+<documents>
+  <document index="N">
+    <source>文件路径</source>
+    <document_content>文件内容...</document_content>
+  </document>
+</documents>
+
+这些内容即是您需要处理的数据，请直接执行任务。
+</file_processing_guidance>`;
+	}
+
+	/**
+	 * 获取文件意图分析器实例（供外部使用）
+	 */
+	getIntentAnalyzer(): FileIntentAnalyzer {
+		return this.intentAnalyzer;
 	}
 }

@@ -198,8 +198,7 @@ export class HistoryService {
 					created: this.formatTimestamp(session.createdAt),
 					updated: this.formatTimestamp(session.updatedAt),
 					messageCount: session.messages.length,
-					contextNotes: session.contextNotes ?? [],
-					agentLoopState: session.agentLoopState ?? undefined
+					contextNotes: session.contextNotes ?? []
 				});
 				return session.filePath;
 			}
@@ -235,8 +234,7 @@ export class HistoryService {
 			created: this.formatTimestamp(session.createdAt),
 			updated: this.formatTimestamp(session.updatedAt),
 			messageCount: session.messages.length,
-			contextNotes: session.contextNotes ?? [],
-			agentLoopState: session.agentLoopState ?? undefined
+			contextNotes: session.contextNotes ?? []
 		});
 
 		const body = session.messages.map((message) => this.messageService.serializeMessage(message)).join('\n\n');
@@ -273,7 +271,6 @@ ${body}
 				contextNotes: (frontmatter.contextNotes as string[]) ?? [],
 				createdAt: this.parseTimestamp(frontmatter.created ?? file.stat.ctime),
 				updatedAt: this.parseTimestamp(frontmatter.updated ?? file.stat.mtime),
-				agentLoopState: (frontmatter.agentLoopState as ChatSession['agentLoopState']) ?? undefined,
 				selectedImages: [],
 				filePath: filePath // 设置文件路径
 			};
@@ -310,8 +307,7 @@ ${body}
 			model: session.modelId,
 			created: session.createdAt,
 			updated: session.updatedAt,
-			contextNotes: session.contextNotes ?? [],
-			agentLoopState: session.agentLoopState ?? undefined
+			contextNotes: session.contextNotes ?? []
 		});
 
 		// 创建文件，只包含frontmatter，不包含任何消息
@@ -433,8 +429,7 @@ ${body}
 			created: this.formatTimestamp(session.createdAt),
 			updated: this.formatTimestamp(session.updatedAt),
 			messageCount: 1, // 第一条消息
-			contextNotes: updatedContextNotes,
-			agentLoopState: session.agentLoopState ?? undefined
+			contextNotes: updatedContextNotes
 		});
 
 		// 序列化第一条消息，但不重复添加文件和文件夹信息（因为已经在消息内容中了）

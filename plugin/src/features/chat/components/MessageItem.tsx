@@ -1,9 +1,9 @@
 import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download, Highlighter, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Repeat, Clock3 } from 'lucide-react';
 import { Component, Platform } from 'obsidian';
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
 import type { ChatMessage } from '../types/chat';
-import type { ToolExecution } from '../types/tools';
+import type { ToolCall, ToolExecution } from '../types/tools';
 import { ChatService } from '../services/ChatService';
 import { MessageService } from '../services/MessageService';
 import { renderMarkdownContent, parseContentBlocks, hasReasoningBlock, ContentBlock } from '../utils/markdown';
@@ -210,6 +210,106 @@ const getToolCallDisplay = (call: { name: string; arguments?: Record<string, any
 		}
 	}
 };
+
+const buildToolCallSignature = (call: ToolCall): string => {
+	const argsText = call.arguments ? formatArgsValue(call.arguments) : '';
+	const resultText = call.result ?? '';
+	return `${call.id}|${call.name}|${call.status}|${argsText}|${resultText}`;
+};
+
+const buildExecutionSignatureMap = (executions: ToolExecution[], toolCallIds: Set<string>) => {
+	const map = new Map<string, string>();
+	executions.forEach((execution) => {
+		if (!execution.toolCallId || !toolCallIds.has(execution.toolCallId)) return;
+		map.set(execution.toolCallId, `${execution.id}|${execution.status}|${execution.error ?? ''}`);
+	});
+	return map;
+};
+
+interface ToolCallListProps {
+	toolCalls: ToolCall[];
+	toolExecutions?: ToolExecution[];
+	service?: ChatService;
+	messageId: string;
+}
+
+const ToolCallList = memo(
+	({ toolCalls, toolExecutions, service, messageId }: ToolCallListProps) => {
+		const executionMap = useMemo(() => {
+			const map = new Map<string, ToolExecution>();
+			(toolExecutions ?? []).forEach((exec) => {
+				if (exec.toolCallId) {
+					map.set(exec.toolCallId, exec);
+				}
+			});
+			return map;
+		}, [toolExecutions]);
+		const completedCount = toolCalls.filter((call) => {
+			const exec = executionMap.get(call.id);
+			return exec?.status === 'completed' || call.status === 'completed';
+		}).length;
+		const failedCount = toolCalls.filter((call) => {
+			const exec = executionMap.get(call.id);
+			return exec?.status === 'failed' || exec?.status === 'rejected' || call.status === 'failed';
+		}).length;
+		const totalCount = toolCalls.length;
+		const inProgressCount = Math.max(totalCount - completedCount - failedCount, 0);
+
+		return (
+			<div className="ff-tool-call-list">
+				<div className="ff-tool-call__progress">
+					{inProgressCount > 0 ? (
+						<span>执行中 {completedCount}/{totalCount} 个工具</span>
+					) : (
+						<span>已完成 {completedCount}/{totalCount} 个工具</span>
+					)}
+				</div>
+				{toolCalls.map((call) => {
+					const exec = executionMap.get(call.id);
+					const canRetry = call.status === 'failed' || exec?.status === 'failed' || exec?.status === 'rejected';
+					return (
+						<ToolCallItem
+							key={call.id}
+							call={call}
+							execution={exec}
+							canRetry={!!service && canRetry}
+							onRetry={
+								service
+									? () => void service.retryToolCall(messageId, call.id)
+									: undefined
+							}
+							onApprove={
+								exec && service ? () => void service.approveToolExecution(exec.id) : undefined
+							}
+							onReject={
+								exec && service ? () => void service.rejectToolExecution(exec.id) : undefined
+							}
+						/>
+					);
+				})}
+			</div>
+		);
+	},
+	(prev, next) => {
+		if (prev.messageId !== next.messageId) return false;
+		if (prev.service !== next.service) return false;
+		if (prev.toolCalls.length !== next.toolCalls.length) return false;
+		const prevSignatures = prev.toolCalls.map(buildToolCallSignature);
+		const nextSignatures = next.toolCalls.map(buildToolCallSignature);
+		for (let i = 0; i < prevSignatures.length; i += 1) {
+			if (prevSignatures[i] !== nextSignatures[i]) return false;
+		}
+
+		const toolCallIds = new Set(prev.toolCalls.map((call) => call.id));
+		const prevExecutionMap = buildExecutionSignatureMap(prev.toolExecutions ?? [], toolCallIds);
+		const nextExecutionMap = buildExecutionSignatureMap(next.toolExecutions ?? [], toolCallIds);
+		if (prevExecutionMap.size !== nextExecutionMap.size) return false;
+		for (const [toolCallId, signature] of prevExecutionMap.entries()) {
+			if (nextExecutionMap.get(toolCallId) !== signature) return false;
+		}
+		return true;
+	}
+);
 
 const ToolCallItem = ({
 	call,
@@ -443,7 +543,6 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 	const [draft, setDraft] = useState(message.content);
 	const [previewImage, setPreviewImage] = useState<string | null>(null);
 	const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
-	const [thoughtCollapsed, setThoughtCollapsed] = useState(false);
 
 	const timestamp = useMemo(() => helper.formatTimestamp(message.timestamp), [helper, message.timestamp]);
 
@@ -452,10 +551,6 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 		const blocks = parseContentBlocks(message.content);
 		setContentBlocks(blocks);
 	}, [message.content]);
-
-	useEffect(() => {
-		setThoughtCollapsed(false);
-	}, [message.id]);
 
 	const handleCopy = async () => {
 		try {
@@ -573,26 +668,6 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 				? 'chat-message--assistant'
 				: 'chat-message--system';
 	const toolCalls = message.toolCalls ?? [];
-	const shouldRenderAsThought = message.role === 'assistant' && toolCalls.length > 0 && message.content.trim().length > 0;
-	const executionMap = useMemo(() => {
-		const map = new Map<string, ToolExecution>();
-		(toolExecutions ?? []).forEach((exec) => {
-			if (exec.toolCallId) {
-				map.set(exec.toolCallId, exec);
-			}
-		});
-		return map;
-	}, [toolExecutions]);
-	const completedCount = toolCalls.filter((call) => {
-		const exec = executionMap.get(call.id);
-		return exec?.status === 'completed' || call.status === 'completed';
-	}).length;
-	const failedCount = toolCalls.filter((call) => {
-		const exec = executionMap.get(call.id);
-		return exec?.status === 'failed' || exec?.status === 'rejected' || call.status === 'failed';
-	}).length;
-	const totalCount = toolCalls.length;
-	const inProgressCount = Math.max(totalCount - completedCount - failedCount, 0);
 
 	return (
 		<>
@@ -653,38 +728,12 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 
 				{/* 工具调用徽章 */}
 				{toolCalls.length > 0 && (
-					<div className="ff-tool-call-list">
-						<div className="ff-tool-call__progress">
-							{inProgressCount > 0 ? (
-								<span>执行中 {completedCount}/{totalCount} 个工具</span>
-							) : (
-								<span>已完成 {completedCount}/{totalCount} 个工具</span>
-							)}
-						</div>
-						{toolCalls.map((call) => {
-							const exec = executionMap.get(call.id);
-							const canRetry = call.status === 'failed' || exec?.status === 'failed' || exec?.status === 'rejected';
-							return (
-								<ToolCallItem
-									key={call.id}
-									call={call}
-									execution={exec}
-									canRetry={!!service && canRetry}
-									onRetry={
-										service
-											? () => void service.retryToolCall(message.id, call.id)
-											: undefined
-									}
-									onApprove={
-										exec && service ? () => void service.approveToolExecution(exec.id) : undefined
-									}
-									onReject={
-										exec && service ? () => void service.rejectToolExecution(exec.id) : undefined
-									}
-								/>
-							);
-						})}
-					</div>
+					<ToolCallList
+						toolCalls={toolCalls}
+						toolExecutions={toolExecutions}
+						service={service}
+						messageId={message.id}
+					/>
 				)}
 
 				{/* 内嵌审批界面 */}
@@ -706,72 +755,26 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 							rows={4}
 						/>
 					) : (
-						<>
-							{shouldRenderAsThought ? (
-								<div className="ff-tool-thought">
-									<div
-										className="ff-tool-thought__header"
-										onClick={(event) => {
-											event.stopPropagation();
-											setThoughtCollapsed((prev) => !prev);
-										}}
-									>
-										<span className="ff-tool-thought__toggle">
-											{thoughtCollapsed ? (
-												<ChevronRight className="tw-size-4" />
-											) : (
-												<ChevronDown className="tw-size-4" />
-											)}
-										</span>
-										<span className="ff-tool-thought__icon">
-											<Loader2 className="tw-size-3 tw-animate-spin" />
-										</span>
-										<span className="ff-tool-thought__title">分析中...</span>
-									</div>
-									{!thoughtCollapsed && (
-										<div className="ff-tool-thought__body">
-										{contentBlocks.map((block, index) => {
-											if (block.type === 'reasoning') {
-												return (
-													<ReasoningBlockComponent
-														key={`reasoning-${index}`}
-														content={block.content}
-														startMs={block.startMs}
-														durationMs={block.durationMs}
-														isGenerating={isGenerating ?? false}
-													/>
-												);
-											}
-											return (
-												<TextBlockComponent key={`text-${index}`} content={block.content} app={app} />
-											);
-										})}
-										</div>
-									)}
-								</div>
-							) : (
-								contentBlocks.map((block, index) => {
-									if (block.type === 'reasoning') {
-										return (
-											<ReasoningBlockComponent
-												key={`reasoning-${index}`}
-												content={block.content}
-												startMs={block.startMs}
-												durationMs={block.durationMs}
-												isGenerating={isGenerating ?? false}
-											/>
-										);
-									}
-									return (
-										<TextBlockComponent
-											key={`text-${index}`}
-											content={block.content}
-											app={app}
-										/>
-									);
-								})
-							)}
-						</>
+						contentBlocks.map((block, index) => {
+							if (block.type === 'reasoning') {
+								return (
+									<ReasoningBlockComponent
+										key={`reasoning-${index}`}
+										content={block.content}
+										startMs={block.startMs}
+										durationMs={block.durationMs}
+										isGenerating={isGenerating ?? false}
+									/>
+								);
+							}
+							return (
+								<TextBlockComponent
+									key={`text-${index}`}
+									content={block.content}
+									app={app}
+								/>
+							);
+						})
 					)}
 				</div>
 				{/* 只在AI消息非生成状态或非AI消息时显示元数据 */}

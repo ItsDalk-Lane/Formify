@@ -113,7 +113,10 @@ export class SystemPromptDataService {
 		for (const leftover of byId.values()) {
 			next.push(leftover);
 		}
-		this.promptsCache = this.normalizeOrders(next);
+		this.promptsCache = next.map((item, index) => ({
+			...item,
+			order: index,
+		}));
 		await this.persist();
 	}
 

@@ -32,6 +32,7 @@ const normalizeSkill = (skill: Skill): Skill => ({
 	isSkillGroup: skill.isSkillGroup ?? false,
 	children: skill.children ?? [],
 	useDefaultSystemPrompt: skill.useDefaultSystemPrompt ?? true,
+	customPromptRole: skill.customPromptRole ?? 'system',
 });
 
 /**

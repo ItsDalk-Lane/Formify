@@ -3,6 +3,31 @@ import type { ToolCall, ToolExecution } from './tools';
 
 export type ChatRole = 'user' | 'assistant' | 'system';
 
+/**
+ * 文件角色类型
+ * - processing_target: 需要处理的数据（如待分析的文章）
+ * - reference: 参考资料（如背景知识文档）
+ * - example: 示例（如格式模板）
+ * - context: 上下文背景（如项目说明）
+ */
+export type FileRole = 
+  | 'processing_target'
+  | 'reference'
+  | 'example'
+  | 'context';
+
+/**
+ * 文件意图分析结果
+ */
+export interface FileIntentAnalysis {
+  /** 推断的文件角色 */
+  role: FileRole;
+  /** 推断理由（用于调试） */
+  reasoning: string;
+  /** 置信度 */
+  confidence: 'high' | 'medium' | 'low';
+}
+
 export interface SelectedFile {
 	id: string;
 	name: string;
@@ -45,12 +70,6 @@ export interface ChatSession {
 	selectedFolders?: SelectedFolder[];
 	filePath?: string; // 添加文件路径字段，用于跟踪会话文件
 	systemPrompt?: string; // 添加系统提示词字段，用于内部存储
-	agentLoopState?: {
-		isPaused: boolean;
-		currentIteration: number;
-		maxIterations: number;
-		pausedMessageId: string;
-	};
 }
 
 export type ChatOpenMode = 'sidebar' | 'left-sidebar' | 'tab' | 'window' | 'persistent-modal';
@@ -110,10 +129,17 @@ export interface Skill {
 	/**
 	 * 是否使用默认系统提示词（默认 true 保持向下兼容）
 	 * - true: 使用全局系统提示词 + 解析后的提示词作为用户消息
-	 * - false: 仅使用自定义提示词内容作为系统消息，选中文本作为用户消息
+	 * - false: 使用自定义配置（由 customPromptRole 控制）
 	 * @default true
 	 */
 	useDefaultSystemPrompt?: boolean;
+	/**
+	 * 自定义提示词的角色（仅当 useDefaultSystemPrompt 为 false 时生效）
+	 * - 'system': 提示词作为系统消息（占位符会被替换为 <用户消息内容> 指示）
+	 * - 'user': 提示词作为用户消息（占位符会被替换为实际选中文本）
+	 * @default 'system'
+	 */
+	customPromptRole?: 'system' | 'user';
 }
 
 export interface ChatSettings {
@@ -123,9 +149,6 @@ export interface ChatSettings {
 	showSidebarByDefault: boolean;
 	openMode: ChatOpenMode;
 	enableSystemPrompt: boolean; // 是否启用系统提示词功能
-	// Agent Loop 配置
-	enableAgentLoop: boolean; // 是否启用 Agent Loop 功能
-	agentLoopMaxIterations: number; // Agent Loop 最大迭代次数
 	// 内链解析配置（已迁移到 Tars 设置中的 internalLinkParsing）
 	/** @deprecated 已迁移到 Tars 设置中的 internalLinkParsing.enabled */
 	enableInternalLinkParsing?: boolean;
@@ -164,11 +187,6 @@ export interface ChatState {
 	selectedFolders: SelectedFolder[];
 	selectedText?: string; // 划词选中的文本内容
 	error?: string;
-	// Agent Loop 状态控制
-	enableAgentLoop?: boolean; // 当前会话是否启用 Agent Loop（覆盖全局设置）
-	agentLoopIteration?: number; // 当前 Agent Loop 迭代次数（用于UI展示）
-	agentLoopMaxIterations?: number; // 当前会话的最大迭代次数
-	isAgentLoopPaused?: boolean; // Agent Loop 是否处于暂停状态（等待手动审批）
 	// 添加模板选择相关状态
 	selectedPromptTemplate?: {
 		path: string;
@@ -191,9 +209,6 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	showSidebarByDefault: true,
 	openMode: 'sidebar',
 	enableSystemPrompt: true, // 默认启用系统提示词功能
-	// Agent Loop 默认配置
-	enableAgentLoop: false, // 默认关闭 Agent Loop
-	agentLoopMaxIterations: 30, // 默认最大迭代次数为 30
 	// 内链解析默认配置
 	enableInternalLinkParsing: true, // 默认启用内链解析
 	parseLinksInTemplates: true, // 默认解析模板中的内链

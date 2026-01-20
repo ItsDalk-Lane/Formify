@@ -161,7 +161,8 @@ export class SkillExecutionService {
 			const messages = await this.buildMessages(
 				useDefaultSystemPrompt,
 				promptContent,
-				selection
+				selection,
+				skill.customPromptRole
 			);
 
 			// 4. 调用AI模型
@@ -225,6 +226,26 @@ export class SkillExecutionService {
 		resolvedPrompt = resolvedPrompt.replace(/\{\{\}\}/g, selection);
 		// {{@xxx}} 格式 - @ 符号在 {{ 之后的第一个位置，会被替换
 		resolvedPrompt = resolvedPrompt.replace(/\{\{@[^}]*\}\}/g, selection);
+
+		return resolvedPrompt;
+	}
+
+	/**
+	 * 仅解析模板引用，不处理占位符替换
+	 * 用于当自定义提示词作为系统消息时，只处理 {{template:xxx}} 模板引用
+	 */
+	async resolvePromptTemplateOnly(prompt: string): Promise<string> {
+		let resolvedPrompt = prompt;
+
+		// 处理模板引用 {{template:文件名}}
+		const templatePattern = /\{\{template:([^}]+)\}\}/g;
+		let match;
+
+		while ((match = templatePattern.exec(prompt)) !== null) {
+			const templateName = match[1].trim();
+			const templateContent = await this.loadTemplate(templateName);
+			resolvedPrompt = resolvedPrompt.replace(match[0], templateContent);
+		}
 
 		return resolvedPrompt;
 	}
@@ -295,12 +316,14 @@ export class SkillExecutionService {
 	 * @param useDefaultSystemPrompt 是否使用默认系统提示词
 	 * @param promptContent 提示词内容（已加载但未解析）
 	 * @param selection 选中的文本
+	 * @param customPromptRole 自定义提示词的角色（仅当 useDefaultSystemPrompt 为 false 时生效）
 	 * @returns 消息数组
 	 */
 	private async buildMessages(
 		useDefaultSystemPrompt: boolean,
 		promptContent: string,
-		selection: string
+		selection: string,
+		customPromptRole?: 'system' | 'user'
 	): Promise<Message[]> {
 		const messages: Message[] = [];
 
@@ -317,9 +340,26 @@ export class SkillExecutionService {
 			const resolvedPrompt = await this.resolvePrompt(promptContent, selection);
 			messages.push({ role: 'user', content: resolvedPrompt });
 		} else {
-			// 新逻辑：不使用系统提示词，直接使用原始提示词
-			messages.push({ role: 'system', content: promptContent });
-			messages.push({ role: 'user', content: selection });
+			// 扩展逻辑：根据配置决定消息结构
+			const promptRole = customPromptRole ?? 'system';
+
+			if (promptRole === 'system') {
+				// 提示词作为系统消息，占位符替换为指示文本
+				// 处理模板引用
+				let processedPrompt = await this.resolvePromptTemplateOnly(promptContent);
+
+				// 将占位符替换为指示文本
+				processedPrompt = processedPrompt.replace(/\{\{\}\}/g, '<用户消息内容>');
+				processedPrompt = processedPrompt.replace(/\{\{@[^}]*\}\}/g, '<用户消息内容>');
+
+				messages.push({ role: 'system', content: processedPrompt });
+				// 选中文本作为用户消息
+				messages.push({ role: 'user', content: selection });
+			} else {
+				// 提示词作为用户消息，需要处理占位符替换
+				const resolvedPrompt = await this.resolvePrompt(promptContent, selection);
+				messages.push({ role: 'user', content: resolvedPrompt });
+			}
 		}
 
 		return messages;
@@ -415,7 +455,8 @@ export class SkillExecutionService {
 			const messages = await this.buildMessages(
 				useDefaultSystemPrompt,
 				promptContent,
-				selection
+				selection,
+				skill.customPromptRole
 			);
 
 			// 4. 流式调用AI

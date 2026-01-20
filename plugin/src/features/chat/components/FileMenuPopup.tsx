@@ -24,7 +24,6 @@ interface FolderItem {
 export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, app, buttonRef }: FileMenuPopupProps) => {
 	const popupRef = useRef<HTMLDivElement>(null);
 	const menuSearchInputRef = useRef<HTMLInputElement>(null);
-	const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
 	const [currentView, setCurrentView] = useState<ViewType>('menu');
 
 	const getFileSecondaryText = (file: TFile): string => {
@@ -57,7 +56,7 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 	const [selectedFolders, setSelectedFolders] = useState<Set<string>>(new Set());
 	const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['/']));
 
-	// 点击外部关闭弹出菜单
+	// 点击外部关闭弹出菜单 - 恢复原始简单逻辑
 	useEffect(() => {
 		const handleClickOutside = (event: MouseEvent) => {
 			if (popupRef.current && !popupRef.current.contains(event.target as Node) &&
@@ -74,19 +73,6 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 			document.removeEventListener('mousedown', handleClickOutside);
 		};
 	}, [isOpen, onClose, buttonRef]);
-
-	// 选择 Portal 宿主：优先挂载到触发按钮所在的模态框容器内，避免 Obsidian focus trap 阻止 input 获得焦点
-	useEffect(() => {
-		if (!isOpen) {
-			setPortalContainer(null);
-			return;
-		}
-
-		const anchorEl = buttonRef.current;
-		const modalContainer = anchorEl?.closest('.modal-container') as HTMLElement | null;
-		const modalEl = anchorEl?.closest('.modal') as HTMLElement | null;
-		setPortalContainer(modalContainer ?? modalEl ?? document.body);
-	}, [isOpen, buttonRef]);
 
 	// 重置视图状态的useEffect
 	useEffect(() => {
@@ -594,6 +580,6 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 				)}
 			</div>
 		</div>,
-		portalContainer ?? document.body
+		document.body
 	);
 };
