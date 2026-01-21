@@ -7,7 +7,39 @@ import {
 	DEFAULT_AGENT_SYSTEM_PROMPT
 } from '../constants/agentDefaults';
 
-export type ChatRole = 'user' | 'assistant' | 'system';
+export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
+
+/**
+ * Agent 模式消息事件类型
+ * 用于按时间顺序记录 Agent 执行过程中的文本输出和工具调用
+ */
+export type AgentMessageEvent = AgentTextEvent | AgentToolCallEvent;
+
+/**
+ * 文本事件：记录 Agent 的普通文本输出
+ */
+export interface AgentTextEvent {
+	type: 'text';
+	/** 文本内容 */
+	content: string;
+	/** 事件时间戳 */
+	timestamp: number;
+}
+
+/**
+ * 工具调用事件：记录单次工具调用及其结果
+ */
+export interface AgentToolCallEvent {
+	type: 'tool_call';
+	/** 完整的工具调用对象 */
+	toolCall: ToolCall;
+	/** 事件时间戳 */
+	timestamp: number;
+	/** 工具执行结果（执行完成后填充） */
+	result?: string;
+	/** 执行错误信息（执行失败时填充） */
+	error?: string;
+}
 
 /**
  * 文件角色类型
@@ -61,6 +93,17 @@ export interface ChatMessage {
 	isError?: boolean;
 	metadata?: Record<string, unknown>;
 	toolCalls?: ToolCall[];
+	/**
+	 * 工具调用 ID（仅用于 tool 角色消息）
+	 * 用于关联工具结果与对应的工具调用
+	 */
+	toolCallId?: string;
+	/**
+	 * Agent 模式事件流
+	 * 仅当 metadata.agentMode 为 true 时有效
+	 * 按时间顺序记录思考内容和工具调用，用于交替流式渲染
+	 */
+	agentEvents?: AgentMessageEvent[];
 }
 
 export interface ChatSession {

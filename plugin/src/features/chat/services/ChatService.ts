@@ -7,7 +7,7 @@ import { isImageGenerationModel } from 'src/features/tars/providers/openRouter';
 import { MessageService } from './MessageService';
 import { HistoryService, ChatHistoryEntry } from './HistoryService';
 import { FileContentService } from './FileContentService';
-import type { ChatMessage, ChatSession, ChatSettings, ChatState, SelectedFile, SelectedFolder } from '../types/chat';
+import type { ChatMessage, ChatSession, ChatSettings, ChatState, SelectedFile, SelectedFolder, AgentMessageEvent, AgentTextEvent, AgentToolCallEvent } from '../types/chat';
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
 import { v4 as uuidv4 } from 'uuid';
 import { InternalLinkParserService } from '../../../service/InternalLinkParserService';
@@ -1279,6 +1279,9 @@ export class ChatService {
 					call.result = result;
 				};
 
+				// 用于追踪当前文本事件的状态
+				let currentTextEvent: AgentTextEvent | null = null;
+
 				const onEvent: AgentLoopCallback = (event) => {
 					switch (event.type) {
 						case 'start':
@@ -1286,40 +1289,111 @@ export class ChatService {
 							this.state.error = undefined;
 							this.emitState();
 							break;
-						case 'message_delta':
+						case 'message_delta': {
 							if (!assistantMessage) {
 								assistantMessage = this.messageService.createMessage('assistant', '', {
 									metadata: { agentMode: true }
 								});
+								assistantMessage.agentEvents = [];
 								sessionMessages.push(assistantMessage);
 							}
+							// 初始化 agentEvents 数组（兼容性处理）
+							if (!assistantMessage.agentEvents) {
+								assistantMessage.agentEvents = [];
+							}
+							// 保持原有的 content 累积（向下兼容）
 							assistantMessage.content += event.content;
-							session.updatedAt = Date.now();
+							
+							// 创建或更新当前文本事件
+							const now = Date.now();
+							if (!currentTextEvent) {
+								// 创建新的文本事件
+								currentTextEvent = {
+									type: 'text',
+									content: event.content,
+									timestamp: now
+								};
+								assistantMessage.agentEvents.push(currentTextEvent);
+							} else {
+								// 追加内容到当前文本事件
+								currentTextEvent.content += event.content;
+							}
+							
+							session.updatedAt = now;
 							this.emitState();
 							break;
-						case 'tool_call':
+						}
+						case 'tool_call': {
 							if (!assistantMessage) {
 								assistantMessage = this.messageService.createMessage('assistant', '', {
 									metadata: { agentMode: true }
 								});
+								assistantMessage.agentEvents = [];
 								sessionMessages.push(assistantMessage);
 							}
+							// 初始化 agentEvents 数组（兼容性处理）
+							if (!assistantMessage.agentEvents) {
+								assistantMessage.agentEvents = [];
+							}
+							
+							// 结束当前文本事件（如果存在），以便下一个文本块成为新事件
+							currentTextEvent = null;
+							
+							// 保持原有的 toolCalls 累积（向下兼容）
 							assistantMessage.toolCalls = [...(assistantMessage.toolCalls ?? []), event.toolCall];
+							
+							// 创建新的工具调用事件
+							const toolCallEvent: AgentToolCallEvent = {
+								type: 'tool_call',
+								toolCall: event.toolCall,
+								timestamp: Date.now()
+							};
+							assistantMessage.agentEvents.push(toolCallEvent);
+							
 							session.updatedAt = Date.now();
 							this.emitState();
 							break;
-						case 'tool_result':
+						}
+						case 'tool_result': {
+							// 保持原有的更新逻辑（向下兼容）
 							updateToolCallResult(event.toolCallId, event.result ? String(event.result) : undefined, event.error);
+							
+							// 更新 agentEvents 中对应的工具调用事件
+							if (assistantMessage?.agentEvents) {
+								const toolCallEvent = assistantMessage.agentEvents.find(
+									(e): e is AgentToolCallEvent => 
+										e.type === 'tool_call' && e.toolCall.id === event.toolCallId
+								);
+								if (toolCallEvent) {
+									if (event.result !== undefined) {
+										toolCallEvent.result = String(event.result);
+									}
+									if (event.error) {
+										toolCallEvent.error = event.error;
+									}
+								}
+							}
+							
 							session.updatedAt = Date.now();
 							this.emitState();
 							break;
-						case 'complete':
+						}
+						case 'complete': {
 							if (!assistantMessage) {
 								assistantMessage = this.messageService.createMessage('assistant', event.message, {
 									metadata: { agentMode: true }
 								});
+								assistantMessage.agentEvents = [];
 								sessionMessages.push(assistantMessage);
 							}
+							// 初始化 agentEvents 数组（兼容性处理）
+							if (!assistantMessage.agentEvents) {
+								assistantMessage.agentEvents = [];
+							}
+							
+							// 结束当前文本事件
+							currentTextEvent = null;
+							
 							if (!assistantMessage.content) {
 								assistantMessage.content = event.message;
 							}
@@ -1332,6 +1406,7 @@ export class ChatService {
 								});
 							}
 							break;
+						}
 						case 'error':
 							this.state.isGenerating = false;
 							this.state.error = event.message;

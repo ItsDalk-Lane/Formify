@@ -68,10 +68,11 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		}
 
 		const preparedMessages = applyPrefixContinuation(messages, internalConfig)
+		const transformedMessages = transformMessagesForDeepSeek(preparedMessages)
 		const stream = await client.chat.completions.create(
 			{
 				model,
-				messages: preparedMessages as OpenAI.ChatCompletionMessageParam[],
+				messages: transformedMessages as OpenAI.ChatCompletionMessageParam[],
 				stream: true,
 				...remains
 			},
@@ -168,6 +169,51 @@ const applyPrefixContinuation = (messages: Message[], config: DeepSeekInternalCo
 		return [...messages.slice(0, -1), { ...last, prefix: true }]
 	}
 	return [...messages, { role: 'assistant', content: assistantPrefix, prefix: true }]
+}
+
+/**
+ * 转换消息格式，处理 DeepSeek 推理模式的特殊要求
+ * 
+ * 根据 DeepSeek 官方文档：
+ * - assistant 消息需要包含 content、reasoning_content、tool_calls 三个字段
+ * - 在工具调用过程中，需要回传 reasoning_content 给 API，以让模型继续思考
+ * - tool 消息需要包含 role、tool_call_id、content 三个字段
+ */
+const transformMessagesForDeepSeek = (messages: Message[]): any[] => {
+	return messages.map(msg => {
+		// 处理 assistant 消息
+		if (msg.role === 'assistant') {
+			const hasReasoningContent = msg.reasoning_content !== undefined && msg.reasoning_content !== '';
+			const hasToolCalls = msg.tool_calls && msg.tool_calls.length > 0;
+			
+			// 如果有 reasoning_content 或 tool_calls，需要特殊处理
+			if (hasReasoningContent || hasToolCalls) {
+				return {
+					role: msg.role,
+					content: msg.content,
+					...(hasReasoningContent ? { reasoning_content: msg.reasoning_content } : {}),
+					...(hasToolCalls ? { tool_calls: msg.tool_calls } : {}),
+					...(msg.prefix ? { prefix: msg.prefix } : {})
+				}
+			}
+		}
+		
+		// 处理 tool 消息（工具执行结果）
+		if (msg.role === 'tool' && msg.tool_call_id) {
+			return {
+				role: 'tool',
+				tool_call_id: msg.tool_call_id,
+				content: msg.content
+			}
+		}
+		
+		return {
+			role: msg.role,
+			content: msg.content,
+			...(msg.embeds ? { embeds: msg.embeds } : {}),
+			...(msg.prefix ? { prefix: msg.prefix } : {})
+		}
+	})
 }
 
 const models = ['deepseek-chat', 'deepseek-reasoner']

@@ -270,6 +270,10 @@ ${agentPromptFromSettings}`.trim();
         return;
       }
 
+      // 保存工具调用到 assistantMessage，以便下次请求时能够正确回传给 API
+      // 这对于 DeepSeek 推理模式的工具调用尤为重要
+      assistantMessage.toolCalls = [...toolCalls];
+
       toolCallCount += toolCalls.length;
       if (toolCallCount > maxToolCalls) {
         params.onEvent({
@@ -290,13 +294,13 @@ ${agentPromptFromSettings}`.trim();
         if (!toolDefinition) {
           const message = `未找到工具定义: ${call.name}`;
           params.onEvent({ type: 'error', message, timestamp: Date.now() });
-          localMessages.push(this.buildToolErrorMessage(messageService, call.name, message));
+          localMessages.push(this.buildToolErrorMessage(messageService, call.id, message));
           continue;
         }
         if (!toolDefinition.enabled) {
           const message = `工具未启用: ${toolDefinition.name}`;
           params.onEvent({ type: 'error', message, timestamp: Date.now() });
-          localMessages.push(this.buildToolErrorMessage(messageService, toolDefinition.name, message));
+          localMessages.push(this.buildToolErrorMessage(messageService, call.id, message));
           continue;
         }
 
@@ -321,7 +325,7 @@ ${agentPromptFromSettings}`.trim();
               error: errorMessage,
               timestamp: Date.now()
             });
-            localMessages.push(this.buildToolErrorMessage(messageService, call.name, errorMessage));
+            localMessages.push(this.buildToolErrorMessage(messageService, call.id, errorMessage));
             continue;
           }
           execution = await toolExecutionManager.approve(exec.id);
@@ -337,7 +341,7 @@ ${agentPromptFromSettings}`.trim();
             result: execution.result,
             timestamp: Date.now()
           });
-          localMessages.push(this.buildToolResultMessage(messageService, call.name, execution.result ?? ''));
+          localMessages.push(this.buildToolResultMessage(messageService, call.id, execution.result ?? ''));
         } else {
           const errorMessage = execution.error ?? '工具执行失败';
           params.onEvent({
@@ -347,7 +351,7 @@ ${agentPromptFromSettings}`.trim();
             error: errorMessage,
             timestamp: Date.now()
           });
-          localMessages.push(this.buildToolErrorMessage(messageService, call.name, errorMessage));
+          localMessages.push(this.buildToolErrorMessage(messageService, call.id, errorMessage));
         }
       }
     }
@@ -605,14 +609,24 @@ ${agentPromptFromSettings}`.trim();
     return output;
   }
 
-  private buildToolResultMessage(messageService: { createMessage: (role: any, content: string) => ChatMessage }, toolName: string, result: string): ChatMessage {
-    const text = `[工具结果]\n工具: ${toolName}\n结果: ${result}`;
-    return messageService.createMessage('assistant', text);
+  private buildToolResultMessage(
+    messageService: { createMessage: (role: any, content: string, options?: any) => ChatMessage },
+    toolCallId: string,
+    result: string
+  ): ChatMessage {
+    const message = messageService.createMessage('tool', result);
+    message.toolCallId = toolCallId;
+    return message;
   }
 
-  private buildToolErrorMessage(messageService: { createMessage: (role: any, content: string) => ChatMessage }, toolName: string, error: string): ChatMessage {
-    const text = `[工具错误]\n工具: ${toolName}\n错误: ${error}`;
-    return messageService.createMessage('assistant', text);
+  private buildToolErrorMessage(
+    messageService: { createMessage: (role: any, content: string, options?: any) => ChatMessage },
+    toolCallId: string,
+    error: string
+  ): ChatMessage {
+    const message = messageService.createMessage('tool', `Error: ${error}`);
+    message.toolCallId = toolCallId;
+    return message;
   }
 
   private resolveEmbedAsBinary = async () => new ArrayBuffer(0);

@@ -1,11 +1,12 @@
 import type { App, EmbedCache } from 'obsidian';
-import type { Message as ProviderMessage } from 'src/features/tars/providers';
+import type { Message as ProviderMessage, MessageToolCall } from 'src/features/tars/providers';
 import { SystemPromptMode } from 'src/model/enums/SystemPromptMode';
 import { PromptSourceType } from 'src/model/enums/PromptSourceType';
 import { InternalLinkParserService, ParseOptions } from 'src/service/InternalLinkParserService';
 import type { ChatMessage, ChatRole, SelectedFile, SelectedFolder, FileIntentAnalysis, FileRole } from 'src/features/chat/types/chat';
 import type { FileContentOptions, FileContentService, FileContent, FolderContent } from 'src/features/chat/services/FileContentService';
 import { FileIntentAnalyzer } from 'src/features/chat/services/FileIntentAnalyzer';
+import { parseContentBlocks } from 'src/features/chat/utils/markdown';
 
 export const DEFAULT_HISTORY_ROUNDS = 10;
 
@@ -377,6 +378,8 @@ export class PromptBuilder {
 		const embeds = this.createEmbedsFromImages(message.images ?? []);
 
 		let messageContent = message.content;
+		let reasoningContent: string | undefined;
+		let toolCalls: MessageToolCall[] | undefined;
 
 		if (message.role === 'user') {
 			const taskUserInput = this.getStringMetadata(message, 'taskUserInput');
@@ -405,6 +408,38 @@ export class PromptBuilder {
 			} else if (message.metadata?.parsedContent && typeof message.metadata.parsedContent === 'string') {
 				messageContent = message.metadata.parsedContent;
 			}
+		} else if (message.role === 'assistant') {
+			// 对于 assistant 消息，提取推理内容和普通文本内容
+			const blocks = parseContentBlocks(messageContent);
+			const reasoningBlocks = blocks.filter(b => b.type === 'reasoning');
+			const textBlocks = blocks.filter(b => b.type === 'text');
+			
+			if (reasoningBlocks.length > 0) {
+				// 合并所有推理内容
+				reasoningContent = reasoningBlocks.map(b => b.content).join('\n');
+				// 合并所有普通文本内容
+				messageContent = textBlocks.map(b => b.content).join('\n');
+			}
+			
+			// 处理 parsedContent
+			if (message.metadata?.parsedContent && typeof message.metadata.parsedContent === 'string') {
+				messageContent = message.metadata.parsedContent;
+			}
+			
+			// 处理工具调用（转换为 DeepSeek/OpenAI 兼容格式）
+			if (message.toolCalls && message.toolCalls.length > 0) {
+				toolCalls = message.toolCalls.map(tc => ({
+					id: tc.id,
+					type: 'function' as const,
+					function: {
+						name: tc.name,
+						arguments: JSON.stringify(tc.arguments)
+					}
+				}));
+			}
+		} else if (message.role === 'tool') {
+			// tool 角色消息：工具执行结果
+			// 不需要特殊处理内容，直接返回
 		} else if (message.metadata?.parsedContent && typeof message.metadata.parsedContent === 'string') {
 			messageContent = message.metadata.parsedContent;
 		}
@@ -412,7 +447,10 @@ export class PromptBuilder {
 		return {
 			role: message.role,
 			content: messageContent,
-			embeds: embeds.length > 0 ? embeds : undefined
+			embeds: embeds.length > 0 ? embeds : undefined,
+			reasoning_content: reasoningContent,
+			tool_calls: toolCalls,
+			tool_call_id: message.toolCallId
 		};
 	}
 
