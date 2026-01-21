@@ -510,10 +510,12 @@ export interface Local {
 	system_prompt_feature_tars_chat: string;
 	system_prompt_feature_tab_completion: string;
 	system_prompt_feature_selection_toolbar: string;
+	system_prompt_feature_agent: string;
 	system_prompt_feature_ai_action_desc: string;
 	system_prompt_feature_tars_chat_desc: string;
 	system_prompt_feature_tab_completion_desc: string;
 	system_prompt_feature_selection_toolbar_desc: string;
+	system_prompt_feature_agent_desc: string;
 	system_prompt_error_name_required: string;
 	system_prompt_error_name_duplicate: string;
 	system_prompt_error_content_required: string;

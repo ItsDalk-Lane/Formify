@@ -551,6 +551,8 @@ export class ZhTw implements Local {
 	system_prompt_feature_tab_completion_desc = "編輯器中按快捷鍵觸發 AI 續寫，可配置觸發鍵和上下文長度，智能上下文構建和後處理優化";
 	system_prompt_feature_selection_toolbar = "選中文本技能";
 	system_prompt_feature_selection_toolbar_desc = "使用游標選中部分文本或者輸出觸發符號選中整個文本後顯示技能工具欄，支援自定義 AI 技能（普通技能/技能組/表單技能），支援佔位符替換和流式輸出";
+	system_prompt_feature_agent = "Agent 模式";
+	system_prompt_feature_agent_desc = "AI 自主執行模式，支援工具呼叫和多輪對話，可配置最大工具呼叫次數和自動審批";
 	system_prompt_error_name_required = "提示詞名稱不能為空";
 	system_prompt_error_name_duplicate = "提示詞名稱已存在";
 	system_prompt_error_content_required = "提示詞內容不能為空";

@@ -6,7 +6,7 @@ import { ClaudeOptions, claudeVendor } from './providers/claude'
 import { DebugLogger } from '../../utils/DebugLogger'
 import { SkillDataService } from '../chat/selection-toolbar/SkillDataService'
 import { getFormSkillService, type FormInfo } from '../chat/selection-toolbar/FormSkillService'
-import { DEFAULT_AGENT_SYSTEM_PROMPT } from '../chat/constants/agentDefaults'
+import { DEFAULT_AGENT_USER_PROMPT } from '../chat/constants/agentDefaults'
 import {
 	DoubaoOptions,
 	doubaoVendor,
@@ -457,21 +457,21 @@ export class TarsSettingTab {
 				});
 			});
 
-		// Agent 系统提示词设置
+		// Agent 用户提示词设置
 		const agentPromptDesc = new DocumentFragment();
-		agentPromptDesc.createEl('div', { text: 'Agent 模式的专用系统提示词，用于控制 AI 的自主执行行为。' });
-		agentPromptDesc.createEl('div', { text: '该提示词会与全局系统提示词组合使用。', cls: 'setting-item-description' });
+		agentPromptDesc.createEl('div', { text: 'Agent 模式的专用用户提示词，会追加到全局系统提示词后面。' });
+		agentPromptDesc.createEl('div', { text: '用于补充说明 Agent 的自主执行行为。', cls: 'setting-item-description' });
 
 		new Setting(chatSection)
-			.setName("Agent 系统提示词")
+			.setName("Agent 用户提示词")
 			.setDesc(agentPromptDesc)
 			.addButton((button) => {
 				button.setButtonText("编辑提示词");
 				button.setCta();
 				button.onClick(() => {
-					new AgentSystemPromptModal(this.app, this.chatSettings.agentSystemPrompt || '', async (newPrompt) => {
-						await this.updateChatSettings({ agentSystemPrompt: newPrompt });
-						new Notice("Agent 系统提示词已更新");
+					new AgentSystemPromptModal(this.app, this.chatSettings.agentUserPrompt || '', async (newPrompt) => {
+						await this.updateChatSettings({ agentUserPrompt: newPrompt });
+						new Notice("Agent 用户提示词已更新");
 					}).open();
 				});
 			});
@@ -5024,7 +5024,7 @@ class AgentSystemPromptModal extends Modal {
 	}
 
 	private getDefaultPrompt(): string {
-		return DEFAULT_AGENT_SYSTEM_PROMPT;
+		return DEFAULT_AGENT_USER_PROMPT;
 	}
 
 	onClose() {

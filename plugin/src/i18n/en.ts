@@ -551,6 +551,8 @@ export class En implements Local {
 	system_prompt_feature_tab_completion_desc = "Trigger AI continuation with a hotkey in the editor, configurable trigger key and context length, smart context building and post-processing";
 	system_prompt_feature_selection_toolbar = "Selected Text Skill";
 	system_prompt_feature_selection_toolbar_desc = "Show a skill toolbar for selected text (or whole text via trigger symbol), supports custom AI skills (skill/skill group/form skill), placeholder substitution and streaming output";
+	system_prompt_feature_agent = "Agent Mode";
+	system_prompt_feature_agent_desc = "AI autonomous execution mode, supports tool calls and multi-turn conversations, configurable max tool calls and auto approval";
 	system_prompt_error_name_required = "Name is required";
 	system_prompt_error_name_duplicate = "Name already exists";
 	system_prompt_error_content_required = "Content is required";

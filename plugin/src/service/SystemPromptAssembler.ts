@@ -24,7 +24,7 @@ export class SystemPromptAssembler {
 				if (!this.shouldIncludePrompt(prompt, featureId, content)) {
 					continue;
 				}
-				parts.push(this.wrapWithXmlTag(prompt.name, content));
+				parts.push(content);
 			}
 
 			return parts.join('\n\n');
@@ -79,17 +79,5 @@ export class SystemPromptAssembler {
 		}
 
 		return (prompt.content ?? '').trim();
-	}
-
-	private wrapWithXmlTag(name: string, content: string): string {
-		const tag = this.sanitizeTagName(name);
-		const body = (content ?? '').trim();
-		return `<${tag}>\n${body}\n</${tag}>`;
-	}
-
-	private sanitizeTagName(name: string): string {
-		const trimmed = (name ?? '').trim();
-		const cleaned = trimmed.replace(/[<>/\\]/g, '').replace(/\s+/g, '');
-		return cleaned.length > 0 ? cleaned : 'system_prompt';
 	}
 }

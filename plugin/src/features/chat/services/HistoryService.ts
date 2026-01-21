@@ -619,6 +619,19 @@ ${body}
 			// 提取内容并去除首尾空白
 			let content = body.substring(contentStart, contentEnd).trim();
 
+			// 提取 Agent 事件流数据（如果存在）
+			let agentEvents;
+			const agentEventsMatch = content.match(/<!-- FF_AGENT_EVENTS_START -->(.+?)<!-- FF_AGENT_EVENTS_END -->/s);
+			if (agentEventsMatch) {
+				try {
+					agentEvents = JSON.parse(agentEventsMatch[1]);
+					// 从内容中移除 agentEvents 标记和 JSON 数据
+					content = content.replace(/<!-- FF_AGENT_EVENTS_START -->(.+?)<!-- FF_AGENT_EVENTS_END -->\n?/s, '').trim();
+				} catch (e) {
+					console.warn('[HistoryService] 解析 agentEvents 失败:', e);
+				}
+			}
+
 			// 将历史文件中的 callout 格式转换回推理标记格式
 			content = this.messageService.parseReasoningBlocksFromHistory(content);
 
@@ -664,7 +677,17 @@ ${body}
 					originalTimestamp: currentHeader.timestampStr
 				}
 			});
-			
+
+			// 如果有 agentEvents，添加到消息中
+			if (agentEvents) {
+				message.agentEvents = agentEvents;
+				// 确保 metadata.agentMode 设置为 true（用于触发事件流渲染）
+				if (!message.metadata) {
+					message.metadata = {};
+				}
+				message.metadata.agentMode = true;
+			}
+
 			messages.push(message);
 		}
 		
@@ -684,16 +707,43 @@ ${body}
 					// 保存前一条消息
 					if (inMessage && currentMessage.trim()) {
 						let content = currentMessage.trim();
+
+						// 提取 Agent 事件流数据（如果存在）
+						let agentEvents;
+						const agentEventsMatch = content.match(/<!-- FF_AGENT_EVENTS_START -->(.+?)<!-- FF_AGENT_EVENTS_END -->/s);
+						if (agentEventsMatch) {
+							try {
+								agentEvents = JSON.parse(agentEventsMatch[1]);
+								// 从内容中移除 agentEvents 标记和 JSON 数据
+								content = content.replace(/<!-- FF_AGENT_EVENTS_START -->(.+?)<!-- FF_AGENT_EVENTS_END -->\n?/s, '').trim();
+							} catch (e) {
+								console.warn('[HistoryService] 解析 agentEvents 失败:', e);
+							}
+						}
+
 						// 将历史文件中的 callout 格式转换回推理标记格式
 						content = this.messageService.parseReasoningBlocksFromHistory(content);
 						const extracted = this.messageService.extractToolCallsFromHistory(content);
 						content = extracted.content;
 						// 清理转换后可能产生的多余空行
 						content = content.replace(/\n{3,}/g, '\n\n').trim();
-						messages.push(this.messageService.createMessage(currentRole, content, {
+
+						const message = this.messageService.createMessage(currentRole, content, {
 							timestamp: currentTimestamp,
 							toolCalls: extracted.toolCalls
-						}));
+						});
+
+						// 如果有 agentEvents，添加到消息中
+						if (agentEvents) {
+							message.agentEvents = agentEvents;
+							// 确保 metadata.agentMode 设置为 true（用于触发事件流渲染）
+							if (!message.metadata) {
+								message.metadata = {};
+							}
+							message.metadata.agentMode = true;
+						}
+
+						messages.push(message);
 					}
 					
 					// 开始新消息

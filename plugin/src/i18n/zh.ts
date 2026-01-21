@@ -563,6 +563,8 @@ export class Zh implements Local {
 	system_prompt_feature_tab_completion_desc = "编辑器中按快捷键触发 AI 续写，可配置触发键和上下文长度，智能上下文构建和后处理优化";
 	system_prompt_feature_selection_toolbar = "选中文本技能";
 	system_prompt_feature_selection_toolbar_desc = "使用光标选中部分文本或者输出触发符号选中整个文本后显示技能工具栏，支持自定义 AI 技能（普通技能/技能组/表单技能），支持占位符替换和流式输出";
+	system_prompt_feature_agent = "Agent 模式";
+	system_prompt_feature_agent_desc = "AI 自主执行模式，支持工具调用和多轮对话，可配置最大工具调用次数和自动审批";
 	system_prompt_error_name_required = "提示词名称不能为空";
 	system_prompt_error_name_duplicate = "提示词名称已存在";
 	system_prompt_error_content_required = "提示词内容不能为空";

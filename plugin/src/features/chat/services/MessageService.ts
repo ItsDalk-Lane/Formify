@@ -134,6 +134,13 @@ export class MessageService {
 			fullMessage += `\n\n${images}`;
 		}
 
+		// 如果有 Agent 事件流，序列化到文件末尾
+		if (message.agentEvents && message.agentEvents.length > 0) {
+			// 使用 JSON 格式序列化 agentEvents，放在特殊标记之间
+			const agentEventsJson = JSON.stringify(message.agentEvents);
+			fullMessage += `\n\n<!-- FF_AGENT_EVENTS_START -->${agentEventsJson}<!-- FF_AGENT_EVENTS_END -->`;
+		}
+
 		return fullMessage;
 	}
 

@@ -231,10 +231,18 @@ export class ChatService {
 	}
 
 	/**
-	 * 获取 Agent 模式专用系统提示词
+	 * 获取 Agent 模式专用用户提示词
 	 */
-	getAgentSystemPrompt(): string {
-		return this.settings.agentSystemPrompt || '';
+	getAgentUserPrompt(): string {
+		return this.settings.agentUserPrompt || '';
+	}
+
+	/**
+	 * 获取 Agent 模式的全局系统提示词
+	 */
+	async getAgentGlobalSystemPrompt(): Promise<string> {
+		const assembler = new SystemPromptAssembler(this.app);
+		return await assembler.buildGlobalSystemPrompt('agent');
 	}
 
 	getReasoningToggle(): boolean {

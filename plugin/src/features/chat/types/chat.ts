@@ -4,7 +4,7 @@ import {
 	DEFAULT_AGENT_MAX_TOOL_CALLS,
 	DEFAULT_AGENT_AUTO_APPROVE_TOOLS,
 	DEFAULT_AGENT_SHOW_THINKING,
-	DEFAULT_AGENT_SYSTEM_PROMPT
+	DEFAULT_AGENT_USER_PROMPT
 } from '../constants/agentDefaults';
 
 export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
@@ -225,7 +225,7 @@ export interface ChatSettings {
 	agentMaxToolCalls: number; // Agent 最大工具调用次数
 	agentAutoApproveTools: boolean; // Agent 模式下是否自动审批工具
 	agentShowThinking: boolean; // Agent 模式是否显示中间思考输出
-	agentSystemPrompt: string; // Agent 模式专用系统提示词
+	agentUserPrompt: string; // Agent 模式专用用户提示词（追加到全局系统提示词后）
 }
 
 export interface ChatState {
@@ -288,6 +288,6 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	agentMaxToolCalls: DEFAULT_AGENT_MAX_TOOL_CALLS,
 	agentAutoApproveTools: DEFAULT_AGENT_AUTO_APPROVE_TOOLS,
 	agentShowThinking: DEFAULT_AGENT_SHOW_THINKING,
-	agentSystemPrompt: DEFAULT_AGENT_SYSTEM_PROMPT,
+	agentUserPrompt: DEFAULT_AGENT_USER_PROMPT,
 };
 

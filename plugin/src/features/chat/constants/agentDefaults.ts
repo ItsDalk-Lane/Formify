@@ -4,9 +4,10 @@
  */
 
 /**
- * Agent 模式的默认系统提示词
+ * Agent 模式的默认用户提示词
+ * 该提示词会追加到全局系统提示词后面
  */
-export const DEFAULT_AGENT_SYSTEM_PROMPT = `【Agent 执行模式】
+export const DEFAULT_AGENT_USER_PROMPT = `【Agent 执行模式】
 你处于自主执行模式，需要持续调用工具直到任务完全完成。请遵循以下规则：
 
 1. **持续执行**：收到工具结果后，评估任务是否完成。如果未完成，立即继续调用下一个工具。

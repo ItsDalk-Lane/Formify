@@ -199,8 +199,8 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 					</div>
 				)}
 
-				{/* Agent 模式提示 */}
-				{state.isAgentMode && (
+				{/* Agent 模式提示 - 已移除 */}
+				{false && state.isAgentMode && (
 					<div className="agent-mode-hint tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-blue-100 tw-text-blue-700 tw-rounded tw-text-xs tw-mb-2">
 						<Repeat className="tw-size-3" />
 						<span>Agent 模式已启用：AI 将自主调用工具直到任务完成</span>
@@ -345,29 +345,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 									</button>
 									<button
 										type="button"
-										aria-label="Agent 模式"
-										onClick={handleAgentToggle}
-										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-px-2 tw-py-1 tw-cursor-pointer tw-rounded tw-gap-1"
-										style={{
-											backgroundColor: state.isAgentMode ? 'var(--interactive-accent)' : 'transparent',
-											color: state.isAgentMode ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)'
-										}}
-										onMouseEnter={(e) => {
-											if (!state.isAgentMode) {
-												e.currentTarget.style.color = 'var(--interactive-accent)';
-											}
-										}}
-										onMouseLeave={(e) => {
-											if (!state.isAgentMode) {
-												e.currentTarget.style.color = 'var(--text-muted)';
-											}
-										}}
-									>
-										<Repeat className="tw-size-4" />
-										<span className="tw-text-xs">Agent</span>
-									</button>
-									<button
-										type="button"
 										aria-label="联网搜索"
 										onClick={() => service.setWebSearchToggle(!state.enableWebSearchToggle)}
 										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-p-1 tw-cursor-pointer tw-rounded"
@@ -387,6 +364,28 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 										}}
 									>
 										<Search className="tw-size-4" />
+									</button>
+									<button
+										type="button"
+										aria-label="Agent 模式"
+										onClick={handleAgentToggle}
+										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-px-2 tw-py-1 tw-cursor-pointer tw-rounded"
+										style={{
+											backgroundColor: state.isAgentMode ? 'var(--interactive-accent)' : 'transparent',
+											color: state.isAgentMode ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)'
+										}}
+										onMouseEnter={(e) => {
+											if (!state.isAgentMode) {
+												e.currentTarget.style.color = 'var(--interactive-accent)';
+											}
+										}}
+										onMouseLeave={(e) => {
+											if (!state.isAgentMode) {
+												e.currentTarget.style.color = 'var(--text-muted)';
+											}
+										}}
+									>
+										<span className="tw-text-xs">Agent</span>
 									</button>
 								</div>
 							</div>
@@ -586,29 +585,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 									</button>
 									<button
 										type="button"
-										aria-label="Agent 模式"
-										onClick={handleAgentToggle}
-										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-px-2 tw-py-1 tw-cursor-pointer tw-rounded tw-gap-1"
-										style={{
-											backgroundColor: state.isAgentMode ? 'var(--interactive-accent)' : 'transparent',
-											color: state.isAgentMode ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)'
-										}}
-										onMouseEnter={(e) => {
-											if (!state.isAgentMode) {
-												e.currentTarget.style.color = 'var(--interactive-accent)';
-											}
-										}}
-										onMouseLeave={(e) => {
-											if (!state.isAgentMode) {
-												e.currentTarget.style.color = 'var(--text-muted)';
-											}
-										}}
-									>
-										<Repeat className="tw-size-4" />
-										<span className="tw-text-xs">Agent</span>
-									</button>
-									<button
-										type="button"
 										aria-label="联网搜索"
 										onClick={() => service.setWebSearchToggle(!state.enableWebSearchToggle)}
 										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-p-1 tw-cursor-pointer tw-rounded"
@@ -629,6 +605,28 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 									>
 										<Search className="tw-size-4" />
 									</button>
+									<button
+										type="button"
+										aria-label="Agent 模式"
+										onClick={handleAgentToggle}
+										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-px-2 tw-py-1 tw-cursor-pointer tw-rounded"
+										style={{
+											backgroundColor: state.isAgentMode ? 'var(--interactive-accent)' : 'transparent',
+											color: state.isAgentMode ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)'
+										}}
+										onMouseEnter={(e) => {
+											if (!state.isAgentMode) {
+												e.currentTarget.style.color = 'var(--interactive-accent)';
+											}
+										}}
+										onMouseLeave={(e) => {
+											if (!state.isAgentMode) {
+												e.currentTarget.style.color = 'var(--text-muted)';
+											}
+										}}
+									>
+										<span className="tw-text-xs">Agent</span>
+									</button>
 								</div>
 							</div>
 							<div className="tw-flex tw-items-center tw-gap-2">
@@ -641,8 +639,8 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 									<span className="tw-ml-1 tw-text-xs">Stop</span>
 								</span>
 
-								{/* Agent 执行状态提示 */}
-								{state.isAgentMode && state.isGenerating && (
+								{/* Agent 执行状态提示 - 已移除 */}
+								{false && state.isAgentMode && state.isGenerating && (
 									<div className="tw-flex tw-items-center tw-gap-1 tw-ml-2 tw-px-2 tw-py-1 tw-bg-blue-100 tw-text-blue-700 tw-rounded tw-text-xs">
 										<Repeat className="tw-size-3" />
 										<span>{activeToolLabel}</span>

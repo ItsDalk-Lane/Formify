@@ -982,8 +982,8 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 					<div></div>
 				)}
 
-				{/* Agent 模式标签 */}
-				{message.metadata?.agentMode && (
+				{/* Agent 模式标签 - 已移除 */}
+				{false && message.metadata?.agentMode && (
 					<div className="message-agent-mode tw-mb-2">
 						<div className="tw-inline-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-blue-100 tw-text-blue-700 tw-rounded tw-text-xs">
 							<Repeat className="tw-size-3" />

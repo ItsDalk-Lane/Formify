@@ -10,6 +10,7 @@ import type { ChatMessage, ChatSession } from '../types/chat';
 import type { AgentConfig, AgentEvent, AgentExecutionContext, AgentLoopCallback, AgentLoopEvent, SdkTool } from '../types/agent';
 import type { ToolCall, ToolResult, ToolExecution } from '../types/tools';
 import type { ToolExecutionManager } from './ToolExecutionManager';
+import { SystemPromptAssembler } from 'src/service/SystemPromptAssembler';
 
 type AgentSdk = typeof import('openai-agents-js');
 
@@ -192,14 +193,25 @@ export class AgentService {
     const localMessages = this.cloneMessages(params.session.messages);
     let toolCallCount = 0;
 
-    // 从 ChatService 获取 Agent 系统提示词设置
-    const agentPromptFromSettings = this.chatService?.getAgentSystemPrompt() || '';
-    // 组合系统提示词：原始系统提示词 + Agent 专用提示词
-    const agentSystemPrompt = `${params.systemPrompt || ''}
+    // 获取全局系统提示词（Agent 功能，可能为空）
+    const globalSystemPrompt = await this.chatService?.getAgentGlobalSystemPrompt() || '';
+    // 获取 Agent 用户提示词
+    const agentUserPrompt = this.chatService?.getAgentUserPrompt() || '';
+    // 系统提示词只使用全局系统提示词 + 会话系统提示词
+    const combinedSystemPrompt = [globalSystemPrompt, params.systemPrompt || '']
+      .filter(p => p.trim().length > 0)
+      .join('\n\n');
+    params.systemPrompt = combinedSystemPrompt;
 
-${agentPromptFromSettings}`.trim();
-    // 更新系统提示词
-    params.systemPrompt = agentSystemPrompt;
+    // 如果有 Agent 用户提示词，插入到消息列表中作为用户消息
+    if (agentUserPrompt.trim().length > 0) {
+      // 找到最后一条用户消息的位置，在其前面插入 Agent 用户提示词
+      const lastUserMsgIndex = localMessages.findLastIndex(m => m.role === 'user');
+      if (lastUserMsgIndex >= 0) {
+        const agentUserMessage = messageService.createMessage('user', agentUserPrompt);
+        localMessages.splice(lastUserMsgIndex, 0, agentUserMessage);
+      }
+    }
 
     this.stopRequested = false;
     params.onEvent({ type: 'start', executionId, timestamp: Date.now() });
