@@ -51,6 +51,7 @@
 		"luxon": "^3.4.4",
 		"ollama": "^0.5.16",
 		"openai": "^5.0.1",
+		"openai-agents-js": "^0.1.9",
 		"radix-ui": "^1.4.1",
 		"react": "^18.3.0",
 		"react-dom": "^18.3.0",

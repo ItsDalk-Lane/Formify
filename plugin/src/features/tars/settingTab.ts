@@ -1,4 +1,4 @@
-import { App, DropdownComponent, Notice, requestUrl, Setting, TextComponent } from 'obsidian'
+import { App, DropdownComponent, Modal, Notice, requestUrl, Setting, TextComponent } from 'obsidian'
 import { t } from './lang/helper'
 import { SelectModelModal, SelectVendorModal, ProviderSettingModal } from './modal'
 import { BaseOptions, Message, Optional, ProviderSettings, ResolveEmbedAsBinary, Vendor } from './providers'
@@ -6,6 +6,7 @@ import { ClaudeOptions, claudeVendor } from './providers/claude'
 import { DebugLogger } from '../../utils/DebugLogger'
 import { SkillDataService } from '../chat/selection-toolbar/SkillDataService'
 import { getFormSkillService, type FormInfo } from '../chat/selection-toolbar/FormSkillService'
+import { DEFAULT_AGENT_SYSTEM_PROMPT } from '../chat/constants/agentDefaults'
 import {
 	DoubaoOptions,
 	doubaoVendor,
@@ -420,6 +421,59 @@ export class TarsSettingTab {
 							await this.updateChatSettings({ chatModalHeight: num });
 						}
 					});
+			});
+
+		new Setting(chatSection)
+			.setName("Agent 最大工具调用次数")
+			.setDesc("限制 Agent 循环中最多可调用工具的次数，防止无限循环")
+			.addText((text) => {
+				text
+					.setValue(String(this.chatSettings.agentMaxToolCalls ?? 20))
+					.onChange(async (value) => {
+						const num = parseInt(value);
+						if (!isNaN(num) && num > 0) {
+							await this.updateChatSettings({ agentMaxToolCalls: num });
+						}
+					});
+			});
+
+		new Setting(chatSection)
+			.setName("Agent 自动审批工具")
+			.setDesc("开启后，Agent 模式将自动执行所有工具调用（危险选项）")
+			.addToggle((toggle) => {
+				toggle.setValue(this.chatSettings.agentAutoApproveTools ?? false);
+				toggle.onChange(async (value) => {
+					await this.updateChatSettings({ agentAutoApproveTools: value });
+				});
+			});
+
+		new Setting(chatSection)
+			.setName("Agent 显示中间思考")
+			.setDesc("是否在 Agent 模式下显示流式思考过程")
+			.addToggle((toggle) => {
+				toggle.setValue(this.chatSettings.agentShowThinking ?? true);
+				toggle.onChange(async (value) => {
+					await this.updateChatSettings({ agentShowThinking: value });
+				});
+			});
+
+		// Agent 系统提示词设置
+		const agentPromptDesc = new DocumentFragment();
+		agentPromptDesc.createEl('div', { text: 'Agent 模式的专用系统提示词，用于控制 AI 的自主执行行为。' });
+		agentPromptDesc.createEl('div', { text: '该提示词会与全局系统提示词组合使用。', cls: 'setting-item-description' });
+
+		new Setting(chatSection)
+			.setName("Agent 系统提示词")
+			.setDesc(agentPromptDesc)
+			.addButton((button) => {
+				button.setButtonText("编辑提示词");
+				button.setCta();
+				button.onClick(() => {
+					new AgentSystemPromptModal(this.app, this.chatSettings.agentSystemPrompt || '', async (newPrompt) => {
+						await this.updateChatSettings({ agentSystemPrompt: newPrompt });
+						new Notice("Agent 系统提示词已更新");
+					}).open();
+				});
 			});
 
 		// 快捷技能设置区域
@@ -4869,3 +4923,112 @@ const MODEL_FETCH_CONFIGS = {
 		requiresApiKey: true
 	}
 } as const
+
+/**
+ * Agent 系统提示词编辑模态框
+ */
+class AgentSystemPromptModal extends Modal {
+	private textareaEl: HTMLTextAreaElement;
+	private onSave: (prompt: string) => Promise<void>;
+
+	constructor(app: App, private currentPrompt: string, onSave: (prompt: string) => Promise<void>) {
+		super(app);
+		this.onSave = onSave;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.addClass('agent-system-prompt-modal');
+
+		contentEl.createEl('h2', { text: 'Agent 系统提示词' });
+
+		const desc = contentEl.createEl('p', { cls: 'setting-item-description' });
+		desc.textContent = '此提示词将用于 Agent 模式，控制 AI 的自主执行行为。它会在全局系统提示词之后追加。';
+
+		// 创建文本区域
+		const textareaContainer = contentEl.createDiv({ cls: 'agent-prompt-textarea-container' });
+		textareaContainer.style.cssText = `
+			margin: 16px 0;
+		`;
+
+		this.textareaEl = textareaContainer.createEl('textarea', {
+			cls: 'agent-prompt-textarea',
+			attr: { rows: '15' }
+		});
+		this.textareaEl.style.cssText = `
+			width: 100%;
+			min-width: 500px;
+			min-height: 300px;
+			padding: 12px;
+			font-family: var(--font-monospace);
+			font-size: var(--font-ui-small);
+			line-height: 1.6;
+			border: 1px solid var(--background-modifier-border);
+			border-radius: 4px;
+			background: var(--background-primary);
+			color: var(--text-normal);
+			resize: vertical;
+		`;
+		this.textareaEl.value = this.currentPrompt;
+
+		// 按钮容器
+		const buttonContainer = contentEl.createDiv({ cls: 'modal-button-container' });
+		buttonContainer.style.cssText = `
+			display: flex;
+			justify-content: flex-end;
+			gap: 12px;
+			margin-top: 20px;
+		`;
+
+		// 取消按钮
+		const cancelBtn = buttonContainer.createEl('button', { text: '取消' });
+		cancelBtn.style.cssText = `
+			padding: 8px 16px;
+			border: 1px solid var(--background-modifier-border);
+			border-radius: 4px;
+			background: var(--background-secondary);
+			color: var(--text-normal);
+			cursor: pointer;
+		`;
+		cancelBtn.onclick = () => this.close();
+
+		// 重置按钮
+		const resetBtn = buttonContainer.createEl('button', { text: '重置为默认' });
+		resetBtn.style.cssText = `
+			padding: 8px 16px;
+			border: 1px solid var(--background-modifier-border);
+			border-radius: 4px;
+			background: var(--background-secondary);
+			color: var(--text-normal);
+			cursor: pointer;
+		`;
+		resetBtn.onclick = () => {
+			this.textareaEl.value = this.getDefaultPrompt();
+		};
+
+		// 保存按钮
+		const saveBtn = buttonContainer.createEl('button', { text: '保存', cls: 'mod-cta' });
+		saveBtn.style.cssText = `
+			padding: 8px 16px;
+			border: none;
+			border-radius: 4px;
+			background: var(--interactive-accent);
+			color: var(--text-on-accent);
+			cursor: pointer;
+		`;
+		saveBtn.onclick = async () => {
+			await this.onSave(this.textareaEl.value);
+			this.close();
+		};
+	}
+
+	private getDefaultPrompt(): string {
+		return DEFAULT_AGENT_SYSTEM_PROMPT;
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
+	}
+}

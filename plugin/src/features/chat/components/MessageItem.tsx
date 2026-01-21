@@ -712,6 +712,16 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 					<div></div>
 				)}
 
+				{/* Agent 模式标签 */}
+				{message.metadata?.agentMode && (
+					<div className="message-agent-mode tw-mb-2">
+						<div className="tw-inline-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-blue-100 tw-text-blue-700 tw-rounded tw-text-xs">
+							<Repeat className="tw-size-3" />
+							<span>Agent 模式</span>
+						</div>
+					</div>
+				)}
+
 				{/* 显示选中文本标签 */}
 				{message.metadata?.selectedText && typeof message.metadata.selectedText === 'string' && (
 					<div className="message-selected-text tw-mb-2">

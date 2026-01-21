@@ -7,6 +7,7 @@ import { ContextMenuService } from './command/ContextMenuService';
 import { FormIntegrationService } from './command/FormIntegrationService';
 import { InternalLinkParserService } from './InternalLinkParserService';
 import { AutoTriggerService } from './startup-condition/AutoTriggerService';
+import { AgentService } from 'src/features/chat/services/AgentService';
 
 /**
  * 全局服务容器实例
@@ -38,6 +39,7 @@ export class ServiceContainer {
     readonly contextMenuService: ContextMenuService;
     readonly formIntegrationService: FormIntegrationService;
     readonly autoTriggerService: AutoTriggerService;
+    readonly agentService: AgentService;
 
     // 可选服务（需要 App 实例初始化）
     private _internalLinkParserService: InternalLinkParserService | null = null;
@@ -54,6 +56,7 @@ export class ServiceContainer {
         this.contextMenuService = new ContextMenuService();
         this.formIntegrationService = new FormIntegrationService();
         this.autoTriggerService = new AutoTriggerService();
+        this.agentService = new AgentService();
 
         // 设置服务间的回调关系
         this.formIntegrationService.setMenuRefreshCallback(() => {
@@ -105,6 +108,7 @@ export class ServiceContainer {
         this.formScriptService.unload();
         this.formIntegrationService.cleanup();
         this.contextMenuService.cleanup();
+        this.agentService.stopExecution();
         
         // 清理内链解析服务缓存
         if (this._internalLinkParserService) {

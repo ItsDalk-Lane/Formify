@@ -17,6 +17,8 @@ import { TOOL_CALLS_END_MARKER, TOOL_CALLS_START_MARKER } from 'src/features/tar
 import type { ToolCall, ToolDefinition, ToolExecution } from '../types/tools';
 import { ToolRegistryService } from './ToolRegistryService';
 import { ToolExecutionManager } from './ToolExecutionManager';
+import { getServiceContainer } from 'src/service/ServiceContainer';
+import type { AgentLoopCallback } from '../types/agent';
 import {
 	createDeleteFileTool,
 	createExecuteScriptTool,
@@ -43,6 +45,8 @@ export class ChatService {
 	private state: ChatState = {
 		activeSession: null,
 		isGenerating: false,
+		isAgentMode: false,
+		agentExecutionId: null,
 		inputValue: '',
 		selectedModelId: null,
 		enableReasoningToggle: false,
@@ -199,6 +203,40 @@ export class ChatService {
 		this.emitState();
 	}
 
+	/**
+	 * 设置 Agent 模式开关
+	 * @param enabled 是否启用 Agent 模式
+	 */
+	setAgentMode(enabled: boolean) {
+		if (enabled) {
+			this.state.isAgentMode = true;
+			this.state.agentExecutionId = `agent-${uuidv4()}`;
+			this.emitState();
+			return;
+		}
+
+		if (this.state.isAgentMode) {
+			this.stopGeneration();
+		}
+		this.state.isAgentMode = false;
+		this.state.agentExecutionId = null;
+		this.emitState();
+	}
+
+	/**
+	 * 获取当前是否为 Agent 模式
+	 */
+	isAgentMode(): boolean {
+		return this.state.isAgentMode;
+	}
+
+	/**
+	 * 获取 Agent 模式专用系统提示词
+	 */
+	getAgentSystemPrompt(): string {
+		return this.settings.agentSystemPrompt || '';
+	}
+
 	getReasoningToggle(): boolean {
 		return this.state.enableReasoningToggle;
 	}
@@ -264,6 +302,27 @@ export class ChatService {
 			};
 			this.toolRegistry.upsertUserTool(toolWithMode);
 		}
+	}
+
+	/**
+	 * 获取消息服务实例
+	 */
+	getMessageService(): MessageService {
+		return this.messageService;
+	}
+
+	/**
+	 * 获取工具注册服务实例
+	 */
+	getToolRegistry(): ToolRegistryService {
+		return this.toolRegistry;
+	}
+
+	/**
+	 * 获取工具执行管理器实例
+	 */
+	getToolExecutionManager(): ToolExecutionManager {
+		return this.toolExecutionManager;
 	}
 
 	getTools(): ToolDefinition[] {
@@ -333,12 +392,28 @@ export class ChatService {
 	}
 
 	async approveToolExecution(id: string) {
+		if (this.state.isAgentMode) {
+			try {
+				getServiceContainer().agentService.approveToolExecution(id);
+			} catch (error) {
+				console.error('[ChatService] Agent 审批工具失败:', error);
+			}
+			return;
+		}
 		const exec = await this.toolExecutionManager.approve(id);
 		this.applyExecutionResultToMessage(exec);
 		this.emitState();
 	}
 
 	rejectToolExecution(id: string) {
+		if (this.state.isAgentMode) {
+			try {
+				getServiceContainer().agentService.rejectToolExecution(id, '用户已拒绝');
+			} catch (error) {
+				console.error('[ChatService] Agent 拒绝工具失败:', error);
+			}
+			return;
+		}
 		const exec = this.toolExecutionManager.reject(id);
 		this.applyExecutionResultToMessage(exec);
 		this.emitState();
@@ -823,6 +898,13 @@ export class ChatService {
 	}
 
 	stopGeneration() {
+		if (this.state.isAgentMode) {
+			try {
+				getServiceContainer().agentService.stopExecution();
+			} catch {
+				// ignore
+			}
+		}
 		if (this.controller) {
 			this.controller.abort();
 			this.controller = null;
@@ -1176,6 +1258,113 @@ export class ChatService {
 					(providerOptions as any).parameters = nextParams;
 				}
 			}
+
+			if (this.state.isAgentMode) {
+				const agentService = getServiceContainer().agentService;
+				const executionId = this.state.agentExecutionId ?? `agent-${uuidv4()}`;
+				this.state.agentExecutionId = executionId;
+				const sessionMessages = session.messages;
+				let assistantMessage: ChatMessage | null = null;
+
+				const updateToolCallResult = (toolCallId: string, result?: string, error?: string) => {
+					if (!assistantMessage?.toolCalls?.length) return;
+					const call = assistantMessage.toolCalls.find((item) => item.id === toolCallId);
+					if (!call) return;
+					if (error) {
+						call.status = 'failed';
+						call.result = error;
+						return;
+					}
+					call.status = 'completed';
+					call.result = result;
+				};
+
+				const onEvent: AgentLoopCallback = (event) => {
+					switch (event.type) {
+						case 'start':
+							this.state.isGenerating = true;
+							this.state.error = undefined;
+							this.emitState();
+							break;
+						case 'message_delta':
+							if (!assistantMessage) {
+								assistantMessage = this.messageService.createMessage('assistant', '', {
+									metadata: { agentMode: true }
+								});
+								sessionMessages.push(assistantMessage);
+							}
+							assistantMessage.content += event.content;
+							session.updatedAt = Date.now();
+							this.emitState();
+							break;
+						case 'tool_call':
+							if (!assistantMessage) {
+								assistantMessage = this.messageService.createMessage('assistant', '', {
+									metadata: { agentMode: true }
+								});
+								sessionMessages.push(assistantMessage);
+							}
+							assistantMessage.toolCalls = [...(assistantMessage.toolCalls ?? []), event.toolCall];
+							session.updatedAt = Date.now();
+							this.emitState();
+							break;
+						case 'tool_result':
+							updateToolCallResult(event.toolCallId, event.result ? String(event.result) : undefined, event.error);
+							session.updatedAt = Date.now();
+							this.emitState();
+							break;
+						case 'complete':
+							if (!assistantMessage) {
+								assistantMessage = this.messageService.createMessage('assistant', event.message, {
+									metadata: { agentMode: true }
+								});
+								sessionMessages.push(assistantMessage);
+							}
+							if (!assistantMessage.content) {
+								assistantMessage.content = event.message;
+							}
+							this.state.isGenerating = false;
+							session.updatedAt = Date.now();
+							this.emitState();
+							if (this.state.shouldSaveHistory && session.filePath) {
+								this.historyService.appendMessageToFile(session.filePath, assistantMessage).catch((error) => {
+									console.error('[ChatService] 追加AI回复失败:', error);
+								});
+							}
+							break;
+						case 'error':
+							this.state.isGenerating = false;
+							this.state.error = event.message;
+							this.state.isAgentMode = false;
+							this.state.agentExecutionId = null;
+							if (assistantMessage) {
+								assistantMessage.isError = true;
+								if (!assistantMessage.content) {
+									assistantMessage.content = event.message;
+								}
+							}
+							this.emitState();
+							new Notice(event.message, 10000);
+							break;
+					}
+				};
+
+				await agentService.executeAgentLoop({
+					userMessage: session.messages[session.messages.length - 1]?.content ?? '',
+					session,
+					systemPrompt: session.systemPrompt,
+					provider,
+					vendor,
+					providerOptions,
+					onEvent,
+					executionId,
+					maxToolCalls: this.settings.agentMaxToolCalls ?? 20,
+					autoApproveTools: this.settings.agentAutoApproveTools ?? false,
+					showThinking: this.settings.agentShowThinking ?? true
+				});
+				return;
+			}
+
 			const sendRequest = vendor.sendRequestFunc(providerOptions);
 			const messages = await this.buildProviderMessages(session);
 			DebugLogger.logLlmMessages('ChatService.generateAssistantResponse', messages, { level: 'debug' });
@@ -1464,7 +1653,21 @@ export class ChatService {
 		return providers.find((provider) => provider.tag === this.state.selectedModelId) ?? providers[0];
 	}
 
-	private async buildProviderMessages(session: ChatSession): Promise<ProviderMessage[]> {
+	/**
+	 * 构建发送给 Provider 的消息列表
+	 * @param session 当前会话
+	 */
+	async buildProviderMessages(session: ChatSession): Promise<ProviderMessage[]> {
+		return this.buildProviderMessagesForAgent(session.messages, session, session.systemPrompt);
+	}
+
+	/**
+	 * 构建 Agent 循环所需的 Provider 消息列表
+	 * @param messages 待发送的消息列表
+	 * @param session 当前会话
+	 * @param systemPrompt 系统提示词
+	 */
+	async buildProviderMessagesForAgent(messages: ChatMessage[], session: ChatSession, systemPrompt?: string): Promise<ProviderMessage[]> {
 		const contextNotes = [...(session.contextNotes ?? []), ...this.state.contextNotes];
 		const selectedFiles = session.selectedFiles ?? [];
 		const selectedFolders = session.selectedFolders ?? [];
@@ -1484,16 +1687,16 @@ export class ChatService {
 		};
 		
 		// 使用会话中存储的系统提示词，而不是重新计算
-		let systemPrompt: string | undefined = session.systemPrompt;
+		let effectiveSystemPrompt: string | undefined = systemPrompt ?? session.systemPrompt;
 		const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
 
 		// 从 Tars 全局设置读取内链解析配置
 		const tarsSettings = this.plugin.settings.tars.settings;
 		const internalLinkParsing = tarsSettings.internalLinkParsing;
 
-		return await this.messageService.toProviderMessages(session.messages, {
+		return await this.messageService.toProviderMessages(messages, {
 			contextNotes,
-			systemPrompt,
+			systemPrompt: effectiveSystemPrompt,
 			selectedFiles,
 			selectedFolders,
 			fileContentOptions,

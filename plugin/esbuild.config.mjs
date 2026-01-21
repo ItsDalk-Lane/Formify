@@ -58,6 +58,11 @@ const cssOutputPlugin = () => ({
 	},
 });
 
+const builtinExternals = [
+	...builtins,
+	...builtins.map((name) => `node:${name}`)
+];
+
 const context = await esbuild.context({
 	banner: {
 		js: banner,
@@ -80,7 +85,7 @@ const context = await esbuild.context({
 		"@lezer/common",
 		"@lezer/highlight",
 		"@lezer/lr",
-		...builtins,
+		...builtinExternals,
 	],
 	format: "cjs",
 	target: "es2018",
