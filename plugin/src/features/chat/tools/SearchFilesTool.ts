@@ -39,7 +39,14 @@ export const createSearchFilesTool = (app: App): ToolDefinition => {
 	return {
 		id: 'search_files',
 		name: 'search_files',
-		description: '根据文件名或路径模式搜索文件（不读取内容）。',
+		description: `按文件名或路径模式搜索文件（不读取内容）。当用户想要「查找文件」「搜索笔记名」「找到叫 xxx 的文件」时使用此工具。
+
+适用场景：用户知道大概的文件名，但不确定完整路径。
+
+⛔ 负面约束（重要）：
+- 当用户已经明确告诉你具体的文件名（如 "读取 001.md"），严禁先调用此工具搜索路径！应直接调用 read_file，传入文件名即可。
+- 当需要搜索「文件内容包含某关键词」时，不要使用此工具，应使用 search_content。
+- 此工具只匹配文件名/路径，不搜索文件内部的文字。`,
 		enabled: true,
 		executionMode: 'auto',
 		category: 'file',

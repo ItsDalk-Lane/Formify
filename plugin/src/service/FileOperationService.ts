@@ -8,6 +8,7 @@ import { Strings } from "src/utils/Strings";
 import { openFilePathDirectly } from "src/utils/openFilePathDirectly";
 import { OpenPageInType } from "src/model/enums/OpenPageInType";
 import { localInstance } from "src/i18n/locals";
+import { PathResolverService } from "./PathResolverService";
 
 export type FileConflictStrategy =
     | "error"
@@ -181,7 +182,22 @@ export class FileOperationService {
 
         const folderMode = options.folderMode ?? "recursive";
         for (const targetPath of uniquePaths) {
-            const existing = this.app.vault.getAbstractFileByPath(targetPath);
+            // 使用模糊路由解析路径
+            const resolver = new PathResolverService(this.app);
+            const resolveResult = await resolver.resolvePath(targetPath, {
+                allowFuzzyMatch: true
+            });
+
+            if (!resolveResult.success || (!resolveResult.file && !resolveResult.folder)) {
+                result.success = false;
+                result.errors.push({
+                    path: targetPath,
+                    error: resolveResult.error || "文件或文件夹不存在"
+                });
+                continue;
+            }
+
+            const existing = resolveResult.file || resolveResult.folder;
             if (!existing) {
                 result.success = false;
                 result.errors.push({ path: targetPath, error: "文件或文件夹不存在" });
@@ -254,15 +270,23 @@ export class FileOperationService {
                 };
             }
 
-            const file = this.app.vault.getAbstractFileByPath(filePath);
-            if (!(file instanceof TFile)) {
+            // 使用模糊路由解析路径
+            const resolver = new PathResolverService(this.app);
+            const resolveResult = await resolver.resolvePath(filePath, {
+                allowFuzzyMatch: true,
+                requireFile: true
+            });
+
+            if (!resolveResult.success || !resolveResult.file) {
                 return {
                     success: false,
                     path: filePath,
                     mode: String(options.mode ?? "tab"),
-                    error: `文件未找到: ${filePath}`,
+                    error: resolveResult.error || `文件未找到: ${filePath}`,
                 };
             }
+
+            const file = resolveResult.file;
 
             const mode = this.normalizeOpenMode(options.mode);
             if (mode === "none") {

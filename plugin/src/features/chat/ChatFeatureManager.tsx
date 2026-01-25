@@ -83,8 +83,6 @@ export class ChatFeatureManager {
 
 	async initialize(initialSettings?: Partial<ChatSettings>) {
 		this.service.initialize(initialSettings);
-		// 初始化 Agent 服务
-		await this.plugin.services.agentService.initialize(this.plugin.services, this.service);
 		this.registerViews();
 		this.registerCommands();
 		this.createRibbon();

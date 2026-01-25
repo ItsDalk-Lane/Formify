@@ -7,7 +7,7 @@ import { isImageGenerationModel } from 'src/features/tars/providers/openRouter';
 import { MessageService } from './MessageService';
 import { HistoryService, ChatHistoryEntry } from './HistoryService';
 import { FileContentService } from './FileContentService';
-import type { ChatMessage, ChatSession, ChatSettings, ChatState, SelectedFile, SelectedFolder, AgentMessageEvent, AgentTextEvent, AgentToolCallEvent } from '../types/chat';
+import type { ChatMessage, ChatSession, ChatSettings, ChatState, SelectedFile, SelectedFolder } from '../types/chat';
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
 import { v4 as uuidv4 } from 'uuid';
 import { InternalLinkParserService } from '../../../service/InternalLinkParserService';
@@ -17,8 +17,6 @@ import { TOOL_CALLS_END_MARKER, TOOL_CALLS_START_MARKER } from 'src/features/tar
 import type { ToolCall, ToolDefinition, ToolExecution } from '../types/tools';
 import { ToolRegistryService } from './ToolRegistryService';
 import { ToolExecutionManager } from './ToolExecutionManager';
-import { getServiceContainer } from 'src/service/ServiceContainer';
-import type { AgentLoopCallback } from '../types/agent';
 import {
 	createDeleteFileTool,
 	createExecuteScriptTool,
@@ -45,8 +43,6 @@ export class ChatService {
 	private state: ChatState = {
 		activeSession: null,
 		isGenerating: false,
-		isAgentMode: false,
-		agentExecutionId: null,
 		inputValue: '',
 		selectedModelId: null,
 		enableReasoningToggle: false,
@@ -201,48 +197,6 @@ export class ChatService {
 	setWebSearchToggle(enabled: boolean) {
 		this.state.enableWebSearchToggle = enabled;
 		this.emitState();
-	}
-
-	/**
-	 * 设置 Agent 模式开关
-	 * @param enabled 是否启用 Agent 模式
-	 */
-	setAgentMode(enabled: boolean) {
-		if (enabled) {
-			this.state.isAgentMode = true;
-			this.state.agentExecutionId = `agent-${uuidv4()}`;
-			this.emitState();
-			return;
-		}
-
-		if (this.state.isAgentMode) {
-			this.stopGeneration();
-		}
-		this.state.isAgentMode = false;
-		this.state.agentExecutionId = null;
-		this.emitState();
-	}
-
-	/**
-	 * 获取当前是否为 Agent 模式
-	 */
-	isAgentMode(): boolean {
-		return this.state.isAgentMode;
-	}
-
-	/**
-	 * 获取 Agent 模式专用用户提示词
-	 */
-	getAgentUserPrompt(): string {
-		return this.settings.agentUserPrompt || '';
-	}
-
-	/**
-	 * 获取 Agent 模式的全局系统提示词
-	 */
-	async getAgentGlobalSystemPrompt(): Promise<string> {
-		const assembler = new SystemPromptAssembler(this.app);
-		return await assembler.buildGlobalSystemPrompt('agent');
 	}
 
 	getReasoningToggle(): boolean {
@@ -400,28 +354,12 @@ export class ChatService {
 	}
 
 	async approveToolExecution(id: string) {
-		if (this.state.isAgentMode) {
-			try {
-				getServiceContainer().agentService.approveToolExecution(id);
-			} catch (error) {
-				console.error('[ChatService] Agent 审批工具失败:', error);
-			}
-			return;
-		}
 		const exec = await this.toolExecutionManager.approve(id);
 		this.applyExecutionResultToMessage(exec);
 		this.emitState();
 	}
 
 	rejectToolExecution(id: string) {
-		if (this.state.isAgentMode) {
-			try {
-				getServiceContainer().agentService.rejectToolExecution(id, '用户已拒绝');
-			} catch (error) {
-				console.error('[ChatService] Agent 拒绝工具失败:', error);
-			}
-			return;
-		}
 		const exec = this.toolExecutionManager.reject(id);
 		this.applyExecutionResultToMessage(exec);
 		this.emitState();
@@ -906,13 +844,6 @@ export class ChatService {
 	}
 
 	stopGeneration() {
-		if (this.state.isAgentMode) {
-			try {
-				getServiceContainer().agentService.stopExecution();
-			} catch {
-				// ignore
-			}
-		}
 		if (this.controller) {
 			this.controller.abort();
 			this.controller = null;
@@ -1265,187 +1196,6 @@ export class ChatService {
 
 					(providerOptions as any).parameters = nextParams;
 				}
-			}
-
-			if (this.state.isAgentMode) {
-				const agentService = getServiceContainer().agentService;
-				const executionId = this.state.agentExecutionId ?? `agent-${uuidv4()}`;
-				this.state.agentExecutionId = executionId;
-				const sessionMessages = session.messages;
-				let assistantMessage: ChatMessage | null = null;
-
-				const updateToolCallResult = (toolCallId: string, result?: string, error?: string) => {
-					if (!assistantMessage?.toolCalls?.length) return;
-					const call = assistantMessage.toolCalls.find((item) => item.id === toolCallId);
-					if (!call) return;
-					if (error) {
-						call.status = 'failed';
-						call.result = error;
-						return;
-					}
-					call.status = 'completed';
-					call.result = result;
-				};
-
-				// 用于追踪当前文本事件的状态
-				let currentTextEvent: AgentTextEvent | null = null;
-
-				const onEvent: AgentLoopCallback = (event) => {
-					switch (event.type) {
-						case 'start':
-							this.state.isGenerating = true;
-							this.state.error = undefined;
-							this.emitState();
-							break;
-						case 'message_delta': {
-							if (!assistantMessage) {
-								assistantMessage = this.messageService.createMessage('assistant', '', {
-									metadata: { agentMode: true }
-								});
-								assistantMessage.agentEvents = [];
-								sessionMessages.push(assistantMessage);
-							}
-							// 初始化 agentEvents 数组（兼容性处理）
-							if (!assistantMessage.agentEvents) {
-								assistantMessage.agentEvents = [];
-							}
-							// 保持原有的 content 累积（向下兼容）
-							assistantMessage.content += event.content;
-							
-							// 创建或更新当前文本事件
-							const now = Date.now();
-							if (!currentTextEvent) {
-								// 创建新的文本事件
-								currentTextEvent = {
-									type: 'text',
-									content: event.content,
-									timestamp: now
-								};
-								assistantMessage.agentEvents.push(currentTextEvent);
-							} else {
-								// 追加内容到当前文本事件
-								currentTextEvent.content += event.content;
-							}
-							
-							session.updatedAt = now;
-							this.emitState();
-							break;
-						}
-						case 'tool_call': {
-							if (!assistantMessage) {
-								assistantMessage = this.messageService.createMessage('assistant', '', {
-									metadata: { agentMode: true }
-								});
-								assistantMessage.agentEvents = [];
-								sessionMessages.push(assistantMessage);
-							}
-							// 初始化 agentEvents 数组（兼容性处理）
-							if (!assistantMessage.agentEvents) {
-								assistantMessage.agentEvents = [];
-							}
-							
-							// 结束当前文本事件（如果存在），以便下一个文本块成为新事件
-							currentTextEvent = null;
-							
-							// 保持原有的 toolCalls 累积（向下兼容）
-							assistantMessage.toolCalls = [...(assistantMessage.toolCalls ?? []), event.toolCall];
-							
-							// 创建新的工具调用事件
-							const toolCallEvent: AgentToolCallEvent = {
-								type: 'tool_call',
-								toolCall: event.toolCall,
-								timestamp: Date.now()
-							};
-							assistantMessage.agentEvents.push(toolCallEvent);
-							
-							session.updatedAt = Date.now();
-							this.emitState();
-							break;
-						}
-						case 'tool_result': {
-							// 保持原有的更新逻辑（向下兼容）
-							updateToolCallResult(event.toolCallId, event.result ? String(event.result) : undefined, event.error);
-							
-							// 更新 agentEvents 中对应的工具调用事件
-							if (assistantMessage?.agentEvents) {
-								const toolCallEvent = assistantMessage.agentEvents.find(
-									(e): e is AgentToolCallEvent => 
-										e.type === 'tool_call' && e.toolCall.id === event.toolCallId
-								);
-								if (toolCallEvent) {
-									if (event.result !== undefined) {
-										toolCallEvent.result = String(event.result);
-									}
-									if (event.error) {
-										toolCallEvent.error = event.error;
-									}
-								}
-							}
-							
-							session.updatedAt = Date.now();
-							this.emitState();
-							break;
-						}
-						case 'complete': {
-							if (!assistantMessage) {
-								assistantMessage = this.messageService.createMessage('assistant', event.message, {
-									metadata: { agentMode: true }
-								});
-								assistantMessage.agentEvents = [];
-								sessionMessages.push(assistantMessage);
-							}
-							// 初始化 agentEvents 数组（兼容性处理）
-							if (!assistantMessage.agentEvents) {
-								assistantMessage.agentEvents = [];
-							}
-							
-							// 结束当前文本事件
-							currentTextEvent = null;
-							
-							if (!assistantMessage.content) {
-								assistantMessage.content = event.message;
-							}
-							this.state.isGenerating = false;
-							session.updatedAt = Date.now();
-							this.emitState();
-							if (this.state.shouldSaveHistory && session.filePath) {
-								this.historyService.appendMessageToFile(session.filePath, assistantMessage).catch((error) => {
-									console.error('[ChatService] 追加AI回复失败:', error);
-								});
-							}
-							break;
-						}
-						case 'error':
-							this.state.isGenerating = false;
-							this.state.error = event.message;
-							this.state.isAgentMode = false;
-							this.state.agentExecutionId = null;
-							if (assistantMessage) {
-								assistantMessage.isError = true;
-								if (!assistantMessage.content) {
-									assistantMessage.content = event.message;
-								}
-							}
-							this.emitState();
-							new Notice(event.message, 10000);
-							break;
-					}
-				};
-
-				await agentService.executeAgentLoop({
-					userMessage: session.messages[session.messages.length - 1]?.content ?? '',
-					session,
-					systemPrompt: session.systemPrompt,
-					provider,
-					vendor,
-					providerOptions,
-					onEvent,
-					executionId,
-					maxToolCalls: this.settings.agentMaxToolCalls ?? 20,
-					autoApproveTools: this.settings.agentAutoApproveTools ?? false,
-					showThinking: this.settings.agentShowThinking ?? true
-				});
-				return;
 			}
 
 			const sendRequest = vendor.sendRequestFunc(providerOptions);

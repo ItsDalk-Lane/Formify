@@ -619,18 +619,8 @@ ${body}
 			// 提取内容并去除首尾空白
 			let content = body.substring(contentStart, contentEnd).trim();
 
-			// 提取 Agent 事件流数据（如果存在）
-			let agentEvents;
-			const agentEventsMatch = content.match(/<!-- FF_AGENT_EVENTS_START -->(.+?)<!-- FF_AGENT_EVENTS_END -->/s);
-			if (agentEventsMatch) {
-				try {
-					agentEvents = JSON.parse(agentEventsMatch[1]);
-					// 从内容中移除 agentEvents 标记和 JSON 数据
-					content = content.replace(/<!-- FF_AGENT_EVENTS_START -->(.+?)<!-- FF_AGENT_EVENTS_END -->\n?/s, '').trim();
-				} catch (e) {
-					console.warn('[HistoryService] 解析 agentEvents 失败:', e);
-				}
-			}
+			// 移除历史文件中的 Agent 事件流标记（避免展示原始数据）
+			content = content.replace(/<!-- FF_AGENT_EVENTS_START -->[\s\S]*?<!-- FF_AGENT_EVENTS_END -->\n?/g, '').trim();
 
 			// 将历史文件中的 callout 格式转换回推理标记格式
 			content = this.messageService.parseReasoningBlocksFromHistory(content);
@@ -678,16 +668,6 @@ ${body}
 				}
 			});
 
-			// 如果有 agentEvents，添加到消息中
-			if (agentEvents) {
-				message.agentEvents = agentEvents;
-				// 确保 metadata.agentMode 设置为 true（用于触发事件流渲染）
-				if (!message.metadata) {
-					message.metadata = {};
-				}
-				message.metadata.agentMode = true;
-			}
-
 			messages.push(message);
 		}
 		
@@ -708,18 +688,8 @@ ${body}
 					if (inMessage && currentMessage.trim()) {
 						let content = currentMessage.trim();
 
-						// 提取 Agent 事件流数据（如果存在）
-						let agentEvents;
-						const agentEventsMatch = content.match(/<!-- FF_AGENT_EVENTS_START -->(.+?)<!-- FF_AGENT_EVENTS_END -->/s);
-						if (agentEventsMatch) {
-							try {
-								agentEvents = JSON.parse(agentEventsMatch[1]);
-								// 从内容中移除 agentEvents 标记和 JSON 数据
-								content = content.replace(/<!-- FF_AGENT_EVENTS_START -->(.+?)<!-- FF_AGENT_EVENTS_END -->\n?/s, '').trim();
-							} catch (e) {
-								console.warn('[HistoryService] 解析 agentEvents 失败:', e);
-							}
-						}
+						// 移除历史文件中的 Agent 事件流标记
+						content = content.replace(/<!-- FF_AGENT_EVENTS_START -->[\s\S]*?<!-- FF_AGENT_EVENTS_END -->\n?/g, '').trim();
 
 						// 将历史文件中的 callout 格式转换回推理标记格式
 						content = this.messageService.parseReasoningBlocksFromHistory(content);
@@ -732,16 +702,6 @@ ${body}
 							timestamp: currentTimestamp,
 							toolCalls: extracted.toolCalls
 						});
-
-						// 如果有 agentEvents，添加到消息中
-						if (agentEvents) {
-							message.agentEvents = agentEvents;
-							// 确保 metadata.agentMode 设置为 true（用于触发事件流渲染）
-							if (!message.metadata) {
-								message.metadata = {};
-							}
-							message.metadata.agentMode = true;
-						}
 
 						messages.push(message);
 					}

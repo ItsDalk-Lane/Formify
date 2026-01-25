@@ -3,10 +3,15 @@ import type { App } from 'obsidian';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { ToolDefinition } from '../types/tools';
+import { PathResolverService } from '../../../service/PathResolverService';
 
 interface MoveFileArgs {
-	from: string;
-	to: string;
+	// 新参数名（优先）
+	source_file_name_or_path?: string;
+	target_file_name_or_path?: string;
+	// 兼容旧参数名
+	from?: string;
+	to?: string;
 }
 
 interface MoveFileResult {
@@ -40,7 +45,15 @@ export const createMoveFileTool = (app: App): ToolDefinition => {
 	return {
 		id: 'move_file',
 		name: 'move_file',
-		description: '将文件从一个位置移动到另一个位置（支持重命名）。',
+		description: `将文件从一个位置移动到另一个位置，或重命名文件。当用户想要「移动」「重命名」「转移」「归档」文件时使用此工具。
+
+源路径支持模糊匹配：你可以只传入文件名（如 "001"），系统会自动定位。
+目标路径需要是完整的新路径（含文件名）。
+
+⛔ 负面约束：
+- 如果只是想读取或修改文件内容，不要使用此工具。
+- 此工具会自动创建目标文件夹，但如果目标文件已存在则会报错。
+- 不支持移动文件夹，仅支持移动单个文件。`,
 		enabled: true,
 		executionMode: 'auto',
 		category: 'file',
@@ -48,24 +61,37 @@ export const createMoveFileTool = (app: App): ToolDefinition => {
 		parameters: {
 			type: 'object',
 			properties: {
+				source_file_name_or_path: {
+					type: 'string',
+					description: '源文件名或路径。可传入完整路径或仅文件名（如 "001.md"），系统会自动定位。'
+				},
+				target_file_name_or_path: {
+					type: 'string',
+					description: '目标文件路径（需要是完整的新路径，含文件名）。'
+				},
+				// 兼容旧参数名
 				from: {
 					type: 'string',
-					description: '源文件路径，相对于 vault 根目录'
+					description: '（已弃用，请使用 source_file_name_or_path）源文件路径，相对于 vault 根目录。'
 				},
 				to: {
 					type: 'string',
-					description: '目标文件路径（包含新文件名），相对于 vault 根目录'
+					description: '（已弃用，请使用 target_file_name_or_path）目标文件路径（包含新文件名），相对于 vault 根目录。'
 				}
 			},
-			required: ['from', 'to']
+			required: ['source_file_name_or_path', 'target_file_name_or_path']
 		},
 		handler: async (rawArgs: Record<string, any>) => {
 			const args = rawArgs as MoveFileArgs;
-			const from = normalizeVaultPath(args.from);
-			const to = normalizeVaultPath(args.to);
+			const from = normalizeVaultPath(
+				args.source_file_name_or_path ?? args.from ?? ''
+			);
+			const to = normalizeVaultPath(
+				args.target_file_name_or_path ?? args.to ?? ''
+			);
 
 			if (!from || !to) {
-				throw new Error('from 和 to 不能为空。示例: from="notes/a.md", to="archive/a.md"');
+				throw new Error('source_file_name_or_path 和 target_file_name_or_path 不能为空。示例: source="notes/a.md", target="archive/a.md"');
 			}
 
 			const invalidChars = /[<>:"|?*]/;
@@ -82,11 +108,19 @@ export const createMoveFileTool = (app: App): ToolDefinition => {
 				return result;
 			}
 
-			const source = app.vault.getAbstractFileByPath(from);
-			if (!source) {
-				throw new Error(`源文件未找到: ${from}`);
+			// 使用模糊路由解析源文件路径
+			const resolver = new PathResolverService(app);
+			const sourceResult = await resolver.resolvePath(from, {
+				allowFuzzyMatch: true,
+				requireFile: true
+			});
+
+			if (!sourceResult.success || !sourceResult.file) {
+				throw new Error(sourceResult.error || `源文件未找到: ${from}`);
 			}
-			if (source instanceof TFolder || !(source instanceof TFile)) {
+
+			const source = sourceResult.file;
+			if (source instanceof TFolder) {
 				throw new Error('源路径指向文件夹，move_file 仅支持移动文件');
 			}
 

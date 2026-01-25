@@ -4,6 +4,20 @@ import { createPortal } from 'react-dom';
 import type { ToolDefinition } from '../types/tools';
 import './ToolPanelPopup.css';
 
+/**
+ * 获取文本的第一句话
+ * @param description 原始描述文本
+ * @returns 第一句话内容
+ */
+function getFirstSentence(description: string): string {
+	if (!description) return '';
+
+	// 匹配中文或英文的第一句话结束标点
+	const match = description.match(/^[^。.！！?？]+[。.！！?？]/);
+
+	return match ? match[0] : description;
+}
+
 interface ToolPanelPopupProps {
 	isOpen: boolean;
 	onClose: () => void;
@@ -110,7 +124,7 @@ export const ToolPanelPopup = ({
 									<p className="ff-tool-panel__item-name">
 										{tool.name}{builtin ? '（内置）' : ''}
 									</p>
-									<p className="ff-tool-panel__item-desc">{tool.description}</p>
+									<p className="ff-tool-panel__item-desc">{getFirstSentence(tool.description)}</p>
 								</div>
 								<div className="ff-tool-panel__actions">
 									<button

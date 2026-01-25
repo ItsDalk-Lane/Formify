@@ -2,7 +2,7 @@ import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2
 import { Component, Platform } from 'obsidian';
 import { memo, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
-import type { ChatMessage, AgentMessageEvent, AgentTextEvent, AgentToolCallEvent } from '../types/chat';
+import type { ChatMessage } from '../types/chat';
 import type { ToolCall, ToolExecution } from '../types/tools';
 import { ChatService } from '../services/ChatService';
 import { MessageService } from '../services/MessageService';
@@ -535,269 +535,6 @@ const TextBlockComponent = ({ content, app }: TextBlockProps) => {
 	return <div ref={containerRef}></div>;
 };
 
-/**
- * 文本事件块组件
- * 用于渲染 Agent 模式下的文本输出（支持推理内容的折叠显示）
- */
-interface TextEventBlockProps {
-	event: AgentTextEvent;
-	app: any;
-	isGenerating: boolean;
-	isLastEvent: boolean;
-}
-
-const TextEventBlock = ({ event, app, isGenerating, isLastEvent }: TextEventBlockProps) => {
-	// 解析内容块，区分推理内容和普通文本
-	const contentBlocks = useMemo(() => parseContentBlocks(event.content), [event.content]);
-	
-	return (
-		<div className="ff-agent-text-block">
-			{contentBlocks.map((block, index) => {
-				if (block.type === 'reasoning') {
-					return (
-						<ReasoningBlockComponent
-							key={`reasoning-${index}`}
-							content={block.content}
-							startMs={block.startMs}
-							durationMs={block.durationMs}
-							isGenerating={isGenerating && isLastEvent}
-						/>
-					);
-				}
-				return (
-					<TextBlockComponent
-						key={`text-${index}`}
-						content={block.content}
-						app={app}
-					/>
-				);
-			})}
-		</div>
-	);
-};
-
-/**
- * 工具调用事件块组件
- * 用于渲染 Agent 模式下的单个工具调用
- */
-interface ToolCallEventBlockProps {
-	event: AgentToolCallEvent;
-	execution?: ToolExecution;
-	service?: ChatService;
-	messageId: string;
-}
-
-const ToolCallEventBlock = ({ event, execution, service, messageId }: ToolCallEventBlockProps) => {
-	const [collapsed, setCollapsed] = useState(true);
-	const call = event.toolCall;
-	const display = useMemo(() => getToolCallDisplay(call), [call]);
-	
-	// 确定状态
-	const resolvedStatus = execution?.status ?? call.status;
-	const hasError = event.error || execution?.error;
-	const hasResult = event.result || call.result;
-	
-	const dotStatus =
-		resolvedStatus === 'completed'
-			? 'success'
-			: resolvedStatus === 'failed' || resolvedStatus === 'rejected' || hasError
-				? 'error'
-				: 'pending';
-	
-	const statusText =
-		execution?.status === 'pending'
-			? '待审批'
-			: execution?.status === 'approved' || execution?.status === 'executing'
-				? '执行中'
-				: execution?.status === 'completed' || call.status === 'completed'
-					? '已完成'
-					: execution?.status === 'failed' || call.status === 'failed' || hasError
-						? '执行失败'
-						: execution?.status === 'rejected'
-							? '已拒绝'
-							: '待处理';
-	
-	const statusIcon =
-		statusText === '执行中' ? (
-			<Loader2 className="tw-size-3 tw-animate-spin" />
-		) : statusText === '已完成' ? (
-			<CheckCircle2 className="tw-size-3" />
-		) : statusText === '执行失败' || statusText === '已拒绝' ? (
-			<AlertCircle className="tw-size-3" />
-		) : (
-			<Clock3 className="tw-size-3" />
-		);
-	
-	const canRetry = call.status === 'failed' || execution?.status === 'failed' || execution?.status === 'rejected' || hasError;
-	const contentText = display.contentText;
-	const resultText = event.result || call.result;
-	const errorText = event.error || execution?.error;
-	
-	return (
-		<div className={`ff-agent-tool-block ${hasError ? 'ff-agent-tool-block--error' : ''}`}>
-			<div className="ff-agent-tool-header" onClick={() => setCollapsed(prev => !prev)}>
-				<span className={`ff-agent-tool-dot ff-agent-tool-dot--${dotStatus}`} />
-				<span className="ff-agent-tool-toggle">
-					{collapsed ? <ChevronRight className="tw-size-4" /> : <ChevronDown className="tw-size-4" />}
-				</span>
-				<span className="ff-agent-tool-status">
-					{statusIcon}
-					<span>{statusText}</span>
-				</span>
-				<span className="ff-agent-tool-name" title={display.title}>
-					{display.title}
-				</span>
-				{display.summary && (
-					<span className="ff-agent-tool-summary" title={display.summary}>
-						{display.summary}
-					</span>
-				)}
-				{canRetry && service && (
-					<button
-						type="button"
-						className="ff-agent-tool-retry"
-						onClick={(e) => {
-							e.stopPropagation();
-							void service.retryToolCall(messageId, call.id);
-						}}
-						title="重试"
-					>
-						<Repeat className="tw-size-3" />
-						<span>重试</span>
-					</button>
-				)}
-			</div>
-			{!collapsed && (
-				<div className="ff-agent-tool-body">
-					<div className="ff-agent-tool-section">
-						<div className="ff-agent-tool-label">{display.contentLabel}</div>
-						<pre className="ff-agent-tool-code">{contentText || '（无内容）'}</pre>
-					</div>
-					{execution?.status === 'pending' && service && (
-						<div className="ff-agent-tool-section ff-agent-tool-actions">
-							<button
-								type="button"
-								className="ff-agent-tool-action"
-								onClick={(e) => {
-									e.stopPropagation();
-									void service.approveToolExecution(execution.id);
-								}}
-							>
-								允许
-							</button>
-							<button
-								type="button"
-								className="ff-agent-tool-action ff-agent-tool-action--danger"
-								onClick={(e) => {
-									e.stopPropagation();
-									void service.rejectToolExecution(execution.id);
-								}}
-							>
-								拒绝
-							</button>
-						</div>
-					)}
-					{errorText && (
-						<div className="ff-agent-tool-section ff-agent-tool-error-section">
-							<div className="ff-agent-tool-label">错误信息</div>
-							<pre className="ff-agent-tool-code ff-agent-tool-code--error">{errorText}</pre>
-						</div>
-					)}
-					{resultText && resultText.trim().length > 0 && (
-						<div className="ff-agent-tool-section">
-							<div className="ff-agent-tool-label">{display.resultLabel}</div>
-							<pre className="ff-agent-tool-code">{formatToolResult(resultText)}</pre>
-						</div>
-					)}
-				</div>
-			)}
-		</div>
-	);
-};
-
-/**
- * Agent 事件流渲染组件
- * 按时间顺序交替渲染文本内容和工具调用
- */
-interface AgentEventStreamProps {
-	events: AgentMessageEvent[];
-	isGenerating: boolean;
-	toolExecutions?: ToolExecution[];
-	service?: ChatService;
-	messageId: string;
-	app: any;
-}
-
-const AgentEventStream = ({ events, isGenerating, toolExecutions, service, messageId, app }: AgentEventStreamProps) => {
-	// 构建工具调用 ID 到执行状态的映射
-	const executionMap = useMemo(() => {
-		const map = new Map<string, ToolExecution>();
-		(toolExecutions ?? []).forEach((exec) => {
-			if (exec.toolCallId) {
-				map.set(exec.toolCallId, exec);
-			}
-		});
-		return map;
-	}, [toolExecutions]);
-	
-	// 计算统计信息
-	const toolCallEvents = events.filter((e): e is AgentToolCallEvent => e.type === 'tool_call');
-	const completedCount = toolCallEvents.filter((e) => {
-		const exec = executionMap.get(e.toolCall.id);
-		return exec?.status === 'completed' || e.toolCall.status === 'completed';
-	}).length;
-	const failedCount = toolCallEvents.filter((e) => {
-		const exec = executionMap.get(e.toolCall.id);
-		return exec?.status === 'failed' || exec?.status === 'rejected' || e.toolCall.status === 'failed' || e.error;
-	}).length;
-	const totalCount = toolCallEvents.length;
-	const inProgressCount = Math.max(totalCount - completedCount - failedCount, 0);
-	
-	return (
-		<div className="ff-agent-event-stream">
-			{totalCount > 0 && (
-				<div className="ff-agent-event-progress">
-					{inProgressCount > 0 ? (
-						<span>执行中 {completedCount}/{totalCount} 个工具</span>
-					) : (
-						<span>已完成 {completedCount}/{totalCount} 个工具</span>
-					)}
-				</div>
-			)}
-			{events.map((event, index) => {
-				const isLastEvent = index === events.length - 1;
-				
-				if (event.type === 'text') {
-					return (
-						<TextEventBlock
-							key={`text-${index}`}
-							event={event}
-							app={app}
-							isGenerating={isGenerating}
-							isLastEvent={isLastEvent}
-						/>
-					);
-				}
-				
-				if (event.type === 'tool_call') {
-					const execution = executionMap.get(event.toolCall.id);
-					return (
-						<ToolCallEventBlock
-							key={`tool-${event.toolCall.id}`}
-							event={event}
-							execution={execution}
-							service={service}
-							messageId={messageId}
-						/>
-					);
-				}
-				
-				return null;
-			})}
-		</div>
-	);
-};
-
 export const MessageItem = ({ message, service, isGenerating, pendingToolExecutions, toolExecutions }: MessageItemProps) => {
 	const app = useObsidianApp();
 	const helper = useMemo(() => new MessageService(), []);
@@ -809,13 +546,6 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 
 	const timestamp = useMemo(() => helper.formatTimestamp(message.timestamp), [helper, message.timestamp]);
 	
-	// 判断是否使用新的 Agent 事件流渲染方式
-	const useAgentEventStream = Boolean(
-		message.metadata?.agentMode && 
-		message.agentEvents && 
-		message.agentEvents.length > 0
-	);
-
 	// 解析内容块
 	useEffect(() => {
 		const blocks = parseContentBlocks(message.content);
@@ -982,16 +712,6 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 					<div></div>
 				)}
 
-				{/* Agent 模式标签 - 已移除 */}
-				{false && message.metadata?.agentMode && (
-					<div className="message-agent-mode tw-mb-2">
-						<div className="tw-inline-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-blue-100 tw-text-blue-700 tw-rounded tw-text-xs">
-							<Repeat className="tw-size-3" />
-							<span>Agent 模式</span>
-						</div>
-					</div>
-				)}
-
 				{/* 显示选中文本标签 */}
 				{message.metadata?.selectedText && typeof message.metadata.selectedText === 'string' && (
 					<div className="message-selected-text tw-mb-2">
@@ -1006,20 +726,8 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 					</div>
 				)}
 
-				{/* Agent 事件流渲染（新的交替流式显示） */}
-				{useAgentEventStream && (
-					<AgentEventStream
-						events={message.agentEvents!}
-						isGenerating={isGenerating ?? false}
-						toolExecutions={toolExecutions}
-						service={service}
-						messageId={message.id}
-						app={app}
-					/>
-				)}
-
-				{/* 原有的工具调用徽章（用于非 Agent 模式或无 agentEvents 的历史消息） */}
-				{!useAgentEventStream && toolCalls.length > 0 && (
+				{/* 工具调用徽章 */}
+				{toolCalls.length > 0 && (
 					<ToolCallList
 						toolCalls={toolCalls}
 						toolExecutions={toolExecutions}
@@ -1028,8 +736,8 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 					/>
 				)}
 
-				{/* 内嵌审批界面（用于非 Agent 事件流模式） */}
-				{!useAgentEventStream && toolCalls.length > 0 && pendingToolExecutions && (
+				{/* 内嵌审批界面 */}
+				{toolCalls.length > 0 && pendingToolExecutions && (
 					<EmbeddedToolApproval
 						toolCalls={toolCalls}
 						pendingExecutions={pendingToolExecutions}
@@ -1046,11 +754,8 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 							className="chat-message__editor"
 							rows={4}
 						/>
-					) : useAgentEventStream ? (
-						// Agent 事件流模式：文本内容已在 AgentEventStream 中渲染，此处不再重复渲染
-						null
 					) : (
-						// 原有渲染模式：渲染所有内容块
+						// 渲染所有内容块
 						contentBlocks.map((block, index) => {
 							if (block.type === 'reasoning') {
 								return (

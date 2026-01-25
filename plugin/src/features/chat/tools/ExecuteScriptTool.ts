@@ -22,7 +22,12 @@ export const createExecuteScriptTool = (app?: App): ToolDefinition => {
 	return {
 		id: 'execute_script',
 		name: 'execute_script',
-		description: '执行预定义的脚本或代码片段，并返回执行结果。',
+		description: `执行 JavaScript 代码片段并返回结果。当用户需要「运行代码」「执行脚本」「计算」「处理数据」时使用此工具。
+
+⛔ 负面约束：
+- 对于简单的文件操作（读写、搜索），不要编写脚本，应使用专门的文件工具。
+- 脚本在沙箱中运行，有超时限制（默认 5 秒）。
+- 这是一个高权限工具，除非用户明确要求执行代码，否则优先使用其他工具。`,
 		enabled: true,
 		executionMode: 'manual',
 		category: 'system',

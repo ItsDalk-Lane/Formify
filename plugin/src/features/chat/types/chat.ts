@@ -1,45 +1,7 @@
 import { App, TFile, TFolder } from 'obsidian';
 import type { ToolCall, ToolExecution } from './tools';
-import {
-	DEFAULT_AGENT_MAX_TOOL_CALLS,
-	DEFAULT_AGENT_AUTO_APPROVE_TOOLS,
-	DEFAULT_AGENT_SHOW_THINKING,
-	DEFAULT_AGENT_USER_PROMPT
-} from '../constants/agentDefaults';
 
 export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
-
-/**
- * Agent 模式消息事件类型
- * 用于按时间顺序记录 Agent 执行过程中的文本输出和工具调用
- */
-export type AgentMessageEvent = AgentTextEvent | AgentToolCallEvent;
-
-/**
- * 文本事件：记录 Agent 的普通文本输出
- */
-export interface AgentTextEvent {
-	type: 'text';
-	/** 文本内容 */
-	content: string;
-	/** 事件时间戳 */
-	timestamp: number;
-}
-
-/**
- * 工具调用事件：记录单次工具调用及其结果
- */
-export interface AgentToolCallEvent {
-	type: 'tool_call';
-	/** 完整的工具调用对象 */
-	toolCall: ToolCall;
-	/** 事件时间戳 */
-	timestamp: number;
-	/** 工具执行结果（执行完成后填充） */
-	result?: string;
-	/** 执行错误信息（执行失败时填充） */
-	error?: string;
-}
 
 /**
  * 文件角色类型
@@ -98,12 +60,6 @@ export interface ChatMessage {
 	 * 用于关联工具结果与对应的工具调用
 	 */
 	toolCallId?: string;
-	/**
-	 * Agent 模式事件流
-	 * 仅当 metadata.agentMode 为 true 时有效
-	 * 按时间顺序记录思考内容和工具调用，用于交替流式渲染
-	 */
-	agentEvents?: AgentMessageEvent[];
 }
 
 export interface ChatSession {
@@ -221,18 +177,11 @@ export interface ChatSettings {
 	maxToolbarButtons: number; // 工具栏最多显示的按钮数量
 	selectionToolbarStreamOutput: boolean; // 快捷技能是否使用流式输出
 	skills?: Skill[]; // 技能列表（已废弃，技能数据现在独立存储在 .obsidian/plugins/formify/skills.json 中）
-	// Agent 模式配置
-	agentMaxToolCalls: number; // Agent 最大工具调用次数
-	agentAutoApproveTools: boolean; // Agent 模式下是否自动审批工具
-	agentShowThinking: boolean; // Agent 模式是否显示中间思考输出
-	agentUserPrompt: string; // Agent 模式专用用户提示词（追加到全局系统提示词后）
 }
 
 export interface ChatState {
 	activeSession: ChatSession | null;
 	isGenerating: boolean;
-	isAgentMode: boolean;
-	agentExecutionId: string | null;
 	inputValue: string;
 	selectedModelId: string | null;
 	enableReasoningToggle: boolean;
@@ -284,10 +233,5 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	maxToolbarButtons: 4, // 默认显示4个按钮
 	selectionToolbarStreamOutput: true, // 默认启用流式输出
 	skills: [], // 默认无技能（已废弃，仅用于向后兼容和数据迁移）
-	// Agent 模式默认配置
-	agentMaxToolCalls: DEFAULT_AGENT_MAX_TOOL_CALLS,
-	agentAutoApproveTools: DEFAULT_AGENT_AUTO_APPROVE_TOOLS,
-	agentShowThinking: DEFAULT_AGENT_SHOW_THINKING,
-	agentUserPrompt: DEFAULT_AGENT_USER_PROMPT,
 };
 

@@ -1,4 +1,4 @@
-import { Brain, CornerDownLeft, Search, StopCircle, X, FileText, Folder, Palette, Zap, Highlighter, Repeat } from 'lucide-react';
+import { Brain, CornerDownLeft, Search, StopCircle, X, FileText, Folder, Palette, Zap, Highlighter } from 'lucide-react';
 import { FormEvent, useEffect, useState, useRef, Fragment } from 'react';
 import { ChatService } from '../services/ChatService';
 import type { ChatState, SelectedFile, SelectedFolder } from '../types/chat';
@@ -125,19 +125,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 		service.setTemplateSelectorVisibility(true);
 	};
 
-	const handleAgentToggle = () => {
-		if (state.isAgentMode && state.isGenerating) {
-			const confirmed = window.confirm('Agent 正在执行任务，关闭 Agent 模式将中止当前执行，是否继续？');
-			if (!confirmed) {
-				return;
-			}
-		}
-		service.setAgentMode(!state.isAgentMode);
-	};
-
-	const activeToolExecution = state.toolExecutions?.find((item) => item.status === 'executing') ?? state.pendingToolExecutions[0];
-	const activeToolLabel = activeToolExecution?.toolId ? `正在处理工具：${activeToolExecution.toolId}` : 'Agent 正在思考并执行任务...';
-
 	// 处理键盘事件 - 只在textarea中触发
 	const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
 		// 处理中文输入法组合输入
@@ -196,14 +183,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 						>
 							<X className="tw-size-4" />
 						</button>
-					</div>
-				)}
-
-				{/* Agent 模式提示 - 已移除 */}
-				{false && state.isAgentMode && (
-					<div className="agent-mode-hint tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-blue-100 tw-text-blue-700 tw-rounded tw-text-xs tw-mb-2">
-						<Repeat className="tw-size-3" />
-						<span>Agent 模式已启用：AI 将自主调用工具直到任务完成</span>
 					</div>
 				)}
 
@@ -364,28 +343,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 										}}
 									>
 										<Search className="tw-size-4" />
-									</button>
-									<button
-										type="button"
-										aria-label="Agent 模式"
-										onClick={handleAgentToggle}
-										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-px-2 tw-py-1 tw-cursor-pointer tw-rounded"
-										style={{
-											backgroundColor: state.isAgentMode ? 'var(--interactive-accent)' : 'transparent',
-											color: state.isAgentMode ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)'
-										}}
-										onMouseEnter={(e) => {
-											if (!state.isAgentMode) {
-												e.currentTarget.style.color = 'var(--interactive-accent)';
-											}
-										}}
-										onMouseLeave={(e) => {
-											if (!state.isAgentMode) {
-												e.currentTarget.style.color = 'var(--text-muted)';
-											}
-										}}
-									>
-										<span className="tw-text-xs">Agent</span>
 									</button>
 								</div>
 							</div>
@@ -605,28 +562,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 									>
 										<Search className="tw-size-4" />
 									</button>
-									<button
-										type="button"
-										aria-label="Agent 模式"
-										onClick={handleAgentToggle}
-										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-px-2 tw-py-1 tw-cursor-pointer tw-rounded"
-										style={{
-											backgroundColor: state.isAgentMode ? 'var(--interactive-accent)' : 'transparent',
-											color: state.isAgentMode ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)'
-										}}
-										onMouseEnter={(e) => {
-											if (!state.isAgentMode) {
-												e.currentTarget.style.color = 'var(--interactive-accent)';
-											}
-										}}
-										onMouseLeave={(e) => {
-											if (!state.isAgentMode) {
-												e.currentTarget.style.color = 'var(--text-muted)';
-											}
-										}}
-									>
-										<span className="tw-text-xs">Agent</span>
-									</button>
 								</div>
 							</div>
 							<div className="tw-flex tw-items-center tw-gap-2">
@@ -638,14 +573,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 									<StopCircle className="tw-size-4" />
 									<span className="tw-ml-1 tw-text-xs">Stop</span>
 								</span>
-
-								{/* Agent 执行状态提示 - 已移除 */}
-								{false && state.isAgentMode && state.isGenerating && (
-									<div className="tw-flex tw-items-center tw-gap-1 tw-ml-2 tw-px-2 tw-py-1 tw-bg-blue-100 tw-text-blue-700 tw-rounded tw-text-xs">
-										<Repeat className="tw-size-3" />
-										<span>{activeToolLabel}</span>
-									</div>
-								)}
 
 								{/* 图片生成状态提示 */}
 								{isImageGenerationIntent && (

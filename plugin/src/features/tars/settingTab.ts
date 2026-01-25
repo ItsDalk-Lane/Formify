@@ -6,7 +6,6 @@ import { ClaudeOptions, claudeVendor } from './providers/claude'
 import { DebugLogger } from '../../utils/DebugLogger'
 import { SkillDataService } from '../chat/selection-toolbar/SkillDataService'
 import { getFormSkillService, type FormInfo } from '../chat/selection-toolbar/FormSkillService'
-import { DEFAULT_AGENT_USER_PROMPT } from '../chat/constants/agentDefaults'
 import {
 	DoubaoOptions,
 	doubaoVendor,
@@ -187,7 +186,7 @@ export class TarsSettingTab {
 		this.providersContainerEl.style.padding = '0 8px 8px 8px'
 
 		if (!this.settings.providers.length) {
-			const emptyTip = this.providersContainerEl.createEl('div', { 
+			const emptyTip = this.providersContainerEl.createEl('div', {
 				cls: 'ai-providers-empty-tip'
 			})
 			emptyTip.textContent = t('Please add at least one AI assistant to start using the plugin.')
@@ -198,12 +197,9 @@ export class TarsSettingTab {
 				text-align: center;
 				font-style: italic;
 			`
-		}
-
-		for (const [index, provider] of this.settings.providers.entries()) {
-			const isLast = index === this.settings.providers.length - 1
-			const shouldOpen = (isLast && expandLastProvider) || index === keepOpenIndex
-			this.createProviderSetting(index, provider, shouldOpen)
+		} else {
+			// 按提供商分组渲染 AI 助手列表
+			this.renderProvidersGroupedByVendor(expandLastProvider, keepOpenIndex)
 		}
 
 		// 移除间隔行，使区域直接相邻
@@ -421,59 +417,6 @@ export class TarsSettingTab {
 							await this.updateChatSettings({ chatModalHeight: num });
 						}
 					});
-			});
-
-		new Setting(chatSection)
-			.setName("Agent 最大工具调用次数")
-			.setDesc("限制 Agent 循环中最多可调用工具的次数，防止无限循环")
-			.addText((text) => {
-				text
-					.setValue(String(this.chatSettings.agentMaxToolCalls ?? 20))
-					.onChange(async (value) => {
-						const num = parseInt(value);
-						if (!isNaN(num) && num > 0) {
-							await this.updateChatSettings({ agentMaxToolCalls: num });
-						}
-					});
-			});
-
-		new Setting(chatSection)
-			.setName("Agent 自动审批工具")
-			.setDesc("开启后，Agent 模式将自动执行所有工具调用（危险选项）")
-			.addToggle((toggle) => {
-				toggle.setValue(this.chatSettings.agentAutoApproveTools ?? false);
-				toggle.onChange(async (value) => {
-					await this.updateChatSettings({ agentAutoApproveTools: value });
-				});
-			});
-
-		new Setting(chatSection)
-			.setName("Agent 显示中间思考")
-			.setDesc("是否在 Agent 模式下显示流式思考过程")
-			.addToggle((toggle) => {
-				toggle.setValue(this.chatSettings.agentShowThinking ?? true);
-				toggle.onChange(async (value) => {
-					await this.updateChatSettings({ agentShowThinking: value });
-				});
-			});
-
-		// Agent 用户提示词设置
-		const agentPromptDesc = new DocumentFragment();
-		agentPromptDesc.createEl('div', { text: 'Agent 模式的专用用户提示词，会追加到全局系统提示词后面。' });
-		agentPromptDesc.createEl('div', { text: '用于补充说明 Agent 的自主执行行为。', cls: 'setting-item-description' });
-
-		new Setting(chatSection)
-			.setName("Agent 用户提示词")
-			.setDesc(agentPromptDesc)
-			.addButton((button) => {
-				button.setButtonText("编辑提示词");
-				button.setCta();
-				button.onClick(() => {
-					new AgentSystemPromptModal(this.app, this.chatSettings.agentUserPrompt || '', async (newPrompt) => {
-						await this.updateChatSettings({ agentUserPrompt: newPrompt });
-						new Notice("Agent 用户提示词已更新");
-					}).open();
-				});
 			});
 
 		// 快捷技能设置区域
@@ -3195,14 +3138,261 @@ export class TarsSettingTab {
 	private updateProviderCapabilities(index: number, settings: ProviderSettings) {
 		const vendor = availableVendors.find((v) => v.name === settings.vendor)
 		if (!vendor) return
-		
+
 		const capabilitiesEl = this.providerCapabilityEls.get(index)
 		if (capabilitiesEl) {
 			capabilitiesEl.textContent = getCapabilityDisplayText(vendor, settings.options)
 		}
 	}
 
-    createProviderSetting = (index: number, settings: ProviderSettings, isOpen: boolean = false) => {
+	/**
+	 * 按提供商分组渲染 AI 助手列表
+	 */
+	private renderProvidersGroupedByVendor(expandLastProvider: boolean, keepOpenIndex: number) {
+		// 按提供商分组
+		const groupedProviders = new Map<string, Array<{ index: number; settings: ProviderSettings }>>()
+		const providerNames: string[] = []
+
+		for (const [index, provider] of this.settings.providers.entries()) {
+			const vendor = availableVendors.find((v) => v.name === provider.vendor)
+			if (!vendor) continue
+
+			const vendorName = vendor.name
+			if (!groupedProviders.has(vendorName)) {
+				groupedProviders.set(vendorName, [])
+				providerNames.push(vendorName)
+			}
+			groupedProviders.get(vendorName)!.push({ index, settings: provider })
+		}
+
+		// 渲染每个分组
+		for (const vendorName of providerNames) {
+			const providers = groupedProviders.get(vendorName)!
+			this.renderVendorGroup(vendorName, providers, expandLastProvider, keepOpenIndex)
+		}
+	}
+
+	/**
+	 * 渲染单个提供商分组
+	 */
+	private renderVendorGroup(
+		vendorName: string,
+		providers: Array<{ index: number; settings: ProviderSettings }>,
+		expandLastProvider: boolean,
+		keepOpenIndex: number
+	) {
+		const container = this.providersContainerEl || this.containerEl
+
+		// 创建分组容器
+		const groupContainer = container.createEl('div', { cls: 'vendor-group-container' })
+		groupContainer.style.marginBottom = '12px'
+
+		// 创建分组标题（可折叠）
+		const groupHeader = groupContainer.createEl('div', { cls: 'vendor-group-header' })
+		groupHeader.style.cssText = `
+			display: flex;
+			align-items: center;
+			padding: 10px 12px;
+			background-color: var(--background-secondary);
+			border: 1px solid var(--background-modifier-border);
+			border-radius: 6px;
+			cursor: pointer;
+			user-select: none;
+			transition: background-color 0.15s ease;
+		`
+
+		// 存储分组状态
+		let isCollapsed = true
+
+		// 折叠图标
+		const collapseIcon = groupHeader.createEl('span', { cls: 'vendor-group-collapse-icon' })
+		collapseIcon.textContent = '▶'
+		collapseIcon.style.cssText = `
+			margin-right: 8px;
+			font-size: 10px;
+			transition: transform 0.2s ease;
+			color: var(--text-muted);
+		`
+
+		// 分组名称
+		const groupName = groupHeader.createEl('span', { cls: 'vendor-group-name' })
+		groupName.textContent = `${vendorName} (${providers.length})`
+		groupName.style.cssText = `
+			font-weight: 600;
+			font-size: 14px;
+			color: var(--text-normal);
+		`
+
+		// 创建分组内容容器
+		const groupContent = groupContainer.createEl('div', { cls: 'vendor-group-content' })
+		groupContent.style.cssText = `
+			margin-top: 8px;
+			padding-left: 12px;
+			display: none;
+		`
+
+		// 点击标题切换折叠状态
+		groupHeader.addEventListener('click', () => {
+			isCollapsed = !isCollapsed
+			collapseIcon.textContent = isCollapsed ? '▶' : '▼'
+			groupContent.style.display = isCollapsed ? 'none' : 'block'
+		})
+
+		// 悬停效果
+		groupHeader.addEventListener('mouseenter', () => {
+			groupHeader.style.backgroundColor = 'var(--background-modifier-hover)'
+		})
+
+		groupHeader.addEventListener('mouseleave', () => {
+			groupHeader.style.backgroundColor = 'var(--background-secondary)'
+		})
+
+		// 渲染该分组下的所有 AI 助手
+		for (const { index, settings } of providers) {
+			const isLast = index === this.settings.providers.length - 1
+			const shouldOpen = (isLast && expandLastProvider) || index === keepOpenIndex
+			this.createProviderSettingInGroup(index, settings, shouldOpen, groupContent)
+		}
+	}
+
+	/**
+	 * 在分组中创建单个 AI 助手卡片
+	 */
+	private createProviderSettingInGroup(
+		index: number,
+		settings: ProviderSettings,
+		isOpen: boolean,
+		container: HTMLElement
+	) {
+		const vendor = availableVendors.find((v) => v.name === settings.vendor)
+		if (!vendor) throw new Error('No vendor found ' + settings.vendor)
+
+		// 创建服务商卡片
+		const card = container.createEl('div', { cls: 'ai-provider-card' })
+		card.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 12px 16px;
+			margin-bottom: 8px;
+			background-color: var(--background-secondary);
+			border: 1px solid var(--background-modifier-border);
+			border-radius: var(--radius-m);
+			cursor: pointer;
+			transition: all 0.2s ease;
+		`
+
+		// 左侧信息
+		const leftSection = card.createEl('div', { cls: 'ai-provider-info' })
+		leftSection.style.cssText = `
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+			flex: 1;
+		`
+
+		const titleEl = leftSection.createEl('div', { cls: 'ai-provider-title' })
+		titleEl.style.cssText = `
+			font-size: var(--font-ui-medium);
+			font-weight: 500;
+			color: var(--text-normal);
+		`
+		titleEl.textContent = getSummary(settings.tag, vendor.name)
+		// 记录标题元素，便于在配置中实时更新标题
+		this.providerTitleEls.set(index, titleEl)
+
+		const capabilitiesEl = leftSection.createEl('div', { cls: 'ai-provider-capabilities' })
+		capabilitiesEl.style.cssText = `
+			font-size: var(--font-ui-smaller);
+			color: var(--text-muted);
+		`
+		// 使用动态计算的功能而非vendor的capabilities
+		capabilitiesEl.textContent = getCapabilityDisplayText(vendor, settings.options)
+		// 记录功能元素，便于在配置中实时更新
+		this.providerCapabilityEls.set(index, capabilitiesEl)
+
+		// 右侧按钮 - 只保留删除按钮
+		const rightSection = card.createEl('div', { cls: 'ai-provider-actions' })
+		rightSection.style.cssText = `
+			display: flex;
+			gap: 8px;
+			align-items: center;
+		`
+
+		// 删除按钮 - 使用SVG图标
+		const deleteBtn = rightSection.createEl('button', { cls: 'ai-provider-delete-btn' })
+		deleteBtn.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="3 6 5 6 21 6"></polyline>
+				<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+				<line x1="10" y1="11" x2="10" y2="17"></line>
+				<line x1="14" y1="11" x2="14" y2="17"></line>
+			</svg>
+		`
+		deleteBtn.style.cssText = `
+			padding: 4px;
+			background: transparent;
+			border: none;
+			cursor: pointer;
+			color: var(--text-muted);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: var(--radius-s);
+			transition: color 0.2s ease, transform 0.1s ease;
+		`
+		deleteBtn.title = '删除此服务商'
+
+		// 删除按钮悬停效果
+		deleteBtn.addEventListener('mouseenter', () => {
+			deleteBtn.style.color = 'var(--color-red)'
+		})
+
+		deleteBtn.addEventListener('mouseleave', () => {
+			deleteBtn.style.color = 'var(--text-muted)'
+		})
+
+		// 悬停效果
+		card.addEventListener('mouseenter', () => {
+			card.style.backgroundColor = 'var(--background-modifier-hover)'
+			card.style.borderColor = 'var(--interactive-accent)'
+		})
+
+		card.addEventListener('mouseleave', () => {
+			card.style.backgroundColor = 'var(--background-secondary)'
+			card.style.borderColor = 'var(--background-modifier-border)'
+		})
+
+		// 点击卡片打开 Modal
+		const openConfigModal = () => {
+			const modal = new ProviderSettingModal(this.app, getSummary(settings.tag, vendor.name), (modalContainer) => {
+				// 在 Modal 中渲染配置内容
+				this.renderProviderConfig(modalContainer, index, settings, vendor, modal)
+			})
+			modal.open()
+		}
+
+		card.addEventListener('click', (e) => {
+			// 如果点击的是删除按钮，不触发卡片点击
+			if (e.target === deleteBtn || (e.target as HTMLElement).closest('button') === deleteBtn) return
+			openConfigModal()
+		})
+
+		// 删除按钮点击事件
+		deleteBtn.addEventListener('click', async (e) => {
+			e.stopPropagation()
+			this.settings.providers.splice(index, 1)
+			await this.settingsContext.saveSettings()
+			this.render(this.containerEl)
+		})
+
+		if (isOpen) {
+			this.currentOpenProviderIndex = index
+			openConfigModal()
+		}
+	}
+
+	createProviderSetting = (index: number, settings: ProviderSettings, isOpen: boolean = false) => {
 		const vendor = availableVendors.find((v) => v.name === settings.vendor)
 		if (!vendor) throw new Error('No vendor found ' + settings.vendor)
 		
@@ -4923,112 +5113,3 @@ const MODEL_FETCH_CONFIGS = {
 		requiresApiKey: true
 	}
 } as const
-
-/**
- * Agent 系统提示词编辑模态框
- */
-class AgentSystemPromptModal extends Modal {
-	private textareaEl: HTMLTextAreaElement;
-	private onSave: (prompt: string) => Promise<void>;
-
-	constructor(app: App, private currentPrompt: string, onSave: (prompt: string) => Promise<void>) {
-		super(app);
-		this.onSave = onSave;
-	}
-
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.empty();
-		contentEl.addClass('agent-system-prompt-modal');
-
-		contentEl.createEl('h2', { text: 'Agent 系统提示词' });
-
-		const desc = contentEl.createEl('p', { cls: 'setting-item-description' });
-		desc.textContent = '此提示词将用于 Agent 模式，控制 AI 的自主执行行为。它会在全局系统提示词之后追加。';
-
-		// 创建文本区域
-		const textareaContainer = contentEl.createDiv({ cls: 'agent-prompt-textarea-container' });
-		textareaContainer.style.cssText = `
-			margin: 16px 0;
-		`;
-
-		this.textareaEl = textareaContainer.createEl('textarea', {
-			cls: 'agent-prompt-textarea',
-			attr: { rows: '15' }
-		});
-		this.textareaEl.style.cssText = `
-			width: 100%;
-			min-width: 500px;
-			min-height: 300px;
-			padding: 12px;
-			font-family: var(--font-monospace);
-			font-size: var(--font-ui-small);
-			line-height: 1.6;
-			border: 1px solid var(--background-modifier-border);
-			border-radius: 4px;
-			background: var(--background-primary);
-			color: var(--text-normal);
-			resize: vertical;
-		`;
-		this.textareaEl.value = this.currentPrompt;
-
-		// 按钮容器
-		const buttonContainer = contentEl.createDiv({ cls: 'modal-button-container' });
-		buttonContainer.style.cssText = `
-			display: flex;
-			justify-content: flex-end;
-			gap: 12px;
-			margin-top: 20px;
-		`;
-
-		// 取消按钮
-		const cancelBtn = buttonContainer.createEl('button', { text: '取消' });
-		cancelBtn.style.cssText = `
-			padding: 8px 16px;
-			border: 1px solid var(--background-modifier-border);
-			border-radius: 4px;
-			background: var(--background-secondary);
-			color: var(--text-normal);
-			cursor: pointer;
-		`;
-		cancelBtn.onclick = () => this.close();
-
-		// 重置按钮
-		const resetBtn = buttonContainer.createEl('button', { text: '重置为默认' });
-		resetBtn.style.cssText = `
-			padding: 8px 16px;
-			border: 1px solid var(--background-modifier-border);
-			border-radius: 4px;
-			background: var(--background-secondary);
-			color: var(--text-normal);
-			cursor: pointer;
-		`;
-		resetBtn.onclick = () => {
-			this.textareaEl.value = this.getDefaultPrompt();
-		};
-
-		// 保存按钮
-		const saveBtn = buttonContainer.createEl('button', { text: '保存', cls: 'mod-cta' });
-		saveBtn.style.cssText = `
-			padding: 8px 16px;
-			border: none;
-			border-radius: 4px;
-			background: var(--interactive-accent);
-			color: var(--text-on-accent);
-			cursor: pointer;
-		`;
-		saveBtn.onclick = async () => {
-			await this.onSave(this.textareaEl.value);
-			this.close();
-		};
-	}
-
-	private getDefaultPrompt(): string {
-		return DEFAULT_AGENT_USER_PROMPT;
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-	}
-}

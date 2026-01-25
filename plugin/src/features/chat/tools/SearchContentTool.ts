@@ -55,7 +55,14 @@ export const createSearchContentTool = (app: App): ToolDefinition => {
 	return {
 		id: 'search_content',
 		name: 'search_content',
-		description: '在笔记内容中进行全文搜索，查找包含关键词的文件。',
+		description: `在笔记内容中进行全文搜索，查找「包含指定关键词」的文件。当用户想要「搜索内容」「查找提到 xxx 的笔记」「哪个文件里写了 xxx」时使用此工具。
+
+返回结果包含匹配行的上下文片段。
+
+⛔ 负面约束：
+- 当用户只是想按文件名查找时，不要使用此工具，应使用 search_files。
+- 当用户已经知道要读取哪个文件时，不要使用此工具，应直接使用 read_file。
+- 此工具会遍历大量文件，对于只需要定位单个已知文件的场景是浪费性能的。`,
 		enabled: true,
 		executionMode: 'auto',
 		category: 'search',

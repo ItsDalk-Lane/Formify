@@ -1,6 +1,6 @@
 export type SystemPromptSourceType = 'custom' | 'template';
 
-export type AiFeatureId = 'ai_action' | 'tars_chat' | 'tab_completion' | 'selection_toolbar' | 'agent';
+export type AiFeatureId = 'ai_action' | 'tars_chat' | 'tab_completion' | 'selection_toolbar';
 
 export interface SystemPromptItem {
 	id: string;

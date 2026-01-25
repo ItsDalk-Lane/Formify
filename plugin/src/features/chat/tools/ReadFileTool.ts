@@ -1,10 +1,13 @@
-import { TFile } from 'obsidian';
 import type { App } from 'obsidian';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { ToolDefinition } from '../types/tools';
+import { PathResolverService } from '../../../service/PathResolverService';
 
 interface ReadFileArgs {
+	// 新参数名（优先）
+	file_name_or_path?: string;
+	// 兼容旧参数名
 	path?: string;
 	filePath?: string;
 	file_path?: string;
@@ -42,7 +45,14 @@ export const createReadFileTool = (app: App): ToolDefinition => {
 	return {
 		id: 'read_file',
 		name: 'read_file',
-		description: '读取指定路径的文本文件内容并返回。',
+		description: `读取指定笔记的文本内容。当用户想要「查看」「阅读」「打开」「检查」或「获取内容」时使用此工具。
+
+你可以传入完整路径（如 "notes/日记/2024-01.md"），也可以只传入文件名（如 "2024-01" 或 "日记"），系统会自动尝试定位文件。
+
+⛔ 负面约束：
+- 当你需要查找「哪些文件包含某关键词」时，不要使用此工具，应使用 search_content。
+- 当你不确定文件是否存在、想先看看有哪些文件时，不要使用此工具，应使用 list_directory 或 search_files。
+- 此工具不能读取二进制文件（图片、PDF 等）。`,
 		enabled: true,
 		executionMode: 'auto',
 		category: 'file',
@@ -50,21 +60,34 @@ export const createReadFileTool = (app: App): ToolDefinition => {
 		parameters: {
 			type: 'object',
 			properties: {
+				file_name_or_path: {
+					type: 'string',
+					description: '文件名或路径。可传入完整路径（如 "notes/日记/2024-01.md"）或仅文件名（如 "2024-01.md" 或 "日记"），系统会自动尝试定位文件。'
+				},
+				// 兼容旧参数名（保持别名兼容）
 				path: {
 					type: 'string',
-					description: '文件路径，相对于 vault 根目录。例如: notes/我的笔记.md'
+					description: '（已弃用，请使用 file_name_or_path）文件路径，相对于 vault 根目录。'
+				},
+				filePath: {
+					type: 'string',
+					description: '（已弃用，请使用 file_name_or_path）文件路径，相对于 vault 根目录。'
+				},
+				file_path: {
+					type: 'string',
+					description: '（已弃用，请使用 file_name_or_path）文件路径，相对于 vault 根目录。'
 				}
 			},
-			required: ['path']
+			required: ['file_name_or_path']
 		},
 		handler: async (rawArgs: Record<string, any>) => {
 			const args = rawArgs as ReadFileArgs;
 			const filePath = normalizeVaultPath(
-				coalesceString(args.path, args.filePath, args.file_path)
+				coalesceString(args.file_name_or_path, args.path, args.filePath, args.file_path)
 			);
 
 			if (!filePath) {
-				throw new Error('path 不能为空。示例: "notes/my-note.md"');
+				throw new Error('file_name_or_path 不能为空。示例: "notes/my-note.md" 或 "my-note.md"');
 			}
 
 			const invalidChars = /[<>:"|?*]/;
@@ -72,22 +95,29 @@ export const createReadFileTool = (app: App): ToolDefinition => {
 				throw new Error('文件路径包含非法字符: < > : " | ? *');
 			}
 
-			// 1) 优先使用 Obsidian API
+			// 1) 优先使用模糊路由解析路径
 			try {
-				const existing = app.vault.getAbstractFileByPath(filePath);
-				if (!existing || !(existing instanceof TFile)) {
-					throw new Error(`文件不存在: ${filePath}`);
+				const resolver = new PathResolverService(app);
+				const result = await resolver.resolvePath(filePath, {
+					allowFuzzyMatch: true,
+					requireFile: true
+				});
+
+				if (result.success && result.file) {
+					const existing = result.file;
+					if (isBinaryExtension(existing.extension)) {
+						throw new Error('该文件为二进制文件，read_file 仅支持文本文件');
+					}
+					const content = await app.vault.read(existing);
+					const stat = await app.vault.adapter.stat(existing.path);
+					const size = stat?.size ?? content.length;
+					if (size > MAX_READ_SIZE || content.length > MAX_READ_SIZE) {
+						return `${content.slice(0, MAX_READ_SIZE)}\n\n[内容过大已截断]`;
+					}
+					return content;
 				}
-				if (isBinaryExtension(existing.extension)) {
-					throw new Error('该文件为二进制文件，read_file 仅支持文本文件');
-				}
-				const content = await app.vault.read(existing);
-				const stat = await app.vault.adapter.stat(filePath);
-				const size = stat?.size ?? content.length;
-				if (size > MAX_READ_SIZE || content.length > MAX_READ_SIZE) {
-					return `${content.slice(0, MAX_READ_SIZE)}\n\n[内容过大已截断]`;
-				}
-				return content;
+				// PathResolverService 失败，继续到 Node.js 降级逻辑
+				throw new Error(result.error || `文件不存在: ${filePath}`);
 			} catch (error) {
 				// 2) 降级到 Node.js API
 				try {

@@ -3,15 +3,18 @@ import type { ToolDefinition } from '../types/tools';
 import { FileOperationService } from 'src/service/FileOperationService';
 
 interface WriteFileArgs {
-	filePath: string;
-	content: string;
+	// 新参数名（优先）
+	file_name_or_path?: string;
+	content?: string;
 	createFolders?: boolean;
 	fileName?: string;
 	folderPath?: string;
 	fileTitle?: string;
 	extension?: string;
+	// 兼容旧参数名
 	path?: string;
 	file_path?: string;
+	filePath?: string;
 	filename?: string;
 	name?: string;
 	title?: string;
@@ -73,7 +76,14 @@ export const createWriteFileTool = (app: App): ToolDefinition => {
 	return {
 		id: 'write_file',
 		name: 'write_file',
-		description: '向文件写入内容。如果文件不存在则创建新文件，存在则覆盖。支持 Markdown 和纯文本文件。',
+		description: `创建新文件或完全覆盖现有文件内容。当用户想要「新建」「创建」「写入」「保存」笔记时使用此工具。
+
+你可以传入完整路径（如 "notes/新笔记.md"），也可以只传入文件名（如 "新笔记"），系统会自动处理。
+
+⛔ 负面约束（重要）：
+- 如果用户只是想在现有文件「末尾添加」「追加」内容，严禁使用此工具！使用此工具会完全覆盖原文。
+- 对于追加操作，应该先用 read_file 读取原内容，然后将新内容拼接后再写入。
+- 如果不确定文件是否存在、是否会误覆盖，请先用 read_file 确认。`,
 		enabled: true,
 			executionMode: 'auto',
 		category: 'file',
@@ -81,25 +91,34 @@ export const createWriteFileTool = (app: App): ToolDefinition => {
 		parameters: {
 			type: 'object',
 			properties: {
+				file_name_or_path: {
+					type: 'string',
+					description: '文件名或路径。可传入完整路径（如 "notes/新笔记.md"）或仅文件名（如 "新笔记"）。'
+				},
+				// 兼容旧参数名（保持别名兼容）
 				path: {
 					type: 'string',
-					description: '文件路径，相对于 vault 根目录。例如: notes/我的笔记.md'
+					description: '（已弃用，请使用 file_name_or_path）文件路径，相对于 vault 根目录。'
 				},
 				filePath: {
 					type: 'string',
-					description: '文件路径（兼容字段），相对于 vault 根目录。例如: notes/我的笔记.md'
+					description: '（已弃用，请使用 file_name_or_path）文件路径，相对于 vault 根目录。'
+				},
+				file_path: {
+					type: 'string',
+					description: '（已弃用，请使用 file_name_or_path）文件路径，相对于 vault 根目录。'
 				},
 				fileName: {
 					type: 'string',
-					description: '文件名（可不含扩展名）。当未提供 filePath 时使用'
+					description: '文件名（可不含扩展名）。当未提供 file_name_or_path 时使用'
 				},
 				folderPath: {
 					type: 'string',
-					description: '父文件夹路径（相对 vault 根目录）。当未提供 filePath 时使用'
+					description: '父文件夹路径（相对 vault 根目录）。当未提供 file_name_or_path 时使用'
 				},
 				fileTitle: {
 					type: 'string',
-					description: '文件标题（将转换为文件名）。当未提供 filePath 时使用'
+					description: '文件标题（将转换为文件名）。当未提供 file_name_or_path 时使用'
 				},
 				extension: {
 					type: 'string',
@@ -126,12 +145,13 @@ export const createWriteFileTool = (app: App): ToolDefinition => {
 					description: '如果父文件夹不存在，是否自动创建。默认 true。'
 				}
 			},
-			required: ['path']
+			required: []  // 移除必填要求，支持 fileName/folderPath 等组合方式
 		},
 		handler: async (rawArgs: Record<string, any>) => {
 			const args = rawArgs as WriteFileArgs;
 			const filePath = normalizeVaultPath(
 				coalesceString(
+					args.file_name_or_path,
 					args.path,
 					args.filePath,
 					args.file_path
@@ -147,7 +167,7 @@ export const createWriteFileTool = (app: App): ToolDefinition => {
 			if (!resolvedPath) {
 				const fallback = buildFallbackPath(args);
 				if (!fallback) {
-					throw new Error('path 不能为空。示例: "notes/my-note.md"');
+					throw new Error('file_name_or_path 不能为空。示例: "notes/my-note.md" 或 "my-note.md"');
 				}
 				resolvedPath = fallback;
 			}

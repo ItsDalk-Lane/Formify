@@ -3,6 +3,9 @@ import type { ToolDefinition } from '../types/tools';
 import { FileOperationService } from 'src/service/FileOperationService';
 
 interface DeleteFileArgs {
+	// 新参数名（优先）
+	file_name_or_path?: string;
+	// 兼容旧参数名
 	path?: string;
 	filePath?: string;
 	file_path?: string;
@@ -34,7 +37,14 @@ export const createDeleteFileTool = (app: App): ToolDefinition => {
 	return {
 		id: 'delete_file',
 		name: 'delete_file',
-		description: '删除指定路径的文件或文件夹。如果删除文件夹，将递归删除其中的所有内容。',
+		description: `永久删除指定的文件或文件夹。当用户明确要求「删除」「移除」「清理」某个文件时使用此工具。
+
+你可以传入完整路径，也可以只传入文件名，系统会尝试定位。
+
+⛔ 负面约束（重要）：
+- 这是一个危险操作，删除后无法撤销（或进入回收站，取决于系统设置）。
+- 除非用户明确表达删除意图，否则不要主动调用此工具。
+- 对于「清空文件内容」的需求，应使用 write_file 写入空内容，而不是删除文件。`,
 		enabled: true,
 		executionMode: 'manual',
 		category: 'file',
@@ -42,32 +52,45 @@ export const createDeleteFileTool = (app: App): ToolDefinition => {
 		parameters: {
 			type: 'object',
 			properties: {
+				file_name_or_path: {
+					type: 'string',
+					description: '文件名或路径。可传入完整路径或仅文件名，系统会尝试定位。'
+				},
+				// 兼容旧参数名
 				path: {
 					type: 'string',
-					description: '要删除的文件或文件夹路径，相对于 vault 根目录'
-			},
-			paths: {
-				type: 'array',
-				description: '（可选）要删除的多个路径'
-			},
-			recursive: {
-				type: 'boolean',
-				description: '是否递归删除文件夹。默认 true。'
+					description: '（已弃用，请使用 file_name_or_path）要删除的文件或文件夹路径，相对于 vault 根目录。'
+				},
+				filePath: {
+					type: 'string',
+					description: '（已弃用，请使用 file_name_or_path）文件路径，相对于 vault 根目录。'
+				},
+				file_path: {
+					type: 'string',
+					description: '（已弃用，请使用 file_name_or_path）文件路径，相对于 vault 根目录。'
+				},
+				paths: {
+					type: 'array',
+					description: '（可选）要删除的多个路径'
+				},
+				recursive: {
+					type: 'boolean',
+					description: '是否递归删除文件夹。默认 true。'
 				}
 			},
-		required: []
+			required: []
 		},
 		handler: async (rawArgs: Record<string, any>) => {
 			const args = rawArgs as DeleteFileArgs;
 		const filePath = normalizeVaultPath(
-			coalesceString(args.path, args.filePath, args.file_path)
+			coalesceString(args.file_name_or_path, args.path, args.filePath, args.file_path)
 		);
 		const normalizedPaths = (args.paths ?? [])
 			.map((item) => normalizeVaultPath(item))
 			.filter((item) => item);
 		const paths = normalizedPaths.length > 0 ? normalizedPaths : (filePath ? [filePath] : []);
 		if (paths.length === 0) {
-			throw new Error('必须提供 path 或 paths 参数');
+			throw new Error('必须提供 file_name_or_path 参数或 paths 参数');
 		}
 
 		const service = new FileOperationService(app);

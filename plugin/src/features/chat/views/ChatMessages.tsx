@@ -77,16 +77,18 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 				ref={scrollRef}
 				className="tw-flex tw-flex-1 tw-flex-col tw-overflow-y-auto tw-scroll-smooth tw-select-text tw-break-words tw-gap-2"
 			>
-				{messages.map((message, index) => (
-					<MessageItem
-						key={message.id}
-						message={message}
-						service={service}
-						isGenerating={message.role === 'assistant' && index === messages.length - 1 && state.isGenerating}
-						pendingToolExecutions={state.pendingToolExecutions}
-						toolExecutions={state.toolExecutions}
-					/>
-				))}
+				{messages
+					.filter((message) => !message.metadata?.hidden)
+					.map((message, index) => (
+						<MessageItem
+							key={message.id}
+							message={message}
+							service={service}
+							isGenerating={message.role === 'assistant' && index === messages.length - 1 && state.isGenerating}
+							pendingToolExecutions={state.pendingToolExecutions}
+							toolExecutions={state.toolExecutions}
+						/>
+					))}
 			</div>
 		</div>
 	);

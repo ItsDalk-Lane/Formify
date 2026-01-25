@@ -45,7 +45,12 @@ export const createWebFetchTool = (): ToolDefinition => {
 	return {
 		id: 'web_fetch',
 		name: 'web_fetch',
-		description: '抓取指定 URL 的网页内容并返回文本。',
+		description: `抓取指定 URL 的网页内容并返回纯文本。当用户想要「获取网页」「抓取链接」「读取 URL 内容」时使用此工具。
+
+⛔ 负面约束：
+- 此工具只能获取公开可访问的网页，不支持需要登录的页面。
+- 对于 vault 内部的文件，不要使用此工具，应使用 read_file。
+- 返回的是去除 HTML 标签后的纯文本，可能丢失格式信息。`,
 		enabled: true,
 		executionMode: 'auto',
 		category: 'web',

@@ -111,18 +111,18 @@ export class ProviderSettingModal extends Modal {
 
 	onOpen() {
 		const { contentEl, titleEl } = this
-		
+
 		// 设置标题
 		titleEl.setText(this.title)
-		
+
 		// 设置 Modal 样式
 		contentEl.style.maxHeight = '80vh'
 		contentEl.style.overflowY = 'auto'
 		contentEl.style.padding = '20px'
-		
+
 		// 创建配置容器
 		this.configContainer = contentEl.createDiv({ cls: 'provider-setting-modal-container' })
-		
+
 		// 调用渲染回调
 		this.renderCallback(this.configContainer)
 	}
@@ -132,4 +132,3 @@ export class ProviderSettingModal extends Modal {
 		contentEl.empty()
 	}
 }
-

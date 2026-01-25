@@ -5,6 +5,9 @@ import * as path from 'path';
 import type { ToolDefinition } from '../types/tools';
 
 interface ListDirectoryArgs {
+	// 新参数名（优先）
+	folder_name_or_path?: string;
+	// 兼容旧参数名
 	path?: string;
 }
 
@@ -52,7 +55,14 @@ export const createListDirectoryTool = (app: App): ToolDefinition => {
 	return {
 		id: 'list_directory',
 		name: 'list_directory',
-		description: '列出指定目录下的文件和子文件夹。',
+		description: `列出指定目录下的所有文件和子文件夹。当用户想要「看看文件夹里有什么」「列出目录」「浏览文件结构」时使用此工具。
+
+传入空字符串或 "/" 表示列出 vault 根目录。支持模糊目录名。
+
+⛔ 负面约束：
+- 如果用户想要搜索某个文件名，不要遍历多个目录，应使用 search_files。
+- 如果用户想要搜索文件内容，不要用此工具逐个查看，应使用 search_content。
+- 此工具只返回直接子项，不会递归列出所有层级。`,
 		enabled: true,
 		executionMode: 'auto',
 		category: 'file',
@@ -60,16 +70,21 @@ export const createListDirectoryTool = (app: App): ToolDefinition => {
 		parameters: {
 			type: 'object',
 			properties: {
+				folder_name_or_path: {
+					type: 'string',
+					description: '目录名或路径。可传入完整路径或仅目录名，空字符串或 "/" 表示根目录。'
+				},
+				// 兼容旧参数名
 				path: {
 					type: 'string',
-					description: '目录路径，相对于 vault 根目录。空字符串或 "/" 表示根目录'
+					description: '（已弃用，请使用 folder_name_or_path）目录路径，相对于 vault 根目录。'
 				}
 			},
-			required: ['path']
+			required: ['folder_name_or_path']
 		},
 		handler: async (rawArgs: Record<string, any>) => {
 			const args = rawArgs as ListDirectoryArgs;
-			const rawPath = String(args.path ?? '').trim();
+			const rawPath = String(args.folder_name_or_path ?? args.path ?? '').trim();
 			const normalized = normalizeVaultPath(rawPath);
 
 			const invalidChars = /[<>:"|?*]/;

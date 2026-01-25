@@ -67,7 +67,12 @@ export const createWritePlanTool = (): ToolDefinition => {
 	return {
 		id: 'write_plan',
 		name: 'write_plan',
-		description: '创建或更新任务执行计划（会完全覆盖现有计划）。',
+		description: `创建或更新任务执行计划，用于跟踪多步骤任务的进度。当需要「制定计划」「规划任务」「跟踪进度」时使用此工具。
+
+⛔ 负面约束：
+- 此工具会完全覆盖现有计划，不是增量更新。
+- 对于简单的单步任务，不需要创建计划。
+- 每个任务必须有明确的验收标准（acceptance_criteria）。`,
 		enabled: true,
 		executionMode: 'auto',
 		category: 'planning',
