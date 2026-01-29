@@ -5,6 +5,16 @@
 	width: 100%;
 }
 
+.form--CpsFormSettingTabs {
+	min-height: 0;
+}
+
+.form--CpsFormSettingTabs .form--TabPanels {
+	min-height: 0;
+	max-height: 100%;
+	overflow-y: auto;
+}
+
 .form--CpsFormSettingGroup .form--SettingGroupHeader {
 	display: flex;
 	align-items: center;

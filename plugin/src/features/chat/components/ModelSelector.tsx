@@ -23,6 +23,8 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 	const dropdownRef = useRef<HTMLDivElement>(null);
 	const providerListRef = useRef<HTMLDivElement>(null);
 	const submenuRef = useRef<HTMLDivElement>(null);
+	const vendorItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+	const [dropdownDirection, setDropdownDirection] = useState<'up' | 'down'>('down');
 
 	// 当前悬停的提供商
 	const [hoveredVendor, setHoveredVendor] = useState<string | null>(null);
@@ -80,22 +82,46 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 		setHoveredVendor(null);
 	}, [onChange]);
 
-	// Get button position for portal dropdown
-	const getButtonPosition = useCallback(() => {
-		if (!dropdownRef.current) return { left: 0, top: 0 };
+	const updateDropdownDirection = useCallback(() => {
+		if (!dropdownRef.current) return;
 		const rect = dropdownRef.current.getBoundingClientRect();
-		return { left: rect.left, top: rect.bottom + 2 };
+		const spaceBelow = window.innerHeight - rect.bottom;
+		const spaceAbove = rect.top;
+		const shouldOpenUp = spaceBelow < 240 && spaceAbove > spaceBelow;
+		setDropdownDirection(shouldOpenUp ? 'up' : 'down');
 	}, []);
 
-	// 获取侧边弹窗位置（在提供商列表项的右侧）
+	// Get button position for portal dropdown
+	const getButtonPosition = useCallback(() => {
+		if (!dropdownRef.current) return { left: 0, top: 0, transform: 'none' };
+		const rect = dropdownRef.current.getBoundingClientRect();
+		if (dropdownDirection === 'up') {
+			return { left: rect.left, top: rect.top - 2, transform: 'translateY(-100%)' };
+		}
+		return { left: rect.left, top: rect.bottom + 2, transform: 'none' };
+	}, [dropdownDirection]);
+
+	// 获取侧边弹窗位置（在当前提供商列表项的右侧）
 	const getSubmenuPosition = useCallback(() => {
-		if (!providerListRef.current) return { left: 0, top: 0 };
-		const rect = providerListRef.current.getBoundingClientRect();
+		if (!hoveredVendor) return { left: 0, top: 0 };
+		const vendorEl = vendorItemRefs.current.get(hoveredVendor);
+		if (!vendorEl) return { left: 0, top: 0 };
+		const rect = vendorEl.getBoundingClientRect();
 		return {
 			left: rect.right + 4,
 			top: rect.top
 		};
-	}, []);
+	}, [hoveredVendor]);
+
+	useEffect(() => {
+		if (!isOpen) return;
+		updateDropdownDirection();
+		const handleResize = () => updateDropdownDirection();
+		window.addEventListener('resize', handleResize);
+		return () => {
+			window.removeEventListener('resize', handleResize);
+		};
+	}, [isOpen, updateDropdownDirection]);
 
 	useEffect(() => {
 		const handleClickOutside = (event: MouseEvent) => {
@@ -142,6 +168,12 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 			}
 		};
 	}, []);
+
+	useEffect(() => {
+		if (!isOpen) {
+			vendorItemRefs.current.clear();
+		}
+	}, [isOpen]);
 
 	if (!providers.length) {
 		return <div className="tw-text-sm tw-text-error">尚未配置AI模型</div>;
@@ -222,6 +254,13 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 									<div
 										key={group.vendorName}
 										role="menuitem"
+										ref={(el) => {
+											if (el) {
+												vendorItemRefs.current.set(group.vendorName, el);
+											} else {
+												vendorItemRefs.current.delete(group.vendorName);
+											}
+										}}
 										style={{
 											display: 'flex',
 											alignItems: 'center',

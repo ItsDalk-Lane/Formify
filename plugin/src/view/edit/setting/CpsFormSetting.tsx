@@ -266,6 +266,7 @@ export default function CpsFormSetting(props: {
 			)}
 
 		<Tab
+			className="form--CpsFormSettingTabs"
 			items={[
 				{
 					id: "basic",

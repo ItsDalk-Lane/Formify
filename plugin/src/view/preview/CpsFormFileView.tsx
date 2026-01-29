@@ -92,6 +92,7 @@ export function CpsFormFileView(props: Props) {
 		<FormConfigContext.Provider value={formConfig}>
 			<div
 				className={`form--CpsFormFileView ${className ?? ""}`}
+				data-editing={inEditing}
 				{...rest}
 			>
 				{viewOptions.hideHeader !== true && (
@@ -147,17 +148,19 @@ export function CpsFormFileView(props: Props) {
 						)}
 					</div>
 				)}
-				{inEditing === true ? (
-					<CpsFormEditView
-						defaultConfig={formConfig}
-						filePath={formFile}
-					/>
-				) : (
-					<CpsFormActionView
-						formConfig={formConfig}
-						options={props.options}
-					/>
-				)}
+				<div className="form--CpsFormFileViewBody">
+					{inEditing === true ? (
+						<CpsFormEditView
+							defaultConfig={formConfig}
+							filePath={formFile}
+						/>
+					) : (
+						<CpsFormActionView
+							formConfig={formConfig}
+							options={props.options}
+						/>
+					)}
+				</div>
 
 			{/* 导入对话框 */}
 			{showImportDialog && (

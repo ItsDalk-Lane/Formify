@@ -3557,7 +3557,11 @@ export class TarsSettingTab {
 			this.addModelDropDownSection(container, settings.options, vendor.models, capabilities)
 		} else {
 			// 纯文本输入模式（完全自定义）
-			this.addModelTextSection(container, settings.options, capabilities)
+			if (vendor.name === ollamaVendor.name) {
+				this.addOllamaModelTextSection(container, settings.options, capabilities)
+			} else {
+				this.addModelTextSection(container, settings.options, capabilities)
+			}
 		}
 
 		if (vendor.name !== ollamaVendor.name) {
@@ -4165,6 +4169,121 @@ export class TarsSettingTab {
 						await this.saveSettings()
 					})
 			)
+
+	addOllamaModelTextSection = (details: HTMLElement, options: BaseOptions, desc: string) => {
+		const setting = new Setting(details).setName(t('Model')).setDesc(desc)
+		let listEl: HTMLDivElement | null = null
+		let isLoading = false
+		let cachedModels: string[] | null = null
+		let removeDocClick: (() => void) | null = null
+
+		const closeList = () => {
+			if (listEl) {
+				listEl.remove()
+				listEl = null
+			}
+			if (removeDocClick) {
+				removeDocClick()
+				removeDocClick = null
+			}
+		}
+
+		const renderList = (models: string[], inputEl: HTMLInputElement) => {
+			closeList()
+			listEl = document.createElement('div')
+			listEl.style.position = 'fixed'
+			listEl.style.background = 'var(--background-primary)'
+			listEl.style.border = '1px solid var(--background-modifier-border)'
+			listEl.style.borderRadius = '6px'
+			listEl.style.boxShadow = '0 6px 24px rgba(0, 0, 0, 0.12)'
+			listEl.style.maxHeight = '240px'
+			listEl.style.overflowY = 'auto'
+			listEl.style.zIndex = '9999'
+			listEl.style.minWidth = '220px'
+
+			if (models.length === 0) {
+				const emptyEl = document.createElement('div')
+				emptyEl.textContent = '未检测到本地模型'
+				emptyEl.style.padding = '8px 10px'
+				emptyEl.style.color = 'var(--text-muted)'
+				emptyEl.style.fontSize = '12px'
+				listEl.appendChild(emptyEl)
+			} else {
+				for (const model of models) {
+					const item = document.createElement('div')
+					item.textContent = model
+					item.style.padding = '8px 10px'
+					item.style.cursor = 'pointer'
+					item.style.fontSize = '12px'
+					item.addEventListener('mouseenter', () => {
+						item.style.background = 'var(--background-modifier-hover)'
+					})
+					item.addEventListener('mouseleave', () => {
+						item.style.background = 'transparent'
+					})
+					item.addEventListener('mousedown', (e) => {
+						e.preventDefault()
+					})
+					item.addEventListener('click', async () => {
+						inputEl.value = model
+						options.model = model
+						await this.saveSettings()
+						closeList()
+					})
+					listEl.appendChild(item)
+				}
+			}
+
+			const rect = inputEl.getBoundingClientRect()
+			const width = Math.max(rect.width, 220)
+			listEl.style.left = `${rect.left}px`
+			listEl.style.top = `${rect.bottom + 6}px`
+			listEl.style.width = `${width}px`
+			document.body.appendChild(listEl)
+
+			const onDocClick = (event: MouseEvent) => {
+				if (!listEl) return
+				const target = event.target as Node
+				if (!setting.controlEl.contains(target)) {
+					closeList()
+				}
+			}
+			document.addEventListener('mousedown', onDocClick)
+			removeDocClick = () => document.removeEventListener('mousedown', onDocClick)
+		}
+
+		setting.addText((text) => {
+			const inputEl = text.inputEl
+			text
+				.setPlaceholder('点击自动扫描本地模型')
+				.setValue(options.model)
+				.onChange(async (value) => {
+					options.model = value.trim()
+					await this.saveSettings()
+				})
+
+			inputEl.addEventListener('focus', async () => {
+				if (isLoading) return
+				isLoading = true
+				try {
+					if (!cachedModels) {
+						cachedModels = await fetchOllamaLocalModels(options.baseURL)
+					}
+					renderList(cachedModels, inputEl)
+				} catch (error) {
+					new Notice('🔴 无法获取本地 Ollama 模型，请确认服务已启动')
+				} finally {
+					isLoading = false
+				}
+			})
+
+			inputEl.addEventListener('blur', () => {
+				setTimeout(() => closeList(), 120)
+			})
+		})
+
+		return setting
+	}
 
 	addClaudeSections = (details: HTMLElement, options: ClaudeOptions) => {
 		new Setting(details)
@@ -5092,6 +5211,20 @@ const fetchModels = async (url: string, apiKey?: string): Promise<string[]> => {
 	})
 	const result = response.json
 	return result.data.map((model: { id: string }) => model.id)
+}
+
+const normalizeBaseUrl = (baseURL?: string) => {
+	const trimmed = (baseURL || '').trim()
+	if (!trimmed) return 'http://127.0.0.1:11434'
+	return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed
+}
+
+const fetchOllamaLocalModels = async (baseURL?: string): Promise<string[]> => {
+	const url = `${normalizeBaseUrl(baseURL)}/api/tags`
+	const response = await requestUrl({ url })
+	const result = response.json
+	const models = Array.isArray(result?.models) ? result.models : []
+	return models.map((model: { name: string }) => model.name).filter(Boolean)
 }
 
 // Model fetching configurations for different vendors

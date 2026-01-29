@@ -1,4 +1,4 @@
-import { MarkdownView, Notice, TFile, TFolder } from 'obsidian';
+import { MarkdownView, Notice, requestUrl, TFile, TFolder } from 'obsidian';
 import FormPlugin from 'src/main';
 import type { ProviderSettings, SaveAttachment } from 'src/features/tars/providers';
 import type { Message as ProviderMessage, ResolveEmbedAsBinary } from 'src/features/tars/providers';
@@ -59,6 +59,7 @@ export class ChatService {
 	};
 	private subscribers: Set<ChatSubscriber> = new Set();
 	private controller: AbortController | null = null;
+	private ollamaCapabilityCache = new Map<string, { toolCalling: boolean; reasoning: boolean; checkedAt: number; warned?: boolean }>();
 	// 跟踪当前活动文件的路径
 	private currentActiveFilePath: string | null = null;
 	// 跟踪在当前活动文件会话期间，用户手动移除的文件路径（仅在当前文件活跃期间有效）
@@ -1148,6 +1149,42 @@ export class ChatService {
 		return true;
 	}
 
+	private normalizeOllamaBaseUrl(baseURL?: string) {
+		const trimmed = (baseURL || '').trim();
+		if (!trimmed) return 'http://127.0.0.1:11434';
+		return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
+	}
+
+	private async getOllamaCapabilities(baseURL: string, model: string) {
+		const normalizedBase = this.normalizeOllamaBaseUrl(baseURL);
+		const key = `${normalizedBase}|${model}`;
+		const cache = this.ollamaCapabilityCache.get(key);
+		const now = Date.now();
+		if (cache && now - cache.checkedAt < 5 * 60 * 1000) {
+			return cache;
+		}
+
+		try {
+			const response = await requestUrl({
+				url: `${normalizedBase}/api/show`,
+				method: 'POST',
+				body: JSON.stringify({ model })
+			});
+			const capabilities = Array.isArray(response.json?.capabilities) ? response.json.capabilities : [];
+			const normalized = capabilities.map((cap: string) => String(cap).toLowerCase());
+			const toolCalling = normalized.includes('tool_calling') || normalized.includes('tool-calling') || normalized.includes('tools');
+			const reasoning = normalized.includes('thinking') || normalized.includes('reasoning');
+			const next = { toolCalling, reasoning, checkedAt: now };
+			this.ollamaCapabilityCache.set(key, next);
+			return next;
+		} catch (error) {
+			const next = { toolCalling: false, reasoning: false, checkedAt: now, warned: cache?.warned };
+			this.ollamaCapabilityCache.set(key, next);
+			return next;
+		}
+	}
+
+
 	private async generateAssistantResponse(session: ChatSession) {
 		try {
 			const provider = this.resolveProvider();
@@ -1164,9 +1201,10 @@ export class ChatService {
 						: false;
 			const providerEnableThinking = providerOptionsRaw.enableThinking ?? false;
 			const providerEnableWebSearch = provider?.options.enableWebSearch ?? false;
-			const enableReasoning = this.state.enableReasoningToggle && providerEnableReasoning;
-			const enableThinking = this.state.enableReasoningToggle && providerEnableThinking;
+			let enableReasoning = this.state.enableReasoningToggle && providerEnableReasoning;
+			let enableThinking = this.state.enableReasoningToggle && providerEnableThinking;
 			const enableWebSearch = this.state.enableWebSearchToggle && providerEnableWebSearch;
+			let allowToolCalling = true;
 			const providerOptions = {
 				...providerOptionsRaw,
 				enableReasoning,
@@ -1179,8 +1217,30 @@ export class ChatService {
 				throw new Error(`无法找到供应商 ${provider.vendor}`);
 			}
 
+			// Ollama：根据模型能力禁用不支持的功能，避免请求失败
+			if (vendor.name === 'Ollama') {
+				const modelName = String((providerOptions as any).model ?? '');
+				const baseURL = String((providerOptions as any).baseURL ?? '');
+				if (modelName) {
+					const caps = await this.getOllamaCapabilities(baseURL, modelName);
+					enableReasoning = enableReasoning && caps.reasoning;
+					enableThinking = enableThinking && caps.reasoning;
+					allowToolCalling = caps.toolCalling;
+					(providerOptions as any).enableReasoning = enableReasoning;
+					(providerOptions as any).enableThinking = enableThinking;
+					if (!caps.toolCalling || !caps.reasoning) {
+						const key = `${this.normalizeOllamaBaseUrl(baseURL)}|${modelName}`;
+						const cached = this.ollamaCapabilityCache.get(key);
+						if (cached && !cached.warned) {
+							this.ollamaCapabilityCache.set(key, { ...cached, warned: true });
+							new Notice('已根据 Ollama 模型能力自动关闭不支持的推理/工具功能');
+						}
+					}
+				}
+			}
+
 			// 注入全局工具（仅对支持 Tool Calling 的 vendor 生效）
-			if (vendor.capabilities.includes('Tool Calling')) {
+			if (vendor.capabilities.includes('Tool Calling') && allowToolCalling) {
 				const tools = this.toolRegistry.toOpenAICompatibleTools(true);
 				if (tools.length > 0) {
 					const rawParams = (providerOptions as any).parameters ?? {};
