@@ -31,26 +31,34 @@ export function CpsFormFieldSettingContent(props: {
 	};
 
 	const fieldConditionLength = useMemo(() => {
-		if (!field.condition) {
+		if (!field.condition || !field.condition.conditions) {
 			return 0;
 		}
-		// 对于扩展条件类型（timeCondition, fileCondition, scriptCondition），它们本身就是一个条件
-		if (field.condition.type === FilterType.timeCondition || 
-			field.condition.type === FilterType.fileCondition ||
-			field.condition.type === FilterType.scriptCondition) {
-			return 1;
-		}
-		if (!field.condition.conditions) {
-			return 0;
-		}
-		// 统计子条件数量，包括扩展条件类型
-		return field.condition.conditions.filter(c => 
-			c.type === FilterType.timeCondition ||
-			c.type === FilterType.fileCondition ||
-			c.type === FilterType.scriptCondition ||
-			c.type === FilterType.field ||
-			c.type === FilterType.group
-		).length;
+
+		// 递归计算实际有效的过滤条件数量
+		const countValidFilters = (conditions: any[]): number => {
+			if (!conditions || conditions.length === 0) {
+				return 0;
+			}
+
+			return conditions.reduce((count, condition) => {
+				if (condition.type === FilterType.group) {
+					// 递归计算组内的条件
+					return count + countValidFilters(condition.conditions || []);
+				} else if (condition.type === FilterType.timeCondition ||
+					condition.type === FilterType.fileCondition ||
+					condition.type === FilterType.scriptCondition) {
+					// 时间条件、文件条件或脚本条件视为有效条件
+					return condition.extendedConfig ? count + 1 : count;
+				} else if (condition.type === FilterType.filter) {
+					// 字段过滤条件，检查是否有有效的属性和操作符
+					return (condition.property && condition.operator) ? count + 1 : count;
+				}
+				return count;
+			}, 0);
+		};
+
+		return countValidFilters(field.condition.conditions);
 	}, [field.condition]);
 
 	const error = useMemo(() => {

@@ -10,11 +10,12 @@ export function PropertyValueSuggestInput(props: {
 	label?: string;
 	placeholder?: string;
 	name: string;
-	value: string;
+	value: string | string[];
 	onChange: (value: string | string[] | null) => void;
+	multiple?: boolean;
 }) {
 	const app = useObsidianApp();
-	const { name, value, onChange } = props;
+	const { name, value, onChange, multiple } = props;
 	const items = useMemo(() => {
 		app.metadataTypeManager.getAllProperties().find;
 		const options = getPropertyValues(app, name)
@@ -33,7 +34,8 @@ export function PropertyValueSuggestInput(props: {
 		return options;
 	}, [name]);
 
-	const isMultiple = isMultiTextProperty(app, name);
+	// 优先使用传入的 multiple 配置，如果没有则根据 Obsidian 属性类型检测
+	const isMultiple = multiple !== undefined ? multiple : isMultiTextProperty(app, name);
 
 	return isMultiple ? (
 		<MultipleComboboxSuggestion

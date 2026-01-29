@@ -251,7 +251,22 @@ export default class UpdateFrontmatterActionService implements IActionService {
                 // Process array values
                 const processedArray = [];
                 for (const [index, item] of propertyValue.entries()) {
-                    const processedItem = await engine.process(item, context.state, context.app);
+                    // 检测纯变量引用（如 {{@MOC}}），直接使用原始值以保持数组格式
+                    const pureVariableMatch = typeof item === 'string' && item.match(/^\{\{@([^}]+)\}\}$/);
+                    let processedItem;
+
+                    if (pureVariableMatch) {
+                        const rawName = pureVariableMatch[1]?.trim();
+                        const originalValue = context.state.values[rawName];
+                        // 如果原始值是数组，直接使用；否则正常处理
+                        if (Array.isArray(originalValue)) {
+                            processedItem = originalValue;
+                        } else {
+                            processedItem = await engine.process(item, context.state, context.app);
+                        }
+                    } else {
+                        processedItem = await engine.process(item, context.state, context.app);
+                    }
 
                     if (Array.isArray(processedItem)) {
                         processedArray.push(...processedItem);

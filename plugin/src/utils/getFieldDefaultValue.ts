@@ -1,6 +1,7 @@
 import { FormFieldType } from "../model/enums/FormFieldType";
 import { IFormField } from "../model/field/IFormField";
 import { ISelectField } from "../model/field/ISelectField";
+import { IPropertyValueField } from "../model/field/IPropertyValueField";
 import { isTimeFormField } from "./isTimeFormField";
 import { DateTime } from "luxon";
 import { BaseTimeField, TimeFieldDefaultValueType } from "../model/field/time/BaseTimeField";
@@ -67,6 +68,34 @@ export function getFieldDefaultValue(
 
     if (curr.type === FormFieldType.FOLDER_PATH) {
         return curr.defaultValue || "";
+    }
+
+    // 属性值列表字段：根据 multiple 属性处理默认值格式
+    if (curr.type === FormFieldType.PROPERTY_VALUE_SUGGESTION) {
+        const propertyField = curr as IPropertyValueField;
+        const defaultValue = curr.defaultValue;
+
+        if (propertyField.multiple) {
+            // 多选模式：确保返回数组格式
+            if (Array.isArray(defaultValue)) {
+                return defaultValue;
+            }
+            // 如果是逗号分隔的字符串，分割成数组
+            if (typeof defaultValue === 'string' && defaultValue.includes('，')) {
+                return defaultValue.split('，').map(v => v.trim()).filter(v => v.length > 0);
+            }
+            if (typeof defaultValue === 'string' && defaultValue.includes(',')) {
+                return defaultValue.split(',').map(v => v.trim()).filter(v => v.length > 0);
+            }
+            // 单个值转为单元素数组
+            return defaultValue ? [defaultValue] : [];
+        } else {
+            // 单选模式：返回字符串或 undefined
+            if (Array.isArray(defaultValue)) {
+                return defaultValue[0];
+            }
+            return defaultValue || undefined;
+        }
     }
 
     return curr.defaultValue;

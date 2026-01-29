@@ -22,6 +22,16 @@ export const internalFieldNames = [
 		description: DateTime.now().toFormat("yyMMdd"),
 	},
 	{
+		name: "{{date:YYYY年M月D日}}",
+		description: DateTime.now().toFormat("yyyy年M月d日"),
+		tooltip: "中文日期格式：\n• {{date:YYYY年M月D日}} → 2026年1月29日\n• {{date:YYYY年MM月DD日}} → 2026年01月29日",
+	},
+	{
+		name: "{{date:YYYY年M月D日HH时mm分ss秒}}",
+		description: DateTime.now().toFormat("yyyy年M月d日HH时mm分ss秒"),
+		tooltip: "中文日期时间格式：\n• {{date:YYYY年M月D日HH时mm分ss秒}} → 2026年1月29日22时28分33秒\n• 可自行调整格式，如：{{date:YYYY年MM月DD日 HH时mm分}}",
+	},
+	{
 		name: "{{date:YYYY-MM-DD|+3}}",
 		description: DateTime.now().plus({ days: 3 }).toFormat("yyyy-MM-dd") + " (当前日期+3天)",
 		tooltip: "支持相对日期：\n• {{date:格式|+数字}} 未来几天\n• {{date:格式|-数字}} 过去几天\n• {{date:格式|下周一}} 下周一到下周日\n• {{date:格式|next monday}} next monday to next sunday",

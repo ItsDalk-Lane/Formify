@@ -20,7 +20,8 @@ export function CpsFormFieldControl(props: {
 	autoFocus?: boolean;
 }) {
 	const { value, field, autoFocus } = props;
-	const actualValue = value || "";
+	// 对于数组类型的字段（如属性值列表、文件列表），保持数组格式
+	const actualValue = Array.isArray(value) ? value : (value || "");
 	const onValueChange = props.onValueChange;
 
 	if (field.type === FormFieldType.TEXTAREA) {
@@ -182,6 +183,7 @@ export function CpsFormFieldControl(props: {
 				name={propertyName}
 				value={actualValue}
 				onChange={onValueChange}
+				multiple={propertyValueField.multiple}
 			/>
 		);
 	}
