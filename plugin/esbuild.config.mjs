@@ -17,7 +17,7 @@ console.log("📋 构建参数:", process.argv);
 console.log("🔧 构建模式:", prod ? "生产模式 (production)" : "开发模式 (development)");
 
 // Obsidian 插件目标目录
-const OBSIDIAN_PLUGIN_DIR = "C:\\Desktop\\沙箱仓库2\\.obsidian\\plugins\\formify";
+const OBSIDIAN_PLUGIN_DIR = "C:\\Desktop\\TakeAction\\.obsidian\\plugins\\formify";
 
 // 确定输出目录：生产模式直接输出到 Obsidian 插件目录，开发模式输出到当前目录
 const OUTPUT_DIR = prod ? OBSIDIAN_PLUGIN_DIR : ".";

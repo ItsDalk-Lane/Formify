@@ -81,17 +81,19 @@ export class FormTemplateProcessEngine {
         });
 
         // handle {{output:variableName}} - 支持AI动作输出变量引用
+        // 当变量不存在时返回空字符串，确保AI动作未执行时不会残留占位符
         res = res.replace(/\{\{output:([^}]+)\}\}/g, (match, variableName) => {
             const name = String(variableName).trim();
             const value = state.values[name];
-            return value !== undefined && value !== null ? String(value) : match;
+            return value !== undefined && value !== null ? String(value) : "";
         });
 
         // handle {{@output:variableName}} - 与文档/界面提示保持一致
+        // 当变量不存在时返回空字符串，确保AI动作未执行时不会残留占位符
         res = res.replace(/\{\{@output:([^}]+)\}\}/g, (match, variableName) => {
             const name = String(variableName).trim();
             const value = state.values[name];
-            return value !== undefined && value !== null ? String(value) : match;
+            return value !== undefined && value !== null ? String(value) : "";
         });
 
         // handle {{selection}}

@@ -4222,7 +4222,7 @@ export class TarsSettingTab {
 						item.style.background = 'transparent'
 					})
 					item.addEventListener('mousedown', (e) => {
-						e.preventDefault()
+						e.stopPropagation()
 					})
 					item.addEventListener('click', async () => {
 						inputEl.value = model

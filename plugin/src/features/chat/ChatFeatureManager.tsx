@@ -598,11 +598,12 @@ export class ChatFeatureManager {
 		}
 
 		const { from, to, text } = this.currentSelectionInfo;
+		const editorView = this.currentEditorView;
 
 		// 复制到剪贴板
 		navigator.clipboard.writeText(text).then(() => {
 			// 删除选中的文本
-			this.currentEditorView?.dispatch({
+			editorView.dispatch({
 				changes: {
 					from,
 					to,
@@ -610,11 +611,11 @@ export class ChatFeatureManager {
 				}
 			});
 			new Notice('已剪切到剪贴板');
+			this.hideSelectionToolbar();
 		}).catch(() => {
 			new Notice('剪切失败');
+			this.hideSelectionToolbar();
 		});
-
-		this.hideSelectionToolbar();
 	}
 
 	private getFrontmatterLength(docText: string): number {

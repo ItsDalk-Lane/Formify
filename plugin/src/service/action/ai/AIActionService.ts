@@ -256,6 +256,7 @@ export default class AIActionService implements IActionService {
 
         // 处理 {{output:variableName}} 格式的变量
         // 这种格式用于引用之前动作输出的变量
+        // 当变量不存在时返回空字符串，确保AI动作未执行时不会残留占位符
         const outputPattern = /\{\{output:([^}]+)\}\}/g;
         result = result.replace(outputPattern, (_match: string, variableName: string) => {
             const name = String(variableName).trim();
@@ -263,11 +264,11 @@ export default class AIActionService implements IActionService {
             if (value !== undefined && value !== null) {
                 return String(value);
             }
-            DebugLogger.warn(`[AIAction] 输出变量未找到: ${name}`);
             return "";
         });
 
         // 处理 {{@output:variableName}} 格式的变量
+        // 当变量不存在时返回空字符串，确保AI动作未执行时不会残留占位符
         const atOutputPattern = /\{\{@output:([^}]+)\}\}/g;
         result = result.replace(atOutputPattern, (_match: string, variableName: string) => {
             const name = String(variableName).trim();
@@ -275,7 +276,6 @@ export default class AIActionService implements IActionService {
             if (value !== undefined && value !== null) {
                 return String(value);
             }
-            DebugLogger.warn(`[AIAction] 输出变量未找到: ${name}`);
             return "";
         });
 
