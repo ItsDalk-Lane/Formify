@@ -242,7 +242,10 @@ export function VariableManagementTabItem(props: { plugin: FormPlugin }) {
 											{row.description && <span>{row.description}</span>}
 										</div>
 									</td>
-									<td>{TYPE_FILTERS.find((item) => item.value === row.source)?.label ?? row.source}</td>
+									<td>
+										{TYPE_FILTERS.find((item) => item.value === row.source)?.label ?? row.source}
+										{row.meta?.valueType ? ` (${row.meta.valueType})` : ""}
+									</td>
 									<td>{row.location?.path || row.location?.actionType || "-"}</td>
 									<td>
 										<div className="form--VariableFileCell">

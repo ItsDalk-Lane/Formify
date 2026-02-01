@@ -1,0 +1,39 @@
+.form--DatabaseFieldSetting {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 8px 12px;
+	border-radius: var(--radius-s);
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+}
+
+
+.form--DatabaseFieldSettingHeader {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.form--DatabaseFieldSettingTitle {
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	line-height: var(--line-height-tight);
+}
+
+.form--DatabaseFieldSettingDesc {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	line-height: var(--line-height-tight);
+}
+
+.form--DatabaseFieldSettingBody {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+
+.form--DatabaseFieldEmpty {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}

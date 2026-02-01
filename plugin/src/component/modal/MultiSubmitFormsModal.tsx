@@ -5,6 +5,7 @@ import { ObsidianAppContext } from "src/context/obsidianAppContext";
 import { localInstance } from "src/i18n/locals";
 import { FormConfig } from "src/model/FormConfig";
 import { IFormField } from "src/model/field/IFormField";
+import { FormFieldType } from "src/model/enums/FormFieldType";
 import { FormVisibilies } from "src/service/condition/FormVisibilies";
 import { FormIdValues } from "src/service/FormValues";
 import { resolveDefaultFormIdValues } from "src/utils/resolveDefaultFormIdValues";
@@ -173,8 +174,11 @@ function MultiSubmitFormsModalContent(props: {
 			entryValues,
 			app
 		);
+		const renderFields = visibleFields.filter(
+			(field) => field.type !== FormFieldType.DATABASE
+		);
 
-		if (visibleFields.length === 0) {
+		if (renderFields.length === 0) {
 			return (
 				<div className="form--MultiSubmitFormsModalEmptyTab">
 					{localInstance.no_fields_for_form}
@@ -184,7 +188,7 @@ function MultiSubmitFormsModalContent(props: {
 
 		return (
 			<CpsForm layout="vertical" className="form--MultiSubmitFormsModalTabContent">
-				{visibleFields.map((field, index) => (
+				{renderFields.map((field, index) => (
 					<CpsFormItem
 						key={field.id}
 						required={field.required}

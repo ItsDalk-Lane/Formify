@@ -6,6 +6,7 @@ import { NumberFieldValueReader } from "./readers/NumberFieldValueReader";
 import { BooleanFieldValueReader } from "./readers/BooleanFieldValueReader";
 import { FileListFieldValueReader } from "./readers/FileListFieldValueReader";
 import { TimeFieldValueReader } from "./readers/TimeFieldValueReader";
+import { DatabaseFieldValueReader } from "./readers/DatabaseFieldValueReader";
 
 /**
  * 字段值读取器工厂
@@ -51,6 +52,9 @@ export class FieldValueReaderFactory {
             case FormFieldType.TIME:
             case FormFieldType.DATETIME:
                 reader = new TimeFieldValueReader();
+                break;
+            case FormFieldType.DATABASE:
+                reader = new DatabaseFieldValueReader();
                 break;
 
             default:

@@ -22,6 +22,9 @@ export class FormValidator {
         const formValues = values || {};
         const visibleFields = FormVisibilies.visibleFields(fields, values);
         visibleFields.forEach((field) => {
+            if (field.type === FormFieldType.DATABASE) {
+                return;
+            }
             if (field.required) {
                 const value = formValues[field.id];
                 if (value === undefined || value === null) {

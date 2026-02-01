@@ -5,7 +5,7 @@ import {
 	SquareMinusIcon,
 } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import "./ListBox.css";
 import { localInstance } from "src/i18n/locals";
 
@@ -16,6 +16,7 @@ type Props = {
 	name?: string;
 	id?: string;
 	disabled?: boolean;
+	renderOptionSuffix?: (option: SelcetOption, isSelected: boolean) => React.ReactNode;
 };
 
 type SelcetOption = {
@@ -25,7 +26,8 @@ type SelcetOption = {
 };
 
 export function ListBox(props: Props) {
-	const { value, onChange, options, name } = props;
+	const { value, onChange, options, name, renderOptionSuffix } = props;
+	const [open, setOpen] = useState(false);
 
 	const values = Array.isArray(value) ? value : value ? [value] : [];
 	const allSelected = values.length === options.length;
@@ -48,8 +50,31 @@ export function ListBox(props: Props) {
 		return <Square size={16} />;
 	}, [allSelected, hasSelected]);
 
+	const actionClickRef = useRef(false);
+
+	const isActionClick = (event: Event) => {
+		const originalEvent = (event as CustomEvent<{ originalEvent?: Event }>)
+			.detail?.originalEvent;
+		if (originalEvent?.defaultPrevented) {
+			return true;
+		}
+		const target = (originalEvent?.target ?? event.target) as HTMLElement | null;
+		return !!target?.closest(".form--ListBoxOptionAction");
+	};
+
 	return (
-		<DropdownMenu.Root modal={true}>
+		<DropdownMenu.Root
+			modal={true}
+			open={open}
+			onOpenChange={(nextOpen) => {
+				if (!nextOpen && actionClickRef.current) {
+					actionClickRef.current = false;
+					setOpen(true);
+					return;
+				}
+				setOpen(nextOpen);
+			}}
+		>
 			<DropdownMenu.Trigger asChild>
 				<button className="form--ListBoxButton">
 					<div className="form--ListBoxSelections">
@@ -90,6 +115,12 @@ export function ListBox(props: Props) {
 			<DropdownMenu.Content
 				className={"form--ListBoxOptions"}
 				align="start"
+				onPointerDownCapture={(event) => {
+					const target = event.target as HTMLElement | null;
+					actionClickRef.current = !!target?.closest(
+						".form--ListBoxOptionAction"
+					);
+				}}
 			>
 				<div className="form--ListBoxOptionsHeader">
 					<button
@@ -120,7 +151,13 @@ export function ListBox(props: Props) {
 						<DropdownMenu.Item
 							key={option.id}
 							className={"form--ListBoxOption"}
-							onSelect={() => {
+							onSelect={(event) => {
+								if (actionClickRef.current || isActionClick(event)) {
+									actionClickRef.current = false;
+									event.preventDefault();
+									return;
+								}
+								actionClickRef.current = false;
 								if (isSelected) {
 									onChange(
 										values.filter(
@@ -142,7 +179,10 @@ export function ListBox(props: Props) {
 										<Square size={16} />
 									)}
 								</span>
-								{option.label}
+								<span className="form--ListBoxOptionLabel">
+									{option.label}
+								</span>
+								{renderOptionSuffix?.(option, isSelected)}
 							</div>
 						</DropdownMenu.Item>
 					);

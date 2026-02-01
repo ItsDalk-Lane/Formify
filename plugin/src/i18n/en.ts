@@ -261,6 +261,16 @@ export class En implements Local {
 	type_text = "Text";
 	type_time = "Time";
 	type_toggle = "Toggle switch";
+	type_database = "Database";
+	database_source_fields = "Source fields";
+	database_source_fields_description = "Select fields to aggregate (excluding this field)";
+	database_source_fields_empty = "No source fields selected";
+	database_include_condition = "Include condition";
+	database_include_condition_description = "Same rules as field visibility conditions";
+	database_output_format = "Output format";
+	database_output_format_array = "Array";
+	database_output_format_string = "String";
+	database_field_readonly_hint = "This field is aggregated from source fields and does not require input.";
 	typing = "Typing...";
 	unchecked = "Unchecked";
 	undo = "Undo";

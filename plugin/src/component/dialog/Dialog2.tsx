@@ -18,10 +18,12 @@ export default function Dialog2(props: {
 	onOpenChange: (open: boolean) => void;
 	dialogClassName?: string;
 	modal?: boolean;
+	closeOnInteractOutside?: boolean;
 	children?: (close: () => void) => JSX.Element;
 }) {
 	const { title, titleNode, titleRight, open, onOpenChange, description } = props;
 	const showTitle = titleNode != null || Strings.isNotBlank(title);
+	const closeOnInteractOutside = props.closeOnInteractOutside !== false;
 	return (
 		<DialogPrimitive.Root
 			open={open}
@@ -35,6 +37,16 @@ export default function Dialog2(props: {
 						className={`form--DialogContent ${
 							props.dialogClassName || ""
 						}`}
+						onPointerDownOutside={(event) => {
+							if (!closeOnInteractOutside) {
+								event.preventDefault();
+							}
+						}}
+						onFocusOutside={(event) => {
+							if (!closeOnInteractOutside) {
+								event.preventDefault();
+							}
+						}}
 					>
 						{showTitle ? (
 							<div className="form--DialogHeader">

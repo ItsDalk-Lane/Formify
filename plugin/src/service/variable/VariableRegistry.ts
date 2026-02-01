@@ -11,6 +11,9 @@ import { IFormAction } from "src/model/action/IFormAction";
 import { LoopVariableScope } from "src/utils/LoopVariableScope";
 import { INTERNAL_VARIABLE_NAMES, SYSTEM_RESERVED_LOOP_VARIABLES } from "./VariableConstants";
 import { localInstance } from "src/i18n/locals";
+import { FormFieldType } from "src/model/enums/FormFieldType";
+import { DatabaseFieldOutputFormat, IDatabaseField } from "src/model/field/IDatabaseField";
+import { IFormField } from "src/model/field/IFormField";
 
 const DEFAULT_COLLECT_OPTIONS: Required<VariableCollectOptions> = {
     includeInternal: true,
@@ -154,7 +157,8 @@ export class VariableRegistry {
                 location: {
                     fieldId: field.id,
                     index
-                }
+                },
+                meta: this.getFieldVariableMeta(field)
             }))
             .filter((info) => this.shouldInclude(info.name, opts));
     }
@@ -200,7 +204,8 @@ export class VariableRegistry {
                                 actionType: action.type,
                                 index,
                                 path: `actions.${index}.fields.${childIndex}`
-                            }
+                            },
+                            meta: this.getFieldVariableMeta(field)
                         });
                     });
                     break;
@@ -317,5 +322,17 @@ export class VariableRegistry {
         }
         return !!name.trim();
     }
-}
 
+    private static getFieldVariableMeta(field: IFormField): Record<string, any> | undefined {
+        if (field.type !== FormFieldType.DATABASE) {
+            return undefined;
+        }
+        const databaseField = field as IDatabaseField;
+        const outputFormat = databaseField.outputFormat === DatabaseFieldOutputFormat.STRING
+            ? "string"
+            : "array";
+        return {
+            valueType: outputFormat
+        };
+    }
+}

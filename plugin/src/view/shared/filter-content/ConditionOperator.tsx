@@ -3,6 +3,7 @@ import { SelectOption2, Select2 } from "src/component/select2/Select";
 import useFormConfig from "src/hooks/useFormConfig";
 import { localInstance } from "src/i18n/locals";
 import { FormFieldType } from "src/model/enums/FormFieldType";
+import { DatabaseFieldOutputFormat, IDatabaseField } from "src/model/field/IDatabaseField";
 import { OperatorType } from "src/model/filter/OperatorType";
 
 export function ConditionOperator(props: {
@@ -117,6 +118,22 @@ export function ConditionOperator(props: {
             field?.type === FormFieldType.DATETIME
         ) {
             return [...commomOperators, ...timeOperators, ...valueOperators];
+        }
+
+    if (field?.type === FormFieldType.DATABASE) {
+            const databaseField = field as IDatabaseField;
+            const outputFormat = databaseField.outputFormat;
+            if (outputFormat === DatabaseFieldOutputFormat.STRING) {
+                return [...commomOperators, ...valueOperators];
+            }
+            return [
+                ...commomOperators,
+                ...listOperators,
+                { value: OperatorType.ArrayLengthEquals, label: localInstance.equal },
+                { value: OperatorType.ArrayLengthGreater, label: localInstance.greater_than },
+                { value: OperatorType.ArrayLengthLess, label: localInstance.less_than },
+                ...valueOperators,
+            ];
         }
 
     const isList = [FormFieldType.SELECT, FormFieldType.RADIO].includes(

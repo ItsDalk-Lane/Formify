@@ -95,6 +95,8 @@ export function FormImportDialog({
                 return '文件列表';
             case FormFieldType.FOLDER_PATH:
                 return '文件夹路径';
+            case FormFieldType.DATABASE:
+                return '数据库';
             default:
                 return type;
         }

@@ -15,6 +15,9 @@ import CpsFormPropertyValueFieldSetting from "./property-value/CpsFormPropertyVa
 import CpsFormTextAreaFieldSetting from "./textarea/CpsFormTextAreaFieldSetting";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import { FolderPathControl } from "src/view/shared/control/FolderPathControl";
+import { applyFieldTypeChange } from "src/utils/applyFieldTypeChange";
+import { Select2, SelectOption2 } from "src/component/select2/Select";
+import { DatabaseFieldOutputFormat, IDatabaseField } from "src/model/field/IDatabaseField";
 
 export function CpsFormFieldDetailEditing(props: {
 	value: IFormField;
@@ -22,8 +25,22 @@ export function CpsFormFieldDetailEditing(props: {
 }) {
 	const { value: field, onChange: setField } = props;
 	const selectTypes = [FormFieldType.RADIO, FormFieldType.SELECT];
+	const showDefaultValue = field.type !== FormFieldType.DATABASE;
+	const databaseOutputOptions: SelectOption2[] = [
+		{
+			label: localInstance.database_output_format_array,
+			value: DatabaseFieldOutputFormat.ARRAY,
+		},
+		{
+			label: localInstance.database_output_format_string,
+			value: DatabaseFieldOutputFormat.STRING,
+		},
+	];
 
 	const defaultValueEl = useMemo(() => {
+		if (field.type === FormFieldType.DATABASE) {
+			return null;
+		}
 		if (isTimeFormField(field.type)) {
 			return (
 				<DateFieldDefaultValueControl
@@ -72,11 +89,7 @@ export function CpsFormFieldDetailEditing(props: {
 				<FormFieldTypeSelect
 					value={field.type}
 					onChange={(value) => {
-						const newField = {
-							...field,
-							type: value,
-						};
-						props.onChange(newField);
+						props.onChange(applyFieldTypeChange(field, value));
 					}}
 				/>
 			</CpsFormItem>
@@ -103,9 +116,30 @@ export function CpsFormFieldDetailEditing(props: {
 					}}
 				/>
 			</CpsFormItem>
-			<CpsFormItem label={localInstance.default_value}>
-				{defaultValueEl}
-			</CpsFormItem>
+			{showDefaultValue && (
+				<CpsFormItem label={localInstance.default_value}>
+					{defaultValueEl}
+				</CpsFormItem>
+			)}
+
+			{field.type === FormFieldType.DATABASE && (
+				<CpsFormItem label={localInstance.database_output_format}>
+					<Select2
+						value={
+							(field as IDatabaseField).outputFormat ??
+							DatabaseFieldOutputFormat.ARRAY
+						}
+						options={databaseOutputOptions}
+						onChange={(value) => {
+							const newField = {
+								...(field as IDatabaseField),
+								outputFormat: value as DatabaseFieldOutputFormat,
+							};
+							setField(newField);
+						}}
+					/>
+				</CpsFormItem>
+			)}
 
 			<CpsFormPropertyValueFieldSetting
 				field={field}

@@ -13,6 +13,7 @@ import { FormTypeSelect } from "src/view/shared/select/FormTypeSelect";
 import { fieldTypeOptions } from "../common/FieldTypeSelect";
 import { CpsFormFieldDetailEditing } from "../CpsFormFieldDetailEditing";
 import { FieldNameConflictWarning } from "../FieldNameConflictWarning";
+import { applyFieldTypeChange } from "src/utils/applyFieldTypeChange";
 import "./FormFieldSettingHeader.css";
 
 export function FormFieldSettingHeader(props: {
@@ -92,11 +93,9 @@ export function FormFieldSettingHeader(props: {
 					value={field.type}
 					hideLabel={true}
 					onChange={(value) => {
-						const newField = {
-							...field,
-							type: value as FormFieldType,
-						};
-						props.onChange(newField);
+						props.onChange(
+							applyFieldTypeChange(field, value as FormFieldType)
+						);
 					}}
 					options={fieldTypeOptions}
 				/>

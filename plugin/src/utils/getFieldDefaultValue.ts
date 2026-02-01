@@ -2,6 +2,7 @@ import { FormFieldType } from "../model/enums/FormFieldType";
 import { IFormField } from "../model/field/IFormField";
 import { ISelectField } from "../model/field/ISelectField";
 import { IPropertyValueField } from "../model/field/IPropertyValueField";
+import { DatabaseFieldOutputFormat, IDatabaseField } from "../model/field/IDatabaseField";
 import { isTimeFormField } from "./isTimeFormField";
 import { DateTime } from "luxon";
 import { BaseTimeField, TimeFieldDefaultValueType } from "../model/field/time/BaseTimeField";
@@ -68,6 +69,14 @@ export function getFieldDefaultValue(
 
     if (curr.type === FormFieldType.FOLDER_PATH) {
         return curr.defaultValue || "";
+    }
+
+    if (curr.type === FormFieldType.DATABASE) {
+        const databaseField = curr as IDatabaseField;
+        if (databaseField.outputFormat === DatabaseFieldOutputFormat.STRING) {
+            return "";
+        }
+        return [];
     }
 
     // 属性值列表字段：根据 multiple 属性处理默认值格式

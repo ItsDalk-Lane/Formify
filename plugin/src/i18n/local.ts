@@ -225,6 +225,16 @@ export interface Local {
 	type_text: string;
 	type_time: string;
 	type_toggle: string;
+	type_database: string;
+	database_source_fields: string;
+	database_source_fields_description: string;
+	database_source_fields_empty: string;
+	database_include_condition: string;
+	database_include_condition_description: string;
+	database_output_format: string;
+	database_output_format_array: string;
+	database_output_format_string: string;
+	database_field_readonly_hint: string;
 	typing: string;
 	unchecked: string;
 	undo: string;

@@ -3,6 +3,7 @@ import {
 	CalendarClock,
 	CircleDot,
 	Clock,
+	Database,
 	File,
 	FileCode,
 	Folder,
@@ -101,6 +102,11 @@ export const fieldTypeOptions = [
 		icon: <FileCode size={14} />,
 		value: FormFieldType.PROPERTY_VALUE_SUGGESTION,
 		label: localInstance.property_value_suggestions,
+	},
+	{
+		icon: <Database size={14} />,
+		value: FormFieldType.DATABASE,
+		label: localInstance.type_database,
 	},
 ].map((opt) => {
 	return {

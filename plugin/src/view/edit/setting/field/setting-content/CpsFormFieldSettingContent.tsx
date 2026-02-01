@@ -15,6 +15,8 @@ import { OperatorType } from "src/model/filter/OperatorType";
 import { FormValidator } from "src/service/validator/FormValidator";
 import { CpsFormFieldControl } from "src/view/shared/control/CpsFormFieldControl";
 import { FormCondition } from "src/view/shared/filter-content/FormCondition";
+import CpsFormDatabaseFieldSetting from "../database/CpsFormDatabaseFieldSetting";
+import { FormFieldType } from "src/model/enums/FormFieldType";
 
 export function CpsFormFieldSettingContent(props: {
 	field: IFormField;
@@ -99,23 +101,31 @@ export function CpsFormFieldSettingContent(props: {
 				/>
 			</div>
 
-			<div className="form--CpsFormFieldSettingControlPreview">
-				{isOptionsEditing ? (
-					<CpsFormSelectFieldSetting
-						field={field as IOptionsField}
-						onFieldChange={onChange}
-					/>
-				) : (
-					<CpsFormFieldControl
-						field={field}
-						value={field.defaultValue}
-						onValueChange={(v) => {
-							const newField = { ...field, defaultValue: v };
-							onChange(newField);
-						}}
-					/>
-				)}
-			</div>
+			{field.type !== FormFieldType.DATABASE && (
+				<div className="form--CpsFormFieldSettingControlPreview">
+					{isOptionsEditing ? (
+						<CpsFormSelectFieldSetting
+							field={field as IOptionsField}
+							onFieldChange={onChange}
+						/>
+					) : (
+						<CpsFormFieldControl
+							field={field}
+							value={field.defaultValue}
+							onValueChange={(v) => {
+								const newField = { ...field, defaultValue: v };
+								onChange(newField);
+							}}
+						/>
+					)}
+				</div>
+			)}
+
+			{field.type === FormFieldType.DATABASE && (
+				<div className="form--CpsFormFieldSettingDatabase">
+					<CpsFormDatabaseFieldSetting field={field} onChange={onChange} />
+				</div>
+			)}
 			<Dialog2
 				open={openCondition}
 				onOpenChange={function (open: boolean): void {

@@ -122,6 +122,7 @@ button.form--ListBoxOptionsHeaderButton:hover {
 .form--ListBoxOptionContent {
 	display: flex;
 	align-items: center;
+	gap: 0.5rem;
 }
 
 .form--ListBoxOptionIcon {
@@ -129,6 +130,28 @@ button.form--ListBoxOptionsHeaderButton:hover {
 	align-items: center;
 	margin-right: 8px;
 	color: var(--text-muted);
+}
+
+.form--ListBoxOptionLabel {
+	flex: 1;
+}
+
+.form--ListBoxOptionAction {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 2px 6px;
+	border-radius: 4px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+}
+
+.form--ListBoxOptionAction:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
 }
 
 .form--ListBoxOption[data-selected="true"],

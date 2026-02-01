@@ -60,6 +60,13 @@ button.form--CpsFormFieldSettingContentModeItem[data-state="on"] {
 	background-color: var(--background-primary);
 }
 
+.form--CpsFormFieldSettingDatabase {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 4px;
+}
+
 button.form--VisibilityConditionButton {
 	display: inline-flex;
 	align-items: center;

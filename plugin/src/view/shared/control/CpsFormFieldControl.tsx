@@ -12,6 +12,7 @@ import RadioControl from "./RadioControl";
 import SelectControl from "./SelectControl";
 import ToggleControl from "./ToggleControl";
 import { BaseTimeField } from "src/model/field/time/BaseTimeField";
+import "./CpsFormFieldControl.css";
 
 export function CpsFormFieldControl(props: {
 	field: IFormField;
@@ -185,6 +186,12 @@ export function CpsFormFieldControl(props: {
 				onChange={onValueChange}
 				multiple={propertyValueField.multiple}
 			/>
+		);
+	}
+
+	if (field.type === FormFieldType.DATABASE) {
+		return (
+			<div className="form--DatabaseFieldReadonly" />
 		);
 	}
 

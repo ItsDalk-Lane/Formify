@@ -18,6 +18,7 @@ import CalloutBlock from "src/component/callout-block/CalloutBlock";
 import { FormConfig } from "src/model/FormConfig";
 import { useObsidianApp } from "src/context/obsidianAppContext";
 import { FormExecutionManager } from "src/service/FormExecutionManager";
+import { FormFieldType } from "src/model/enums/FormFieldType";
 
 type Props = {
 	fields: IFormField[];
@@ -194,6 +195,11 @@ export function CpsFormRenderView(props: Props) {
 		return newFields;
 	}, [fields, formIdValues, app]);
 
+	const renderFields = useMemo(
+		() => visibleFields.filter((field) => field.type !== FormFieldType.DATABASE),
+		[visibleFields]
+	);
+
 	return (
 		<form
 			className="form--CpsFormPreview"
@@ -209,7 +215,7 @@ export function CpsFormRenderView(props: Props) {
 				className="form--CpsFormPreviewBody"
 				layout="vertical"
 			>
-				{visibleFields.map((field, index) => (
+				{renderFields.map((field, index) => (
 					<CpsFormItem
 						required={field.required}
 						label={field.label}

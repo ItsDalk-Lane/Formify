@@ -97,7 +97,8 @@ export function ConditionValue(props: {
 	// 对于 TEXT 和 TEXTAREA 类型，使用 VariableReferenceInput 支持变量引用
 	if (
 		field.type === FormFieldType.TEXT ||
-		field.type === FormFieldType.TEXTAREA
+		field.type === FormFieldType.TEXTAREA ||
+		field.type === FormFieldType.DATABASE
 	) {
 		return (
 			<VariableReferenceInput

@@ -272,6 +272,16 @@ export class Zh implements Local {
 	type_text = "文本";
 	type_time = "时间";
 	type_toggle = "开关";
+	type_database = "数据库";
+	database_source_fields = "源字段";
+	database_source_fields_description = "选择要参与聚合的字段（不含自身）";
+	database_source_fields_empty = "尚未选择源字段";
+	database_include_condition = "纳入条件";
+	database_include_condition_description = "与字段显示条件规则一致";
+	database_output_format = "输出格式";
+	database_output_format_array = "数组";
+	database_output_format_string = "字符串";
+	database_field_readonly_hint = "该字段由源字段自动聚合，无需填写";
 	typing = "输入......";
 	unchecked = "未勾选";
 	undo = "撤销";

@@ -261,6 +261,16 @@ export class ZhTw implements Local {
 	type_text = "文字";
 	type_time = "時間";
 	type_toggle = "開關";
+	type_database = "資料庫";
+	database_source_fields = "來源欄位";
+	database_source_fields_description = "選擇要參與彙總的欄位（不含自身）";
+	database_source_fields_empty = "尚未選擇來源欄位";
+	database_include_condition = "納入條件";
+	database_include_condition_description = "與欄位顯示條件規則一致";
+	database_output_format = "輸出格式";
+	database_output_format_array = "陣列";
+	database_output_format_string = "字串";
+	database_field_readonly_hint = "此欄位由來源欄位自動彙總，無需填寫";
 	typing = "輸入......";
 	unchecked = "未勾選";
 	undo = "撤銷";

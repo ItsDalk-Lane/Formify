@@ -94,6 +94,9 @@ export class FormDisplayRules {
             case FormFieldType.FOLDER_PATH:
                 // 简单类型：检查defaultValue是否有值
                 return !Strings.isEmpty(field.defaultValue);
+            case FormFieldType.DATABASE:
+                // 数据库字段：运行时计算，不需要用户输入
+                return true;
 
             case FormFieldType.DATE:
             case FormFieldType.TIME:
