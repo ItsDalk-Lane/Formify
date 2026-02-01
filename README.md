@@ -2,7 +2,7 @@
 
 > 强大的 Obsidian 工作流与 AI 集成插件
 
-[![Version](https://img.shields.io/badge/version-0.2.8.260130-blue.svg)](https://github.com/vran-dev/obsidian-form-flow)
+[![Version](https://img.shields.io/badge/version-0.2.8.260201-blue.svg)](https://github.com/vran-dev/obsidian-form-flow)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Obsidian](https://img.shields.io/badge/Obsidian-1.8.0+-purple.svg)](https://obsidian.md)
 
