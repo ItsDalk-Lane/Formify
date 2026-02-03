@@ -17,7 +17,7 @@ export function NewActionGridPopover({ children, onSelect, isInsideLoop = false 
 		setOpen(false);
 	};
 	return (
-		<Popover open={open} onOpenChange={setOpen}>
+		<Popover open={open} onOpenChange={setOpen} closeOnInteractOutside>
 			{children}
 			<NewActionGrid onSelect={handleSelect} isInsideLoop={isInsideLoop} />
 		</Popover>

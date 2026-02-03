@@ -1,7 +1,7 @@
-import React, { useMemo } from "react";
-import { v4 } from "uuid";
+import React, { useCallback, useMemo } from "react";
 import "./FilterItem.css";
 import { useFilterContentComponent } from "./hooks/FilterContentComponentContext";
+import { useFilterOperations } from "./hooks/useFilterOperations";
 import { FilterAddDropdown } from "./menu/FilterAddDropdown";
 import { FilterMenuDropdown } from "./menu/FilterMenuDropdown";
 import { FilterRelationDropdown } from "./menu/FilterRelationDropdown";
@@ -20,7 +20,25 @@ export interface FilternProps {
 	onFilterRemove: (id: string) => void;
 }
 
-export function FilterItem(props: FilternProps) {
+const areEqualFilterItem = (
+	prev: FilternProps,
+	next: FilternProps
+): boolean => {
+	return (
+		prev.index === next.index &&
+		prev.relation === next.relation &&
+		prev.filter === next.filter &&
+		prev.onRelationChange === next.onRelationChange &&
+		prev.onFilterChange === next.onFilterChange &&
+		prev.onFilterDuplicate === next.onFilterDuplicate &&
+		prev.onFilterRemove === next.onFilterRemove
+	);
+};
+
+export const FilterItem = React.memo(FilterItemComponent, areEqualFilterItem);
+export const FilterGroup = React.memo(FilterGroupComponent);
+
+function FilterItemComponent(props: FilternProps) {
 	const {
 		filter,
 		onFilterChange,
@@ -31,6 +49,20 @@ export function FilterItem(props: FilternProps) {
 		index,
 	} = props;
 
+	const handleFilterChange = useCallback(
+		(nextFilter: Filter) => {
+			onFilterChange(nextFilter);
+		},
+		[onFilterChange]
+	);
+
+	const handleRelationChange = useCallback(
+		(nextRelation: RelationType) => {
+			onRelationChange(nextRelation);
+		},
+		[onRelationChange]
+	);
+
 	const relationEl = useMemo(() => {
 		if (index === 0) {
 			return localInstance.operator_condition;
@@ -40,7 +72,7 @@ export function FilterItem(props: FilternProps) {
 			return (
 				<FilterRelationDropdown
 					relation={relation}
-					onChange={onRelationChange}
+					onChange={handleRelationChange}
 				/>
 			);
 		} else {
@@ -50,11 +82,27 @@ export function FilterItem(props: FilternProps) {
 				return localInstance.operator_or;
 			}
 		}
-	}, [index, relation, onRelationChange]);
+	}, [index, relation, handleRelationChange]);
+
+	const handleMenuDelete = useCallback(() => {
+		onFilterRemove(filter.id);
+	}, [filter.id, onFilterRemove]);
+
+	const handleMenuDuplicate = useCallback(() => {
+		onFilterDuplicate(filter.id);
+	}, [filter.id, onFilterDuplicate]);
+
+	const handleFilterRemove = useCallback(
+		(id: string) => {
+			onFilterRemove(id);
+		},
+		[onFilterRemove]
+	);
 
 	// 判断是否为扩展条件类型
-	const isExtendedCondition = filter.type === FilterType.timeCondition || 
-		filter.type === FilterType.fileCondition || 
+	const isExtendedCondition =
+		filter.type === FilterType.timeCondition ||
+		filter.type === FilterType.fileCondition ||
 		filter.type === FilterType.scriptCondition;
 
 	return (
@@ -62,25 +110,21 @@ export function FilterItem(props: FilternProps) {
 			<div className="form--FilterRelation">{relationEl}</div>
 			<div className="form--FilterContent">
 				{filter.type === FilterType.group ? (
-					<FilterGroup filter={filter} onChange={onFilterChange} />
+					<FilterGroup filter={filter} onChange={handleFilterChange} />
 				) : isExtendedCondition ? (
-					<ExtendedConditionContent filter={filter} onChange={onFilterChange} />
+					<ExtendedConditionContent filter={filter} onChange={handleFilterChange} />
 				) : (
 					<FilterRule
 						filter={filter}
-						onChange={onFilterChange}
-						onRemove={onFilterRemove}
+						onChange={handleFilterChange}
+						onRemove={handleFilterRemove}
 					/>
 				)}
 			</div>
 			<div className="form--FilterMenu">
 				<FilterMenuDropdown
-					onDelete={() => {
-						onFilterRemove(filter.id);
-					}}
-					onDuplicate={() => {
-						onFilterDuplicate(filter.id);
-					}}
+					onDelete={handleMenuDelete}
+					onDuplicate={handleMenuDuplicate}
 				/>
 			</div>
 		</div>
@@ -105,44 +149,19 @@ export function FilterRule(props: {
 	);
 }
 
-export function FilterGroup(props: {
+function FilterGroupComponent(props: {
 	filter: Filter;
 	onChange: (filter: Filter) => void;
 }) {
 	const { filter, onChange } = props;
-	const onRemoveChild = (id: string) => {
-		const newConditions = filter.conditions.filter((c) => c.id !== id);
-		onChange({ ...filter, conditions: newConditions });
-	};
 
-	const onDuplicateChild = (id: string) => {
-		const condition = filter.conditions.find((c) => c.id === id);
-		if (condition) {
-			const newCondition = { ...condition, id: v4() };
-			const newConditions = [...filter.conditions, newCondition];
-			onChange({ ...filter, conditions: newConditions });
-		}
-	};
+	const {
+		removeCondition,
+		duplicateCondition,
+		updateCondition,
+		changeOperator,
+	} = useFilterOperations(filter, onChange);
 
-	const saveChild = (condition: Filter) => {
-		const newConditions = filter.conditions.map((c) => {
-			if (c.id === condition.id) {
-				return condition;
-			}
-			return c;
-		});
-		onChange({
-			...filter,
-			conditions: newConditions,
-		});
-	};
-
-	const onRelationChange = (joiner: RelationType) => {
-		onChange({
-			...filter,
-			operator: joiner,
-		});
-	};
 	return (
 		<div className="form--FilterGroup">
 			{filter.conditions.map((c, index) => (
@@ -150,11 +169,11 @@ export function FilterGroup(props: {
 					key={c.id}
 					filter={c}
 					index={index}
-					onFilterChange={saveChild}
-					onFilterRemove={onRemoveChild}
-					onFilterDuplicate={onDuplicateChild}
+					onFilterChange={updateCondition}
+					onFilterRemove={removeCondition}
+					onFilterDuplicate={duplicateCondition}
 					relation={filter.operator as RelationType}
-					onRelationChange={onRelationChange}
+					onRelationChange={changeOperator}
 				/>
 			))}
 			<div className="form--FilterGroupAdd">

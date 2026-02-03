@@ -1,13 +1,14 @@
 {
 	"name": "obsidian-formify",
-	"version": "0.2.8.260201",
+	"version": "0.2.8.260203",
 	"description": "Create simple, one-action workflows — with ease.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "node esbuild.config.mjs production",
 		"build:local": "node esbuild.config.mjs production && node scripts/copy-to-vault.mjs",
-		"version": "node version-bump.mjs && git add manifest.json versions.json"
+		"version": "node version-bump.mjs && git add manifest.json versions.json",
+		"lint": "eslint ."
 	},
 	"keywords": [],
 	"author": "vran",

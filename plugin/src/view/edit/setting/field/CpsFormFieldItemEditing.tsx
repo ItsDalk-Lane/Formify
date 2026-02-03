@@ -1,4 +1,5 @@
 import { DropIndicator } from "@atlaskit/pragmatic-drag-and-drop-react-drop-indicator/box";
+import { useState } from "react";
 import { FormField, IFormField } from "../../../../model/field/IFormField";
 import { CpsFormFieldSettingContent } from "./setting-content/CpsFormFieldSettingContent";
 import { FormFieldSettingHeader } from "./setting-header/FormFieldSettingHeader";
@@ -11,11 +12,13 @@ export function CpsFormFieldItemEditing(props: {
     onDelete: (field: IFormField) => void;
     onChange: (field: IFormField) => void;
     onDuplicate: (field: IFormField) => void;
+	defaultOpen?: boolean;
     children?: React.ReactNode;
 }) {
 	const { field, onChange } = props;
 	const { closestEdge, dragging, draggedOver, setElRef, setDragHandleRef } =
 		useSortableItem(field.id);
+	const [open, setOpen] = useState(props.defaultOpen ?? false);
 
 	return (
 		<FormFieldContext.Provider
@@ -30,9 +33,11 @@ export function CpsFormFieldItemEditing(props: {
 					onChange={props.onChange}
 					onDelete={props.onDelete}
 					onDuplicate={props.onDuplicate}
+					open={open}
+					onOpenChange={setOpen}
 					setDragHandleRef={setDragHandleRef}
                     >{props.children}</FormFieldSettingHeader>
-				<CpsFormFieldSettingContent field={field} onChange={onChange} />
+				{open && <CpsFormFieldSettingContent field={field} onChange={onChange} />}
 				{closestEdge && <DropIndicator edge={closestEdge} gap="1px" />}
 			</div>
 		</FormFieldContext.Provider>

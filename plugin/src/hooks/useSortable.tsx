@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import {
 	type Edge,
@@ -20,38 +20,53 @@ export interface SortableContextProps<T> {
 }
 
 export default function <T>(props: SortableContextProps<T>) {
-	const onSort = (
-		items: T[],
-		sourceId: string,
-		targetId: string,
-		closestEdgeOfTarget: Edge | null
-	) => {
-		const getId = props.getId;
-		const startIndex = items.findIndex((i) => getId(i) == sourceId);
-		const indexOfTarget = items.findIndex((i) => getId(i) == targetId);
-		const finishIndex = getReorderDestinationIndex({
-			startIndex,
-			closestEdgeOfTarget,
-			indexOfTarget,
-			axis: props.axis || "vertical",
-		});
-		if (finishIndex == undefined || startIndex == finishIndex) {
-			return;
-		}
-		const newItems = reorder({
-			list: items,
-			startIndex: startIndex,
-			finishIndex: finishIndex,
-		});
-		props.onChange?.(newItems);
-	};
+	const itemsRef = useRef(props.items);
+	const getIdRef = useRef(props.getId);
+	const onChangeRef = useRef(props.onChange);
+	const onNativeChangeRef = useRef(props.onNativeChange);
+	const axisRef = useRef(props.axis);
+
+	itemsRef.current = props.items;
+	getIdRef.current = props.getId;
+	onChangeRef.current = props.onChange;
+	onNativeChangeRef.current = props.onNativeChange;
+	axisRef.current = props.axis;
+
+	const onSort = useCallback(
+		(
+			items: T[],
+			sourceId: string,
+			targetId: string,
+			closestEdgeOfTarget: Edge | null
+		) => {
+			const getId = getIdRef.current;
+			const startIndex = items.findIndex((i) => getId(i) == sourceId);
+			const indexOfTarget = items.findIndex((i) => getId(i) == targetId);
+			const finishIndex = getReorderDestinationIndex({
+				startIndex,
+				closestEdgeOfTarget,
+				indexOfTarget,
+				axis: axisRef.current || "vertical",
+			});
+			if (finishIndex == undefined || startIndex == finishIndex) {
+				return;
+			}
+			const newItems = reorder({
+				list: items,
+				startIndex: startIndex,
+				finishIndex: finishIndex,
+			});
+			onChangeRef.current?.(newItems);
+		},
+		[]
+	);
 
 	useEffect(() => {
 		return monitorForElements({
 			canMonitor: (args) => {
 				const source = args.source;
 				const itemId = source.data.itemId as string;
-				return props.items.some((item) => props.getId(item) === itemId);
+				return itemsRef.current.some((item) => getIdRef.current(item) === itemId);
 			},
 			onDrop: (args) => {
 				const { location, source } = args;
@@ -67,15 +82,15 @@ export default function <T>(props: SortableContextProps<T>) {
 						return;
 					}
 					const closestEdgeOfTarget = extractClosestEdge(target.data);
-					if (props.onNativeChange) {
-						props.onNativeChange(
+					if (onNativeChangeRef.current) {
+						onNativeChangeRef.current(
 							source.data.itemId as string,
 							target.data.itemId as string,
 							closestEdgeOfTarget
 						);
 					} else {
 						onSort(
-							props.items,
+							itemsRef.current,
 							source.data.itemId as string,
 							target.data.itemId as string,
 							closestEdgeOfTarget
@@ -84,5 +99,5 @@ export default function <T>(props: SortableContextProps<T>) {
 				}
 			},
 		});
-	}, [props.items, props.onChange]);
+	}, [onSort]);
 }

@@ -1,5 +1,6 @@
 import { DropIndicator } from "@atlaskit/pragmatic-drag-and-drop-react-drop-indicator/box";
-import { useCallback } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useCallback, useMemo, useRef } from "react";
 import { DragHandler } from "src/component/drag-handler/DragHandler";
 import useSortable from "src/hooks/useSortable";
 import useSortableItem from "src/hooks/useSortableItem";
@@ -9,6 +10,12 @@ import "./InteractiveList.css";
 export interface WithId {
 	id: string;
 }
+
+const VIRTUALIZATION_THRESHOLD = 50;
+const DEFAULT_ITEM_HEIGHT = 50;
+const OVERSCAN_COUNT = 5;
+const LIST_MAX_HEIGHT = 360;
+const ITEM_GAP = "0.5rem";
 
 export type InteractiveListProps<T extends WithId> = {
 	title?: string;
@@ -34,6 +41,7 @@ export function InteractiveList<T extends WithId>({
 	className,
 	...rest
 }: InteractiveListProps<T>): React.ReactElement {
+	const parentRef = useRef<HTMLDivElement>(null);
 	useSortable({
 		items,
 		getId: (item) => item.id,
@@ -48,6 +56,22 @@ export function InteractiveList<T extends WithId>({
 		[items, onChange]
 	);
 
+	const shouldVirtualize = items.length >= VIRTUALIZATION_THRESHOLD;
+	const listStyle = useMemo<React.CSSProperties>(
+		() => ({
+			maxHeight: LIST_MAX_HEIGHT,
+			overflowY: "auto",
+		}),
+		[]
+	);
+	const virtualizer = useVirtualizer({
+		count: items.length,
+		getScrollElement: () => parentRef.current,
+		estimateSize: () => DEFAULT_ITEM_HEIGHT,
+		overscan: OVERSCAN_COUNT,
+		getItemKey: (index) => items[index]?.id ?? index,
+	});
+
 	return (
 		<div
 			className={`form--InteractiveList ${className || ""}`}
@@ -56,8 +80,50 @@ export function InteractiveList<T extends WithId>({
 			{title && (
 				<div className="form--InteractiveListTitle">{title}</div>
 			)}
-			<div className="form--InteractiveListItems">
-				{items.map((item, index) => children(item, index, removeItem))}
+			<div
+				ref={parentRef}
+				className="form--InteractiveListItems"
+				style={listStyle}
+			>
+				{shouldVirtualize ? (
+					<div
+						style={{
+							height: virtualizer.getTotalSize(),
+							width: "100%",
+							position: "relative",
+						}}
+					>
+						{virtualizer.getVirtualItems().map((row) => {
+							const item = items[row.index];
+							if (!item) {
+								return null;
+							}
+							return (
+								<div
+									key={item.id}
+									ref={virtualizer.measureElement}
+									style={{
+										position: "absolute",
+										top: 0,
+										left: 0,
+										width: "100%",
+										transform: `translateY(${row.start}px)`,
+										paddingBottom:
+											row.index === items.length - 1
+												? 0
+												: ITEM_GAP,
+									}}
+								>
+									{children(item, row.index, removeItem)}
+								</div>
+							);
+						})}
+					</div>
+				) : (
+					items.map((item, index) =>
+						children(item, index, removeItem)
+					)
+				)}
 			</div>
 			{onAdd && (
 				<button

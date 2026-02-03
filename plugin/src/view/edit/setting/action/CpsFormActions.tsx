@@ -92,7 +92,6 @@ export function CpsFormActions(props: {
                         )}
                         <CpsFormAction
                             value={action}
-                            defaultOpen={actions.length === 1}
                             onChange={(v) => {
                                 const newActions = actions.map((a) => {
                                     if (v.id === a.id) {

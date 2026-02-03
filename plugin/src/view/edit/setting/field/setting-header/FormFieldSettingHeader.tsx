@@ -1,4 +1,4 @@
-import { Copy, MoreHorizontal, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, MoreHorizontal, Trash2, X } from "lucide-react";
 import { Popover } from "radix-ui";
 import { useCallback, useEffect, useState } from "react";
 import { ConfirmPopover } from "src/component/confirm/ConfirmPopover";
@@ -22,9 +22,11 @@ export function FormFieldSettingHeader(props: {
 	onChange: (field: IFormField) => void;
 	onDelete: (field: IFormField) => void;
 	onDuplicate: (field: IFormField) => void;
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
 	setDragHandleRef: (ref: HTMLDivElement | null) => void;
 }) {
-	const { field, setDragHandleRef, onChange, onDuplicate } = props;
+	const { field, setDragHandleRef, onChange, onDuplicate, open } = props;
 	const formConfig = useFormConfig();
 	const [conflict, setConflict] = useState<ConflictInfo | null>(null);
 
@@ -55,6 +57,11 @@ export function FormFieldSettingHeader(props: {
 			className="form--CpsFormFieldSettingHeader"
 			data-required={field.required}
 			data-conflict={!!conflict}
+			onClick={(e) => {
+				if (e.target === e.currentTarget) {
+					props.onOpenChange(!open);
+				}
+			}}
 		>
 			<DragHandler
 				ref={setDragHandleRef}
@@ -66,6 +73,13 @@ export function FormFieldSettingHeader(props: {
 					*
 				</span>
 			)}
+			<button
+				className="clickable-icon form--CpsFormFieldSettingToggle"
+				aria-label={open ? localInstance.fold : localInstance.expand}
+				onClick={() => props.onOpenChange(!open)}
+			>
+				{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+			</button>
 			<div className="form--FieldNameWrapper">
 				<input
 					type="text"

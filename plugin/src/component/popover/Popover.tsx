@@ -11,6 +11,7 @@ export type PopoverProps = {
 	onOpenChange?: (open: boolean) => void;
 	defaultOpen?: boolean;
 	modal?: boolean;
+	closeOnInteractOutside?: boolean;
 };
 
 export function Popover(props: PopoverProps) {
@@ -23,6 +24,7 @@ export function Popover(props: PopoverProps) {
 		onOpenChange,
 		defaultOpen,
 		modal = false,
+		closeOnInteractOutside = false,
 	} = props;
 
 	const triggerElement = Array.isArray(children) ? children[0] : null;
@@ -49,8 +51,10 @@ export function Popover(props: PopoverProps) {
 						event.preventDefault();
 					}}
 					onInteractOutside={(event) => {
-						// 阻止点击外部立即关闭，给用户时间操作
-						event.preventDefault();
+						if (!closeOnInteractOutside) {
+							// 阻止点击外部立即关闭，给用户时间操作
+							event.preventDefault();
+						}
 					}}
 					collisionPadding={{
 						left: 16,

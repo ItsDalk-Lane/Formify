@@ -16,7 +16,7 @@ export function NewFieldGridPopover({ children, onSelect }: Props) {
 		setOpen(false);
 	};
 	return (
-		<Popover open={open} onOpenChange={setOpen}>
+		<Popover open={open} onOpenChange={setOpen} closeOnInteractOutside>
 			{children}
 			<NewFieldGrid onSelect={handleSelect} />
 		</Popover>

@@ -8,7 +8,7 @@
 - **obsidian-form-flow** - Form workflow system foundation
 - **obsidian-tars** - Multi-AI provider integration
 
-**Current Version**: 0.2.8.260201
+**Current Version**: 0.2.8.260203
 **Plugin ID**: `formify`
 **License**: MIT
 **Target Platform**: Obsidian 1.8.0+
