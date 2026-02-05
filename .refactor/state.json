@@ -1,0 +1,545 @@
+{
+  "project_name": "Form",
+  "original_version": "0.2.8.260203",
+  "plugin_id": "form",
+  "plugin_display_name": "Form",
+  "plugin_author": "vran",
+  "target_project_path": "C:\\Desktop\\插件开发\\.obsidian\\plugins\\form",
+  "reference_project_path": "c:\\Desktop\\code\\form-flow\\plugin",
+  "initialized_at": "2026-02-05T00:00:00Z",
+  "min_app_version": "1.8.0",
+  "features": [
+    {
+      "id": "F001",
+      "name": "插件骨架",
+      "description": "基础插件结构、生命周期管理、manifest.json、esbuild 配置",
+      "complexity": 2,
+      "dependencies": [],
+      "source_files": ["src/main.ts", "manifest.json", "package.json", "esbuild.config.mjs"],
+      "status": "pending"
+    },
+    {
+      "id": "F002",
+      "name": "Settings 框架",
+      "description": "设置管理、PluginSettings 接口、Settings Tab UI、加密存储",
+      "complexity": 3,
+      "dependencies": ["F001"],
+      "source_files": ["src/settings/"],
+      "status": "pending"
+    },
+    {
+      "id": "F003",
+      "name": "国际化系统",
+      "description": "多语言支持（en, zh, zhTw）、Local 接口",
+      "complexity": 2,
+      "dependencies": ["F001"],
+      "source_files": ["src/i18n/"],
+      "status": "pending"
+    },
+    {
+      "id": "F004",
+      "name": "ServiceContainer",
+      "description": "依赖注入容器、服务生命周期管理",
+      "complexity": 3,
+      "dependencies": ["F001"],
+      "source_files": ["src/service/ServiceContainer.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F005",
+      "name": "表单数据模型",
+      "description": "FormConfig、Field 类型、Action 类型、Filter 模型、所有枚举定义",
+      "complexity": 4,
+      "dependencies": ["F001"],
+      "source_files": ["src/model/"],
+      "status": "pending"
+    },
+    {
+      "id": "F006",
+      "name": "基础 UI 组件库",
+      "description": "Button、Toast、Dialog、Popover、Dropdown 等通用组件",
+      "complexity": 3,
+      "dependencies": ["F001"],
+      "source_files": ["src/component/button/", "src/component/toast/", "src/component/dialog/", "src/component/popover/", "src/component/dropdown/"],
+      "status": "pending"
+    },
+    {
+      "id": "F007",
+      "name": "React Context 系统",
+      "description": "ObsidianAppContext、PluginSettingsContext、ServiceContainerContext",
+      "complexity": 2,
+      "dependencies": ["F001", "F004"],
+      "source_files": ["src/context/"],
+      "status": "pending"
+    },
+    {
+      "id": "F008",
+      "name": "表单字段组件",
+      "description": "15+ 字段类型的 UI 组件和控制器",
+      "complexity": 4,
+      "dependencies": ["F005", "F006"],
+      "source_files": ["src/component/form-fields/", "src/view/shared/control/"],
+      "status": "pending"
+    },
+    {
+      "id": "F009",
+      "name": "表单验证服务",
+      "description": "FormValidator、字段必填检查、类型验证",
+      "complexity": 2,
+      "dependencies": ["F005"],
+      "source_files": ["src/service/validator/"],
+      "status": "pending"
+    },
+    {
+      "id": "F010",
+      "name": "条件过滤系统",
+      "description": "FilterService、20+ 操作符、条件组合、可见性控制",
+      "complexity": 4,
+      "dependencies": ["F005"],
+      "source_files": ["src/service/filter/", "src/component/filter/"],
+      "status": "pending"
+    },
+    {
+      "id": "F011",
+      "name": "模板引擎",
+      "description": "FormTemplateProcessEngine、Handlebars 模板、变量替换",
+      "complexity": 3,
+      "dependencies": ["F005"],
+      "source_files": ["src/service/engine/"],
+      "status": "pending"
+    },
+    {
+      "id": "F012",
+      "name": "文件操作服务",
+      "description": "FileOperationService、创建/删除/移动文件、路径解析",
+      "complexity": 3,
+      "dependencies": ["F011"],
+      "source_files": ["src/service/FileOperationService.ts", "src/service/PathResolverService.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F013",
+      "name": "Action Chain 框架",
+      "description": "ActionChain、IActionService 接口、Visitor 模式",
+      "complexity": 3,
+      "dependencies": ["F005", "F011"],
+      "source_files": ["src/service/action/IActionService.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F014",
+      "name": "基础 Action 服务",
+      "description": "CreateFile、InsertText、UpdateFrontmatter Action",
+      "complexity": 3,
+      "dependencies": ["F013", "F012"],
+      "source_files": ["src/service/action/create-file/", "src/service/action/insert-text/", "src/service/action/update-frontmatter/"],
+      "status": "pending"
+    },
+    {
+      "id": "F015",
+      "name": "FormService 核心",
+      "description": "表单提交、字段值处理、Action Chain 执行",
+      "complexity": 4,
+      "dependencies": ["F009", "F010", "F013"],
+      "source_files": ["src/service/FormService.ts", "src/service/FormExecutionManager.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F016",
+      "name": "表单文件视图",
+      "description": "CpsFormFileView、表单渲染、预览/编辑切换",
+      "complexity": 4,
+      "dependencies": ["F008", "F015"],
+      "source_files": ["src/view/preview/"],
+      "status": "pending"
+    },
+    {
+      "id": "F017",
+      "name": "表单编辑器",
+      "description": "CpsFormEditView、字段编辑、Action 编辑",
+      "complexity": 5,
+      "dependencies": ["F008", "F013"],
+      "source_files": ["src/view/edit/"],
+      "status": "pending"
+    },
+    {
+      "id": "F018",
+      "name": "命令系统",
+      "description": "ApplicationCommandService、打开表单、创建表单命令",
+      "complexity": 2,
+      "dependencies": ["F004", "F015"],
+      "source_files": ["src/service/command/ApplicationCommandService.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F019",
+      "name": "表单集成服务",
+      "description": "FormIntegrationService、文件监听、动态命令注册",
+      "complexity": 3,
+      "dependencies": ["F018"],
+      "source_files": ["src/service/command/FormIntegrationService.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F020",
+      "name": "右键菜单服务",
+      "description": "ContextMenuService、编辑器右键菜单",
+      "complexity": 2,
+      "dependencies": ["F019"],
+      "source_files": ["src/service/command/ContextMenuService.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F021",
+      "name": "脚本执行服务",
+      "description": "ScriptExecutionService、FormScriptService、自定义脚本",
+      "complexity": 4,
+      "dependencies": ["F004"],
+      "source_files": ["src/service/ScriptExecutionService.ts", "src/service/extend/"],
+      "status": "pending"
+    },
+    {
+      "id": "F022",
+      "name": "RunScript Action",
+      "description": "脚本动作执行",
+      "complexity": 2,
+      "dependencies": ["F013", "F021"],
+      "source_files": ["src/service/action/run-script/"],
+      "status": "pending"
+    },
+    {
+      "id": "F023",
+      "name": "Loop/Break/Continue Action",
+      "description": "循环控制动作",
+      "complexity": 3,
+      "dependencies": ["F013"],
+      "source_files": ["src/service/action/loop/"],
+      "status": "pending"
+    },
+    {
+      "id": "F024",
+      "name": "SuggestModal Action",
+      "description": "建议选择模态框动作",
+      "complexity": 2,
+      "dependencies": ["F013", "F006"],
+      "source_files": ["src/service/action/suggest-modal/"],
+      "status": "pending"
+    },
+    {
+      "id": "F025",
+      "name": "GenerateForm Action",
+      "description": "动态表单生成动作",
+      "complexity": 3,
+      "dependencies": ["F013", "F016"],
+      "source_files": ["src/service/action/generate-form/"],
+      "status": "pending"
+    },
+    {
+      "id": "F026",
+      "name": "Button/Text Action",
+      "description": "按钮和文本操作动作",
+      "complexity": 2,
+      "dependencies": ["F013"],
+      "source_files": ["src/service/action/button/", "src/service/action/text/"],
+      "status": "pending"
+    },
+    {
+      "id": "F027",
+      "name": "Collect Action",
+      "description": "数据收集动作",
+      "complexity": 2,
+      "dependencies": ["F013"],
+      "source_files": ["src/service/action/collect/"],
+      "status": "pending"
+    },
+    {
+      "id": "F028",
+      "name": "启动条件系统",
+      "description": "StartupCondition、时间/文件/系统/脚本条件",
+      "complexity": 4,
+      "dependencies": ["F010"],
+      "source_files": ["src/model/startup-condition/", "src/service/startup-condition/"],
+      "status": "pending"
+    },
+    {
+      "id": "F029",
+      "name": "自动触发服务",
+      "description": "AutoTriggerService、定时评估、表单自动执行",
+      "complexity": 3,
+      "dependencies": ["F028", "F015"],
+      "source_files": ["src/service/startup-condition/AutoTriggerService.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F030",
+      "name": "表单导入导出",
+      "description": "FormImportService、冲突检测、ID 重新生成",
+      "complexity": 3,
+      "dependencies": ["F005", "F015"],
+      "source_files": ["src/service/FormImportService.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F031",
+      "name": "FeatureCoordinator",
+      "description": "特性协调器、管理 Chat 和 TARS 特性",
+      "complexity": 2,
+      "dependencies": ["F004"],
+      "source_files": ["src/features/FeatureCoordinator.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F032",
+      "name": "AI Provider 基础框架",
+      "description": "Provider 接口、设置管理、API Key 加密",
+      "complexity": 3,
+      "dependencies": ["F002"],
+      "source_files": ["src/features/tars/providers/", "src/features/tars/settings.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F033",
+      "name": "OpenAI Provider",
+      "description": "OpenAI API 集成",
+      "complexity": 3,
+      "dependencies": ["F032"],
+      "source_files": ["src/features/tars/providers/openAI.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F034",
+      "name": "Claude Provider",
+      "description": "Anthropic Claude API 集成",
+      "complexity": 3,
+      "dependencies": ["F032"],
+      "source_files": ["src/features/tars/providers/claude.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F035",
+      "name": "Gemini Provider",
+      "description": "Google Gemini API 集成",
+      "complexity": 3,
+      "dependencies": ["F032"],
+      "source_files": ["src/features/tars/providers/gemini.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F036",
+      "name": "Ollama Provider",
+      "description": "本地 Ollama 模型集成",
+      "complexity": 2,
+      "dependencies": ["F032"],
+      "source_files": ["src/features/tars/providers/ollama.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F037",
+      "name": "其他 AI Provider",
+      "description": "DeepSeek、Qwen、Kimi、ZhiPu、Doubao 等 10+ 供应商",
+      "complexity": 3,
+      "dependencies": ["F032"],
+      "source_files": ["src/features/tars/providers/"],
+      "status": "pending"
+    },
+    {
+      "id": "F038",
+      "name": "AI Action",
+      "description": "AI 动作、流式输出、模态框显示",
+      "complexity": 4,
+      "dependencies": ["F013", "F032"],
+      "source_files": ["src/service/action/ai/", "src/component/modal/AIStreamingModal.tsx"],
+      "status": "pending"
+    },
+    {
+      "id": "F039",
+      "name": "TarsFeatureManager",
+      "description": "TARS 特性管理、命令注册、编辑器扩展",
+      "complexity": 3,
+      "dependencies": ["F031", "F032"],
+      "source_files": ["src/features/tars/TarsFeatureManager.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F040",
+      "name": "Tab Completion",
+      "description": "Tab 补全系统、上下文构建、Ghost Text",
+      "complexity": 4,
+      "dependencies": ["F039"],
+      "source_files": ["src/features/tars/tab-completion/"],
+      "status": "pending"
+    },
+    {
+      "id": "F041",
+      "name": "System Prompt 管理",
+      "description": "系统提示词管理、编辑器、数据服务",
+      "complexity": 3,
+      "dependencies": ["F039"],
+      "source_files": ["src/features/tars/system-prompts/"],
+      "status": "pending"
+    },
+    {
+      "id": "F042",
+      "name": "ChatFeatureManager",
+      "description": "Chat 特性管理、视图注册、命令注册",
+      "complexity": 3,
+      "dependencies": ["F031", "F032"],
+      "source_files": ["src/features/chat/ChatFeatureManager.tsx"],
+      "status": "pending"
+    },
+    {
+      "id": "F043",
+      "name": "ChatService 核心",
+      "description": "会话管理、消息发送、AI 调用",
+      "complexity": 4,
+      "dependencies": ["F042"],
+      "source_files": ["src/features/chat/services/ChatService.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F044",
+      "name": "Chat View",
+      "description": "ChatView 侧边栏/标签页视图",
+      "complexity": 4,
+      "dependencies": ["F043"],
+      "source_files": ["src/features/chat/views/ChatView.tsx"],
+      "status": "pending"
+    },
+    {
+      "id": "F045",
+      "name": "Chat Modal",
+      "description": "ChatModal、ChatPersistentModal",
+      "complexity": 3,
+      "dependencies": ["F043"],
+      "source_files": ["src/features/chat/views/ChatModal.tsx", "src/features/chat/views/ChatPersistentModal.tsx"],
+      "status": "pending"
+    },
+    {
+      "id": "F046",
+      "name": "Chat UI 组件",
+      "description": "ChatMessages、ChatInput、ChatControls",
+      "complexity": 3,
+      "dependencies": ["F044"],
+      "source_files": ["src/features/chat/views/ChatMessages.tsx", "src/features/chat/views/ChatInput.tsx", "src/features/chat/views/ChatControls.tsx"],
+      "status": "pending"
+    },
+    {
+      "id": "F047",
+      "name": "Chat 历史记录",
+      "description": "HistoryService、会话保存/加载",
+      "complexity": 3,
+      "dependencies": ["F043"],
+      "source_files": ["src/features/chat/services/HistoryService.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F048",
+      "name": "Chat 触发系统",
+      "description": "ChatTriggerExtension、@ 符号触发",
+      "complexity": 2,
+      "dependencies": ["F042"],
+      "source_files": ["src/features/chat/trigger/"],
+      "status": "pending"
+    },
+    {
+      "id": "F049",
+      "name": "Selection Toolbar",
+      "description": "划词工具栏、快捷技能执行",
+      "complexity": 4,
+      "dependencies": ["F042"],
+      "source_files": ["src/features/chat/selection-toolbar/"],
+      "status": "pending"
+    },
+    {
+      "id": "F050",
+      "name": "Skill 系统",
+      "description": "技能定义、技能组、表单技能",
+      "complexity": 3,
+      "dependencies": ["F049"],
+      "source_files": ["src/features/chat/selection-toolbar/SkillDataService.ts", "src/features/chat/selection-toolbar/SkillExecutionService.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F051",
+      "name": "Tool Calling 框架",
+      "description": "ToolRegistryService、ToolExecutionManager",
+      "complexity": 4,
+      "dependencies": ["F043"],
+      "source_files": ["src/features/chat/services/ToolRegistryService.ts", "src/features/chat/services/ToolExecutionManager.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F052",
+      "name": "内置 Tools",
+      "description": "ReadFile、WriteFile、SearchFiles 等 11 个工具",
+      "complexity": 3,
+      "dependencies": ["F051"],
+      "source_files": ["src/features/chat/tools/"],
+      "status": "pending"
+    },
+    {
+      "id": "F053",
+      "name": "文件上下文管理",
+      "description": "FileContentService、FileIntentAnalyzer、自动添加活跃文件",
+      "complexity": 3,
+      "dependencies": ["F043"],
+      "source_files": ["src/features/chat/services/FileContentService.ts", "src/features/chat/services/FileIntentAnalyzer.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F054",
+      "name": "内链解析服务",
+      "description": "InternalLinkParserService、递归解析、缓存",
+      "complexity": 3,
+      "dependencies": ["F004"],
+      "source_files": ["src/service/InternalLinkParserService.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F055",
+      "name": "冲突监控",
+      "description": "ConflictMonitor、文件冲突检测",
+      "complexity": 2,
+      "dependencies": ["F004"],
+      "source_files": ["src/service/conflict/"],
+      "status": "pending"
+    },
+    {
+      "id": "F056",
+      "name": "调试日志系统",
+      "description": "DebugLogger、日志级别、控制台输出",
+      "complexity": 1,
+      "dependencies": ["F002"],
+      "source_files": ["src/utils/DebugLogger.ts"],
+      "status": "pending"
+    },
+    {
+      "id": "F057",
+      "name": "Custom Hooks",
+      "description": "useForm、useDebounce 等 14+ 自定义 Hooks",
+      "complexity": 2,
+      "dependencies": ["F007"],
+      "source_files": ["src/hooks/"],
+      "status": "pending"
+    },
+    {
+      "id": "F058",
+      "name": "工具函数库",
+      "description": "40+ 工具函数、日期处理、文件操作",
+      "complexity": 2,
+      "dependencies": ["F001"],
+      "source_files": ["src/utils/"],
+      "status": "pending"
+    }
+  ],
+  "mvp_queue": [
+    "MVP001", "MVP002", "MVP003", "MVP004", "MVP005",
+    "MVP006", "MVP007", "MVP008", "MVP009", "MVP010",
+    "MVP011", "MVP012", "MVP013", "MVP014", "MVP015",
+    "MVP016", "MVP017", "MVP018", "MVP019", "MVP020",
+    "MVP021", "MVP022", "MVP023", "MVP024", "MVP025"
+  ],
+  "current_mvp": null,
+  "completed_mvps": [],
+  "notes": {}
+}
