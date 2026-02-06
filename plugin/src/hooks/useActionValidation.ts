@@ -227,6 +227,19 @@ function validateAction(action: FormActionImp) {
                     }
                     break;
                 }
+                case TextCleanupType.MOVE_FILE: {
+                    const cfg = cleanup.moveFileConfig;
+                    if (cfg?.targetMode === TargetMode.SPECIFIED) {
+                        const paths = (cfg.targetPaths ?? []).filter((item) => Strings.isNotBlank(item));
+                        if (paths.length === 0) {
+                            messages.push(l.file_path_required);
+                        }
+                    }
+                    if (Strings.isBlank(cfg?.destinationFolderPath)) {
+                        messages.push(l.target_folder_required);
+                    }
+                    break;
+                }
                 case TextCleanupType.DELETE_CONTENT: {
                     const cfg = cleanup.deleteContentConfig;
                     if (cfg?.targetMode === TargetMode.SPECIFIED) {

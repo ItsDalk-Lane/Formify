@@ -303,6 +303,8 @@ export class En implements Local {
 	text_action_cleanup_feature_clear_format_desc = "Remove Markdown formatting while keeping plain text.";
 	text_action_cleanup_feature_delete_file = "Delete Files/Folders";
 	text_action_cleanup_feature_delete_file_desc = "Delete selected files or folders in bulk.";
+	text_action_cleanup_feature_move_file = "Move Files/Folders";
+	text_action_cleanup_feature_move_file_desc = "Move selected files or folders in bulk.";
 	text_action_cleanup_feature_delete_content = "Delete File Content";
 	text_action_cleanup_feature_delete_content_desc = "Delete entire files or content under specific headings.";
 	text_target_mode_label = "Target mode";
@@ -376,6 +378,17 @@ export class En implements Local {
 	text_folder_delete_folders_only = "Delete folders only";
 	text_folder_delete_folders_only_desc = "Remove empty subfolders but keep files.";
 	text_delete_file_confirm_placeholder = "Are you sure you want to delete the selected files/folders? This action cannot be undone.";
+	text_move_type_label = "Move type";
+	text_move_type_description = "Choose whether to move files or folders.";
+	text_move_target_paths_label = "Source paths";
+	text_move_target_paths_description = "Specify file or folder paths to move.";
+	text_move_target_paths_placeholder = "Select or enter source file/folder paths";
+	text_move_destination_folder_label = "Destination folder";
+	text_move_destination_folder_description = "Choose the folder where files/folders will be moved.";
+	text_move_destination_folder_placeholder = "Select or enter destination folder path";
+	text_move_conflict_resolution_description = "Choose how to handle name conflicts in destination.";
+	text_move_file_confirm_placeholder = "Are you sure you want to move the selected files/folders?";
+	text_move_result_summary = "Move result: moved {0}, skipped {1}, failed {2}.";
 	text_delete_content_type_label = "Content deletion type";
 	text_delete_content_type_description = "Choose the scope of content to delete.";
 	text_delete_content_type_entire = "Entire file content";

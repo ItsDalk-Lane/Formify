@@ -1,10 +1,11 @@
 import React, { useMemo } from "react";
 import { localInstance } from "src/i18n/locals";
-import { TextFormAction, TextCleanupConfig, ClearFormatConfig, DeleteFileConfig, DeleteContentConfig } from "src/model/action/TextFormAction";
+import { TextFormAction, TextCleanupConfig, ClearFormatConfig, DeleteFileConfig, MoveFileConfig, DeleteContentConfig } from "src/model/action/TextFormAction";
 import { TextCleanupType } from "src/model/enums/TextCleanupType";
 import { TargetMode } from "src/model/enums/TargetMode";
 import { DeleteType } from "src/model/enums/DeleteType";
 import { FolderDeleteOption } from "src/model/enums/FolderDeleteOption";
+import { FileConflictResolution } from "src/model/enums/FileConflictResolution";
 import { ContentDeleteType } from "src/model/enums/ContentDeleteType";
 import { ContentDeleteRange } from "src/model/enums/ContentDeleteRange";
 import { HeadingContentDeleteRange } from "src/model/enums/HeadingContentDeleteRange";
@@ -12,6 +13,7 @@ import { Select2, SelectOption2 } from "src/component/select2/Select";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import { ClearFormatSetting } from "./ClearFormatSetting";
 import { DeleteFileSetting } from "./DeleteFileSetting";
+import { MoveFileSetting } from "./MoveFileSetting";
 import { DeleteContentSetting } from "./DeleteContentSetting";
 
 type TextCleanupSettingProps = {
@@ -38,6 +40,15 @@ const defaultDeleteFileConfig = (): DeleteFileConfig => ({
     needConfirm: true,
 });
 
+const defaultMoveFileConfig = (): MoveFileConfig => ({
+    targetMode: TargetMode.CURRENT,
+    targetPaths: [],
+    moveType: DeleteType.FILE,
+    destinationFolderPath: "",
+    conflictResolution: FileConflictResolution.SKIP,
+    needConfirm: true,
+});
+
 const defaultDeleteContentConfig = (): DeleteContentConfig => ({
     targetMode: TargetMode.CURRENT,
     targetFiles: [],
@@ -56,6 +67,10 @@ const ensureCleanupConfig = (config?: TextCleanupConfig): TextCleanupConfig => (
     deleteFileConfig: {
         ...defaultDeleteFileConfig(),
         ...(config?.deleteFileConfig ?? {}),
+    },
+    moveFileConfig: {
+        ...defaultMoveFileConfig(),
+        ...(config?.moveFileConfig ?? {}),
     },
     deleteContentConfig: {
         ...defaultDeleteContentConfig(),
@@ -82,6 +97,10 @@ export function TextCleanupSetting(props: TextCleanupSettingProps) {
             {
                 value: TextCleanupType.DELETE_FILE,
                 label: localInstance.text_action_cleanup_feature_delete_file,
+            },
+            {
+                value: TextCleanupType.MOVE_FILE,
+                label: localInstance.text_action_cleanup_feature_move_file,
             },
             {
                 value: TextCleanupType.DELETE_CONTENT,
@@ -153,6 +172,19 @@ export function TextCleanupSetting(props: TextCleanupSettingProps) {
                             ...cleanupConfig,
                             type: TextCleanupType.DELETE_CONTENT,
                             deleteContentConfig,
+                        });
+                    }}
+                />
+            )}
+
+            {cleanupType === TextCleanupType.MOVE_FILE && (
+                <MoveFileSetting
+                    config={cleanupConfig.moveFileConfig ?? defaultMoveFileConfig()}
+                    onChange={(moveFileConfig) => {
+                        updateCleanupConfig({
+                            ...cleanupConfig,
+                            type: TextCleanupType.MOVE_FILE,
+                            moveFileConfig,
                         });
                     }}
                 />

@@ -314,6 +314,8 @@ export class Zh implements Local {
 	text_action_cleanup_feature_clear_format_desc = "移除 Markdown 格式标记，保留原始文本";
 	text_action_cleanup_feature_delete_file = "删除文件/文件夹";
 	text_action_cleanup_feature_delete_file_desc = "批量删除选定的文件或文件夹";
+	text_action_cleanup_feature_move_file = "移动文件/文件夹";
+	text_action_cleanup_feature_move_file_desc = "批量移动选定的文件或文件夹";
 	text_action_cleanup_feature_delete_content = "删除文件内容";
 	text_action_cleanup_feature_delete_content_desc = "删除整个文件或指定标题下的内容";
 	text_target_mode_label = "目标模式";
@@ -387,6 +389,17 @@ export class Zh implements Local {
 	text_folder_delete_folders_only = "仅删除文件夹";
 	text_folder_delete_folders_only_desc = "只删除空的子文件夹，保留文件";
 	text_delete_file_confirm_placeholder = "确认要删除选定的文件/文件夹吗？此操作不可撤销。";
+	text_move_type_label = "移动类型";
+	text_move_type_description = "选择移动文件还是文件夹";
+	text_move_target_paths_label = "源路径";
+	text_move_target_paths_description = "指定要移动的文件或文件夹路径";
+	text_move_target_paths_placeholder = "选择或输入源文件/文件夹路径";
+	text_move_destination_folder_label = "目标文件夹";
+	text_move_destination_folder_description = "选择要移动到的目标文件夹";
+	text_move_destination_folder_placeholder = "选择或输入目标文件夹路径";
+	text_move_conflict_resolution_description = "当目标中存在同名项时的处理方式";
+	text_move_file_confirm_placeholder = "确认要移动选定的文件/文件夹吗？";
+	text_move_result_summary = "移动结果：已移动 {0} 项，跳过 {1} 项，失败 {2} 项。";
 	text_delete_content_type_label = "删除内容类型";
 	text_delete_content_type_description = "选择要删除的内容范围";
 	text_delete_content_type_entire = "整个文件内容";

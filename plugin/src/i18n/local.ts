@@ -267,6 +267,8 @@ export interface Local {
 	text_action_cleanup_feature_clear_format_desc: string;
 	text_action_cleanup_feature_delete_file: string;
 	text_action_cleanup_feature_delete_file_desc: string;
+	text_action_cleanup_feature_move_file: string;
+	text_action_cleanup_feature_move_file_desc: string;
 	text_action_cleanup_feature_delete_content: string;
 	text_action_cleanup_feature_delete_content_desc: string;
 	text_target_mode_label: string;
@@ -340,6 +342,17 @@ export interface Local {
 	text_folder_delete_folders_only: string;
 	text_folder_delete_folders_only_desc: string;
 	text_delete_file_confirm_placeholder: string;
+	text_move_type_label: string;
+	text_move_type_description: string;
+	text_move_target_paths_label: string;
+	text_move_target_paths_description: string;
+	text_move_target_paths_placeholder: string;
+	text_move_destination_folder_label: string;
+	text_move_destination_folder_description: string;
+	text_move_destination_folder_placeholder: string;
+	text_move_conflict_resolution_description: string;
+	text_move_file_confirm_placeholder: string;
+	text_move_result_summary: string;
 	text_delete_content_type_label: string;
 	text_delete_content_type_description: string;
 	text_delete_content_type_entire: string;

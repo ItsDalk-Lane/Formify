@@ -68,6 +68,23 @@ export interface DeleteFileResult {
     errors: Array<{ path: string; error: string }>;
 }
 
+export interface MoveFileOptions {
+    paths: string | string[];
+    targetFolder: string;
+    moveType?: "file" | "folder";
+    conflictStrategy?: FileConflictStrategy;
+    silent?: boolean;
+    state?: FormState;
+    variables?: Record<string, any>;
+}
+
+export interface MoveFileResult {
+    success: boolean;
+    moved: Array<{ from: string; to: string }>;
+    skipped: Array<{ path: string; reason: string }>;
+    errors: Array<{ path: string; error: string }>;
+}
+
 export interface OpenFileOptions {
     path: string;
     mode?: OpenFileMode | OpenPageInType;
@@ -247,6 +264,131 @@ export class FileOperationService {
                 result.success = false;
                 result.errors.push({
                     path: targetPath,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+        }
+
+        return result;
+    }
+
+    async moveFile(options: MoveFileOptions): Promise<MoveFileResult> {
+        const result: MoveFileResult = {
+            success: true,
+            moved: [],
+            skipped: [],
+            errors: [],
+        };
+
+        const state = this.resolveState(options.state, options.variables);
+        const engine = new FormTemplateProcessEngine();
+        const rawPaths = Array.isArray(options.paths) ? options.paths : [options.paths];
+        const resolvedPaths: string[] = [];
+
+        for (const raw of rawPaths) {
+            if (Strings.isBlank(raw)) continue;
+            const processed = await engine.process(String(raw), state, this.app);
+            if (Strings.isBlank(processed)) continue;
+            resolvedPaths.push(normalizePath(processed));
+        }
+
+        const uniquePaths = Array.from(new Set(resolvedPaths));
+        if (uniquePaths.length === 0) {
+            result.success = false;
+            result.errors.push({ path: "", error: "未提供有效的移动路径" });
+            return result;
+        }
+
+        const processedTargetFolder = await engine.process(options.targetFolder ?? "", state, this.app);
+        const targetFolder = this.normalizeAndValidatePath(processedTargetFolder);
+        if (!targetFolder) {
+            result.success = false;
+            result.errors.push({ path: "", error: "目标文件夹不能为空" });
+            return result;
+        }
+
+        const targetFolderFile = this.app.vault.getAbstractFileByPath(targetFolder);
+        if (targetFolderFile && !(targetFolderFile instanceof TFolder)) {
+            result.success = false;
+            result.errors.push({ path: targetFolder, error: "目标路径不是文件夹" });
+            return result;
+        }
+
+        await this.ensureFolderExists(targetFolder);
+
+        const resolver = new PathResolverService(this.app);
+        for (const sourcePath of uniquePaths) {
+            try {
+                const resolveResult = await resolver.resolvePath(sourcePath, {
+                    allowFuzzyMatch: true,
+                    requireFile: options.moveType === "file",
+                    requireFolder: options.moveType === "folder",
+                });
+
+                if (!resolveResult.success || (!resolveResult.file && !resolveResult.folder)) {
+                    result.success = false;
+                    result.errors.push({
+                        path: sourcePath,
+                        error: resolveResult.error || "文件或文件夹不存在",
+                    });
+                    continue;
+                }
+
+                const source = resolveResult.file || resolveResult.folder;
+                if (!source) {
+                    result.success = false;
+                    result.errors.push({ path: sourcePath, error: "文件或文件夹不存在" });
+                    continue;
+                }
+
+                let targetPath = this.buildMoveTargetPath(targetFolder, source.name);
+
+                if (source.path === targetPath) {
+                    result.skipped.push({ path: source.path, reason: "源路径与目标路径一致" });
+                    continue;
+                }
+
+                if (source instanceof TFolder && (targetPath === source.path || targetPath.startsWith(`${source.path}/`))) {
+                    result.success = false;
+                    result.errors.push({ path: source.path, error: "不能将文件夹移动到自身或其子目录中" });
+                    continue;
+                }
+
+                const strategy = options.conflictStrategy ?? FileConflictResolution.SKIP;
+                const existing = this.app.vault.getAbstractFileByPath(targetPath);
+                if (existing) {
+                    if (this.isConflictStrategy(strategy, FileConflictResolution.SKIP)) {
+                        result.skipped.push({ path: source.path, reason: "目标路径已存在，已跳过" });
+                        continue;
+                    }
+
+                    if (this.isConflictStrategy(strategy, "error")) {
+                        result.success = false;
+                        result.errors.push({ path: source.path, error: `目标路径已存在: ${targetPath}` });
+                        continue;
+                    }
+
+                    if (this.isConflictStrategy(strategy, FileConflictResolution.AUTO_RENAME) || this.isConflictStrategy(strategy, "rename")) {
+                        targetPath = this.generateAvailablePath(targetPath, source instanceof TFile);
+                    } else {
+                        await this.app.vault.delete(existing, existing instanceof TFolder);
+                    }
+                }
+
+                const parentPath = targetPath.includes("/")
+                    ? targetPath.substring(0, targetPath.lastIndexOf("/"))
+                    : "";
+                if (parentPath) {
+                    await this.ensureFolderExists(parentPath);
+                }
+
+                const from = source.path;
+                await this.app.vault.rename(source, targetPath);
+                result.moved.push({ from, to: targetPath });
+            } catch (error) {
+                result.success = false;
+                result.errors.push({
+                    path: sourcePath,
                     error: error instanceof Error ? error.message : String(error),
                 });
             }
@@ -462,5 +604,61 @@ export class FileOperationService {
         if (mode === "new-tab") return "tab";
         if (mode === "new-window") return "window";
         return mode;
+    }
+
+    private buildMoveTargetPath(targetFolder: string, sourceName: string): string {
+        const normalizedFolder = normalizePath(targetFolder);
+        if (!normalizedFolder || normalizedFolder === "/") {
+            return normalizePath(sourceName);
+        }
+        return normalizePath(`${normalizedFolder}/${sourceName}`);
+    }
+
+    private generateAvailablePath(originalPath: string, treatAsFile: boolean): string {
+        const normalized = normalizePath(originalPath);
+        if (!this.app.vault.getAbstractFileByPath(normalized)) {
+            return normalized;
+        }
+
+        const segments = normalized.split("/");
+        const name = segments.pop() ?? "";
+        const parent = segments.join("/");
+
+        let baseName = name;
+        let extension = "";
+
+        if (treatAsFile) {
+            const dotIndex = name.lastIndexOf(".");
+            if (dotIndex > 0) {
+                baseName = name.slice(0, dotIndex);
+                extension = name.slice(dotIndex);
+            }
+        }
+
+        let index = 1;
+        let candidate = normalized;
+        while (this.app.vault.getAbstractFileByPath(candidate)) {
+            const nextName = `${baseName} (${index})${extension}`;
+            candidate = parent ? normalizePath(`${parent}/${nextName}`) : normalizePath(nextName);
+            index += 1;
+        }
+
+        return candidate;
+    }
+
+    private async ensureFolderExists(folderPath: string): Promise<void> {
+        const normalized = normalizePath(folderPath).replace(/^\/+/, "");
+        if (!normalized || normalized === ".") {
+            return;
+        }
+
+        const parts = normalized.split("/").filter(Boolean);
+        let current = "";
+        for (const part of parts) {
+            current = current ? `${current}/${part}` : part;
+            if (!this.app.vault.getAbstractFileByPath(current)) {
+                await this.app.vault.createFolder(current);
+            }
+        }
     }
 }

@@ -303,6 +303,8 @@ export class ZhTw implements Local {
 	text_action_cleanup_feature_clear_format_desc = "移除 Markdown 格式標記，保留原始文本";
 	text_action_cleanup_feature_delete_file = "刪除文件/文件夾";
 	text_action_cleanup_feature_delete_file_desc = "批量刪除選定的文件或文件夾";
+	text_action_cleanup_feature_move_file = "移動文件/文件夾";
+	text_action_cleanup_feature_move_file_desc = "批量移動選定的文件或文件夾";
 	text_action_cleanup_feature_delete_content = "刪除文件內容";
 	text_action_cleanup_feature_delete_content_desc = "刪除整個文件或指定標題下的內容";
 	text_target_mode_label = "目標模式";
@@ -376,6 +378,17 @@ export class ZhTw implements Local {
 	text_folder_delete_folders_only = "僅刪除文件夾";
 	text_folder_delete_folders_only_desc = "只刪除空的子文件夾，保留文件";
 	text_delete_file_confirm_placeholder = "確認要刪除選定的文件/文件夾嗎？此操作不可撤銷。";
+	text_move_type_label = "移動類型";
+	text_move_type_description = "選擇移動文件還是文件夾";
+	text_move_target_paths_label = "源路徑";
+	text_move_target_paths_description = "指定要移動的文件或文件夾路徑";
+	text_move_target_paths_placeholder = "選擇或輸入源文件/文件夾路徑";
+	text_move_destination_folder_label = "目標文件夾";
+	text_move_destination_folder_description = "選擇要移動到的目標文件夾";
+	text_move_destination_folder_placeholder = "選擇或輸入目標文件夾路徑";
+	text_move_conflict_resolution_description = "當目標中存在同名項時的處理方式";
+	text_move_file_confirm_placeholder = "確認要移動選定的文件/文件夾嗎？";
+	text_move_result_summary = "移動結果：已移動 {0} 項，跳過 {1} 項，失敗 {2} 項。";
 	text_delete_content_type_label = "刪除內容類型";
 	text_delete_content_type_description = "選擇要刪除的內容範圍";
 	text_delete_content_type_entire = "整個文件內容";

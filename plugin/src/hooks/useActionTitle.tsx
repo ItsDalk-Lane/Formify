@@ -158,6 +158,9 @@ export function useActionTitle(value: IFormAction) {
 					case TextCleanupType.DELETE_FILE:
 						detail = localInstance.text_action_cleanup_feature_delete_file;
 						break;
+					case TextCleanupType.MOVE_FILE:
+						detail = localInstance.text_action_cleanup_feature_move_file;
+						break;
 					case TextCleanupType.DELETE_CONTENT:
 						detail = localInstance.text_action_cleanup_feature_delete_content;
 						break;

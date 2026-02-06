@@ -8,6 +8,7 @@ import { ContentDeleteType } from "../enums/ContentDeleteType";
 import { ContentDeleteRange } from "../enums/ContentDeleteRange";
 import { HeadingContentDeleteRange } from "../enums/HeadingContentDeleteRange";
 import { TextOperationType } from "../enums/TextOperationType";
+import { FileConflictResolution } from "../enums/FileConflictResolution";
 
 export type TextActionMode = "operation" | "cleanup";
 
@@ -64,6 +65,16 @@ export interface DeleteFileConfig {
     confirmMessage?: string;
 }
 
+export interface MoveFileConfig {
+    targetMode: TargetMode;
+    targetPaths?: string[];
+    moveType: DeleteType;
+    destinationFolderPath: string;
+    conflictResolution?: FileConflictResolution;
+    needConfirm: boolean;
+    confirmMessage?: string;
+}
+
 export interface DeleteContentConfig {
     targetMode: TargetMode;
     targetFiles?: string[];
@@ -79,6 +90,7 @@ export interface TextCleanupConfig {
     type: TextCleanupType;
     clearFormatConfig?: ClearFormatConfig;
     deleteFileConfig?: DeleteFileConfig;
+    moveFileConfig?: MoveFileConfig;
     deleteContentConfig?: DeleteContentConfig;
 }
 
@@ -120,6 +132,14 @@ export class TextFormAction extends BaseFormAction {
                 targetPaths: [],
                 deleteType: DeleteType.FILE,
                 folderDeleteOption: FolderDeleteOption.RECURSIVE,
+                needConfirm: true,
+            },
+            moveFileConfig: {
+                targetMode: TargetMode.CURRENT,
+                targetPaths: [],
+                moveType: DeleteType.FILE,
+                destinationFolderPath: "",
+                conflictResolution: FileConflictResolution.SKIP,
                 needConfirm: true,
             },
             deleteContentConfig: {

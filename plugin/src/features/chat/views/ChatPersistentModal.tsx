@@ -484,6 +484,12 @@ export class ChatPersistentModal extends Modal {
 		// 隐藏模态框
 		modalEl.style.display = 'none';
 
+		// 隐藏模态容器，防止 backdrop-filter: blur() 导致界面模糊
+		const modalContainer = modalEl.closest('.modal-container') as HTMLElement | null;
+		if (modalContainer) {
+			modalContainer.style.display = 'none';
+		}
+
 		// 创建悬浮按钮
 		this.createFloatingButton();
 
@@ -523,6 +529,12 @@ export class ChatPersistentModal extends Modal {
 		this.floatingButton.remove();
 		this.floatingButton = null;
 
+		// 先恢复模态容器的显示
+		const modalContainer = modalEl.closest('.modal-container') as HTMLElement | null;
+		if (modalContainer) {
+			modalContainer.style.display = '';
+		}
+
 		// 恢复模态框
 		if (this.originalStyleSnapshot) {
 			modalEl.style.display = this.originalStyleSnapshot.display;
@@ -540,6 +552,9 @@ export class ChatPersistentModal extends Modal {
 		}
 
 		this.isMinimized = false;
+
+		// 重新应用非模态行为，确保遮罩层不会阻止交互
+		this.setupNonModalBehavior();
 	}
 
 	/**

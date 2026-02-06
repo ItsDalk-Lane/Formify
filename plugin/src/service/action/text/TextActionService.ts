@@ -4,6 +4,7 @@ import {
     ClearFormatConfig,
     DeleteContentConfig,
     DeleteFileConfig,
+    MoveFileConfig,
     TextCleanupConfig,
     TextFormAction,
     TextOperationConfig,
@@ -17,6 +18,7 @@ import { ContentDeleteType } from "src/model/enums/ContentDeleteType";
 import { ContentDeleteRange } from "src/model/enums/ContentDeleteRange";
 import { HeadingContentDeleteRange } from "src/model/enums/HeadingContentDeleteRange";
 import { TextOperationType } from "src/model/enums/TextOperationType";
+import { FileConflictResolution } from "src/model/enums/FileConflictResolution";
 import { Strings } from "src/utils/Strings";
 import { DebugLogger } from "src/utils/DebugLogger";
 import { focusLatestEditor } from "src/utils/focusLatestEditor";
@@ -46,7 +48,9 @@ export class TextActionService implements IActionService {
                 const cleanup = this.ensureCleanupConfig(formAction.textCleanupConfig);
                 const executed = await this.executeCleanup(cleanup, context);
                 if (executed) {
-                    new Notice(localInstance.submit_success);
+                    if (cleanup.type !== TextCleanupType.MOVE_FILE) {
+                        new Notice(localInstance.submit_success);
+                    }
                 }
             } else if (formAction.mode === "operation") {
                 // 执行文本操作
@@ -305,6 +309,15 @@ export class TextActionService implements IActionService {
                 needConfirm: config?.deleteFileConfig?.needConfirm ?? true,
                 confirmMessage: config?.deleteFileConfig?.confirmMessage,
             },
+            moveFileConfig: {
+                targetMode: config?.moveFileConfig?.targetMode ?? TargetMode.CURRENT,
+                targetPaths: config?.moveFileConfig?.targetPaths ?? [],
+                moveType: config?.moveFileConfig?.moveType ?? DeleteType.FILE,
+                destinationFolderPath: config?.moveFileConfig?.destinationFolderPath ?? "",
+                conflictResolution: config?.moveFileConfig?.conflictResolution ?? FileConflictResolution.SKIP,
+                needConfirm: config?.moveFileConfig?.needConfirm ?? true,
+                confirmMessage: config?.moveFileConfig?.confirmMessage,
+            },
             deleteContentConfig: {
                 targetMode: config?.deleteContentConfig?.targetMode ?? TargetMode.CURRENT,
                 targetFiles: config?.deleteContentConfig?.targetFiles ?? [],
@@ -324,6 +337,8 @@ export class TextActionService implements IActionService {
                 return await this.handleClearFormat(config.clearFormatConfig!, context);
             case TextCleanupType.DELETE_FILE:
                 return await this.handleDeleteFile(config.deleteFileConfig!, context);
+            case TextCleanupType.MOVE_FILE:
+                return await this.handleMoveFile(config.moveFileConfig!, context);
             case TextCleanupType.DELETE_CONTENT:
                 return await this.handleDeleteContent(config.deleteContentConfig!, context);
             default:
@@ -444,7 +459,7 @@ export class TextActionService implements IActionService {
     }
 
     private async handleDeleteFile(config: DeleteFileConfig, context: ActionContext): Promise<boolean> {
-        const paths = await this.resolveDeleteTargets(config, context);
+        const paths = await this.resolveTargetPaths(config.targetMode, config.targetPaths ?? [], context);
         if (paths.length === 0) {
             throw new Error(localInstance.file_not_found);
         }
@@ -479,6 +494,57 @@ export class TextActionService implements IActionService {
             throw new Error(localInstance.unknown_error);
         }
         return true;
+    }
+
+    private async handleMoveFile(config: MoveFileConfig, context: ActionContext): Promise<boolean> {
+        const paths = await this.resolveTargetPaths(config.targetMode, config.targetPaths ?? [], context);
+        if (paths.length === 0) {
+            throw new Error(localInstance.file_not_found);
+        }
+
+        const destinationFolderPath = await this.renderTemplate(config.destinationFolderPath ?? "", context);
+        const targetFolder = normalizePath(destinationFolderPath ?? "");
+        if (Strings.isBlank(targetFolder)) {
+            throw new Error(localInstance.folder_path_required);
+        }
+
+        if (config.needConfirm !== false) {
+            const confirmed = await this.showConfirm(context, config.confirmMessage ?? localInstance.text_move_file_confirm_placeholder);
+            if (!confirmed) {
+                DebugLogger.info("[TextActionService] 用户取消移动文件操作");
+                return false;
+            }
+        }
+
+        const moveType =
+            config.targetMode === TargetMode.CURRENT
+                ? "file"
+                : (config.moveType === DeleteType.FOLDER ? "folder" : "file");
+
+        const fileService = new FileOperationService(context.app);
+        const result = await fileService.moveFile({
+            paths,
+            targetFolder,
+            moveType,
+            conflictStrategy: config.conflictResolution ?? FileConflictResolution.SKIP,
+            state: context.state,
+        });
+
+        const summary = localInstance.text_move_result_summary
+            .replace("{0}", String(result.moved.length))
+            .replace("{1}", String(result.skipped.length))
+            .replace("{2}", String(result.errors.length));
+
+        if (result.success) {
+            new Notice(summary);
+            return true;
+        }
+
+        const firstError = result.errors[0];
+        if (firstError) {
+            throw new Error(`${summary} ${firstError.path} ${firstError.error}`);
+        }
+        throw new Error(`${summary} ${localInstance.unknown_error}`);
     }
 
     private async handleDeleteContent(config: DeleteContentConfig, context: ActionContext): Promise<boolean> {
@@ -658,21 +724,20 @@ export class TextActionService implements IActionService {
             modal.open();
         });
     }
-    private async resolveDeleteTargets(config: DeleteFileConfig, context: ActionContext): Promise<string[]> {
+    private async resolveTargetPaths(targetMode: TargetMode, targetPaths: string[], context: ActionContext): Promise<string[]> {
         const app = context.app;
-        if (config.targetMode === TargetMode.CURRENT) {
+        if (targetMode === TargetMode.CURRENT) {
             focusLatestEditor(app);
             const activeFile = app.workspace.getActiveFile();
             if (!activeFile) {
                 throw new Error(localInstance.no_active_md_file);
             }
-            // 当前文件模式下,始终返回当前文件路径,不考虑 deleteType
             return [activeFile.path];
         }
 
         const engine = new FormTemplateProcessEngine();
         const resolved: string[] = [];
-        for (const raw of config.targetPaths ?? []) {
+        for (const raw of targetPaths ?? []) {
             if (Strings.isBlank(raw)) continue;
             const processed = await engine.process(raw, context.state, app);
             if (Strings.isBlank(processed)) continue;
@@ -995,4 +1060,3 @@ class TextActionConfirmModal extends Modal {
         this.contentEl.empty();
     }
 }
-
