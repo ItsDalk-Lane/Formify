@@ -38,21 +38,16 @@ export function createTabCompletionExtension(
     // 确定触发键
     const triggerKey = settings.triggerKey || 'Alt'
 
-    console.debug('[TabCompletion] 创建扩展，触发键:', triggerKey)
-
     // 事件处理回调
     const callbacks = {
         triggerKey,
         onTrigger: (view: EditorView) => {
-            console.debug('[TabCompletion] onTrigger 被调用')
             service.trigger(view)
         },
         onConfirm: (view: EditorView, text: string, pos: number) => {
-            console.debug('[TabCompletion] onConfirm 被调用')
             service.confirm(view, text, pos)
         },
         onCancel: (view: EditorView) => {
-            console.debug('[TabCompletion] onCancel 被调用')
             service.cancel()
         }
     }

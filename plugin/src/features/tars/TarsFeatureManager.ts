@@ -64,8 +64,6 @@ export class TarsFeatureManager {
 	}
 
 	updateSettings(settings: TarsSettings) {
-		console.debug('[Tars] 更新设置，检查 provider 变化')
-		
 		// 检测 provider 是否有实质性变化（API key、baseURL、model 等）
 		const hasProviderChanges = this.hasProviderConfigChanges(this.settings.providers, settings.providers)
 		
@@ -76,7 +74,6 @@ export class TarsFeatureManager {
 		
 		// 如果 provider 配置有变化，需要更新 Tab 补全的 providers
 		if (hasProviderChanges) {
-			console.debug('[Tars] 检测到 provider 配置变化，更新 Tab 补全')
 			updateTabCompletionProviders(settings.providers)
 		}
 		
@@ -102,25 +99,16 @@ export class TarsFeatureManager {
 			const newProvider = newProviders[i]
 
 			// 检查关键配置是否变化
-			if (
-				oldProvider.tag !== newProvider.tag ||
-				oldProvider.vendor !== newProvider.vendor ||
+				if (
+					oldProvider.tag !== newProvider.tag ||
+					oldProvider.vendor !== newProvider.vendor ||
 				oldProvider.options.apiKey !== newProvider.options.apiKey ||
 				oldProvider.options.baseURL !== newProvider.options.baseURL ||
-				oldProvider.options.model !== newProvider.options.model ||
-				JSON.stringify(oldProvider.options.parameters) !== JSON.stringify(newProvider.options.parameters)
-			) {
-				console.debug(
-					`[Tars] Provider ${oldProvider.tag} 配置变化:`,
-					{
-						apiKey: oldProvider.options.apiKey !== newProvider.options.apiKey,
-						baseURL: oldProvider.options.baseURL !== newProvider.options.baseURL,
-						model: oldProvider.options.model !== newProvider.options.model,
-						parameters: JSON.stringify(oldProvider.options.parameters) !== JSON.stringify(newProvider.options.parameters)
-					}
-				)
-				return true
-			}
+					oldProvider.options.model !== newProvider.options.model ||
+					JSON.stringify(oldProvider.options.parameters) !== JSON.stringify(newProvider.options.parameters)
+				) {
+					return true
+				}
 		}
 
 		return false
@@ -151,8 +139,7 @@ export class TarsFeatureManager {
 		// 重新构建命令（suppressNotifications = true 避免重复通知）
 		this.buildTagCommands(true)
 
-		console.debug('[Tars] 所有命令已重建完成')
-	}
+		}
 
 	private registerCommand(
 		id: string,
@@ -214,18 +201,9 @@ export class TarsFeatureManager {
 			this.tagLowerCaseMap.set(tag.toLowerCase(), { role, tag })
 		})
 
-		this.tagCmdIds = newTagCmdIds
-		if (suppressNotifications) return
-
-		const removedTags = toRemove.map((cmdId) => getMeta(cmdId).tag)
-		if (removedTags.length > 0) {
-			console.debug('Removed commands', removedTags)
+			this.tagCmdIds = newTagCmdIds
+			if (suppressNotifications) return
 		}
-		const addedTags = toAdd.map((cmdId) => getMeta(cmdId).tag)
-		if (addedTags.length > 0) {
-			console.debug('Added commands', addedTags)
-		}
-	}
 
 	private syncEditorSuggest() {
 		if (!this.settings.enableTagSuggest) {
@@ -309,7 +287,6 @@ export class TarsFeatureManager {
 		if (!tabCompletionSettings.enabled) {
 			// 功能被禁用，移除扩展
 			this.disposeTabCompletion()
-			console.debug('[Tars] Tab 补全功能已禁用')
 			return
 		}
 
@@ -329,10 +306,6 @@ export class TarsFeatureManager {
 		this.plugin.registerEditorExtension(this.tabCompletionExtensions)
 		this.tabCompletionRegistered = true
 
-		console.debug('[Tars] Tab 补全功能已启用', {
-			triggerKey: tabCompletionSettings.triggerKey,
-			providerTag: tabCompletionSettings.providerTag || '(使用第一个可用)'
-		})
 	}
 
 	/**

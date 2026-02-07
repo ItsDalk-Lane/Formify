@@ -114,7 +114,6 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 					// 处理完成状态
 					const finishReason = part.choices[0]?.finish_reason
 					if (finishReason) {
-						console.log('[Qwen] 流结束，原因:', finishReason)
 						if (thinkingActive) {
 							thinkingActive = false
 							const durationMs = Date.now() - (thinkingStartMs ?? Date.now())
@@ -187,4 +186,3 @@ export const qwenVendor: Vendor = {
 	websiteToObtainKey: 'https://dashscope.console.aliyun.com',
 	capabilities: ['Text Generation', 'Image Vision', 'Reasoning']
 }
-

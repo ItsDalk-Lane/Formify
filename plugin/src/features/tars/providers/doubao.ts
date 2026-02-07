@@ -467,10 +467,9 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 					webSearchConfig?.enableThinking !== false &&
 					effectiveThinkingType &&
 					effectiveThinkingType !== 'disabled'
-				) {
-					data.thinking = { type: effectiveThinkingType }
-					console.log('[Doubao] Web Search模式下已启用thinking参数:', data.thinking)
-				}
+					) {
+						data.thinking = { type: effectiveThinkingType }
+					}
 
 				// 如果配置了系统提示词，添加到消息开头
 				if (webSearchConfig?.systemPrompt) {
@@ -493,15 +492,7 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			data.messages = processedMessages
 		}
 
-		// 调试日志：豆包API请求参数
-		console.log('[Doubao] API请求参数:', {
-			model,
-			thinking: data.thinking,
-			hasWebSearch: !!data.tools,
-			apiType: useResponsesAPI ? 'Responses API' : 'Chat Completions API'
-		})
-
-	// 发送请求
+		// 发送请求
 	
 	const response = await fetch(endpoint, {
 		method: 'POST',
@@ -644,4 +635,3 @@ export const doubaoVendor: Vendor = {
 	websiteToObtainKey: 'https://www.volcengine.com',
 	capabilities: ['Text Generation', 'Image Vision', 'Web Search', 'Reasoning']
 }
-

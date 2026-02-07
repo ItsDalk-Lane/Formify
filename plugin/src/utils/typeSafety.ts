@@ -186,14 +186,7 @@ export function logTypeConversion(
     convertedValue: string,
     success: boolean = true
 ): void {
-    if (process.env.NODE_ENV === 'development') {
-        console.group(`Type Conversion ${success ? '✅' : '❌'}`);
-        console.log('Context:', context);
-        console.log('Original Value:', originalValue, `(${typeof originalValue})`);
-        console.log('Converted Value:', convertedValue, `(${typeof convertedValue})`);
-        console.log('Timestamp:', new Date().toISOString());
-        console.groupEnd();
-    }
+    // intentionally noop: non-warning/error logs are disabled
 }
 
 /**

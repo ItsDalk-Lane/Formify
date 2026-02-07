@@ -11,6 +11,7 @@ import { kimiVendor } from './providers/kimi'
 import { ollamaVendor } from './providers/ollama'
 import { openAIVendor } from './providers/openAI'
 import { openRouterVendor } from './providers/openRouter'
+import { poeVendor } from './providers/poe'
 import { qianFanVendor } from './providers/qianFan'
 import { qwenVendor } from './providers/qwen'
 import { siliconFlowVendor } from './providers/siliconflow'
@@ -121,6 +122,7 @@ export const availableVendors: Vendor[] = [
 	kimiVendor,
 	ollamaVendor,
 	openRouterVendor,
+	poeVendor,
 	qianFanVendor,
 	qwenVendor,
 	siliconFlowVendor,

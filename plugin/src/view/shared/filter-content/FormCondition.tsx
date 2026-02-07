@@ -40,7 +40,6 @@ export function FormCondition(props: {
 		loopContext = useLoopContext();
 	} catch (error) {
 		// 如果不在循环上下文中，使用默认值
-		console.debug("[FormCondition] Not in loop context:", error);
 		loopContext = { isInsideLoop: false };
 	}
 

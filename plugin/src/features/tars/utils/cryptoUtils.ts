@@ -150,8 +150,7 @@ export function encryptApiKey(apiKey: string): string {
 			const encryptedBytes = xorCipher(dataBytes, masterKey)
 			const hexString = bytesToHex(encryptedBytes)
 
-			console.debug('[Crypto] API 密钥已使用 XOR 加密')
-			return hexString
+				return hexString
 		} catch (xorError) {
 			console.warn('[Crypto] XOR 加密失败，尝试 Base64 方案', xorError)
 		}
@@ -162,8 +161,7 @@ export function encryptApiKey(apiKey: string): string {
 			const encryptedBytes = xorCipher(dataBytes, masterKey)
 			const base64String = btoa(String.fromCharCode(...encryptedBytes))
 
-			console.debug('[Crypto] API 密钥已使用 Base64 加密')
-			return base64String
+				return base64String
 		} catch (base64Error) {
 			console.warn('[Crypto] Base64 加密失败', base64Error)
 		}
@@ -199,8 +197,7 @@ export function decryptApiKey(encryptedKey: string): string {
 				const decrypted = new TextDecoder().decode(decryptedBytes)
 
 				if (validateApiKey(decrypted)) {
-					console.debug('[Crypto] API 密钥已使用十六进制格式解密')
-					return decrypted
+						return decrypted
 				}
 			} catch (hexError) {
 				console.warn('[Crypto] 十六进制解密失败', hexError)
@@ -220,8 +217,7 @@ export function decryptApiKey(encryptedKey: string): string {
 				const decrypted = new TextDecoder().decode(decryptedBytes)
 
 				if (validateApiKey(decrypted)) {
-					console.debug('[Crypto] API 密钥已使用 Base64 格式解密')
-					return decrypted
+						return decrypted
 				}
 			} catch (base64Error) {
 				console.warn('[Crypto] Base64 解密失败', base64Error)
@@ -231,8 +227,7 @@ export function decryptApiKey(encryptedKey: string): string {
 			try {
 				const decoded = atob(encryptedKey)
 				if (validateApiKey(decoded)) {
-					console.debug('[Crypto] API 密钥使用纯 Base64 解码')
-					return decoded
+						return decoded
 				}
 			} catch {
 				// 忽略
@@ -241,7 +236,6 @@ export function decryptApiKey(encryptedKey: string): string {
 
 		// 如果解密失败，假设是明文密钥（向后兼容）
 		if (validateApiKey(encryptedKey)) {
-			console.debug('[Crypto] 检测到明文 API 密钥')
 			return encryptedKey
 		}
 

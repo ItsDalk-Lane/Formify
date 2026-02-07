@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { localInstance } from "src/i18n/locals";
 import { FormFieldType } from "src/model/enums/FormFieldType";
 import { IFileListField } from "src/model/field/IFileListField";
+import { IFolderPathField } from "src/model/field/IFolderPathField";
 import { IFormField } from "src/model/field/IFormField";
 import { ISelectField } from "src/model/field/ISelectField";
 import { isTimeFormField } from "src/utils/isTimeFormField";
@@ -219,6 +220,7 @@ export function CpsFormFieldDetailEditing(props: {
 									...field,
 									placeholder: localInstance.limit_folder_path_placeholder,
 								}}
+								limitFolderPath=""
 								value={(field as IFileListField).folderPath || ""}
 								onValueChange={(value) => {
 									const f = field as IFileListField;
@@ -232,6 +234,29 @@ export function CpsFormFieldDetailEditing(props: {
 						</div>
 					</CpsFormItem>
 				</>
+			)}
+
+			{field.type === FormFieldType.FOLDER_PATH && (
+				<CpsFormItem label={localInstance.limit_folder_path}>
+					<div style={{ flex: 1 }}>
+						<FolderPathControl
+							field={{
+								...field,
+								placeholder: localInstance.limit_folder_path_placeholder,
+							}}
+							limitFolderPath=""
+							value={(field as IFolderPathField).folderPath || ""}
+							onValueChange={(value) => {
+								const f = field as IFolderPathField;
+								const v = {
+									...f,
+									folderPath: value,
+								};
+								setField(v);
+							}}
+						/>
+					</div>
+				</CpsFormItem>
 			)}
 
 			{field.type === FormFieldType.SELECT && (

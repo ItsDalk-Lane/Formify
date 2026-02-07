@@ -76,7 +76,6 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 
 	// 处理模型选择
 	const handleModelSelect = useCallback((tag: string) => {
-		console.log('ModelSelector: Selecting model', tag);
 		onChange(tag);
 		setIsOpen(false);
 		setHoveredVendor(null);
@@ -366,12 +365,11 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 													transition: 'color 0.15s ease-in-out, background-color 0.15s ease-in-out',
 													marginBottom: '2px',
 													backgroundColor: isSelected ? 'var(--background-modifier-hover)' : 'transparent'
-												}}
-												tabIndex={-1}
-												onClick={() => {
-													console.log('ModelSelector: Clicked model', provider.tag);
-													handleModelSelect(provider.tag);
-												}}
+													}}
+													tabIndex={-1}
+													onClick={() => {
+														handleModelSelect(provider.tag);
+													}}
 												onMouseEnter={(e) => {
 													e.currentTarget.style.backgroundColor = 'var(--background-modifier-hover)';
 												}}

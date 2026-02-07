@@ -90,7 +90,6 @@ export class CommandIdConflictDetector {
 						// 写回文件
 						await vault.modify(formFile, JSON.stringify(parsed, null, 2));
 
-						console.log(`Fixed commandId conflict for ${file.path}: ${conflict.commandId} -> ${newCommandId}`);
 					} catch (error) {
 						console.error(`Failed to fix commandId conflict for ${file.path}:`, error);
 						throw new Error(`修复文件 ${file.path} 的commandId失败: ${error}`);

@@ -160,9 +160,8 @@ export function createTriggerKeyHandler(options: {
                     return true
                 }
 
-                // 触发新的建议请求
-                console.debug('[TabCompletion] 触发键按下，发起请求')
-                onTrigger(view)
+				// 触发新的建议请求
+				onTrigger(view)
                 event.preventDefault()
                 event.stopPropagation()
                 return true
