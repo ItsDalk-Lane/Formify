@@ -775,6 +775,8 @@ export class ZhTw implements Local {
 	chat_modal_title = "AI Chat";
 	chat_trigger_no_active_file = "請先開啟一個 Markdown 檔案";
 	chat_trigger_settings_section = "編輯器觸發設定";
+	chat_template_system_prompt_toggle = "模板系統提示詞";
+	chat_template_system_prompt_toggle_desc = "啟用後將目前提示詞模板原樣作為系統提示詞；關閉或未選擇模板時使用全域系統提示詞。";
 	// 快捷技能
 	selection_toolbar_ai_chat = "AI Chat";
 	selection_toolbar_more = "更多";

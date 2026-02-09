@@ -700,6 +700,8 @@ export interface Local {
 	chat_modal_title: string;
 	chat_trigger_no_active_file: string;
 	chat_trigger_settings_section: string;
+	chat_template_system_prompt_toggle: string;
+	chat_template_system_prompt_toggle_desc: string;
 	// AI Selection Toolbar
 	selection_toolbar_ai_chat: string;
 	selection_toolbar_more: string;

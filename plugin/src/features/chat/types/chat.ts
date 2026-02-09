@@ -75,6 +75,7 @@ export interface ChatSession {
 	selectedFolders?: SelectedFolder[];
 	filePath?: string; // 添加文件路径字段，用于跟踪会话文件
 	systemPrompt?: string; // 添加系统提示词字段，用于内部存储
+	enableTemplateAsSystemPrompt?: boolean; // 会话级模板系统提示词开关
 }
 
 export type ChatOpenMode = 'sidebar' | 'left-sidebar' | 'tab' | 'window' | 'persistent-modal';
@@ -186,6 +187,7 @@ export interface ChatState {
 	selectedModelId: string | null;
 	enableReasoningToggle: boolean;
 	enableWebSearchToggle: boolean;
+	enableTemplateAsSystemPrompt: boolean;
 	contextNotes: string[];
 	selectedImages: string[];
 	selectedFiles: SelectedFile[];

@@ -24,7 +24,7 @@ import { ollamaVendor } from './providers/ollama'
 import { OpenAIOptions, openAIVendor } from './providers/openAI'
 import { OpenRouterOptions, openRouterVendor, isImageGenerationModel } from './providers/openRouter'
 import { AzureOptions, azureVendor } from './providers/azure'
-import { qianFanVendor } from './providers/qianFan'
+import { QianFanOptions, qianFanNormalizeBaseURL, qianFanVendor } from './providers/qianFan'
 import { qwenVendor, QwenOptions } from './providers/qwen'
 import { siliconFlowVendor } from './providers/siliconflow'
 import { zhipuVendor, ZhipuOptions, ZHIPU_THINKING_TYPE_OPTIONS, DEFAULT_ZHIPU_THINKING_TYPE, isReasoningModel } from './providers/zhipu'
@@ -3574,7 +3574,7 @@ export class TarsSettingTab {
 			)
 		}
 
-		if ('apiSecret' in settings.options)
+		if ('apiSecret' in settings.options && vendor.name !== qianFanVendor.name)
 			this.addAPISecretOptional(container, settings.options as BaseOptions & Pick<Optional, 'apiSecret'>)
 
 		// OpenRouter 特殊处理：根据模型判断显示不同功能配置
@@ -3659,6 +3659,10 @@ export class TarsSettingTab {
 
 		if (vendor.name === qwenVendor.name) {
 			this.addQwenSections(container, settings.options as QwenOptions)
+		}
+
+		if (vendor.name === qianFanVendor.name) {
+			this.addQianFanSections(container, settings.options as QianFanOptions, index, settings)
 		}
 
 		if (vendor.name === gptImageVendor.name) {
@@ -5146,6 +5150,68 @@ export class TarsSettingTab {
 			.setDisabled(true)
 	}
 
+	private addQianFanSections = (
+		details: HTMLElement,
+		options: QianFanOptions,
+		index: number,
+		settings: ProviderSettings
+	) => {
+		new Setting(details)
+			.setName('启用深度思考')
+			.setDesc('启用后会向 QianFan 传递 enable_thinking=true，并在流式输出中展示 reasoning_content。')
+			.addToggle((toggle) =>
+				toggle.setValue(options.enableThinking ?? false).onChange(async (value) => {
+					options.enableThinking = value
+					await this.saveSettings()
+					this.updateProviderCapabilities(index, settings)
+				})
+			)
+
+		new Setting(details)
+			.setName('图像返回格式')
+			.setDesc('仅图像生成模型生效（如 qwen-image、flux-1-schnell）。会写入请求体 response_format。')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						b64_json: 'Base64 JSON（推荐）',
+						url: 'URL 链接'
+					})
+					.setValue(options.imageResponseFormat || 'b64_json')
+					.onChange(async (value) => {
+						options.imageResponseFormat = value as QianFanOptions['imageResponseFormat']
+						await this.saveSettings()
+					})
+			)
+
+		new Setting(details)
+			.setName('单次图像数量')
+			.setDesc('仅图像生成模型生效，对应 images/generations 的 n 参数。')
+			.addSlider((slider) =>
+				slider
+					.setLimits(1, 4, 1)
+					.setValue(options.imageCount ?? 1)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						options.imageCount = value
+						await this.saveSettings()
+					})
+			)
+
+		new Setting(details)
+			.setName('图像显示宽度')
+			.setDesc('仅在图像生成结果保存为附件时生效。')
+			.addSlider((slider) =>
+				slider
+					.setLimits(200, 800, 50)
+					.setValue(options.imageDisplayWidth ?? 400)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						options.imageDisplayWidth = value
+						await this.saveSettings()
+					})
+			)
+	}
+
 	addKimiSections = (details: HTMLElement, options: KimiOptions, index: number, settings: ProviderSettings) => {
 		new Setting(details)
 			.setName('启用推理功能')
@@ -5319,27 +5385,8 @@ const resolveOrigin = (baseURL: string | undefined, fallbackOrigin: string) => {
 	}
 }
 
-const requestQianFanAccessToken = async (options: ModelFetchOptions) => {
-	const apiKey = options.apiKey
-	const apiSecret = options.apiSecret || ''
-	if (!apiKey || !apiSecret) {
-		throw new Error('QianFan requires both API key and API secret')
-	}
-	const origin = resolveOrigin(options.baseURL, 'https://aip.baidubce.com')
-	const query = new URLSearchParams({
-		grant_type: 'client_credentials',
-		client_id: apiKey,
-		client_secret: apiSecret
-	}).toString()
-	const tokenResponse = await requestUrl(`${origin}/oauth/2.0/token?${query}`)
-	if (tokenResponse.status >= 400) {
-		throw new Error(`QianFan token request failed (${tokenResponse.status})`)
-	}
-	const token = tokenResponse.json?.access_token
-	if (!token || typeof token !== 'string') {
-		throw new Error('QianFan token response is missing access_token')
-	}
-	return token
+const resolveQianFanModelListURL = (baseURL: string | undefined) => {
+	return `${qianFanNormalizeBaseURL(baseURL)}/models`
 }
 
 const fetchModels = async (config: ModelFetchConfig, options: ModelFetchOptions): Promise<FetchModelsResult> => {
@@ -5471,17 +5518,13 @@ const MODEL_FETCH_CONFIGS: Record<string, ModelFetchConfig> = {
 	},
 	[qianFanVendor.name]: {
 		requiresApiKey: true,
-		requiresApiSecret: true,
 		fallbackModels: [...qianFanVendor.models],
-		buildRequest: async (options) => {
-			const token = await requestQianFanAccessToken(options)
-			return {
-				url: `${resolveOrigin(options.baseURL, 'https://aip.baidubce.com')}/v2/models`,
-				headers: {
-					Authorization: `Bearer ${token}`
-				}
+		buildRequest: (options) => ({
+			url: resolveQianFanModelListURL(options.baseURL),
+			headers: {
+				Authorization: `Bearer ${options.apiKey}`
 			}
-		},
+		}),
 		parseResponse: parseGenericModels
 	},
 	[doubaoImageVendor.name]: {

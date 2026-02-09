@@ -47,6 +47,7 @@ export class ChatService {
 		selectedModelId: null,
 		enableReasoningToggle: false,
 		enableWebSearchToggle: false,
+		enableTemplateAsSystemPrompt: false,
 		contextNotes: [],
 		selectedImages: [],
 		selectedFiles: [],
@@ -123,6 +124,7 @@ export class ChatService {
 			updatedAt: now,
 			contextNotes: [],
 			selectedImages: [],
+			enableTemplateAsSystemPrompt: false
 		};
 		this.state.activeSession = session;
 		this.state.contextNotes = [];
@@ -131,6 +133,7 @@ export class ChatService {
 		this.state.selectedFolders = [];
 		this.state.selectedText = undefined;
 		this.state.inputValue = '';
+		this.state.enableTemplateAsSystemPrompt = false;
 		this.state.selectedPromptTemplate = undefined;
 		this.state.showTemplateSelector = false;
 		// 注意：不清空手动移除记录，这是插件级别的持久化数据
@@ -200,12 +203,39 @@ export class ChatService {
 		this.emitState();
 	}
 
+	setTemplateAsSystemPromptToggle(enabled: boolean) {
+		const session = this.state.activeSession;
+		if (
+			this.state.enableTemplateAsSystemPrompt === enabled &&
+			(!session || session.enableTemplateAsSystemPrompt === enabled)
+		) {
+			return;
+		}
+
+		this.state.enableTemplateAsSystemPrompt = enabled;
+		if (session) {
+			session.enableTemplateAsSystemPrompt = enabled;
+			if (session.filePath) {
+				void this.historyService.updateSessionFrontmatter(session.filePath, {
+					enableTemplateAsSystemPrompt: enabled
+				}).catch((error) => {
+					console.error('[ChatService] 更新模板系统提示词开关失败:', error);
+				});
+			}
+		}
+		this.emitState();
+	}
+
 	getReasoningToggle(): boolean {
 		return this.state.enableReasoningToggle;
 	}
 
 	getWebSearchToggle(): boolean {
 		return this.state.enableWebSearchToggle;
+	}
+
+	getTemplateAsSystemPromptToggle(): boolean {
+		return this.state.enableTemplateAsSystemPrompt;
 	}
 
 	private getTarsToolSettings() {
@@ -450,6 +480,9 @@ export class ChatService {
 	restoreSessionState(savedState: { activeSession: ChatSession | null; selectedFiles: any[]; selectedFolders: any[] }) {
 		if (savedState.activeSession) {
 			this.state.activeSession = savedState.activeSession;
+			this.state.enableTemplateAsSystemPrompt = savedState.activeSession.enableTemplateAsSystemPrompt ?? false;
+		} else {
+			this.state.enableTemplateAsSystemPrompt = false;
 		}
 		this.state.selectedFiles = savedState.selectedFiles;
 		this.state.selectedFolders = savedState.selectedFolders;
@@ -706,27 +739,34 @@ export class ChatService {
 		session.selectedFiles = [...this.state.selectedFiles];
 		session.selectedFolders = [...this.state.selectedFolders];
 
-		// 处理提示词模板（仅用于 Task 层，不再覆盖系统提示词）
+		const selectedPromptTemplate = this.state.selectedPromptTemplate;
+		const useTemplateAsSystemPrompt =
+			this.state.enableTemplateAsSystemPrompt &&
+			!!selectedPromptTemplate?.content;
+
+		// 处理提示词模板（默认仅用于 Task 层）
 		let finalUserMessage = originalUserInput;
 		let taskTemplate: string | undefined;
-		let templateTag: string | undefined;
 		
-		if (this.state.selectedPromptTemplate) {
-			const templateContent = this.state.selectedPromptTemplate.content;
-			const templateName = this.state.selectedPromptTemplate.name;
+		if (selectedPromptTemplate && !useTemplateAsSystemPrompt) {
+			const templateContent = selectedPromptTemplate.content;
+			const templateName = selectedPromptTemplate.name;
 			
 			// 创建提示词模板标签
-			templateTag = `[[${templateName}]]`;
-			finalUserMessage = `${originalUserInput}\n\n${templateTag}`;
+			finalUserMessage = `${originalUserInput}\n\n[[${templateName}]]`;
 			taskTemplate = templateContent;
 		}
 
-		// 获取系统提示词（System 层独立，模板不再覆盖系统提示词）
+		// 获取系统提示词（开启模板系统提示词且选中模板时，直接使用模板原文）
 		let systemPrompt: string | undefined;
-		const assembler = new SystemPromptAssembler(this.app);
-		const built = await assembler.buildGlobalSystemPrompt('tars_chat');
-		if (built && built.trim().length > 0) {
-			systemPrompt = built;
+		if (useTemplateAsSystemPrompt && selectedPromptTemplate) {
+			systemPrompt = selectedPromptTemplate.content;
+		} else {
+			const assembler = new SystemPromptAssembler(this.app);
+			const built = await assembler.buildGlobalSystemPrompt('tars_chat');
+			if (built && built.trim().length > 0) {
+				systemPrompt = built;
+			}
 		}
 
 		// 创建用户消息，包含文件和文件夹信息
@@ -779,6 +819,7 @@ export class ChatService {
 		
 		// 将系统提示词作为会话的内部属性存储
 		session.systemPrompt = systemPrompt;
+		session.enableTemplateAsSystemPrompt = this.state.enableTemplateAsSystemPrompt;
 
 		// 清空选中状态
 		const currentSelectedFiles = [...this.state.selectedFiles];
@@ -862,6 +903,7 @@ export class ChatService {
 	async loadHistory(filePath: string) {
 		const session = await this.historyService.loadSession(filePath);
 		if (session) {
+			session.enableTemplateAsSystemPrompt = session.enableTemplateAsSystemPrompt ?? false;
 			// 设置文件路径，以便后续追加消息
 			session.filePath = filePath;
 			this.state.activeSession = session;
@@ -870,6 +912,7 @@ export class ChatService {
 			this.state.selectedFiles = session.selectedFiles ?? [];
 			this.state.selectedFolders = session.selectedFolders ?? [];
 			this.state.selectedModelId = session.modelId || this.getDefaultProviderTag();
+			this.state.enableTemplateAsSystemPrompt = session.enableTemplateAsSystemPrompt;
 			// 重置模板选择状态
 			this.state.selectedPromptTemplate = undefined;
 			this.state.showTemplateSelector = false;
@@ -1609,4 +1652,3 @@ export class ChatService {
 		return [...this.plugin.settings.tars.settings.providers];
 	}
 }
-

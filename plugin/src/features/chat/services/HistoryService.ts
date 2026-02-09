@@ -69,6 +69,16 @@ export class HistoryService {
 		return 0;
 	}
 
+	private parseBoolean(value: unknown, fallback = false): boolean {
+		if (typeof value === 'boolean') return value;
+		if (typeof value === 'string') {
+			const normalized = value.trim().toLowerCase();
+			if (normalized === 'true') return true;
+			if (normalized === 'false') return false;
+		}
+		return fallback;
+	}
+
 	/**
 	 * 清理文本，使其适合作为文件名
 	 * - 替换空格为下划线
@@ -198,7 +208,8 @@ export class HistoryService {
 					created: this.formatTimestamp(session.createdAt),
 					updated: this.formatTimestamp(session.updatedAt),
 					messageCount: session.messages.length,
-					contextNotes: session.contextNotes ?? []
+					contextNotes: session.contextNotes ?? [],
+					enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false
 				});
 				return session.filePath;
 			}
@@ -234,7 +245,8 @@ export class HistoryService {
 			created: this.formatTimestamp(session.createdAt),
 			updated: this.formatTimestamp(session.updatedAt),
 			messageCount: session.messages.length,
-			contextNotes: session.contextNotes ?? []
+			contextNotes: session.contextNotes ?? [],
+			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false
 		});
 
 		const body = session.messages.map((message) => this.messageService.serializeMessage(message)).join('\n\n');
@@ -272,6 +284,7 @@ ${body}
 				createdAt: this.parseTimestamp(frontmatter.created ?? file.stat.ctime),
 				updatedAt: this.parseTimestamp(frontmatter.updated ?? file.stat.mtime),
 				selectedImages: [],
+				enableTemplateAsSystemPrompt: this.parseBoolean(frontmatter.enableTemplateAsSystemPrompt, false),
 				filePath: filePath // 设置文件路径
 			};
 			return session;
@@ -307,7 +320,8 @@ ${body}
 			model: session.modelId,
 			created: session.createdAt,
 			updated: session.updatedAt,
-			contextNotes: session.contextNotes ?? []
+			contextNotes: session.contextNotes ?? [],
+			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false
 		});
 
 		// 创建文件，只包含frontmatter，不包含任何消息
@@ -429,7 +443,8 @@ ${body}
 			created: this.formatTimestamp(session.createdAt),
 			updated: this.formatTimestamp(session.updatedAt),
 			messageCount: 1, // 第一条消息
-			contextNotes: updatedContextNotes
+			contextNotes: updatedContextNotes,
+			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false
 		});
 
 		// 序列化第一条消息，但不重复添加文件和文件夹信息（因为已经在消息内容中了）
@@ -739,4 +754,3 @@ ${body}
 		return messages;
 	}
 }
-

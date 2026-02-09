@@ -38,7 +38,9 @@ const loadTsModule = (filePath, mocks = {}) => {
 		console,
 		setTimeout,
 		clearTimeout,
-		AbortController
+		AbortController,
+		URL,
+		Buffer
 	})
 	new vm.Script(compiled, { filename: filePath }).runInContext(context)
 	return module.exports
@@ -96,6 +98,7 @@ const runPR2 = () => {
 	const { feedChunk } = loadTsModule(ssePath)
 	const qianFanPath = path.resolve(ROOT, 'src/features/tars/providers/qianFan.ts')
 	const qianFanModule = loadTsModule(qianFanPath, {
+		openai: class MockOpenAI {},
 		axios: {
 			post: async () => {
 				throw new Error('not implemented in regression test')
@@ -109,6 +112,14 @@ const runPR2 = () => {
 		},
 		'tars/lang/helper': { t: (text) => text },
 		'.': {},
+		'./utils': {
+			buildReasoningBlockEnd: () => '',
+			buildReasoningBlockStart: () => '',
+			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } })
+		},
+		'./messageFormat': {
+			withToolMessageContext: (_msg, payload) => payload
+		},
 		'../../../utils/DebugLogger': { DebugLogger: { debug: () => {} } },
 		'./sse': { feedChunk }
 	})
@@ -389,8 +400,9 @@ const runPR6 = () => {
 		'PR6-1: model fetch configs should define fallbackModels for remote fetch failures'
 	)
 	assert(
-		settingTabText.includes('/v2/models'),
-		'PR6-2: QianFan model fetching should try OpenAI-compatible /v2/models endpoint first'
+		settingTabText.includes('resolveQianFanModelListURL') &&
+			settingTabText.includes('qianFanNormalizeBaseURL(baseURL)'),
+		'PR6-2: QianFan model fetching should derive OpenAI-compatible /v2/models from normalized baseURL'
 	)
 	assert(
 		settingTabText.includes('/api/v3/models'),
@@ -531,6 +543,76 @@ const runPR8 = () => {
 	)
 }
 
+const runPR9 = () => {
+	const qianFanPath = path.resolve(ROOT, 'src/features/tars/providers/qianFan.ts')
+	const qianFanModule = loadTsModule(qianFanPath, {
+		openai: class MockOpenAI {},
+		obsidian: {
+			Notice: class {},
+			requestUrl: async () => ({ status: 200, json: {}, text: '', arrayBuffer: new ArrayBuffer(0) })
+		},
+		'tars/lang/helper': { t: (text) => text },
+		'.': {},
+		'./utils': {
+			buildReasoningBlockEnd: () => '',
+			buildReasoningBlockStart: () => '',
+			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } })
+		},
+		'./messageFormat': {
+			withToolMessageContext: (_msg, payload) => payload
+		},
+		'../../../utils/DebugLogger': { DebugLogger: { debug: () => {} } }
+	})
+
+	assert(
+		qianFanModule.qianFanVendor.defaultOptions.baseURL === 'https://qianfan.baidubce.com/v2',
+		'PR9-1: QianFan default baseURL should use official /v2 endpoint'
+	)
+	assert(
+		qianFanModule.qianFanNormalizeBaseURLForTest('https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat') ===
+			'https://qianfan.baidubce.com/v2',
+		'PR9-1: legacy Wenxin RPC baseURL should migrate to official /v2 endpoint'
+	)
+	assert(
+		qianFanModule.qianFanNormalizeBaseURLForTest('https://qianfan.bj.baidubce.com/v2/chat/completions') ===
+			'https://qianfan.bj.baidubce.com/v2',
+		'PR9-1: regional QianFan baseURL should normalize to /v2 root'
+	)
+	assert(
+		!Object.prototype.hasOwnProperty.call(qianFanModule.qianFanVendor.defaultOptions, 'apiSecret'),
+		'PR9-1: QianFan default options should no longer require API secret'
+	)
+	assert(
+		qianFanModule.qianFanIsImageGenerationModel('qwen-image') === true,
+		'PR9-2: qwen-image should be recognized as QianFan image generation model'
+	)
+	assert(
+		qianFanModule.qianFanIsImageGenerationModel('deepseek-vl2') === false,
+		'PR9-2: deepseek-vl2 should stay on chat/vision path instead of image generation endpoint'
+	)
+	assert(
+		qianFanModule.qianFanVendor.capabilities.includes('Image Vision') &&
+			qianFanModule.qianFanVendor.capabilities.includes('Reasoning') &&
+			qianFanModule.qianFanVendor.capabilities.includes('Image Generation'),
+		'PR9-3: QianFan capabilities should include vision, reasoning, and image generation'
+	)
+
+	const settingTabPath = path.resolve(ROOT, 'src/features/tars/settingTab.ts')
+	const settingTabSource = fs.readFileSync(settingTabPath, 'utf-8')
+	assert(
+		settingTabSource.includes('vendor.name !== qianFanVendor.name'),
+		'PR9-4: setting page should not render legacy API secret field for QianFan'
+	)
+	assert(
+		settingTabSource.includes('resolveQianFanModelListURL'),
+		'PR9-4: QianFan model list fetching should resolve official /v2/models URL'
+	)
+	assert(
+		settingTabSource.includes('qianFanNormalizeBaseURL(baseURL)'),
+		'PR9-4: QianFan model list URL should reuse provider baseURL normalization'
+	)
+}
+
 const main = async () => {
 	const pr = parseArgs()
 	if (pr >= 1) {
@@ -556,6 +638,9 @@ const main = async () => {
 	}
 	if (pr >= 8) {
 		runPR8()
+	}
+	if (pr >= 9) {
+		runPR9()
 	}
 
 	console.log(`provider-regression: PR-${pr} checks passed`)

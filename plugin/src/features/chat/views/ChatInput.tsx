@@ -1,10 +1,11 @@
 import { Brain, CornerDownLeft, Search, StopCircle, X, FileText, Folder, Palette, Zap, Highlighter } from 'lucide-react';
 import { FormEvent, useEffect, useState, useRef, Fragment } from 'react';
 import { ChatService } from '../services/ChatService';
-import type { ChatState, SelectedFile, SelectedFolder } from '../types/chat';
+import type { ChatState } from '../types/chat';
 import { ModelSelector } from '../components/ModelSelector';
 import { TemplateSelector } from '../components/TemplateSelector';
-import { App, Notice } from 'obsidian';
+import { App } from 'obsidian';
+import { localInstance } from 'src/i18n/locals';
 
 interface ChatInputProps {
 	service: ChatService;
@@ -16,6 +17,8 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 	const [value, setValue] = useState(state.inputValue);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const [maxHeight, setMaxHeight] = useState(80); // Default minimum height
+	const templateSystemPromptLabel = localInstance.chat_template_system_prompt_toggle || '模板系统提示词';
+	const templateSystemPromptDescription = localInstance.chat_template_system_prompt_toggle_desc || '启用后将提示词模板作为系统提示词使用';
 
 	// 检测当前输入是否包含图片生成意图
 	const [isImageGenerationIntent, setIsImageGenerationIntent] = useState(false);
@@ -344,6 +347,29 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 									>
 										<Search className="tw-size-4" />
 									</button>
+									<button
+										type="button"
+										aria-label={templateSystemPromptLabel}
+										title={templateSystemPromptDescription}
+										onClick={() => service.setTemplateAsSystemPromptToggle(!state.enableTemplateAsSystemPrompt)}
+										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-p-1 tw-cursor-pointer tw-rounded"
+										style={{
+											backgroundColor: state.enableTemplateAsSystemPrompt ? 'var(--interactive-accent)' : 'transparent',
+											color: state.enableTemplateAsSystemPrompt ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)'
+										}}
+										onMouseEnter={(e) => {
+											if (!state.enableTemplateAsSystemPrompt) {
+												e.currentTarget.style.color = 'var(--interactive-accent)';
+											}
+										}}
+										onMouseLeave={(e) => {
+											if (!state.enableTemplateAsSystemPrompt) {
+												e.currentTarget.style.color = 'var(--text-muted)';
+											}
+										}}
+									>
+										<FileText className="tw-size-4" />
+									</button>
 								</div>
 							</div>
 							<div className="tw-flex tw-items-center tw-gap-2">
@@ -562,6 +588,29 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 									>
 										<Search className="tw-size-4" />
 									</button>
+									<button
+										type="button"
+										aria-label={templateSystemPromptLabel}
+										title={templateSystemPromptDescription}
+										onClick={() => service.setTemplateAsSystemPromptToggle(!state.enableTemplateAsSystemPrompt)}
+										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-p-1 tw-cursor-pointer tw-rounded"
+										style={{
+											backgroundColor: state.enableTemplateAsSystemPrompt ? 'var(--interactive-accent)' : 'transparent',
+											color: state.enableTemplateAsSystemPrompt ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)'
+										}}
+										onMouseEnter={(e) => {
+											if (!state.enableTemplateAsSystemPrompt) {
+												e.currentTarget.style.color = 'var(--interactive-accent)';
+											}
+										}}
+										onMouseLeave={(e) => {
+											if (!state.enableTemplateAsSystemPrompt) {
+												e.currentTarget.style.color = 'var(--text-muted)';
+											}
+										}}
+									>
+										<FileText className="tw-size-4" />
+									</button>
 								</div>
 							</div>
 							<div className="tw-flex tw-items-center tw-gap-2">
@@ -597,4 +646,3 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 			</Fragment>
 	);
 };
-

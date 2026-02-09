@@ -143,8 +143,8 @@ export const getEnabledCapabilities = (vendor: Vendor, options: BaseOptions): Ca
 		// 通用开关（大部分 provider 使用）
 		if (raw?.enableReasoning === true) return true
 
-		// Qwen/Claude 使用 enableThinking
-		if (vendor.name === 'Qwen' || vendor.name === 'Claude') {
+		// Qwen/Claude/QianFan 使用 enableThinking
+		if (vendor.name === 'Qwen' || vendor.name === 'Claude' || vendor.name === 'QianFan') {
 			return raw?.enableThinking === true
 		}
 

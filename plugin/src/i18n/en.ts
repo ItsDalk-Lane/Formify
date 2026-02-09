@@ -750,6 +750,8 @@ export class En implements Local {
 	chat_modal_title = "AI Chat";
 	chat_trigger_no_active_file = "Please open a Markdown file first";
 	chat_trigger_settings_section = "Editor Trigger Settings";
+	chat_template_system_prompt_toggle = "Template System Prompt";
+	chat_template_system_prompt_toggle_desc = "When enabled, use the selected prompt template as-is as the system prompt; otherwise use the global system prompt.";
 	// Quick Skills
 	selection_toolbar_ai_chat = "AI Chat";
 	selection_toolbar_more = "More";

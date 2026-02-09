@@ -15,7 +15,7 @@
 | Qwen | Yes | Yes | No | Partial | Yes | OpenAI-compatible Chat Completions |
 | Zhipu | Yes | Partial | No | Partial | Yes | OpenAI-compatible Chat Completions |
 | DeepSeek | Yes | No | No | Yes | Yes | OpenAI-compatible Chat Completions |
-| QianFan | Yes | No | No | No | Partial | Wenxin 接口，SSE 统一解析 |
+| QianFan | Yes | Yes | Yes | Partial | Yes | OpenAI-compatible `/v2` 接口；图像模型走 `/v2/images/generations` |
 | Doubao | Yes | Yes | No | No | Yes | Chat Completions / Responses(Web Search) |
 | DoubaoImage | No | No | Yes | No | No | 图像生成 API，支持 SSE 统一解析 |
 | Kimi | Yes | Yes | No | Partial | Yes | OpenAI-compatible Chat Completions |
@@ -34,6 +34,7 @@
 - OpenRouter `imageResponseFormat` 仅在图像生成模型生效，并写入请求体 `response_format`。
 - OpenRouter `reasoningEffort` 仅在启用推理且命中 Responses API 时生效。
 - OpenAI/Azure/Grok 的推理开关会触发 `chat.completions -> responses` 路由切换。
+- QianFan 使用单一 Bearer Token（API Key），不再依赖 API Secret + OAuth token 交换。
 
 ## 已知限制
 

@@ -759,6 +759,8 @@ export class Zh implements Local {
 	chat_modal_title = "AI Chat";
 	chat_trigger_no_active_file = "请先打开一个 Markdown 文件";
 	chat_trigger_settings_section = "编辑器触发设置";
+	chat_template_system_prompt_toggle = "模板系统提示词";
+	chat_template_system_prompt_toggle_desc = "启用后将当前提示词模板原样作为系统提示词；关闭或未选择模板时使用全局系统提示词。";
 	// 快捷技能
 	selection_toolbar_ai_chat = "AI Chat";
 	selection_toolbar_more = "更多";
