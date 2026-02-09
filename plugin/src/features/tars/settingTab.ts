@@ -21,7 +21,9 @@ import { grokVendor, GrokOptions } from './providers/grok'
 import { kimiVendor, KimiOptions } from './providers/kimi'
 import { deepSeekVendor, DeepSeekOptions } from './providers/deepSeek'
 import { ollamaVendor } from './providers/ollama'
+import { OpenAIOptions, openAIVendor } from './providers/openAI'
 import { OpenRouterOptions, openRouterVendor, isImageGenerationModel } from './providers/openRouter'
+import { AzureOptions, azureVendor } from './providers/azure'
 import { qianFanVendor } from './providers/qianFan'
 import { qwenVendor, QwenOptions } from './providers/qwen'
 import { siliconFlowVendor } from './providers/siliconflow'
@@ -3680,6 +3682,14 @@ export class TarsSettingTab {
 			this.addGrokSections(container, settings.options as GrokOptions, index, settings)
 		}
 
+		if (vendor.name === openAIVendor.name) {
+			this.addOpenAISections(container, settings.options as OpenAIOptions, index, settings)
+		}
+
+		if (vendor.name === azureVendor.name) {
+			this.addAzureSections(container, settings.options as AzureOptions, index, settings)
+		}
+
 		// Ollama 推理功能开关
 		if (vendor.name === ollamaVendor.name) {
 			this.addOllamaSections(container, settings.options, index, settings)
@@ -5171,6 +5181,32 @@ export class TarsSettingTab {
 					options.enableReasoning = value
 					await this.saveSettings()
 					// 更新功能显示
+					this.updateProviderCapabilities(index, settings)
+				})
+			)
+	}
+
+	addOpenAISections = (details: HTMLElement, options: OpenAIOptions, index: number, settings: ProviderSettings) => {
+		new Setting(details)
+			.setName('启用推理功能')
+			.setDesc('启用后 OpenAI 将优先使用 Responses API，并显示推理过程。关闭时走 chat.completions 兼容路径。')
+			.addToggle((toggle) =>
+				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
+					options.enableReasoning = value
+					await this.saveSettings()
+					this.updateProviderCapabilities(index, settings)
+				})
+			)
+	}
+
+	addAzureSections = (details: HTMLElement, options: AzureOptions, index: number, settings: ProviderSettings) => {
+		new Setting(details)
+			.setName('启用推理功能')
+			.setDesc('启用后 Azure 将优先使用 Responses API 的官方推理事件解析；关闭时走 chat.completions 兼容路径。')
+			.addToggle((toggle) =>
+				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
+					options.enableReasoning = value
+					await this.saveSettings()
 					this.updateProviderCapabilities(index, settings)
 				})
 			)

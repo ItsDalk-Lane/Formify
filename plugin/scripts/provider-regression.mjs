@@ -233,6 +233,73 @@ const runPR3 = async () => {
 	)
 }
 
+const runPR4 = () => {
+	const openAIPath = path.resolve(ROOT, 'src/features/tars/providers/openAI.ts')
+	const openAIModule = loadTsModule(openAIPath, {
+		openai: class MockOpenAI {},
+		'tars/lang/helper': { t: (text) => text },
+		'.': {},
+		'./utils': {
+			buildReasoningBlockEnd: () => '',
+			buildReasoningBlockStart: () => '',
+			buildToolCallsBlock: () => '',
+			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } })
+		}
+	})
+	assert(
+		openAIModule.openAIUseResponsesAPI({ enableReasoning: true }) === true,
+		'PR4-1: OpenAI should route to responses when reasoning is enabled'
+	)
+	assert(
+		openAIModule.openAIUseResponsesAPI({ enableReasoning: false }) === false,
+		'PR4-1: OpenAI should keep chat path when reasoning is disabled'
+	)
+	const openAIParams = openAIModule.openAIMapResponsesParams({ max_tokens: 256, temperature: 0.2 })
+	assert(openAIParams.max_output_tokens === 256, 'PR4-2: OpenAI max_tokens should map to max_output_tokens')
+	assert(openAIParams.max_tokens === undefined, 'PR4-2: OpenAI mapped params should drop max_tokens')
+
+	const azurePath = path.resolve(ROOT, 'src/features/tars/providers/azure.ts')
+	const azureModule = loadTsModule(azurePath, {
+		openai: { AzureOpenAI: class MockAzureOpenAI {} },
+		'tars/lang/helper': { t: (text) => text },
+		'.': {},
+		'./utils': {
+			buildReasoningBlockEnd: () => '',
+			buildReasoningBlockStart: () => ''
+		},
+		'../../../utils/DebugLogger': { DebugLogger: { debug: () => {} } }
+	})
+	assert(
+		azureModule.azureUseResponsesAPI({ enableReasoning: true }) === true,
+		'PR4-3: Azure should route to responses when reasoning is enabled'
+	)
+	const azureParams = azureModule.azureMapResponsesParams({ max_tokens: 1024 })
+	assert(azureParams.max_output_tokens === 1024, 'PR4-3: Azure max_tokens should map to max_output_tokens')
+
+	const grokPath = path.resolve(ROOT, 'src/features/tars/providers/grok.ts')
+	const grokModule = loadTsModule(grokPath, {
+		'tars/lang/helper': { t: (text) => text },
+		'.': {},
+		'./utils': {
+			buildReasoningBlockEnd: () => '',
+			buildReasoningBlockStart: () => '',
+			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } })
+		},
+		'./sse': { feedChunk: () => ({ events: [], rest: '', done: false }) }
+	})
+	assert(grokModule.grokUseResponsesAPI({ enableReasoning: true }) === true, 'PR4-4: Grok should use responses with reasoning')
+	assert(
+		grokModule.grokResolveEndpoint('https://api.x.ai/v1/chat/completions', true) ===
+			'https://api.x.ai/v1/responses',
+		'PR4-4: Grok endpoint should switch from chat/completions to responses'
+	)
+	assert(
+		grokModule.grokResolveEndpoint('https://api.x.ai/v1/chat/completions', false) ===
+			'https://api.x.ai/v1/chat/completions',
+		'PR4-4: Grok endpoint should keep chat/completions when reasoning is disabled'
+	)
+}
+
 const main = async () => {
 	const pr = parseArgs()
 	if (pr >= 1) {
@@ -243,6 +310,9 @@ const main = async () => {
 	}
 	if (pr >= 3) {
 		await runPR3()
+	}
+	if (pr >= 4) {
+		runPR4()
 	}
 
 	console.log(`provider-regression: PR-${pr} checks passed`)
