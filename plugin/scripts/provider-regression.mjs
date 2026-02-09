@@ -175,7 +175,65 @@ const runPR2 = () => {
 	}
 }
 
-const main = () => {
+const runPR3 = async () => {
+	const geminiPath = path.resolve(ROOT, 'src/features/tars/providers/gemini.ts')
+	const geminiModule = loadTsModule(geminiPath, {
+		openai: class MockOpenAI {},
+		'tars/lang/helper': { t: (text) => text },
+		'.': {},
+		'./utils': {
+			arrayBufferToBase64: () => 'ZmFrZQ==',
+			getMimeTypeFromFilename: () => 'image/png'
+		}
+	})
+
+	const {
+		geminiNormalizeOpenAIBaseURL,
+		geminiBuildConfig,
+		geminiIsAuthError,
+		geminiBuildContents
+	} = geminiModule
+
+	assert(
+		geminiNormalizeOpenAIBaseURL('https://generativelanguage.googleapis.com') ===
+			'https://generativelanguage.googleapis.com/v1beta/openai',
+		'PR3-1: baseURL should normalize to Gemini OpenAI-compatible endpoint'
+	)
+	assert(
+		geminiNormalizeOpenAIBaseURL('https://generativelanguage.googleapis.com/v1beta/openai') ===
+			'https://generativelanguage.googleapis.com/v1beta/openai',
+		'PR3-1: existing OpenAI-compatible endpoint should remain unchanged'
+	)
+
+	const mappedConfig = geminiBuildConfig({ max_tokens: 2048, temperature: 0.4 })
+	assert(mappedConfig.maxOutputTokens === 2048, 'PR3-2: max_tokens should map to maxOutputTokens')
+	assert(mappedConfig.max_tokens === undefined, 'PR3-2: max_tokens should be removed after mapping')
+
+	assert(geminiIsAuthError({ status: 401 }) === true, 'PR3-3: 401 should be recognized as auth error')
+	assert(geminiIsAuthError({ message: 'invalid api key' }) === true, 'PR3-3: api key error text should be recognized')
+	assert(geminiIsAuthError({ message: 'timeout' }) === false, 'PR3-3: non-auth error should not be misclassified')
+
+	const result = await geminiBuildContents(
+		[
+			{ role: 'system', content: 'you are system' },
+			{ role: 'user', content: 'first question' },
+			{ role: 'assistant', content: 'first answer' },
+			{ role: 'user', content: 'second question', embeds: [{ link: 'a.png' }] }
+		],
+		async () => new ArrayBuffer(8)
+	)
+
+	assert(result.systemInstruction === 'you are system', 'PR3-4: system message should map to systemInstruction')
+	assert(result.contents.length === 3, 'PR3-4: non-system history should remain in order')
+	assert(result.contents[0].role === 'user', 'PR3-4: first history message role mismatch')
+	assert(result.contents[1].role === 'model', 'PR3-4: assistant role should map to model')
+	assert(
+		Boolean(result.contents[2].parts.find((part) => Boolean(part.inlineData))),
+		'PR3-4: image embeds should be preserved as inlineData parts'
+	)
+}
+
+const main = async () => {
 	const pr = parseArgs()
 	if (pr >= 1) {
 		runPR1()
@@ -183,12 +241,15 @@ const main = () => {
 	if (pr >= 2) {
 		runPR2()
 	}
+	if (pr >= 3) {
+		await runPR3()
+	}
 
 	console.log(`provider-regression: PR-${pr} checks passed`)
 }
 
 try {
-	main()
+	await main()
 } catch (error) {
 	console.error('provider-regression failed:', error instanceof Error ? error.message : String(error))
 	process.exit(1)
