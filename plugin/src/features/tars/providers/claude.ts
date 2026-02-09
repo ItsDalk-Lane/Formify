@@ -9,6 +9,8 @@ import {
 	getCapabilityEmoji,
 	getMimeTypeFromFilename
 } from './utils'
+import { normalizeProviderError } from './errors'
+import { withRetry } from './retry'
 
 export interface ClaudeOptions extends BaseOptions {
 	max_tokens: number
@@ -66,112 +68,120 @@ const formatEmbed = async (embed: EmbedCache, resolveEmbedAsBinary: ResolveEmbed
 
 const sendRequestFunc = (settings: ClaudeOptions): SendRequest =>
 	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary) {
-		const { parameters, ...optionsExcludingParams } = settings
-		const options = { ...optionsExcludingParams, ...parameters }
-		const {
-			apiKey,
-			baseURL: originalBaseURL,
-			model,
-			max_tokens,
-			enableWebSearch = false,
-			enableThinking = false,
-			budget_tokens = 1600
-		} = options
-		let baseURL = originalBaseURL
-		if (!apiKey) throw new Error(t('API key is required'))
+		try {
+			const { parameters, ...optionsExcludingParams } = settings
+			const options = { ...optionsExcludingParams, ...parameters }
+			const {
+				apiKey,
+				baseURL: originalBaseURL,
+				model,
+				max_tokens,
+				enableWebSearch = false,
+				enableThinking = false,
+				budget_tokens = 1600
+			} = options
+			let baseURL = originalBaseURL
+			if (!apiKey) throw new Error(t('API key is required'))
 
-		// Remove /v1/messages from baseURL if present, as Anthropic SDK will add it automatically
-		if (baseURL.endsWith('/v1/messages/')) {
-			baseURL = baseURL.slice(0, -'/v1/messages/'.length)
-		} else if (baseURL.endsWith('/v1/messages')) {
-			baseURL = baseURL.slice(0, -'/v1/messages'.length)
-		}
-
-		const [system_msg, messagesWithoutSys] =
-			messages[0].role === 'system' ? [messages[0], messages.slice(1)] : [null, messages]
-
-		// Check if messagesWithoutSys only contains user or assistant roles
-		messagesWithoutSys.forEach((msg) => {
-			if (msg.role === 'system') {
-				throw new Error('System messages are only allowed as the first message')
+			// Remove /v1/messages from baseURL if present, as Anthropic SDK will add it automatically
+			if (baseURL.endsWith('/v1/messages/')) {
+				baseURL = baseURL.slice(0, -'/v1/messages/'.length)
+			} else if (baseURL.endsWith('/v1/messages')) {
+				baseURL = baseURL.slice(0, -'/v1/messages'.length)
 			}
-		})
 
-		const formattedMsgs = await Promise.all(
-			messagesWithoutSys.map((msg) => formatMsgForClaudeAPI(msg, resolveEmbedAsBinary))
-		)
+			const [system_msg, messagesWithoutSys] =
+				messages[0].role === 'system' ? [messages[0], messages.slice(1)] : [null, messages]
 
-		const client = new Anthropic({
-			apiKey,
-			baseURL,
-			fetch: globalThis.fetch,
-			dangerouslyAllowBrowser: true
-		})
-
-		const requestParams: Anthropic.MessageCreateParams = {
-			model,
-			max_tokens,
-			messages: formattedMsgs,
-			stream: true,
-			...(system_msg && { system: system_msg.content }),
-			...(enableWebSearch && {
-				tools: [
-					{
-						name: 'web_search',
-						type: 'web_search_20250305'
-					}
-				]
-			}),
-			...(enableThinking && {
-				thinking: {
-					type: 'enabled',
-					budget_tokens
+			// Check if messagesWithoutSys only contains user or assistant roles
+			messagesWithoutSys.forEach((msg) => {
+				if (msg.role === 'system') {
+					throw new Error('System messages are only allowed as the first message')
 				}
 			})
-		}
 
-		const stream = await client.messages.create(requestParams, {
-			signal: controller.signal
-		})
+			const formattedMsgs = await Promise.all(
+				messagesWithoutSys.map((msg) => formatMsgForClaudeAPI(msg, resolveEmbedAsBinary))
+			)
 
-		let startReasoning = false
-		for await (const messageStreamEvent of stream) {
-			// DebugLogger.debug('ClaudeNew messageStreamEvent', messageStreamEvent)
+			const client = new Anthropic({
+				apiKey,
+				baseURL,
+				fetch: globalThis.fetch,
+				dangerouslyAllowBrowser: true
+			})
 
-			// Handle different types of stream events
-			if (messageStreamEvent.type === 'content_block_delta') {
-				if (messageStreamEvent.delta.type === 'text_delta') {
-					if (startReasoning) {
-						startReasoning = false
-						yield CALLOUT_BLOCK_END + messageStreamEvent.delta.text
-					} else {
-						yield messageStreamEvent.delta.text
+			const requestParams: Anthropic.MessageCreateParams = {
+				model,
+				max_tokens,
+				messages: formattedMsgs,
+				stream: true,
+				...(system_msg && { system: system_msg.content }),
+				...(enableWebSearch && {
+					tools: [
+						{
+							name: 'web_search',
+							type: 'web_search_20250305'
+						}
+					]
+				}),
+				...(enableThinking && {
+					thinking: {
+						type: 'enabled',
+						budget_tokens
 					}
-				}
-				if (messageStreamEvent.delta.type === 'thinking_delta') {
-					const prefix = !startReasoning ? ((startReasoning = true), CALLOUT_BLOCK_START) : ''
-					yield prefix + messageStreamEvent.delta.thinking.replace(/\n/g, '\n> ') // Each line of the callout needs to have '>' at the beginning
-				}
-			} else if (messageStreamEvent.type === 'content_block_start') {
-				// Handle content block start events, including tool usage
-				// DebugLogger.debug('Content block started', messageStreamEvent.content_block)
-				if (
-					messageStreamEvent.content_block.type === 'server_tool_use' &&
-					messageStreamEvent.content_block.name === 'web_search'
-				) {
-					new Notice(getCapabilityEmoji('Web Search') + 'Web Search')
-				}
-			} else if (messageStreamEvent.type === 'message_delta') {
-				// Handle message-level incremental updates
-				// DebugLogger.debug('Message delta received', messageStreamEvent.delta)
-				// Check stop reason and notify user
-				if (messageStreamEvent.delta.stop_reason) {
-					const stopReason = messageStreamEvent.delta.stop_reason
-					if (stopReason !== 'end_turn') {
-						throw new Error(`🔴 Unexpected stop reason: ${stopReason}`)
+				})
+			}
+
+			const stream = await withRetry(
+				() =>
+					client.messages.create(requestParams, {
+						signal: controller.signal
+					}),
+				{ signal: controller.signal }
+			)
+
+			let startReasoning = false
+			for await (const messageStreamEvent of stream) {
+				// DebugLogger.debug('ClaudeNew messageStreamEvent', messageStreamEvent)
+
+				// Handle different types of stream events
+				if (messageStreamEvent.type === 'content_block_delta') {
+					if (messageStreamEvent.delta.type === 'text_delta') {
+						if (startReasoning) {
+							startReasoning = false
+							yield CALLOUT_BLOCK_END + messageStreamEvent.delta.text
+						} else {
+							yield messageStreamEvent.delta.text
+						}
+					}
+					if (messageStreamEvent.delta.type === 'thinking_delta') {
+						const prefix = !startReasoning ? ((startReasoning = true), CALLOUT_BLOCK_START) : ''
+						yield prefix + messageStreamEvent.delta.thinking.replace(/\n/g, '\n> ') // Each line of the callout needs to have '>' at the beginning
+					}
+				} else if (messageStreamEvent.type === 'content_block_start') {
+					// Handle content block start events, including tool usage
+					// DebugLogger.debug('Content block started', messageStreamEvent.content_block)
+					if (
+						messageStreamEvent.content_block.type === 'server_tool_use' &&
+						messageStreamEvent.content_block.name === 'web_search'
+					) {
+						new Notice(getCapabilityEmoji('Web Search') + 'Web Search')
+					}
+				} else if (messageStreamEvent.type === 'message_delta') {
+					// Handle message-level incremental updates
+					// DebugLogger.debug('Message delta received', messageStreamEvent.delta)
+					// Check stop reason and notify user
+					if (messageStreamEvent.delta.stop_reason) {
+						const stopReason = messageStreamEvent.delta.stop_reason
+						if (stopReason !== 'end_turn') {
+							throw new Error(`🔴 Unexpected stop reason: ${stopReason}`)
+						}
 					}
 				}
 			}
+		} catch (error) {
+			throw normalizeProviderError(error, 'Claude request failed')
 		}
 	}
 

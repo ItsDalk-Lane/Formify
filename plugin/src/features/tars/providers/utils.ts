@@ -307,3 +307,6 @@ export const buildProviderOptionsWithReasoningDisabled = (
 	return newOptions
 }
 
+export type { ProviderErrorType, NormalizedProviderError } from './errors'
+export { normalizeProviderError, shouldRetryNormalizedError, isAbortLikeError } from './errors'
+export { withRetry, type RetryOptions } from './retry'

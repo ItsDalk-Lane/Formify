@@ -8,6 +8,8 @@ import {
 	convertEmbedToImageUrl
 } from './utils'
 import { withToolMessageContext } from './messageFormat'
+import { normalizeProviderError } from './errors'
+import { withRetry } from './retry'
 
 export interface OpenAIOptions extends BaseOptions {
 	enableReasoning?: boolean
@@ -25,131 +27,143 @@ export const openAIMapResponsesParams = (params: Record<string, unknown>) => {
 
 const sendRequestFunc = (settings: OpenAIOptions): SendRequest =>
 	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary) {
-		const { parameters, ...optionsExcludingParams } = settings
-		const options = { ...optionsExcludingParams, ...parameters }
-		const { apiKey, baseURL, model, enableReasoning = false, ...remains } = options
-		if (!apiKey) throw new Error(t('API key is required'))
-		const client = new OpenAI({
-			apiKey,
-			baseURL,
-			dangerouslyAllowBrowser: true
-		})
-
-		if (openAIUseResponsesAPI({ ...options, enableReasoning })) {
-			const responseInput = await Promise.all(messages.map((msg) => formatMsgForResponses(msg, resolveEmbedAsBinary)))
-			const responseData: Record<string, unknown> = {
-				model,
-				stream: true,
-				input: responseInput
-			}
-			const responseParams = openAIMapResponsesParams(remains as Record<string, unknown>)
-			Object.assign(responseData, responseParams)
-			if (enableReasoning && responseData.reasoning === undefined) {
-				responseData.reasoning = { effort: 'medium' }
-			}
-
-			const stream = await client.responses.create(responseData as any, {
-				signal: controller.signal
+		try {
+			const { parameters, ...optionsExcludingParams } = settings
+			const options = { ...optionsExcludingParams, ...parameters }
+			const { apiKey, baseURL, model, enableReasoning = false, ...remains } = options
+			if (!apiKey) throw new Error(t('API key is required'))
+			const client = new OpenAI({
+				apiKey,
+				baseURL,
+				dangerouslyAllowBrowser: true
 			})
-			let reasoningActive = false
-			let reasoningStartMs: number | null = null
-			for await (const event of stream as any) {
-				if (event.type === 'response.reasoning_text.delta' || event.type === 'response.reasoning_summary_text.delta') {
-					if (!enableReasoning) continue
-					const text = String(event.delta ?? '')
-					if (!text) continue
-					if (!reasoningActive) {
-						reasoningActive = true
-						reasoningStartMs = Date.now()
-						yield buildReasoningBlockStart(reasoningStartMs)
-					}
-					yield text
-					continue
+
+			if (openAIUseResponsesAPI({ ...options, enableReasoning })) {
+				const responseInput = await Promise.all(messages.map((msg) => formatMsgForResponses(msg, resolveEmbedAsBinary)))
+				const responseData: Record<string, unknown> = {
+					model,
+					stream: true,
+					input: responseInput
+				}
+				const responseParams = openAIMapResponsesParams(remains as Record<string, unknown>)
+				Object.assign(responseData, responseParams)
+				if (enableReasoning && responseData.reasoning === undefined) {
+					responseData.reasoning = { effort: 'medium' }
 				}
 
-				if (event.type === 'response.output_text.delta') {
-					const text = String(event.delta ?? '')
-					if (!text) continue
-					if (reasoningActive) {
+				const stream = await withRetry(
+					() =>
+						client.responses.create(responseData as any, {
+							signal: controller.signal
+						}),
+					{ signal: controller.signal }
+				)
+				let reasoningActive = false
+				let reasoningStartMs: number | null = null
+				for await (const event of stream as any) {
+					if (event.type === 'response.reasoning_text.delta' || event.type === 'response.reasoning_summary_text.delta') {
+						if (!enableReasoning) continue
+						const text = String(event.delta ?? '')
+						if (!text) continue
+						if (!reasoningActive) {
+							reasoningActive = true
+							reasoningStartMs = Date.now()
+							yield buildReasoningBlockStart(reasoningStartMs)
+						}
+						yield text
+						continue
+					}
+
+					if (event.type === 'response.output_text.delta') {
+						const text = String(event.delta ?? '')
+						if (!text) continue
+						if (reasoningActive) {
+							reasoningActive = false
+							const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+							reasoningStartMs = null
+							yield buildReasoningBlockEnd(durationMs)
+						}
+						yield text
+						continue
+					}
+
+					if (event.type === 'response.completed' && reasoningActive) {
 						reasoningActive = false
 						const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
 						reasoningStartMs = null
 						yield buildReasoningBlockEnd(durationMs)
 					}
-					yield text
-					continue
 				}
-
-				if (event.type === 'response.completed' && reasoningActive) {
-					reasoningActive = false
+				if (reasoningActive) {
 					const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
-					reasoningStartMs = null
 					yield buildReasoningBlockEnd(durationMs)
 				}
-			}
-			if (reasoningActive) {
-				const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
-				yield buildReasoningBlockEnd(durationMs)
-			}
-			return
-		}
-
-		const formattedMessages = await Promise.all(messages.map((msg) => formatMsg(msg, resolveEmbedAsBinary)))
-		const stream = await client.chat.completions.create(
-			{
-				model,
-				messages: formattedMessages as OpenAI.ChatCompletionMessageParam[],
-				stream: true,
-				...remains
-			},
-			{ signal: controller.signal }
-		)
-
-		const toolCalls: Array<{ id: string; name: string; argumentsText: string }> = []
-		const ensureToolCall = (id: string, name: string) => {
-			let existing = toolCalls.find((t) => t.id === id)
-			if (!existing) {
-				existing = { id, name, argumentsText: '' }
-				toolCalls.push(existing)
-			}
-			return existing
-		}
-
-		for await (const part of stream) {
-			const delta: any = part.choices[0]?.delta
-			const text = delta?.content
-			if (text) {
-				yield text
+				return
 			}
 
-			const deltaToolCalls: any[] | undefined = delta?.tool_calls
-			if (Array.isArray(deltaToolCalls)) {
-				for (const tc of deltaToolCalls) {
-					const id = String(tc?.id ?? '')
-					const name = String(tc?.function?.name ?? '')
-					const argsChunk = String(tc?.function?.arguments ?? '')
-					if (!id || !name) continue
-					const acc = ensureToolCall(id, name)
-					acc.argumentsText += argsChunk
+			const formattedMessages = await Promise.all(messages.map((msg) => formatMsg(msg, resolveEmbedAsBinary)))
+			const stream = await withRetry(
+				() =>
+					client.chat.completions.create(
+						{
+							model,
+							messages: formattedMessages as OpenAI.ChatCompletionMessageParam[],
+							stream: true,
+							...remains
+						},
+						{ signal: controller.signal }
+					),
+				{ signal: controller.signal }
+			)
+
+			const toolCalls: Array<{ id: string; name: string; argumentsText: string }> = []
+			const ensureToolCall = (id: string, name: string) => {
+				let existing = toolCalls.find((t) => t.id === id)
+				if (!existing) {
+					existing = { id, name, argumentsText: '' }
+					toolCalls.push(existing)
+				}
+				return existing
+			}
+
+			for await (const part of stream) {
+				const delta: any = part.choices[0]?.delta
+				const text = delta?.content
+				if (text) {
+					yield text
+				}
+
+				const deltaToolCalls: any[] | undefined = delta?.tool_calls
+				if (Array.isArray(deltaToolCalls)) {
+					for (const tc of deltaToolCalls) {
+						const id = String(tc?.id ?? '')
+						const name = String(tc?.function?.name ?? '')
+						const argsChunk = String(tc?.function?.arguments ?? '')
+						if (!id || !name) continue
+						const acc = ensureToolCall(id, name)
+						acc.argumentsText += argsChunk
+					}
 				}
 			}
-		}
 
-		if (toolCalls.length > 0) {
-			const payload = toolCalls.map((tc) => {
-				let parsed: any = null
-				try {
-					parsed = tc.argumentsText ? JSON.parse(tc.argumentsText) : {}
-				} catch {
-					parsed = { __raw: tc.argumentsText }
-				}
-				return {
-					id: tc.id,
-					name: tc.name,
-					arguments: parsed
-				}
-			})
-			yield buildToolCallsBlock(payload)
+			if (toolCalls.length > 0) {
+				const payload = toolCalls.map((tc) => {
+					let parsed: any = null
+					try {
+						parsed = tc.argumentsText ? JSON.parse(tc.argumentsText) : {}
+					} catch {
+						parsed = { __raw: tc.argumentsText }
+					}
+					return {
+						id: tc.id,
+						name: tc.name,
+						arguments: parsed
+					}
+				})
+				yield buildToolCallsBlock(payload)
+			}
+		} catch (error) {
+			throw normalizeProviderError(error, 'OpenAI request failed')
 		}
 	}
 

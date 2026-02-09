@@ -2,6 +2,8 @@ import { requestUrl } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl, getMimeTypeFromFilename } from './utils'
+import { normalizeProviderError } from './errors'
+import { withRetry } from './retry'
 
 // Web Search 工具配置
 export interface WebSearchTool {
@@ -225,6 +227,14 @@ const extractString = (value: unknown): string | undefined => {
 	return undefined
 }
 
+const createDoubaoHTTPError = (status: number, detail: string) => {
+	const message = detail?.trim() ? detail : `Doubao request failed with status ${status}`
+	const error = new Error(message) as Error & { status?: number; statusCode?: number }
+	error.status = status
+	error.statusCode = status
+	return error
+}
+
 // 处理消息，支持文本和图片的多模态输入
 // 当启用 Web Search 时，需要转换为 Responses API 的消息格式
 const processMessages = async (
@@ -346,59 +356,60 @@ const processMessages = async (
 
 const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary) {
-		const { parameters, ...optionsExcludingParams } = settings
-		const options = { ...optionsExcludingParams, ...parameters } as DoubaoOptions
-		const {
-			apiKey,
-			baseURL,
-			model,
-			imageDetail,
-			imagePixelLimit,
-			enableReasoning,
-			enableWebSearch,
-			webSearchConfig,
-			thinkingType,
-			reasoningEffort,
-			...remains
-		} = options
-		if (!apiKey) throw new Error(t('API key is required'))
-		if (!model) throw new Error(t('Model is required'))
+		try {
+			const { parameters, ...optionsExcludingParams } = settings
+			const options = { ...optionsExcludingParams, ...parameters } as DoubaoOptions
+			const {
+				apiKey,
+				baseURL,
+				model,
+				imageDetail,
+				imagePixelLimit,
+				enableReasoning,
+				enableWebSearch,
+				webSearchConfig,
+				thinkingType,
+				reasoningEffort,
+				...remains
+			} = options
+			if (!apiKey) throw new Error(t('API key is required'))
+			if (!model) throw new Error(t('Model is required'))
 
-		// 判断是否启用 Web Search
-		const useWebSearch = enableWebSearch === true
-		const useResponsesAPI = useWebSearch // Web Search 需要使用 Responses API
+			// 判断是否启用 Web Search
+			const useWebSearch = enableWebSearch === true
+			const useResponsesAPI = useWebSearch // Web Search 需要使用 Responses API
 
-		// 确定使用的 API 端点
-		let endpoint = baseURL
-		if (useResponsesAPI && baseURL.includes('/chat/completions')) {
-			// 如果启用了 Web Search，自动切换到 Responses API
-			endpoint = baseURL.replace('/chat/completions', '/responses')
-		}
+			// 确定使用的 API 端点
+			let endpoint = baseURL
+			if (useResponsesAPI && baseURL.includes('/chat/completions')) {
+				// 如果启用了 Web Search，自动切换到 Responses API
+				endpoint = baseURL.replace('/chat/completions', '/responses')
+			}
 
-		// 处理消息，自动支持文本和图片的多模态输入
-		const processedMessages = await processMessages(
-			messages, 
-			resolveEmbedAsBinary,
-			imageDetail,
-			imagePixelLimit,
-			useResponsesAPI
-		)
+			// 处理消息，自动支持文本和图片的多模态输入
+			const processedMessages = await processMessages(
+				messages,
+				resolveEmbedAsBinary,
+				imageDetail,
+				imagePixelLimit,
+				useResponsesAPI
+			)
 
-		// 构建请求数据
-		const data: any = {
-			model,
-			stream: true
-		}
+			// 构建请求数据
+			const data: any = {
+				model,
+				stream: true
+			}
 
-		// 只添加通用的、非模型特定的参数
-		// 过滤掉可能不被所有模型支持的参数
-		const { 
-			reasoningEffort: _, 
-			thinkingType: __, 
-			effort: ___,  // 也过滤掉直接的 effort 参数
-			...generalParams 
-		} = remains as any
-		Object.assign(data, generalParams)
+			// 只添加通用的、非模型特定的参数
+			// 过滤掉可能不被所有模型支持的参数
+			const {
+				reasoningEffort: _,
+				thinkingType: __,
+				effort: ___, // 也过滤掉直接的 effort 参数
+				...generalParams
+			} = remains as any
+			Object.assign(data, generalParams)
 
 	const capability = getDoubaoModelCapability(model)
 	let effectiveThinkingType: DoubaoThinkingType | undefined
@@ -494,23 +505,30 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 
 		// 发送请求
 	
-	const response = await fetch(endpoint, {
-		method: 'POST',
-		body: JSON.stringify(data),
-		headers: {
-			Authorization: `Bearer ${apiKey}`,
-			'Content-Type': 'application/json'
-		},
-		signal: controller.signal
-	})
-
-		
-	if (!response.ok) {
-		const errorText = await response.text()
-		throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
-	}
-	const reader = response.body?.getReader()
-	if (!reader) throw new Error('Failed to get response reader')
+			const response = await withRetry(
+				async () => {
+					const request = await fetch(endpoint, {
+						method: 'POST',
+						body: JSON.stringify(data),
+						headers: {
+							Authorization: `Bearer ${apiKey}`,
+							'Content-Type': 'application/json'
+						},
+						signal: controller.signal
+					})
+					if (!request.ok) {
+						const errorText = await request.text()
+						throw createDoubaoHTTPError(
+							request.status,
+							`HTTP error! status: ${request.status}, message: ${errorText}`
+						)
+					}
+					return request
+				},
+				{ signal: controller.signal }
+			)
+			const reader = response.body?.getReader()
+			if (!reader) throw new Error('Failed to get response reader')
 
 	const decoder = new TextDecoder()
 	let buffer = ''
@@ -521,22 +539,22 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		(effectiveThinkingType ?? 'disabled') !== 'disabled' &&
 		(useResponsesAPI ? webSearchConfig?.enableThinking !== false : true)
 
-	try {
-		while (true) {
-			const { done, value } = await reader.read()
-			if (done) break
+			try {
+				while (true) {
+					const { done, value } = await reader.read()
+					if (done) break
 
-			buffer += decoder.decode(value, { stream: true })
-			const lines = buffer.split('\n')
-			buffer = lines.pop() || ''
+					buffer += decoder.decode(value, { stream: true })
+					const lines = buffer.split('\n')
+					buffer = lines.pop() || ''
 
-			for (const line of lines) {
-				const trimmed = line.trim()
-				if (!trimmed || trimmed === 'data: [DONE]') continue
-				if (!trimmed.startsWith('data: ')) continue
+					for (const line of lines) {
+						const trimmed = line.trim()
+						if (!trimmed || trimmed === 'data: [DONE]') continue
+						if (!trimmed.startsWith('data: ')) continue
 
-				try {
-					const payload = JSON.parse(trimmed.slice(6))
+						try {
+							const payload = JSON.parse(trimmed.slice(6))
 
 					if (useResponsesAPI) {
 						const chunkType = payload.type as string | undefined
@@ -603,21 +621,24 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 							yield buildReasoningBlockEnd(durationMs)
 						}
 					}
-				} catch (e) {
-					console.warn('Failed to parse SSE data:', trimmed, e)
+						} catch (e) {
+							console.warn('Failed to parse SSE data:', trimmed, e)
+						}
+					}
 				}
+			} finally {
+				if (thinkingActive) {
+					thinkingActive = false
+					const durationMs = Date.now() - (thinkingStartMs ?? Date.now())
+					thinkingStartMs = null
+					yield buildReasoningBlockEnd(durationMs)
+				}
+				reader.releaseLock()
 			}
+		} catch (error) {
+			throw normalizeProviderError(error, 'Doubao request failed')
 		}
-	} finally {
-		if (thinkingActive) {
-			thinkingActive = false
-			const durationMs = Date.now() - (thinkingStartMs ?? Date.now())
-			thinkingStartMs = null
-			yield buildReasoningBlockEnd(durationMs)
-		}
-		reader.releaseLock()
 	}
-}
 
 const models = Object.keys(DOUBAO_MODEL_CAPABILITY_MAP)
 

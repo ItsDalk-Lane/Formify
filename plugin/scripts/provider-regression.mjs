@@ -35,7 +35,10 @@ const loadTsModule = (filePath, mocks = {}) => {
 			}
 			throw new Error(`Unsupported require in regression script: ${id}`)
 		},
-		console
+		console,
+		setTimeout,
+		clearTimeout,
+		AbortController
 	})
 	new vm.Script(compiled, { filename: filePath }).runInContext(context)
 	return module.exports
@@ -247,6 +250,12 @@ const runPR4 = () => {
 		},
 		'./messageFormat': {
 			withToolMessageContext: (_msg, payload) => payload
+		},
+		'./errors': {
+			normalizeProviderError: (error) => error
+		},
+		'./retry': {
+			withRetry: async (operation) => operation()
 		}
 	})
 	assert(
@@ -421,6 +430,68 @@ const runPR6 = () => {
 	)
 }
 
+const runPR7 = async () => {
+	const errorsPath = path.resolve(ROOT, 'src/features/tars/providers/errors.ts')
+	const errorsModule = loadTsModule(errorsPath)
+	const retryPath = path.resolve(ROOT, 'src/features/tars/providers/retry.ts')
+	const retryModule = loadTsModule(retryPath, {
+		'./errors': errorsModule
+	})
+
+	const authError = errorsModule.normalizeProviderError({ status: 401, message: 'bad key' })
+	assert(authError.type === 'auth', 'PR7-1: 401 should classify as auth error')
+	assert(authError.retryable === false, 'PR7-1: auth errors must not be retryable')
+
+	let attempts = 0
+	const retryResult = await retryModule.withRetry(
+		async () => {
+			attempts += 1
+			if (attempts < 2) {
+				const error = new Error('rate limited')
+				error.status = 429
+				throw error
+			}
+			return 'ok'
+		},
+		{ maxRetries: 2, baseDelayMs: 1, maxDelayMs: 2, jitterRatio: 0 }
+	)
+	assert(retryResult === 'ok', 'PR7-2: retry should eventually return success for retryable 429 errors')
+	assert(attempts === 2, 'PR7-2: retry should perform one retry for initial 429 failure')
+
+	const abortController = new AbortController()
+	abortController.abort()
+	let abortAttempts = 0
+	let abortThrown = false
+	try {
+		await retryModule.withRetry(
+			async () => {
+				abortAttempts += 1
+				const error = new Error('network timeout')
+				error.name = 'TypeError'
+				throw error
+			},
+			{ signal: abortController.signal, maxRetries: 2, baseDelayMs: 1, maxDelayMs: 2, jitterRatio: 0 }
+		)
+	} catch (error) {
+		abortThrown = true
+		const normalized = errorsModule.normalizeProviderError(error)
+		assert(normalized.isAbort === true, 'PR7-3: aborted requests should be marked as user cancellation')
+	}
+	assert(abortThrown, 'PR7-3: aborted requests should throw immediately')
+	assert(abortAttempts === 0, 'PR7-3: aborted requests should not retry user-cancelled operations')
+
+	for (const file of [
+		'src/features/tars/providers/openAI.ts',
+		'src/features/tars/providers/openRouter.ts',
+		'src/features/tars/providers/claude.ts',
+		'src/features/tars/providers/doubao.ts'
+	]) {
+		const source = fs.readFileSync(path.resolve(ROOT, file), 'utf-8')
+		assert(source.includes('withRetry'), `PR7-4: ${file} should integrate shared retry helper`)
+		assert(source.includes('normalizeProviderError'), `PR7-4: ${file} should integrate shared error normalization`)
+	}
+}
+
 const main = async () => {
 	const pr = parseArgs()
 	if (pr >= 1) {
@@ -440,6 +511,9 @@ const main = async () => {
 	}
 	if (pr >= 6) {
 		runPR6()
+	}
+	if (pr >= 7) {
+		await runPR7()
 	}
 
 	console.log(`provider-regression: PR-${pr} checks passed`)
