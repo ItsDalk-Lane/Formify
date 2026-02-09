@@ -14,6 +14,8 @@ export class InsertTextFormAction extends FileBaseFormAction {
 
     targetFileType: TargetFileType;
 
+    targetFiles?: string[];
+
     /*
     * position settings
     */
@@ -36,6 +38,7 @@ export class InsertTextFormAction extends FileBaseFormAction {
         this.openPageIn = OpenPageInType.current;
         this.newFileTemplate = "";
         this.targetFileType = TargetFileType.SPECIFIED_FILE;
+        this.targetFiles = [];
         this.position = TextInsertPosition.END_OF_CONTENT;
         this.heading = "";
         this.content = "";
@@ -43,4 +46,3 @@ export class InsertTextFormAction extends FileBaseFormAction {
         Object.assign(this, partial);
     }
 }
-

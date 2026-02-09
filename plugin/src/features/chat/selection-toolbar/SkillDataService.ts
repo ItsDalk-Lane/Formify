@@ -3,29 +3,28 @@ import type { Skill } from '../types/chat';
 import { DebugLogger } from 'src/utils/DebugLogger';
 
 /**
- * 技能数据文件名
+ * 旧版技能独立文件（仅用于迁移）
  */
-const SKILLS_DATA_FILE = '.obsidian/plugins/formify/skills.json';
+const LEGACY_SKILLS_DATA_FILE = '.obsidian/plugins/formify/skills.json';
 
 /**
- * 技能数据结构
+ * 旧版技能数据结构（skills.json）
  */
-interface SkillsData {
-	version: number;
-	skills: Skill[];
-	lastModified: number;
+interface LegacySkillsData {
+	version?: number;
+	skills?: Skill[];
+	lastModified?: number;
 }
 
-/**
- * 默认技能数据
- */
-const DEFAULT_SKILLS_DATA: SkillsData = {
-	version: 2,
-	skills: [],
-	lastModified: Date.now()
-};
-
-const SKILLS_DATA_VERSION = 2;
+interface FormifyPluginLike {
+	loadData: () => Promise<any>;
+	saveData: (data: any) => Promise<void>;
+	settings?: {
+		chat?: {
+			skills?: Skill[];
+		};
+	};
+}
 
 const normalizeSkill = (skill: Skill): Skill => ({
 	...skill,
@@ -37,12 +36,13 @@ const normalizeSkill = (skill: Skill): Skill => ({
 
 /**
  * 技能数据服务
- * 负责管理技能数据的独立存储
+ * 负责管理技能数据的 data.json 持久化
  */
 export class SkillDataService {
 	private static instance: SkillDataService | null = null;
 	private skillsCache: Skill[] | null = null;
 	private initializePromise: Promise<void> | null = null;
+	private hasCanonicalSkillsField = false;
 
 	private constructor(private readonly app: App) {}
 
@@ -477,10 +477,16 @@ export class SkillDataService {
 
 	/**
 	 * 从旧的设置数据迁移技能
-	 * 用于将 data.json 中的技能数据迁移到独立文件
+	 * 用于将旧版 settings 中的技能数据迁移到 data.json.chat.skills
 	 */
 	async migrateFromSettings(legacySkills: Skill[]): Promise<void> {
 		DebugLogger.debug('[SkillDataService] 开始检查数据迁移，旧技能数量:', legacySkills?.length || 0);
+
+		// 只要 data.json 已存在 chat.skills 字段（即使为空），就视为已迁移完成
+		if (this.hasCanonicalSkillsField) {
+			DebugLogger.debug('[SkillDataService] data.json.chat.skills 已存在，跳过迁移');
+			return;
+		}
 
 		if (!legacySkills || legacySkills.length === 0) {
 			DebugLogger.debug('[SkillDataService] 没有旧数据需要迁移');
@@ -511,24 +517,36 @@ export class SkillDataService {
 	}
 
 	/**
-	 * 从文件加载技能数据
+	 * 从 data.json 加载技能数据；若不存在则尝试从旧 skills.json 迁移
 	 */
 	private async loadSkills(): Promise<void> {
 		try {
-			// 使用 vault.adapter 检查文件是否存在
-			const fileExists = await this.app.vault.adapter.exists(SKILLS_DATA_FILE);
-
-			if (fileExists) {
-				const content = await this.app.vault.adapter.read(SKILLS_DATA_FILE);
-				const data: SkillsData = JSON.parse(content);
-				const rawSkills = data.skills || [];
-				this.skillsCache = rawSkills.map(normalizeSkill);
-				DebugLogger.debug('[SkillDataService] 加载技能数据成功，共', this.skillsCache.length, '个技能');
-			} else {
-				// 文件不存在，使用空数组
+			const plugin = this.getPluginInstance();
+			if (!plugin) {
+				DebugLogger.error('[SkillDataService] 无法获取 formify 插件实例，回退为空');
 				this.skillsCache = [];
-				DebugLogger.debug('[SkillDataService] 技能数据文件不存在，初始化空列表');
+				return;
 			}
+
+			const persisted = (await plugin.loadData()) ?? {};
+			const chatData = persisted?.chat;
+			if (chatData && Object.prototype.hasOwnProperty.call(chatData, 'skills')) {
+				this.hasCanonicalSkillsField = true;
+				const rawSkills = Array.isArray(chatData.skills) ? chatData.skills : [];
+				this.skillsCache = rawSkills.map(normalizeSkill);
+				this.syncRuntimeSettings(this.skillsCache);
+				DebugLogger.debug('[SkillDataService] 从 data.json.chat.skills 加载成功，共', this.skillsCache.length, '个技能');
+				return;
+			}
+
+			this.hasCanonicalSkillsField = false;
+			const migrated = await this.migrateFromLegacyFile();
+			if (migrated) {
+				return;
+			}
+
+			this.skillsCache = [];
+			DebugLogger.debug('[SkillDataService] data.json 中未找到技能数据，初始化空列表');
 		} catch (error) {
 			DebugLogger.error('[SkillDataService] 加载技能数据失败', error);
 			this.skillsCache = [];
@@ -536,41 +554,28 @@ export class SkillDataService {
 	}
 
 	/**
-	 * 将技能数据持久化到文件
+	 * 将技能数据持久化到 data.json.chat.skills
 	 */
 	private async persistSkills(): Promise<void> {
 		try {
-			const data: SkillsData = {
-				version: SKILLS_DATA_VERSION,
-				skills: this.skillsCache || [],
-				lastModified: Date.now()
-			};
-
-			const content = JSON.stringify(data, null, 2);
-
-			// 使用 vault.adapter 检查文件是否存在（更可靠）
-			const fileExists = await this.app.vault.adapter.exists(SKILLS_DATA_FILE);
-
-			if (fileExists) {
-				// 文件已存在，修改内容
-				await this.app.vault.adapter.write(SKILLS_DATA_FILE, content);
-				DebugLogger.debug('[SkillDataService] 更新技能数据文件成功');
-			} else {
-				// 文件不存在，创建新文件
-				// 确保目录存在
-				await this.ensureDirectoryExists();
-
-				// 再次检查文件是否已被创建
-				const fileExistsNow = await this.app.vault.adapter.exists(SKILLS_DATA_FILE);
-				if (fileExistsNow) {
-					await this.app.vault.adapter.write(SKILLS_DATA_FILE, content);
-				} else {
-					await this.app.vault.adapter.write(SKILLS_DATA_FILE, content);
-				}
-				DebugLogger.debug('[SkillDataService] 创建技能数据文件成功');
+			const plugin = this.getPluginInstance();
+			if (!plugin) {
+				throw new Error('无法获取 formify 插件实例，无法保存技能数据');
 			}
 
-			DebugLogger.debug('[SkillDataService] 保存技能数据成功');
+			const persisted = (await plugin.loadData()) ?? {};
+			const next = {
+				...persisted,
+				chat: {
+					...(persisted?.chat ?? {}),
+					skills: this.skillsCache || [],
+				},
+			};
+
+			await plugin.saveData(next);
+			this.hasCanonicalSkillsField = true;
+			this.syncRuntimeSettings(next.chat.skills);
+			DebugLogger.debug('[SkillDataService] 保存技能数据到 data.json.chat.skills 成功');
 		} catch (error) {
 			DebugLogger.error('[SkillDataService] 保存技能数据失败', error);
 			throw error;
@@ -578,24 +583,59 @@ export class SkillDataService {
 	}
 
 	/**
-	 * 确保目录存在
+	 * 从旧版 skills.json 迁移到 data.json.chat.skills
 	 */
-	private async ensureDirectoryExists(): Promise<void> {
-		const dir = '.obsidian/plugins/formify';
-
-		// 使用 vault.adapter 检查目录是否存在
-		const dirExists = await this.app.vault.adapter.exists(dir);
-
-		if (!dirExists) {
-			// 递归创建目录
-			try {
-				await this.app.vault.adapter.mkdir(dir);
-				DebugLogger.debug('[SkillDataService] 创建目录', dir);
-			} catch (error) {
-				// 目录可能已被创建，忽略错误
-				DebugLogger.debug('[SkillDataService] 创建目录失败或已存在', error);
+	private async migrateFromLegacyFile(): Promise<boolean> {
+		try {
+			const fileExists = await this.app.vault.adapter.exists(LEGACY_SKILLS_DATA_FILE);
+			if (!fileExists) {
+				return false;
 			}
+
+			const content = await this.app.vault.adapter.read(LEGACY_SKILLS_DATA_FILE);
+			const parsed = JSON.parse(content) as LegacySkillsData | Skill[];
+			const rawSkills = Array.isArray(parsed)
+				? parsed
+				: Array.isArray(parsed?.skills)
+					? parsed.skills
+					: [];
+
+			this.skillsCache = rawSkills.map(normalizeSkill);
+			await this.persistSkills();
+			await this.removeLegacySkillsFile();
+			this.syncRuntimeSettings(this.skillsCache);
+			DebugLogger.info('[SkillDataService] 已将旧 skills.json 迁移到 data.json.chat.skills，共', this.skillsCache.length, '个技能');
+			return true;
+		} catch (error) {
+			DebugLogger.error('[SkillDataService] 迁移旧版 skills.json 失败', error);
+			this.skillsCache = [];
+			return false;
 		}
+	}
+
+	private async removeLegacySkillsFile(): Promise<void> {
+		try {
+			const exists = await this.app.vault.adapter.exists(LEGACY_SKILLS_DATA_FILE);
+			if (!exists) {
+				return;
+			}
+			await this.app.vault.adapter.remove(LEGACY_SKILLS_DATA_FILE);
+			DebugLogger.info('[SkillDataService] 已删除旧技能文件', LEGACY_SKILLS_DATA_FILE);
+		} catch (error) {
+			DebugLogger.warn('[SkillDataService] 删除旧技能文件失败（忽略）', error);
+		}
+	}
+
+	private getPluginInstance(): FormifyPluginLike | null {
+		return ((this.app as any).plugins?.plugins?.['formify'] as FormifyPluginLike | undefined) ?? null;
+	}
+
+	private syncRuntimeSettings(skills: Skill[]): void {
+		const plugin = this.getPluginInstance();
+		if (!plugin?.settings?.chat) {
+			return;
+		}
+		plugin.settings.chat.skills = skills;
 	}
 
 	/**

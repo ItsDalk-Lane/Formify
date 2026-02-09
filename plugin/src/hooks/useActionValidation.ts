@@ -17,6 +17,7 @@ import { BreakFormAction } from "src/model/action/BreakFormAction";
 import { ContinueFormAction } from "src/model/action/ContinueFormAction";
 import { FormActionType } from "../model/enums/FormActionType";
 import { ButtonActionType } from "../model/enums/ButtonActionType";
+import { CreateFileMode } from "../model/enums/CreateFileMode";
 import { TargetFileType } from "../model/enums/TargetFileType";
 import { TextCleanupType } from "src/model/enums/TextCleanupType";
 import { TargetMode } from "src/model/enums/TargetMode";
@@ -140,14 +141,44 @@ function validateAction(action: FormActionImp) {
 
     switch (action.type) {
         case FormActionType.CREATE_FILE:
-            if (Strings.isEmpty(action.filePath)) {
-                messages.push(l.file_path_required);
+            const createAction = action as CreateFileFormAction;
+            const createMode =
+                createAction.createFileMode ?? CreateFileMode.SINGLE_FILE;
+            if (createMode === CreateFileMode.SINGLE_FILE) {
+                if (Strings.isEmpty(createAction.filePath)) {
+                    messages.push(l.file_path_required);
+                }
+            } else if (createMode === CreateFileMode.BATCH_FILES) {
+                const paths = (createAction.batchFilePaths ?? []).filter(
+                    (item) => Strings.isNotBlank(item)
+                );
+                if (paths.length === 0) {
+                    messages.push(l.file_path_required);
+                }
+            } else if (createMode === CreateFileMode.SINGLE_FOLDER) {
+                if (Strings.isBlank(createAction.folderPath)) {
+                    messages.push(l.target_folder_required);
+                }
+            } else if (createMode === CreateFileMode.BATCH_FOLDERS) {
+                const paths = (createAction.batchFolderPaths ?? []).filter(
+                    (item) => Strings.isNotBlank(item)
+                );
+                if (paths.length === 0) {
+                    messages.push(l.target_folder_required);
+                }
             }
             break;
 
         case FormActionType.INSERT_TEXT:
-            if (action.targetFileType !== TargetFileType.CURRENT_FILE) {
+            if (action.targetFileType === TargetFileType.SPECIFIED_FILE) {
                 if (Strings.isEmpty(action.filePath)) {
+                    messages.push(l.file_path_required);
+                }
+            } else if (action.targetFileType === TargetFileType.MULTIPLE_FILES) {
+                const files = (action.targetFiles ?? []).filter((item) =>
+                    Strings.isNotBlank(item)
+                );
+                if (files.length === 0) {
                     messages.push(l.file_path_required);
                 }
             }
@@ -162,8 +193,15 @@ function validateAction(action: FormActionImp) {
             break;
 
         case FormActionType.UPDATE_FRONTMATTER:
-            if (action.targetFileType !== TargetFileType.CURRENT_FILE) {
+            if (action.targetFileType === TargetFileType.SPECIFIED_FILE) {
                 if (Strings.isEmpty(action.filePath)) {
+                    messages.push(l.file_path_required);
+                }
+            } else if (action.targetFileType === TargetFileType.MULTIPLE_FILES) {
+                const files = (action.targetFiles ?? []).filter((item) =>
+                    Strings.isNotBlank(item)
+                );
+                if (files.length === 0) {
                     messages.push(l.file_path_required);
                 }
             }

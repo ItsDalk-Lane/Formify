@@ -853,4 +853,20 @@ export class Zh implements Local {
 	custom_template = "自定义模板";
 	position_template = "位置模板";
 	position_template_hint = "使用 {{{content}}} 作为占位符，系统会在文件中查找此模板并将内容插入到占位符位置";
+	// === 批量操作扩展 ===
+	create_file_mode = "创建模式";
+	create_mode_single_file = "单个文件";
+	create_mode_batch_files = "批量文件";
+	create_mode_single_folder = "单个文件夹";
+	create_mode_batch_folders = "批量文件夹";
+	batch_file_paths = "文件路径列表";
+	batch_folder_paths = "文件夹路径列表";
+	target_file_type_multiple = "多个文件";
+	add_file = "添加文件";
+	add_folder = "添加文件夹";
+	folder_icon_hint = "文件夹（运行时展开为其中所有文件）";
+	multiple_files_no_cursor = "多文件模式不支持\"在光标位置插入\"";
+	folder_created = "文件夹创建成功";
+	folder_already_exists = "文件夹已存在";
+	batch_create_success = "批量创建成功：{0} 个项目";
 }

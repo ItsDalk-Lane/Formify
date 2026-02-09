@@ -176,7 +176,7 @@ export interface ChatSettings {
 	enableSelectionToolbar: boolean; // 是否启用快捷技能
 	maxToolbarButtons: number; // 工具栏最多显示的按钮数量
 	selectionToolbarStreamOutput: boolean; // 快捷技能是否使用流式输出
-	skills?: Skill[]; // 技能列表（已废弃，技能数据现在独立存储在 .obsidian/plugins/formify/skills.json 中）
+	skills?: Skill[]; // 技能列表（持久化存储于 data.json.chat.skills）
 }
 
 export interface ChatState {
@@ -232,6 +232,5 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	enableSelectionToolbar: true, // 默认启用快捷技能
 	maxToolbarButtons: 4, // 默认显示4个按钮
 	selectionToolbarStreamOutput: true, // 默认启用流式输出
-	skills: [], // 默认无技能（已废弃，仅用于向后兼容和数据迁移）
+	skills: [], // 默认无技能（持久化存储于 data.json.chat.skills）
 };
-

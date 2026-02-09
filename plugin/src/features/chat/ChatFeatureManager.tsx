@@ -380,7 +380,7 @@ export class ChatFeatureManager {
 			this.skillDataService = SkillDataService.getInstance(this.plugin.app);
 			await this.skillDataService.initialize();
 
-			// 执行数据迁移：从旧设置迁移技能数据到独立文件
+			// 执行数据迁移：从旧设置迁移技能数据到 data.json.chat.skills
 			const legacySkills = initialSettings?.skills ?? this.plugin.settings.chat.skills ?? [];
 			await this.skillDataService.migrateFromSettings(legacySkills);
 
@@ -1406,4 +1406,3 @@ export class ChatFeatureManager {
 		}
 	}
 }
-

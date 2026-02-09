@@ -17,6 +17,7 @@ import { qwenVendor } from './providers/qwen'
 import { siliconFlowVendor } from './providers/siliconflow'
 import { zhipuVendor } from './providers/zhipu'
 import type { ToolDefinition } from 'src/features/chat/types/tools'
+import type { SystemPromptsDataFile } from './system-prompts/types'
 
 export const APP_FOLDER = 'Tars'
 
@@ -50,6 +51,8 @@ export interface TarsSettings {
 	enableDefaultSystemMsg?: boolean
 	/** @deprecated 已废弃：旧版默认系统消息内容，仅用于向下兼容迁移 */
 	defaultSystemMsg?: string
+	/** 系统提示词持久化数据（存储于 data.json） */
+	systemPromptsData?: SystemPromptsDataFile
 	enableStreamLog: boolean
 	debugMode: boolean // 调试模式开关
 	debugLevel: 'debug' | 'info' | 'warn' | 'error' // 调试日志级别

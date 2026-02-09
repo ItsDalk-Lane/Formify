@@ -1,10 +1,11 @@
-import { App } from "obsidian";
+import { App, normalizePath } from "obsidian";
 import { IFormAction } from "src/model/action/IFormAction";
 import { InsertTextFormAction } from "src/model/action/InsertTextFormAction";
 import { FormActionType } from "src/model/enums/FormActionType";
 import { OpenPageInType } from "src/model/enums/OpenPageInType";
 import { TargetFileType } from "src/model/enums/TargetFileType";
 import { TextInsertPosition } from "src/model/enums/TextInsertPosition";
+import { expandTargetPaths } from "src/utils/expandTargetPaths";
 import { openFilePathDirectly } from "src/utils/openFilePathDirectly";
 import { FormTemplateProcessEngine } from "../../engine/FormTemplateProcessEngine";
 import { FormState } from "../../FormState";
@@ -30,8 +31,14 @@ export default class InsertTextActionService implements IActionService {
             await this.validateFormValues(state, formAction);
 
             await validateFileName(formAction, context);
-            const file = await this.getFile(formAction, context);
-            await this.insertText(file.path, state, formAction, context);
+            if (formAction.targetFileType === TargetFileType.MULTIPLE_FILES) {
+                await this.insertTextForMultipleTargets(formAction, context);
+            } else {
+                const file = await this.getFile(formAction, context);
+                await this.insertText(file.path, state, formAction, context, {
+                    openFile: true,
+                });
+            }
 
             // do next
             if (chain) {
@@ -52,9 +59,61 @@ export default class InsertTextActionService implements IActionService {
         return file;
     }
 
-    private async insertText(filePath: string, state: FormState, formAction: InsertTextFormAction, context: ActionContext) {
+    private async insertTextForMultipleTargets(
+        formAction: InsertTextFormAction,
+        context: ActionContext
+    ): Promise<void> {
+        const filePaths = await this.resolveMultipleFilePaths(formAction, context);
+        if (filePaths.length === 0) {
+            return;
+        }
+
+        const insertAction = {
+            ...formAction,
+            position:
+                formAction.position === TextInsertPosition.AT_CURSOR
+                    ? TextInsertPosition.END_OF_CONTENT
+                    : formAction.position,
+        };
+
+        for (const filePath of filePaths) {
+            await this.insertText(filePath, context.state, insertAction, context, {
+                openFile: false,
+            });
+        }
+    }
+
+    private async resolveMultipleFilePaths(
+        formAction: InsertTextFormAction,
+        context: ActionContext
+    ): Promise<string[]> {
+        const engine = new FormTemplateProcessEngine();
+        const processedTargets: string[] = [];
+
+        for (const rawPath of formAction.targetFiles ?? []) {
+            if (!rawPath || rawPath.trim() === "") {
+                continue;
+            }
+            const rendered = await engine.process(rawPath, context.state, context.app);
+            if (!rendered || rendered.trim() === "") {
+                continue;
+            }
+            processedTargets.push(normalizePath(rendered));
+        }
+
+        return expandTargetPaths(processedTargets, context.app, { mdOnly: true });
+    }
+
+    private async insertText(
+        filePath: string,
+        state: FormState,
+        formAction: InsertTextFormAction,
+        context: ActionContext,
+        options?: { openFile?: boolean }
+    ) {
         const app = context.app;
         const insertionService = new ContentInsertionService();
+        const shouldOpenFile = options?.openFile !== false;
 
         try {
             // Validate and process content with type checking
@@ -116,7 +175,10 @@ export default class InsertTextActionService implements IActionService {
             }
 
             // Open file if not current file
-            if (formAction.targetFileType !== TargetFileType.CURRENT_FILE) {
+            if (
+                shouldOpenFile &&
+                formAction.targetFileType !== TargetFileType.CURRENT_FILE
+            ) {
                 openFilePathDirectly(app, filePath, formAction.openPageIn || OpenPageInType.none);
             }
 

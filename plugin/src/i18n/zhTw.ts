@@ -869,4 +869,20 @@ export class ZhTw implements Local {
 	custom_template = "自定義模板";
 	position_template = "位置模板";
 	position_template_hint = "使用 {{{content}}} 作為佔位符，系統會在文件中查找此模板並將內容插入到佔位符位置";
+	// === 批量操作擴展 ===
+	create_file_mode = "建立模式";
+	create_mode_single_file = "單一檔案";
+	create_mode_batch_files = "批量檔案";
+	create_mode_single_folder = "單一資料夾";
+	create_mode_batch_folders = "批量資料夾";
+	batch_file_paths = "檔案路徑列表";
+	batch_folder_paths = "資料夾路徑列表";
+	target_file_type_multiple = "多個檔案";
+	add_file = "新增檔案";
+	add_folder = "新增資料夾";
+	folder_icon_hint = "資料夾（執行時展開為其中所有檔案）";
+	multiple_files_no_cursor = "多檔案模式不支援「在游標位置插入」";
+	folder_created = "資料夾建立成功";
+	folder_already_exists = "資料夾已存在";
+	batch_create_success = "批量建立成功：{0} 個項目";
 }

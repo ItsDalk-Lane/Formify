@@ -28,6 +28,7 @@ import { localInstance } from "src/i18n/locals";
 import { TextConverter } from "src/utils/TextConverter";
 import * as fs from "fs/promises";
 import { FileOperationService, FolderDeleteMode } from "src/service/FileOperationService";
+import { expandTargetPaths } from "src/utils/expandTargetPaths";
 
 type CleanupResult = {
     processed: string[];
@@ -703,7 +704,12 @@ export class TextActionService implements IActionService {
             if (Strings.isBlank(processed)) continue;
             resolved.push(normalizePath(processed));
         }
-        return Array.from(new Set(resolved));
+
+        const expanded = expandTargetPaths(resolved, app, {
+            mdOnly: expectFile,
+        });
+        const missing = resolved.filter((path) => !app.vault.getAbstractFileByPath(path));
+        return Array.from(new Set([...expanded, ...missing]));
     }
 
     private mapFolderDeleteOption(option?: FolderDeleteOption): FolderDeleteMode {

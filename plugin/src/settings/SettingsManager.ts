@@ -36,7 +36,7 @@ export class SettingsManager {
         // 迁移内链解析配置到新结构
         const migratedSettings = this.migrateInternalLinkSettings(tarsSettings, mergedChat);
 
-        // 迁移旧版默认系统消息到独立的 system-prompts.json（向下兼容）
+        // 迁移旧版默认系统消息到 data.json.tars.settings.systemPromptsData（向下兼容）
         try {
             const systemPromptService = SystemPromptDataService.getInstance(this.plugin.app);
             const migrated = await systemPromptService.migrateFromLegacyDefaultSystemMessage({
@@ -117,18 +117,33 @@ export class SettingsManager {
         delete (encryptedTars as any).enableDefaultSystemMsg;
         delete (encryptedTars as any).defaultSystemMsg;
 
-        const settingsToPersist: PluginSettings = {
+        // 基于当前 data.json 合并写回，避免覆盖由独立服务维护的字段
+        const persisted = (await this.plugin.loadData()) ?? {};
+        const persistedChat = persisted?.chat ?? {};
+        const persistedTarsSettings = persisted?.tars?.settings ?? {};
+
+        const mergedChat = {
+            ...persistedChat,
+            ...settings.chat,
+        };
+        const mergedTarsSettings = {
+            ...persistedTarsSettings,
+            ...encryptedTars,
+        };
+        delete (mergedTarsSettings as any).enableDefaultSystemMsg;
+        delete (mergedTarsSettings as any).defaultSystemMsg;
+
+        const settingsToPersist = {
+            ...persisted,
             ...settings,
+            chat: mergedChat,
             tars: {
-                settings: encryptedTars,
-            },
-            chat: {
-                ...settings.chat,
-                // 移除 skills 字段，避免重复存储到 data.json
-                // skills 数据现在独立存储在 .obsidian/plugins/formify/skills.json
-                skills: undefined
+                ...(persisted?.tars ?? {}),
+                ...(settings?.tars ?? {}),
+                settings: mergedTarsSettings,
             },
         };
+
         await this.plugin.saveData(settingsToPersist);
     }
 

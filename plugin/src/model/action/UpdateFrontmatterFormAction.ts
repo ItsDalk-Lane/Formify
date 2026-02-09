@@ -8,6 +8,8 @@ export class UpdateFrontmatterFormAction extends FileBaseFormAction {
 
     targetFileType: TargetFileType;
 
+    targetFiles?: string[];
+
     propertyUpdates: PropertyUpdate[];
 
     newFileTemplate?: string;
@@ -16,6 +18,7 @@ export class UpdateFrontmatterFormAction extends FileBaseFormAction {
         super(partial);
         this.type = FormActionType.UPDATE_FRONTMATTER;
         this.targetFileType = TargetFileType.SPECIFIED_FILE;
+        this.targetFiles = [];
         this.propertyUpdates = [];
         this.newFileTemplate = "";
         Object.assign(this, partial);

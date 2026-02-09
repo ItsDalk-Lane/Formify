@@ -20,6 +20,7 @@ import { LoopType } from "src/model/enums/LoopType";
 import { CommandSourceMode } from "src/model/enums/CommandSourceMode";
 import { FormActionType } from "../model/enums/FormActionType";
 import { ButtonActionType } from "../model/enums/ButtonActionType";
+import { CreateFileMode } from "../model/enums/CreateFileMode";
 import { TargetFileType } from "../model/enums/TargetFileType";
 import { allFormActionTypeOptions } from "../view/edit/setting/action/common/ActionTypeSelect";
 import { allFormInsertPositionOptions } from "../view/edit/setting/action/common/InsertPositionSelect";
@@ -61,11 +62,34 @@ export function useActionTitle(value: IFormAction) {
 
 		if (value.type === FormActionType.CREATE_FILE) {
 			const createFileAction = value as CreateFileFormAction;
-
-			if (Strings.isEmpty(createFileAction.filePath)) {
-				title = localInstance.file_path_required;
-			} else {
-				title = normalizePath(createFileAction.filePath);
+			const mode =
+				createFileAction.createFileMode ?? CreateFileMode.SINGLE_FILE;
+			if (mode === CreateFileMode.SINGLE_FILE) {
+				if (Strings.isEmpty(createFileAction.filePath)) {
+					title = localInstance.file_path_required;
+				} else {
+					title = normalizePath(createFileAction.filePath);
+				}
+			} else if (mode === CreateFileMode.BATCH_FILES) {
+				const paths = (createFileAction.batchFilePaths ?? []).filter(
+					(item) => Strings.isNotBlank(item)
+				);
+				title =
+					paths.length > 0
+						? `${localInstance.create_mode_batch_files} (${paths.length})`
+						: localInstance.file_path_required;
+			} else if (mode === CreateFileMode.SINGLE_FOLDER) {
+				title =
+					createFileAction.folderPath?.trim() ||
+					localInstance.target_folder_required;
+			} else if (mode === CreateFileMode.BATCH_FOLDERS) {
+				const paths = (createFileAction.batchFolderPaths ?? []).filter(
+					(item) => Strings.isNotBlank(item)
+				);
+				title =
+					paths.length > 0
+						? `${localInstance.create_mode_batch_folders} (${paths.length})`
+						: localInstance.target_folder_required;
 			}
 		}
 
@@ -78,6 +102,20 @@ export function useActionTitle(value: IFormAction) {
 			) {
 				file = localInstance.in_current_file;
 				position = "";
+			} else if (
+				insertTextAction.targetFileType === TargetFileType.MULTIPLE_FILES
+			) {
+				const files = (insertTextAction.targetFiles ?? []).filter(
+					(item) => Strings.isNotBlank(item)
+				);
+				file =
+					files.length > 0
+						? `${localInstance.target_file_type_multiple} (${files.length})`
+						: localInstance.file_path_required;
+				position =
+					allFormInsertPositionOptions.find(
+						(p) => p.value === insertTextAction.position
+					)?.label || "";
 			} else {
 				if (Strings.isEmpty(insertTextAction.filePath)) {
 					title = localInstance.file_path_required;

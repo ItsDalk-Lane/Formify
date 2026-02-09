@@ -1,13 +1,12 @@
 import React, { useMemo } from "react";
-import { Plus, Trash2 } from "lucide-react";
 import { localInstance } from "src/i18n/locals";
-import MarkdownFileSuggestInput from "src/component/combobox/MarkdownFileSuggestInput";
 import { MultipleComboboxSuggestion, Option } from "src/component/combobox/MultipleComboboxSuggestion";
 import ToggleControl from "src/view/shared/control/ToggleControl";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import { ClearFormatConfig } from "src/model/action/TextFormAction";
 import { TargetMode } from "src/model/enums/TargetMode";
 import { TargetModeSelect } from "../common/TargetModeSelect";
+import { TargetFileListInput } from "../../common/TargetFileListInput";
 
 type ClearFormatSettingProps = {
     config: ClearFormatConfig;
@@ -141,38 +140,13 @@ export function ClearFormatSetting(props: ClearFormatSettingProps) {
                     label={localInstance.text_target_files_label}
                     description={localInstance.text_target_files_description}
                 >
-                    <div className="form--TextTargetFileList">
-                        {targetFiles.map((file, index) => (
-                            <div className="form--TextTargetFileItem" key={index}>
-                                <MarkdownFileSuggestInput
-                                    value={file}
-                                    placeholder={localInstance.text_target_files_placeholder}
-                                    onChange={(value) => {
-                                        const newFiles = [...targetFiles];
-                                        newFiles[index] = value;
-                                        handleConfigChange({ targetFiles: newFiles });
-                                    }}
-                                />
-                                <button
-                                    className="clickable-icon"
-                                    onClick={() => {
-                                        const newFiles = targetFiles.filter((_, i) => i !== index);
-                                        handleConfigChange({ targetFiles: newFiles });
-                                    }}
-                                >
-                                    <Trash2 size={16} />
-                                </button>
-                            </div>
-                        ))}
-                        <button
-                            className="form--AddButton"
-                            onClick={() => {
-                                handleConfigChange({ targetFiles: [...targetFiles, ""] });
-                            }}
-                        >
-                            <Plus size={16} /> {localInstance.add}
-                        </button>
-                    </div>
+                    <TargetFileListInput
+                        files={targetFiles}
+                        mdOnly={true}
+                        onChange={(files) => {
+                            handleConfigChange({ targetFiles: files });
+                        }}
+                    />
                 </CpsFormItem>
             )}
 

@@ -10,6 +10,7 @@ import CpsFormItem from "src/view/shared/CpsFormItem";
 import { FilePathFormItem } from "../common/FilePathFormItem";
 import InsertPositionSelect from "../common/InsertPositionSelect";
 import OpenPageTypeSelect from "../common/OpenPageTypeSelect";
+import { TargetFileListInput } from "../common/TargetFileListInput";
 import TargetFileTypeSelect from "../common/TargetFileTypeSelect";
 import TextAreaContentSetting from "../common/TextAreaContentSetting";
 
@@ -31,24 +32,33 @@ export function InsertTextSetting(props: {
 	const needsCustomTemplate = action.position === TextInsertPosition.CUSTOM_TEMPLATE;
 
 	const targetFilePath = getFilePathCompatible(action);
+	const isSpecifiedFile = action.targetFileType === TargetFileType.SPECIFIED_FILE;
+	const isMultipleFiles = action.targetFileType === TargetFileType.MULTIPLE_FILES;
 	const showFileTemplateSuggeest =
-		action.targetFileType !== TargetFileType.CURRENT_FILE &&
-		Strings.isNotBlank(targetFilePath);
+		isSpecifiedFile && Strings.isNotBlank(targetFilePath);
 
 	return (
 		<>
 			<CpsFormItem label={localInstance.target_file}>
 				<TargetFileTypeSelect
+					showMultiple={true}
 					value={action.targetFileType}
 					onChange={(value) => {
-						const newAction = { ...action, targetFileType: value };
+						const nextPosition =
+							value === TargetFileType.MULTIPLE_FILES &&
+							action.position === TextInsertPosition.AT_CURSOR
+								? TextInsertPosition.END_OF_CONTENT
+								: action.position;
+						const newAction = {
+							...action,
+							targetFileType: value,
+							position: nextPosition,
+						};
 						props.onChange(newAction);
 					}}
 				/>
 			</CpsFormItem>
-			{action.targetFileType === TargetFileType.CURRENT_FILE ? (
-				<></>
-			) : (
+			{isSpecifiedFile && (
 				<>
 					<FilePathFormItem
 						label={""}
@@ -76,6 +86,24 @@ export function InsertTextSetting(props: {
 						/>
 					</CpsFormItem>
 				</>
+			)}
+			{isMultipleFiles && (
+				<CpsFormItem
+					label={localInstance.text_target_files_label}
+					description={localInstance.folder_icon_hint}
+				>
+					<TargetFileListInput
+						files={action.targetFiles ?? []}
+						mdOnly={true}
+						onChange={(files) => {
+							const newAction = {
+								...action,
+								targetFiles: files,
+							};
+							props.onChange(newAction);
+						}}
+					/>
+				</CpsFormItem>
 			)}
 			{showFileTemplateSuggeest && (
 				<FilePathFormItem

@@ -844,4 +844,20 @@ export class En implements Local {
 	custom_template = "Custom template";
 	position_template = "Position template";
 	position_template_hint = "Use {{{content}}} as placeholder, the system will find this template in the file and insert content at the placeholder position";
+	// === Batch operation extensions ===
+	create_file_mode = "Create Mode";
+	create_mode_single_file = "Single File";
+	create_mode_batch_files = "Batch Files";
+	create_mode_single_folder = "Single Folder";
+	create_mode_batch_folders = "Batch Folders";
+	batch_file_paths = "File Path List";
+	batch_folder_paths = "Folder Path List";
+	target_file_type_multiple = "Multiple Files";
+	add_file = "Add File";
+	add_folder = "Add Folder";
+	folder_icon_hint = "Folder (expands to all files at runtime)";
+	multiple_files_no_cursor = "\"At cursor\" is not supported in multi-file mode";
+	folder_created = "Folder created successfully";
+	folder_already_exists = "Folder already exists";
+	batch_create_success = "Batch create success: {0} items";
 }

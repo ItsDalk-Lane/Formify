@@ -1,5 +1,4 @@
 import React, { useMemo } from "react";
-import { Plus, Trash2 } from "lucide-react";
 import { Select2, SelectOption2 } from "src/component/select2/Select";
 import ToggleControl from "src/view/shared/control/ToggleControl";
 import CpsFormItem from "src/view/shared/CpsFormItem";
@@ -10,7 +9,7 @@ import { ContentDeleteType } from "src/model/enums/ContentDeleteType";
 import { ContentDeleteRange } from "src/model/enums/ContentDeleteRange";
 import { HeadingContentDeleteRange } from "src/model/enums/HeadingContentDeleteRange";
 import { TargetModeSelect } from "../common/TargetModeSelect";
-import { VaultPathSuggestInput } from "../common/VaultPathSuggestInput";
+import { TargetFileListInput } from "../../common/TargetFileListInput";
 
 type DeleteContentSettingProps = {
     config: DeleteContentConfig;
@@ -94,38 +93,13 @@ export function DeleteContentSetting(props: DeleteContentSettingProps) {
                     label={localInstance.text_target_files_label}
                     description={localInstance.text_target_files_description}
                 >
-                    <div className="form--TextTargetFileList">
-                        {targetFiles.map((file, index) => (
-                            <div className="form--TextTargetFileItem" key={index}>
-                                <VaultPathSuggestInput
-                                    value={file}
-                                    placeholder={localInstance.text_target_files_placeholder}
-                                    onChange={(value) => {
-                                        const newFiles = [...targetFiles];
-                                        newFiles[index] = value;
-                                        handleConfigChange({ targetFiles: newFiles });
-                                    }}
-                                />
-                                <button
-                                    className="clickable-icon"
-                                    onClick={() => {
-                                        const newFiles = targetFiles.filter((_, i) => i !== index);
-                                        handleConfigChange({ targetFiles: newFiles });
-                                    }}
-                                >
-                                    <Trash2 size={16} />
-                                </button>
-                            </div>
-                        ))}
-                        <button
-                            className="form--AddButton"
-                            onClick={() => {
-                                handleConfigChange({ targetFiles: [...targetFiles, ""] });
-                            }}
-                        >
-                            <Plus size={16} /> {localInstance.add}
-                        </button>
-                    </div>
+                    <TargetFileListInput
+                        files={targetFiles}
+                        mdOnly={false}
+                        onChange={(files) => {
+                            handleConfigChange({ targetFiles: files });
+                        }}
+                    />
                 </CpsFormItem>
             )}
 

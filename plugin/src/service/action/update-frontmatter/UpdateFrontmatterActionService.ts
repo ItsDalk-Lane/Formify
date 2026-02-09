@@ -1,8 +1,11 @@
+import { normalizePath, TFile } from "obsidian";
 import { IFormAction } from "src/model/action/IFormAction";
 import { UpdateFrontmatterFormAction } from "src/model/action/UpdateFrontmatterFormAction";
 import { FormActionType } from "src/model/enums/FormActionType";
+import { TargetFileType } from "src/model/enums/TargetFileType";
 import { FormTemplateProcessEngine } from "src/service/engine/FormTemplateProcessEngine";
 import { convertFrontmatterValue, FrontmatterConversionOptions } from "src/utils/convertFrontmatterValue";
+import { expandTargetPaths } from "src/utils/expandTargetPaths";
 import { IActionService, ActionContext, ActionChain } from "../IActionService";
 import { createFileFromActionIfNotExists } from "../util/createFileFromActionIfNotExists";
 import { getFilePathFromAction } from "../util/getFilePathFromAction";
@@ -33,10 +36,6 @@ export default class UpdateFrontmatterActionService implements IActionService {
                 context
             );
 
-            // Validate file path
-            const filePath = await this.validateAndProcessFilePath(action, context);
-            const file = await createFileFromActionIfNotExists(filePath, action, context);
-
             // Configure frontmatter conversion options
             const conversionOptions: FrontmatterConversionOptions = {
                 strictMode: false, // Allow flexible type conversion for user-friendliness
@@ -44,13 +43,26 @@ export default class UpdateFrontmatterActionService implements IActionService {
                 fallbackValue: null
             };
 
-            // Update frontmatter with type-safe conversion
-            await this.updateFrontmatterWithTypeValidation(
-                app,
-                file,
-                formattedProperties,
-                conversionOptions
-            );
+            if (action.targetFileType === TargetFileType.MULTIPLE_FILES) {
+                const files = await this.resolveMultipleTargetFiles(action, context);
+                for (const file of files) {
+                    await this.updateFrontmatterWithTypeValidation(
+                        app,
+                        file,
+                        formattedProperties,
+                        conversionOptions
+                    );
+                }
+            } else {
+                const filePath = await this.validateAndProcessFilePath(action, context);
+                const file = await createFileFromActionIfNotExists(filePath, action, context);
+                await this.updateFrontmatterWithTypeValidation(
+                    app,
+                    file,
+                    formattedProperties,
+                    conversionOptions
+                );
+            }
 
             if (chain) {
                 return await chain.next(context);
@@ -67,6 +79,43 @@ export default class UpdateFrontmatterActionService implements IActionService {
                 'Check property names, values, and ensure they are compatible with YAML format'
             );
         }
+    }
+
+    private async resolveMultipleTargetFiles(
+        action: UpdateFrontmatterFormAction,
+        context: ActionContext
+    ): Promise<TFile[]> {
+        const engine = new FormTemplateProcessEngine();
+        const processedTargets: string[] = [];
+
+        for (const rawPath of action.targetFiles ?? []) {
+            if (!rawPath || rawPath.trim() === "") {
+                continue;
+            }
+            const rendered = await engine.process(rawPath, context.state, context.app);
+            if (!rendered || rendered.trim() === "") {
+                continue;
+            }
+            processedTargets.push(normalizePath(rendered));
+        }
+
+        const expandedPaths = expandTargetPaths(processedTargets, context.app, {
+            mdOnly: true,
+        });
+        const files: TFile[] = [];
+
+        for (const path of expandedPaths) {
+            const target = context.app.vault.getAbstractFileByPath(path);
+            if (target instanceof TFile && target.extension === "md") {
+                files.push(target);
+            }
+        }
+
+        if (files.length === 0) {
+            throw new Error("No markdown files found for frontmatter update");
+        }
+
+        return files;
     }
 
     /**

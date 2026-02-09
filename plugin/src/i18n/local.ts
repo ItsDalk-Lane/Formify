@@ -779,4 +779,20 @@ export interface Local {
 	custom_template: string;
 	position_template: string;
 	position_template_hint: string;
+	// === 批量操作扩展 ===
+	create_file_mode: string;
+	create_mode_single_file: string;
+	create_mode_batch_files: string;
+	create_mode_single_folder: string;
+	create_mode_batch_folders: string;
+	batch_file_paths: string;
+	batch_folder_paths: string;
+	target_file_type_multiple: string;
+	add_file: string;
+	add_folder: string;
+	folder_icon_hint: string;
+	multiple_files_no_cursor: string;
+	folder_created: string;
+	folder_already_exists: string;
+	batch_create_success: string;
 }

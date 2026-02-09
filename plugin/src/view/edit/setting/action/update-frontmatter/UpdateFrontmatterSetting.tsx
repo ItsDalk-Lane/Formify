@@ -15,6 +15,7 @@ import {
 } from "src/component/interactive-list/InteractiveList";
 import { v4 } from "uuid";
 import { FilePathFormItem } from "../common/FilePathFormItem";
+import { TargetFileListInput } from "../common/TargetFileListInput";
 import TargetFileTypeSelect from "../common/TargetFileTypeSelect";
 import { PropertyUpdateValueInput } from "./PropertyUpdateValueInput";
 import { PropertyNameSuggestInput } from "src/component/combobox/PropertyNameSuggestInput";
@@ -49,6 +50,7 @@ export function UpdateFrontmatterSetting(props: {
 		<>
 			<CpsFormItem label={localInstance.target_file}>
 				<TargetFileTypeSelect
+					showMultiple={true}
 					value={action.targetFileType}
 					onChange={(value) => {
 						const newAction = { ...action, targetFileType: value };
@@ -56,9 +58,7 @@ export function UpdateFrontmatterSetting(props: {
 					}}
 				/>
 			</CpsFormItem>
-			{action.targetFileType === TargetFileType.CURRENT_FILE ? (
-				<></>
-			) : (
+			{action.targetFileType === TargetFileType.SPECIFIED_FILE ? (
 				<>
 					<FilePathFormItem
 						label={""}
@@ -72,6 +72,25 @@ export function UpdateFrontmatterSetting(props: {
 						}}
 					/>
 				</>
+			) : action.targetFileType === TargetFileType.MULTIPLE_FILES ? (
+				<CpsFormItem
+					label={localInstance.text_target_files_label}
+					description={localInstance.folder_icon_hint}
+				>
+					<TargetFileListInput
+						files={action.targetFiles ?? []}
+						mdOnly={true}
+						onChange={(files) => {
+							const newAction = {
+								...action,
+								targetFiles: files,
+							};
+							props.onChange(newAction);
+						}}
+					/>
+				</CpsFormItem>
+			) : (
+				<></>
 			)}
 
 			<InteractiveList

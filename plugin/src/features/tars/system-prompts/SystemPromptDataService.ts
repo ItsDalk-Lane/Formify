@@ -3,13 +3,25 @@ import { DebugLogger } from 'src/utils/DebugLogger';
 import type { AiFeatureId, SystemPromptItem, SystemPromptsDataFile } from './types';
 import { SYSTEM_PROMPTS_DATA_VERSION } from './types';
 
-const SYSTEM_PROMPTS_DATA_FILE = '.obsidian/plugins/formify/system-prompts.json';
+const LEGACY_SYSTEM_PROMPTS_DATA_FILE = '.obsidian/plugins/formify/system-prompts.json';
 
 const DEFAULT_DATA: SystemPromptsDataFile = {
 	version: SYSTEM_PROMPTS_DATA_VERSION,
 	prompts: [],
 	lastModified: Date.now(),
 };
+
+interface FormifyPluginLike {
+	loadData: () => Promise<any>;
+	saveData: (data: any) => Promise<void>;
+	settings?: {
+		tars?: {
+			settings?: {
+				systemPromptsData?: SystemPromptsDataFile;
+			};
+		};
+	};
+}
 
 export class SystemPromptDataService {
 	private static instance: SystemPromptDataService | null = null;
@@ -151,7 +163,7 @@ export class SystemPromptDataService {
 		const bumped = prompts.map((p) => ({ ...p, order: p.order + 1 }));
 		this.promptsCache = this.normalizeOrders([migrated, ...bumped]);
 		await this.persist();
-		DebugLogger.info('[SystemPromptDataService] 已迁移旧默认系统消息到 system-prompts.json');
+		DebugLogger.info('[SystemPromptDataService] 已迁移旧默认系统消息到 data.json.tars.settings.systemPromptsData');
 		return true;
 	}
 
@@ -164,22 +176,39 @@ export class SystemPromptDataService {
 
 	private async loadFromFile(): Promise<void> {
 		try {
-			const exists = await this.app.vault.adapter.exists(SYSTEM_PROMPTS_DATA_FILE);
-			if (!exists) {
+			const plugin = this.getPluginInstance();
+			if (!plugin) {
+				DebugLogger.error('[SystemPromptDataService] 无法获取 formify 插件实例，回退为空');
 				this.promptsCache = [];
 				return;
 			}
 
-			const raw = await this.app.vault.adapter.read(SYSTEM_PROMPTS_DATA_FILE);
-			const parsed = JSON.parse(raw) as Partial<SystemPromptsDataFile>;
-			const data: SystemPromptsDataFile = {
-				...DEFAULT_DATA,
-				...parsed,
-				prompts: Array.isArray(parsed.prompts) ? (parsed.prompts as any) : [],
-				lastModified: typeof parsed.lastModified === 'number' ? parsed.lastModified : Date.now(),
-			};
+			const persisted = (await plugin.loadData()) ?? {};
+			const tarsSettingsData = persisted?.tars?.settings;
+			if (tarsSettingsData && Object.prototype.hasOwnProperty.call(tarsSettingsData, 'systemPromptsData')) {
+				const parsed = tarsSettingsData.systemPromptsData as Partial<SystemPromptsDataFile> | undefined;
+				const data: SystemPromptsDataFile = {
+					...DEFAULT_DATA,
+					...(parsed ?? {}),
+					prompts: Array.isArray(parsed?.prompts) ? (parsed?.prompts as any) : [],
+					lastModified: typeof parsed?.lastModified === 'number' ? parsed.lastModified : Date.now(),
+				};
+				this.promptsCache = this.normalizeOrders(this.sanitizeItems(data.prompts));
+				this.syncRuntimeSettings({
+					version: SYSTEM_PROMPTS_DATA_VERSION,
+					prompts: this.promptsCache,
+					lastModified: data.lastModified,
+				});
+				DebugLogger.debug('[SystemPromptDataService] 从 data.json.tars.settings.systemPromptsData 加载成功，共', this.promptsCache.length, '条系统提示词');
+				return;
+			}
 
-			this.promptsCache = this.normalizeOrders(this.sanitizeItems(data.prompts));
+			const migrated = await this.migrateFromLegacyFile();
+			if (migrated) {
+				return;
+			}
+
+			this.promptsCache = [];
 		} catch (error) {
 			DebugLogger.error('[SystemPromptDataService] 加载系统提示词配置失败，回退为空', error);
 			this.promptsCache = [];
@@ -219,31 +248,88 @@ export class SystemPromptDataService {
 
 	private async persist(): Promise<void> {
 		try {
+			const plugin = this.getPluginInstance();
+			if (!plugin) {
+				throw new Error('无法获取 formify 插件实例，无法保存系统提示词');
+			}
+
 			const data: SystemPromptsDataFile = {
 				version: SYSTEM_PROMPTS_DATA_VERSION,
 				prompts: this.promptsCache || [],
 				lastModified: Date.now(),
 			};
 
-			await this.ensureDirectoryExists();
-			await this.app.vault.adapter.write(SYSTEM_PROMPTS_DATA_FILE, JSON.stringify(data, null, 2));
+			const persisted = (await plugin.loadData()) ?? {};
+			const next = {
+				...persisted,
+				tars: {
+					...(persisted?.tars ?? {}),
+					settings: {
+						...(persisted?.tars?.settings ?? {}),
+						systemPromptsData: data,
+					},
+				},
+			};
+
+			await plugin.saveData(next);
+			this.syncRuntimeSettings(data);
 		} catch (error) {
 			DebugLogger.error('[SystemPromptDataService] 保存系统提示词配置失败', error);
 			throw error;
 		}
 	}
 
-	private async ensureDirectoryExists(): Promise<void> {
-		const dir = '.obsidian/plugins/formify';
-		const exists = await this.app.vault.adapter.exists(dir);
-		if (exists) {
+	private async migrateFromLegacyFile(): Promise<boolean> {
+		try {
+			const exists = await this.app.vault.adapter.exists(LEGACY_SYSTEM_PROMPTS_DATA_FILE);
+			if (!exists) {
+				return false;
+			}
+
+			const raw = await this.app.vault.adapter.read(LEGACY_SYSTEM_PROMPTS_DATA_FILE);
+			const parsed = JSON.parse(raw) as Partial<SystemPromptsDataFile>;
+			const data: SystemPromptsDataFile = {
+				...DEFAULT_DATA,
+				...parsed,
+				prompts: Array.isArray(parsed?.prompts) ? (parsed.prompts as any) : [],
+				lastModified: typeof parsed?.lastModified === 'number' ? parsed.lastModified : Date.now(),
+			};
+
+			this.promptsCache = this.normalizeOrders(this.sanitizeItems(data.prompts));
+			await this.persist();
+			await this.removeLegacyFile();
+			DebugLogger.info('[SystemPromptDataService] 已将旧 system-prompts.json 迁移到 data.json.tars.settings.systemPromptsData，共', this.promptsCache.length, '条');
+			return true;
+		} catch (error) {
+			DebugLogger.error('[SystemPromptDataService] 迁移旧版 system-prompts.json 失败', error);
+			this.promptsCache = [];
+			return false;
+		}
+	}
+
+	private async removeLegacyFile(): Promise<void> {
+		try {
+			const exists = await this.app.vault.adapter.exists(LEGACY_SYSTEM_PROMPTS_DATA_FILE);
+			if (!exists) {
+				return;
+			}
+			await this.app.vault.adapter.remove(LEGACY_SYSTEM_PROMPTS_DATA_FILE);
+			DebugLogger.info('[SystemPromptDataService] 已删除旧系统提示词文件', LEGACY_SYSTEM_PROMPTS_DATA_FILE);
+		} catch (error) {
+			DebugLogger.warn('[SystemPromptDataService] 删除旧系统提示词文件失败（忽略）', error);
+		}
+	}
+
+	private getPluginInstance(): FormifyPluginLike | null {
+		return ((this.app as any).plugins?.plugins?.['formify'] as FormifyPluginLike | undefined) ?? null;
+	}
+
+	private syncRuntimeSettings(systemPromptsData: SystemPromptsDataFile): void {
+		const plugin = this.getPluginInstance();
+		if (!plugin?.settings?.tars?.settings) {
 			return;
 		}
-		try {
-			await this.app.vault.adapter.mkdir(dir);
-		} catch (error) {
-			DebugLogger.debug('[SystemPromptDataService] 创建目录失败或已存在', error);
-		}
+		plugin.settings.tars.settings.systemPromptsData = systemPromptsData;
 	}
 
 	dispose(): void {
