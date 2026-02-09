@@ -20,6 +20,8 @@ interface Token {
 type QianFanOptions = BaseOptions & Pick<Optional, 'apiSecret'> & { token?: Token }
 
 const isRetryableStatus = (status: number) => status === 429 || status >= 500
+export const qianFanShouldRetryStatus = isRetryableStatus
+export const qianFanComputeTokenExp = (expiresInSeconds: number, now = Date.now()) => now + expiresInSeconds * 1000
 
 const buildQianFanApiError = (status: number, detail: string) => {
 	let message = `QianFan API error (${status}): ${detail || 'Unknown error'}`
@@ -39,6 +41,7 @@ const buildQianFanApiError = (status: number, detail: string) => {
 		status === 401 ? 'auth' : status === 403 ? 'permission' : status === 429 ? 'rate_limit' : status >= 500 ? 'server' : 'invalid_request'
 	return error
 }
+export const qianFanBuildApiError = buildQianFanApiError
 
 const mapQianFanRequestError = (error: unknown) => {
 	if (axios.isAxiosError(error)) {
@@ -78,7 +81,7 @@ const createToken = async (apiKey: string, apiSecret: string) => {
 
 	return {
 		accessToken: result.access_token,
-		exp: Date.now() + result.expires_in * 1000,
+		exp: qianFanComputeTokenExp(result.expires_in),
 		apiKey,
 		apiSecret
 	} as Token

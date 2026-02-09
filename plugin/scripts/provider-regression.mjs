@@ -16,7 +16,7 @@ const parseArgs = () => {
 	return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
 }
 
-const loadTsModule = (filePath) => {
+const loadTsModule = (filePath, mocks = {}) => {
 	const source = fs.readFileSync(filePath, 'utf-8')
 	const compiled = ts.transpileModule(source, {
 		compilerOptions: {
@@ -29,8 +29,11 @@ const loadTsModule = (filePath) => {
 	const context = vm.createContext({
 		module,
 		exports: module.exports,
-		require: () => {
-			throw new Error('External require is not supported in this regression script')
+		require: (id) => {
+			if (Object.prototype.hasOwnProperty.call(mocks, id)) {
+				return mocks[id]
+			}
+			throw new Error(`Unsupported require in regression script: ${id}`)
 		},
 		console
 	})
@@ -85,10 +88,100 @@ const runPR1 = () => {
 	}
 }
 
+const runPR2 = () => {
+	const ssePath = path.resolve(ROOT, 'src/features/tars/providers/sse.ts')
+	const { feedChunk } = loadTsModule(ssePath)
+	const qianFanPath = path.resolve(ROOT, 'src/features/tars/providers/qianFan.ts')
+	const qianFanModule = loadTsModule(qianFanPath, {
+		axios: {
+			post: async () => {
+				throw new Error('not implemented in regression test')
+			},
+			isAxiosError: () => false
+		},
+		obsidian: {
+			Notice: class {},
+			Platform: { isDesktopApp: false },
+			requestUrl: async () => ({ status: 200, json: {}, text: '' })
+		},
+		'tars/lang/helper': { t: (text) => text },
+		'.': {},
+		'../../../utils/DebugLogger': { DebugLogger: { debug: () => {} } },
+		'./sse': { feedChunk }
+	})
+
+	const { qianFanComputeTokenExp, qianFanBuildApiError } = qianFanModule
+	assert(
+		qianFanComputeTokenExp(3600, 1_000_000) === 4_600_000,
+		'PR2-1: token expiration must convert expires_in from seconds to milliseconds'
+	)
+
+	{
+		const expectedTokens = Array.from({ length: 20 }, (_, index) => `token-${index}-v`)
+		const sseText =
+			expectedTokens.map((token) => `data: ${JSON.stringify({ result: token })}\n\n`).join('') + 'data: [DONE]\n\n'
+
+		let seed = 7
+		const nextRandom = () => {
+			seed = (seed * 1103515245 + 12345) % 2147483648
+			return seed / 2147483648
+		}
+
+		const chunks = []
+		let cursor = 0
+		while (cursor < sseText.length) {
+			const size = Math.max(1, Math.floor(nextRandom() * 13))
+			chunks.push(sseText.slice(cursor, cursor + size))
+			cursor += size
+		}
+
+		let rest = ''
+		const outputs = []
+		let stopped = false
+		for (const chunk of chunks) {
+			const parsed = feedChunk(rest, chunk)
+			rest = parsed.rest
+			for (const event of parsed.events) {
+				if (event.isDone) {
+					stopped = true
+					break
+				}
+				const content = event.json?.result
+				if (content) outputs.push(content)
+			}
+			if (stopped) break
+		}
+
+		const flushed = feedChunk(rest, '\n\n')
+		for (const event of flushed.events) {
+			if (event.isDone) break
+			const content = event.json?.result
+			if (content) outputs.push(content)
+		}
+
+		assert(
+			JSON.stringify(outputs) === JSON.stringify(expectedTokens),
+			'PR2-2: random fragmented SSE should not lose or duplicate QianFan stream content'
+		)
+	}
+
+	{
+		const authError = qianFanBuildApiError(401, 'bad key')
+		assert(authError.retryable === false, 'PR2-3: 401 errors must not be retryable')
+		const rateLimitError = qianFanBuildApiError(429, 'limit')
+		assert(rateLimitError.retryable === true, 'PR2-3: 429 errors must be retryable')
+		const serverError = qianFanBuildApiError(503, 'down')
+		assert(serverError.retryable === true, 'PR2-3: 5xx errors must be retryable')
+	}
+}
+
 const main = () => {
 	const pr = parseArgs()
 	if (pr >= 1) {
 		runPR1()
+	}
+	if (pr >= 2) {
+		runPR2()
 	}
 
 	console.log(`provider-regression: PR-${pr} checks passed`)
