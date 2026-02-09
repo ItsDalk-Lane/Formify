@@ -117,22 +117,31 @@ const sendRequestFunc = (settings: ZhipuOptions): SendRequest =>
 	}
 
 
-const models = ['glm-4-plus', 'glm-4-air', 'glm-4-airx', 'glm-4-long', 'glm-4-flash', 'glm-4-flashx', 'glm-4.6', 'glm-4.5', 'glm-4.5v']
+export const ZHIPU_MODELS = [
+	'glm-4.6',
+	'glm-4.5',
+	'glm-4.5v',
+	'glm-4-plus',
+	'glm-4-air',
+	'glm-4-airx',
+	'glm-4-long',
+	'glm-4-flash',
+	'glm-4-flashx'
+]
 
 export const zhipuVendor: Vendor = {
 	name: 'Zhipu',
 	defaultOptions: {
 		apiKey: '',
 		baseURL: 'https://open.bigmodel.cn/api/paas/v4/',
-		model: models[0],
+		model: ZHIPU_MODELS[0],
 		enableWebSearch: false,
 		enableReasoning: false,
 		thinkingType: DEFAULT_ZHIPU_THINKING_TYPE,
 		parameters: {}
 	} as ZhipuOptions,
 	sendRequestFunc,
-	models,
+	models: ZHIPU_MODELS,
 	websiteToObtainKey: 'https://open.bigmodel.cn/',
 	capabilities: ['Text Generation', 'Web Search', 'Reasoning']
 }
-

@@ -3908,7 +3908,7 @@ export class TarsSettingTab {
 	addModelButtonSection = (
 		details: HTMLElement,
 		options: BaseOptions,
-		modelConfig: { url: string; requiresApiKey: boolean },
+		modelConfig: ModelFetchConfig,
 		desc: string,
 		vendorName?: string,
 		index?: number,
@@ -3930,16 +3930,28 @@ export class TarsSettingTab {
 			btn
 				.setButtonText(options.model ? options.model : t('Select the model to use'))
 				.onClick(async () => {
+					const modelOptions = options as ModelFetchOptions
 					// Check if API key is required but not provided
-					if (modelConfig.requiresApiKey && !options.apiKey) {
+					if (modelConfig.requiresApiKey && !modelOptions.apiKey) {
 						new Notice(t('Please input API key first'))
 						return
 					}
+					if (modelConfig.requiresApiSecret && !modelOptions.apiSecret) {
+						new Notice(t('Please input API secret first'))
+						return
+					}
 					try {
-						const models = await fetchModels(
-							modelConfig.url,
-							modelConfig.requiresApiKey ? options.apiKey : undefined
-						)
+						const { models, usedFallback, fallbackReason } = await fetchModels(modelConfig, modelOptions)
+						if (models.length === 0) {
+							throw new Error('No models available from remote endpoint or fallback list')
+						}
+						if (usedFallback) {
+							new Notice(
+								`⚠️ ${t('Remote model list unavailable, using built-in fallback list')}${
+									fallbackReason ? `: ${fallbackReason}` : ''
+								}`
+							)
+						}
 						const onChoose = async (selectedModel: string) => {
 							options.model = selectedModel
 							await this.saveSettings()
@@ -5237,16 +5249,127 @@ const isValidUrl = (url: string) => {
 	}
 }
 
-const fetchModels = async (url: string, apiKey?: string): Promise<string[]> => {
-	const response = await requestUrl({
-		url,
-		headers: {
-			...(apiKey && { Authorization: `Bearer ${apiKey}` }),
-			'Content-Type': 'application/json'
+type ModelFetchOptions = BaseOptions & { apiSecret?: string }
+type ModelFetchRequest = {
+	url: string
+	method?: 'GET' | 'POST'
+	headers?: Record<string, string>
+	body?: string
+}
+type ModelFetchConfig = {
+	requiresApiKey: boolean
+	requiresApiSecret?: boolean
+	fallbackModels: string[]
+	buildRequest: (options: ModelFetchOptions) => Promise<ModelFetchRequest> | ModelFetchRequest
+	parseResponse?: (result: any) => string[]
+}
+type FetchModelsResult = {
+	models: string[]
+	usedFallback: boolean
+	fallbackReason?: string
+}
+
+const sanitizeModelList = (models: unknown[]): string[] => {
+	return Array.from(
+		new Set(
+			models
+				.map((model) => (typeof model === 'string' ? model.trim() : ''))
+				.filter((model) => model.length > 0)
+		)
+	)
+}
+
+const parseOpenAICompatibleModels = (result: any): string[] => {
+	const data = Array.isArray(result?.data) ? result.data : []
+	return sanitizeModelList(data.map((model: any) => model?.id ?? model?.name))
+}
+
+const parseGenericModels = (result: any): string[] => {
+	const openAICompatible = parseOpenAICompatibleModels(result)
+	if (openAICompatible.length > 0) {
+		return openAICompatible
+	}
+	const models = Array.isArray(result?.models) ? result.models : []
+	return sanitizeModelList(models.map((model: any) => model?.id ?? model?.name ?? model))
+}
+
+const parseAnthropicModels = (result: any): string[] => {
+	const data = Array.isArray(result?.data) ? result.data : []
+	return sanitizeModelList(data.map((model: any) => model?.id ?? model?.name))
+}
+
+const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '')
+
+const appendPath = (baseURL: string | undefined, path: string, fallbackURL: string) => {
+	const trimmed = (baseURL || '').trim()
+	if (!trimmed) return fallbackURL
+	return `${trimTrailingSlash(trimmed)}${path}`
+}
+
+const resolveOrigin = (baseURL: string | undefined, fallbackOrigin: string) => {
+	try {
+		const parsed = new URL((baseURL || '').trim())
+		return parsed.origin
+	} catch {
+		return fallbackOrigin
+	}
+}
+
+const requestQianFanAccessToken = async (options: ModelFetchOptions) => {
+	const apiKey = options.apiKey
+	const apiSecret = options.apiSecret || ''
+	if (!apiKey || !apiSecret) {
+		throw new Error('QianFan requires both API key and API secret')
+	}
+	const origin = resolveOrigin(options.baseURL, 'https://aip.baidubce.com')
+	const query = new URLSearchParams({
+		grant_type: 'client_credentials',
+		client_id: apiKey,
+		client_secret: apiSecret
+	}).toString()
+	const tokenResponse = await requestUrl(`${origin}/oauth/2.0/token?${query}`)
+	if (tokenResponse.status >= 400) {
+		throw new Error(`QianFan token request failed (${tokenResponse.status})`)
+	}
+	const token = tokenResponse.json?.access_token
+	if (!token || typeof token !== 'string') {
+		throw new Error('QianFan token response is missing access_token')
+	}
+	return token
+}
+
+const fetchModels = async (config: ModelFetchConfig, options: ModelFetchOptions): Promise<FetchModelsResult> => {
+	try {
+		const request = await config.buildRequest(options)
+		const response = await requestUrl({
+			url: request.url,
+			method: request.method || 'GET',
+			body: request.body,
+			headers: {
+				'Content-Type': 'application/json',
+				...(request.headers || {})
+			}
+		})
+		if (response.status >= 400) {
+			throw new Error(`Model request failed (${response.status})`)
 		}
-	})
-	const result = response.json
-	return result.data.map((model: { id: string }) => model.id)
+		const parser = config.parseResponse ?? parseGenericModels
+		const models = sanitizeModelList(parser(response.json))
+		if (models.length > 0) {
+			return { models, usedFallback: false }
+		}
+		throw new Error('Model response did not include valid model IDs')
+	} catch (error) {
+		const fallbackModels = sanitizeModelList(config.fallbackModels)
+		if (fallbackModels.length > 0) {
+			return {
+				models: fallbackModels,
+				usedFallback: true,
+				fallbackReason: error instanceof Error ? error.message : String(error)
+			}
+		}
+		throw error
+	}
 }
 
 const normalizeBaseUrl = (baseURL?: string) => {
@@ -5264,21 +5387,108 @@ const fetchOllamaLocalModels = async (baseURL?: string): Promise<string[]> => {
 }
 
 // Model fetching configurations for different vendors
-const MODEL_FETCH_CONFIGS = {
+const MODEL_FETCH_CONFIGS: Record<string, ModelFetchConfig> = {
 	[siliconFlowVendor.name]: {
-		url: 'https://api.siliconflow.cn/v1/models?type=text&sub_type=chat',
-		requiresApiKey: true
+		requiresApiKey: true,
+		fallbackModels: [...siliconFlowVendor.models],
+		buildRequest: () => ({
+			url: 'https://api.siliconflow.cn/v1/models?type=text&sub_type=chat'
+		}),
+		parseResponse: parseOpenAICompatibleModels
 	},
 	[openRouterVendor.name]: {
-		url: 'https://openrouter.ai/api/v1/models',
-		requiresApiKey: false
+		requiresApiKey: false,
+		fallbackModels: [...openRouterVendor.models],
+		buildRequest: () => ({
+			url: 'https://openrouter.ai/api/v1/models'
+		}),
+		parseResponse: parseOpenAICompatibleModels
 	},
 	[kimiVendor.name]: {
-		url: 'https://api.moonshot.cn/v1/models',
-		requiresApiKey: true
+		requiresApiKey: true,
+		fallbackModels: [...kimiVendor.models],
+		buildRequest: () => ({
+			url: 'https://api.moonshot.cn/v1/models'
+		}),
+		parseResponse: parseOpenAICompatibleModels
 	},
 	[grokVendor.name]: {
-		url: 'https://api.x.ai/v1/models',
-		requiresApiKey: true
+		requiresApiKey: true,
+		fallbackModels: [...grokVendor.models],
+		buildRequest: () => ({
+			url: 'https://api.x.ai/v1/models'
+		}),
+		parseResponse: parseOpenAICompatibleModels
+	},
+	[claudeVendor.name]: {
+		requiresApiKey: true,
+		fallbackModels: [...claudeVendor.models],
+		buildRequest: (options) => ({
+			url: `${resolveOrigin(options.baseURL, 'https://api.anthropic.com')}/v1/models`,
+			headers: {
+				'x-api-key': options.apiKey,
+				'anthropic-version': '2023-06-01'
+			}
+		}),
+		parseResponse: parseAnthropicModels
+	},
+	[qwenVendor.name]: {
+		requiresApiKey: true,
+		fallbackModels: [...qwenVendor.models],
+		buildRequest: (options) => ({
+			url: appendPath(options.baseURL, '/models', 'https://dashscope.aliyuncs.com/compatible-mode/v1/models'),
+			headers: {
+				Authorization: `Bearer ${options.apiKey}`
+			}
+		}),
+		parseResponse: parseOpenAICompatibleModels
+	},
+	[zhipuVendor.name]: {
+		requiresApiKey: true,
+		fallbackModels: [...zhipuVendor.models],
+		buildRequest: (options) => ({
+			url: appendPath(options.baseURL, '/models', 'https://open.bigmodel.cn/api/paas/v4/models'),
+			headers: {
+				Authorization: `Bearer ${options.apiKey}`
+			}
+		}),
+		parseResponse: parseOpenAICompatibleModels
+	},
+	[deepSeekVendor.name]: {
+		requiresApiKey: true,
+		fallbackModels: [...deepSeekVendor.models],
+		buildRequest: (options) => ({
+			url: appendPath(options.baseURL, '/models', 'https://api.deepseek.com/models'),
+			headers: {
+				Authorization: `Bearer ${options.apiKey}`
+			}
+		}),
+		parseResponse: parseOpenAICompatibleModels
+	},
+	[qianFanVendor.name]: {
+		requiresApiKey: true,
+		requiresApiSecret: true,
+		fallbackModels: [...qianFanVendor.models],
+		buildRequest: async (options) => {
+			const token = await requestQianFanAccessToken(options)
+			return {
+				url: `${resolveOrigin(options.baseURL, 'https://aip.baidubce.com')}/v2/models`,
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			}
+		},
+		parseResponse: parseGenericModels
+	},
+	[doubaoImageVendor.name]: {
+		requiresApiKey: true,
+		fallbackModels: [...doubaoImageVendor.models],
+		buildRequest: (options) => ({
+			url: `${resolveOrigin(options.baseURL, 'https://ark.cn-beijing.volces.com')}/api/v3/models`,
+			headers: {
+				Authorization: `Bearer ${options.apiKey}`
+			}
+		}),
+		parseResponse: parseGenericModels
 	}
-} as const
+}

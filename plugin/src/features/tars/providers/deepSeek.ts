@@ -216,20 +216,19 @@ const transformMessagesForDeepSeek = (messages: Message[]): any[] => {
 	})
 }
 
-const models = ['deepseek-chat', 'deepseek-reasoner']
+export const DEEPSEEK_MODELS = ['deepseek-chat', 'deepseek-reasoner']
 
 export const deepSeekVendor: Vendor = {
 	name: 'DeepSeek',
 	defaultOptions: {
 		apiKey: '',
 		baseURL: 'https://api.deepseek.com',
-		model: models[0],
+		model: DEEPSEEK_MODELS[0],
 		parameters: {},
 		enableReasoning: false // 默认关闭推理功能
 	} as DeepSeekOptions,
 	sendRequestFunc,
-	models,
+	models: DEEPSEEK_MODELS,
 	websiteToObtainKey: 'https://platform.deepseek.com',
 	capabilities: ['Text Generation', 'Reasoning', 'Tool Calling', 'Structured Output']
 }
-

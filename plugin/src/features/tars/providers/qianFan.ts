@@ -211,7 +211,7 @@ const sendRequestFunc = (settings: QianFanOptions): SendRequest =>
 		}
 	}
 
-const models = [
+export const QIANFAN_MODELS = [
 	'ernie-4.0-8k-latest',
 	'ernie-4.0-turbo-8k',
 	'ernie-3.5-128k',
@@ -229,11 +229,11 @@ export const qianFanVendor: Vendor = {
 		apiKey: '',
 		apiSecret: '',
 		baseURL: 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat',
-		model: models[0],
+		model: QIANFAN_MODELS[0],
 		parameters: {}
 	} as QianFanOptions,
 	sendRequestFunc,
-	models: models,
+	models: QIANFAN_MODELS,
 	websiteToObtainKey: 'https://qianfan.cloud.baidu.com',
 	capabilities: ['Text Generation']
 }

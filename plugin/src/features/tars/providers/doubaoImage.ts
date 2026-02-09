@@ -72,7 +72,7 @@ const extractImageUrls = (text: string | undefined): string[] => {
 }
 
 // 豆包图像生成支持的模型列表
-const models = [
+export const DOUBAO_IMAGE_MODELS = [
 	'doubao-seedream-4-0-250828',
 	'doubao-seedream-3.0-t2i'
 ]
@@ -391,7 +391,7 @@ export const doubaoImageVendor: Vendor = {
 	defaultOptions: {
 		apiKey: '',
 		baseURL: 'https://ark.cn-beijing.volces.com/api/v3/images/generations',
-		model: models[0],
+		model: DOUBAO_IMAGE_MODELS[0],
 		displayWidth: DEFAULT_DOUBAO_IMAGE_OPTIONS.displayWidth,
 		size: DEFAULT_DOUBAO_IMAGE_OPTIONS.size,
 		response_format: DEFAULT_DOUBAO_IMAGE_OPTIONS.response_format,
@@ -403,7 +403,7 @@ export const doubaoImageVendor: Vendor = {
 		parameters: {}
 	} as DoubaoImageOptions,
 	sendRequestFunc,
-	models,
+	models: DOUBAO_IMAGE_MODELS,
 	websiteToObtainKey: 'https://www.volcengine.com',
 	capabilities: ['Image Generation']
 }

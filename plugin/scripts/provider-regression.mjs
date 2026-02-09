@@ -367,6 +367,60 @@ const runPR5 = () => {
 	assert(siliconFlowFile.includes('withToolMessageContext'), 'PR5-3: SiliconFlow should use withToolMessageContext')
 }
 
+const runPR6 = () => {
+	const settingTabText = fs.readFileSync(path.resolve(ROOT, 'src/features/tars/settingTab.ts'), 'utf-8')
+	for (const vendorName of ['claudeVendor.name', 'qwenVendor.name', 'zhipuVendor.name', 'deepSeekVendor.name', 'qianFanVendor.name', 'doubaoImageVendor.name']) {
+		assert(
+			settingTabText.includes(`[${vendorName}]`),
+			`PR6-1: MODEL_FETCH_CONFIGS should include ${vendorName}`
+		)
+	}
+	assert(
+		settingTabText.includes('fallbackModels'),
+		'PR6-1: model fetch configs should define fallbackModels for remote fetch failures'
+	)
+	assert(
+		settingTabText.includes('/v2/models'),
+		'PR6-2: QianFan model fetching should try OpenAI-compatible /v2/models endpoint first'
+	)
+	assert(
+		settingTabText.includes('/api/v3/models'),
+		'PR6-2: DoubaoImage model fetching should try Ark /api/v3/models endpoint first'
+	)
+
+	const qwenPath = path.resolve(ROOT, 'src/features/tars/providers/qwen.ts')
+	const qwenModule = loadTsModule(qwenPath, {
+		openai: class MockOpenAI {},
+		'tars/lang/helper': { t: (text) => text },
+		'.': {},
+		'./utils': {
+			buildReasoningBlockEnd: () => '',
+			buildReasoningBlockStart: () => '',
+			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } })
+		}
+	})
+	assert(
+		qwenModule.qwenVendor.defaultOptions.model === 'qwen-plus-latest',
+		'PR6-3: Qwen default model should be updated to a newer compatible default'
+	)
+
+	const zhipuPath = path.resolve(ROOT, 'src/features/tars/providers/zhipu.ts')
+	const zhipuModule = loadTsModule(zhipuPath, {
+		openai: class MockOpenAI {},
+		'tars/lang/helper': { t: (text) => text },
+		'.': {},
+		'../../../utils/DebugLogger': { DebugLogger: { debug: () => {} } },
+		'./utils': {
+			buildReasoningBlockEnd: () => '',
+			buildReasoningBlockStart: () => ''
+		}
+	})
+	assert(
+		zhipuModule.zhipuVendor.defaultOptions.model === 'glm-4.6',
+		'PR6-3: Zhipu default model should be updated to a newer compatible default'
+	)
+}
+
 const main = async () => {
 	const pr = parseArgs()
 	if (pr >= 1) {
@@ -383,6 +437,9 @@ const main = async () => {
 	}
 	if (pr >= 5) {
 		runPR5()
+	}
+	if (pr >= 6) {
+		runPR6()
 	}
 
 	console.log(`provider-regression: PR-${pr} checks passed`)

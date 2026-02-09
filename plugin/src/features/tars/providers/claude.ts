@@ -175,7 +175,7 @@ const sendRequestFunc = (settings: ClaudeOptions): SendRequest =>
 		}
 	}
 
-const models = [
+export const CLAUDE_MODELS = [
 	'claude-sonnet-4-0',
 	'claude-opus-4-0',
 	'claude-3-7-sonnet-latest',
@@ -189,7 +189,7 @@ export const claudeVendor: Vendor = {
 	defaultOptions: {
 		apiKey: '',
 		baseURL: 'https://api.anthropic.com',
-		model: models[0],
+		model: CLAUDE_MODELS[0],
 		max_tokens: 8192,
 		enableWebSearch: false,
 		enableThinking: false,
@@ -197,7 +197,7 @@ export const claudeVendor: Vendor = {
 		parameters: {}
 	} as ClaudeOptions,
 	sendRequestFunc,
-	models,
+	models: CLAUDE_MODELS,
 	websiteToObtainKey: 'https://console.anthropic.com',
 	capabilities: ['Text Generation', 'Web Search', 'Reasoning', 'Image Vision', 'PDF Vision']
 }

@@ -22,17 +22,17 @@ const KNOWN_THINKING_MODELS = [
 ]
 
 // 完整的模型列表（包含所有已知模型）
-const models = [
-	'qwen-turbo',
+export const QWEN_MODELS = [
+	'qwen-plus-latest',
 	'qwen-plus',
+	'qwen-turbo-latest',
+	'qwen-turbo',
+	'qwen3-max-preview',
 	'qwen-max',
 	'qwen-vl-max',
-	'qwen3-max-preview',
-	'qwen-plus-latest',
 	'qwen-plus-2025-04-28',
 	'qwen-flash',
 	'qwen-flash-2025-07-28',
-	'qwen-turbo-latest',
 	'qwen-turbo-2025-04-28'
 ]
 
@@ -178,11 +178,11 @@ export const qwenVendor: Vendor = {
 	defaultOptions: {
 		apiKey: '',
 		baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-		model: models[0],
+		model: QWEN_MODELS[0],
 		parameters: {}
 	},
 	sendRequestFunc,
-	models,
+	models: QWEN_MODELS,
 	websiteToObtainKey: 'https://dashscope.console.aliyun.com',
 	capabilities: ['Text Generation', 'Image Vision', 'Reasoning']
 }
