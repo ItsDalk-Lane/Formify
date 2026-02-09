@@ -2,6 +2,7 @@ import OpenAI from 'openai'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl } from './utils'
+import { withToolMessageContext } from './messageFormat'
 
 // SiliconFlow选项接口，扩展基础选项以支持推理功能
 export interface SiliconFlowOptions extends BaseOptions {
@@ -89,10 +90,10 @@ const formatMsg = async (msg: Message, resolveEmbedAsBinary: ResolveEmbedAsBinar
 			text: msg.content
 		})
 	}
-	return {
+	return withToolMessageContext(msg, {
 		role: msg.role,
 		content
-	}
+	})
 }
 
 export const siliconFlowVendor: Vendor = {
@@ -109,4 +110,3 @@ export const siliconFlowVendor: Vendor = {
 	websiteToObtainKey: 'https://siliconflow.cn',
 	capabilities: ['Text Generation', 'Image Vision', 'Reasoning']
 }
-

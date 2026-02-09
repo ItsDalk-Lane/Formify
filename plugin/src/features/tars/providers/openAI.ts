@@ -7,6 +7,7 @@ import {
 	buildToolCallsBlock,
 	convertEmbedToImageUrl
 } from './utils'
+import { withToolMessageContext } from './messageFormat'
 
 export interface OpenAIOptions extends BaseOptions {
 	enableReasoning?: boolean
@@ -172,10 +173,10 @@ const formatMsg = async (msg: Message, resolveEmbedAsBinary: ResolveEmbedAsBinar
 			text: msg.content
 		})
 	}
-	return {
+	return withToolMessageContext(msg, {
 		role: msg.role,
 		content
-	}
+	})
 }
 
 const formatMsgForResponses = async (msg: Message, resolveEmbedAsBinary: ResolveEmbedAsBinary) => {

@@ -244,6 +244,9 @@ const runPR4 = () => {
 			buildReasoningBlockStart: () => '',
 			buildToolCallsBlock: () => '',
 			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } })
+		},
+		'./messageFormat': {
+			withToolMessageContext: (_msg, payload) => payload
 		}
 	})
 	assert(
@@ -300,6 +303,70 @@ const runPR4 = () => {
 	)
 }
 
+const runPR5 = () => {
+	const messageFormatPath = path.resolve(ROOT, 'src/features/tars/providers/messageFormat.ts')
+	const { withToolMessageContext } = loadTsModule(messageFormatPath, {
+		'.': {}
+	})
+
+	const toolCalls = [
+		{
+			id: 'call_weather',
+			type: 'function',
+			function: { name: 'weather', arguments: '{"city":"beijing"}' }
+		},
+		{
+			id: 'call_time',
+			type: 'function',
+			function: { name: 'time', arguments: '{"timezone":"UTC"}' }
+		}
+	]
+
+	const assistantPayload = withToolMessageContext(
+		{
+			role: 'assistant',
+			content: '',
+			tool_calls: toolCalls,
+			reasoning_content: 'need tools'
+		},
+		{
+			role: 'assistant',
+			content: ''
+		}
+	)
+	assert(Array.isArray(assistantPayload.tool_calls), 'PR5-1: assistant tool_calls should be preserved')
+	assert(assistantPayload.tool_calls.length === 2, 'PR5-1: parallel tool_calls should remain isolated')
+	assert(
+		assistantPayload.tool_calls[0].function.arguments === '{"city":"beijing"}',
+		'PR5-1: first tool call arguments should remain unchanged'
+	)
+	assert(
+		assistantPayload.tool_calls[1].function.arguments === '{"timezone":"UTC"}',
+		'PR5-1: second tool call arguments should remain unchanged'
+	)
+	assert(assistantPayload.reasoning_content === 'need tools', 'PR5-1: assistant reasoning_content should be preserved')
+
+	const toolPayload = withToolMessageContext(
+		{
+			role: 'tool',
+			content: '{"temp": 23}',
+			tool_call_id: 'call_weather'
+		},
+		{
+			role: 'tool',
+			content: '{"temp": 23}'
+		}
+	)
+	assert(toolPayload.tool_call_id === 'call_weather', 'PR5-2: tool message should carry tool_call_id')
+
+	const openAIFile = fs.readFileSync(path.resolve(ROOT, 'src/features/tars/providers/openAI.ts'), 'utf-8')
+	const openRouterFile = fs.readFileSync(path.resolve(ROOT, 'src/features/tars/providers/openRouter.ts'), 'utf-8')
+	const siliconFlowFile = fs.readFileSync(path.resolve(ROOT, 'src/features/tars/providers/siliconflow.ts'), 'utf-8')
+	assert(openAIFile.includes('withToolMessageContext'), 'PR5-3: OpenAI should use withToolMessageContext')
+	assert(openRouterFile.includes('withToolMessageContext'), 'PR5-3: OpenRouter should use withToolMessageContext')
+	assert(siliconFlowFile.includes('withToolMessageContext'), 'PR5-3: SiliconFlow should use withToolMessageContext')
+}
+
 const main = async () => {
 	const pr = parseArgs()
 	if (pr >= 1) {
@@ -313,6 +380,9 @@ const main = async () => {
 	}
 	if (pr >= 4) {
 		runPR4()
+	}
+	if (pr >= 5) {
+		runPR5()
 	}
 
 	console.log(`provider-regression: PR-${pr} checks passed`)

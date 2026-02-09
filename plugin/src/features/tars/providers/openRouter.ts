@@ -2,6 +2,7 @@ import { EmbedCache, Notice } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SaveAttachment, SendRequest, Vendor } from '.'
 import { arrayBufferToBase64, buildReasoningBlockStart, buildReasoningBlockEnd, buildToolCallsBlock, getCapabilityEmoji, getMimeTypeFromFilename } from './utils'
+import { withToolMessageContext } from './messageFormat'
 
 // OpenRouter Reasoning Effort 级别
 export type OpenRouterReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
@@ -898,10 +899,10 @@ const formatMsg = async (msg: Message, resolveEmbedAsBinary: ResolveEmbedAsBinar
 	
 	// 如果没有任何图片（既没有文本中的 URL，也没有嵌入的图片），返回简单的文本格式
 	if (textImageUrls.length === 0 && embedContents.length === 0) {
-		return {
+		return withToolMessageContext(msg, {
 			role: msg.role,
 			content: msg.content
-		}
+		})
 	}
 	
 	// 有图片时，使用数组格式（OpenAI 标准的 multimodal 格式）
@@ -935,10 +936,10 @@ const formatMsg = async (msg: Message, resolveEmbedAsBinary: ResolveEmbedAsBinar
 	// 添加嵌入的图片和文件
 	content.push(...embedContents)
 	
-	return {
+	return withToolMessageContext(msg, {
 		role: msg.role,
 		content
-	}
+	})
 }
 
 export const openRouterVendor: Vendor = {
@@ -965,4 +966,3 @@ export const openRouterVendor: Vendor = {
 	websiteToObtainKey: 'https://openrouter.ai',
 	capabilities: ['Text Generation', 'Image Vision', 'PDF Vision', 'Web Search', 'Image Generation', 'Tool Calling', 'Reasoning']
 }
-
