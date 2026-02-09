@@ -2,6 +2,7 @@ import axios from 'axios'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl } from './utils'
+import { feedChunk, ParsedSSEEvent } from './sse'
 
 // Grok选项接口，扩展基础选项以支持推理功能
 export interface GrokOptions extends BaseOptions {
@@ -38,54 +39,64 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		const reader = response.data.pipeThrough(new TextDecoderStream()).getReader()
 
 		let reading = true
+		let sseRest = ''
 		let startReasoning = false
 		let reasoningStartMs: number | null = null
 		const grokOptions = settings as GrokOptions
 		const isReasoningEnabled = grokOptions.enableReasoning ?? false
+
+		const processEvents = async function* (events: ParsedSSEEvent[]) {
+			for (const event of events) {
+				if (event.isDone) {
+					reading = false
+					break
+				}
+				if (event.parseError) {
+					console.warn('[Grok] Failed to parse SSE JSON:', event.parseError)
+				}
+				const payload = event.json as any
+				if (!payload || !payload.choices || !payload.choices[0]?.delta) {
+					continue
+				}
+				const delta = payload.choices[0].delta
+				const reasonContent = delta.reasoning_content
+
+				if (reasonContent && isReasoningEnabled) {
+					if (!startReasoning) {
+						startReasoning = true
+						reasoningStartMs = Date.now()
+						yield buildReasoningBlockStart(reasoningStartMs)
+					}
+					yield reasonContent
+				} else {
+					if (startReasoning) {
+						startReasoning = false
+						const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+						reasoningStartMs = null
+						yield buildReasoningBlockEnd(durationMs)
+					}
+					if (delta.content) {
+						yield delta.content
+					}
+				}
+			}
+		}
 		
 		while (reading) {
 			const { done, value } = await reader.read()
 			if (done) {
+				const flushed = feedChunk(sseRest, '\n\n')
+				sseRest = flushed.rest
+				for await (const text of processEvents(flushed.events)) {
+					yield text
+				}
 				reading = false
 				break
 			}
-
-			const parts = value.split('\n')
-
-			for (const part of parts) {
-				if (part.includes('data: [DONE]')) {
-					reading = false
-					break
-				}
-
-				const trimmedPart = part.replace(/^data: /, '').trim()
-				if (trimmedPart) {
-					const data = JSON.parse(trimmedPart)
-					if (data.choices && data.choices[0].delta) {
-						const delta = data.choices[0].delta
-						const reasonContent = delta.reasoning_content
-
-						// 只有在启用推理功能时才显示推理内容
-						if (reasonContent && isReasoningEnabled) {
-							if (!startReasoning) {
-								startReasoning = true
-								reasoningStartMs = Date.now()
-								yield buildReasoningBlockStart(reasoningStartMs)
-							}
-							yield reasonContent // 直接输出，不加任何前缀
-						} else {
-							if (startReasoning) {
-								startReasoning = false
-								const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
-								reasoningStartMs = null
-								yield buildReasoningBlockEnd(durationMs)
-							}
-							if (delta.content) {
-								yield delta.content
-							}
-						}
-					}
-				}
+			const parsed = feedChunk(sseRest, value)
+			sseRest = parsed.rest
+			for await (const text of processEvents(parsed.events)) {
+				yield text
 			}
 		}
 
@@ -142,4 +153,3 @@ export const grokVendor: Vendor = {
 	websiteToObtainKey: 'https://x.ai',
 	capabilities: ['Text Generation', 'Reasoning', 'Image Vision']
 }
-

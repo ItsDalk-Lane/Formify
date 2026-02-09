@@ -2,6 +2,7 @@ import { Notice, requestUrl } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SaveAttachment, SendRequest, Vendor } from '.'
 import { DebugLogger } from '../../../utils/DebugLogger'
+import { feedChunk } from './sse'
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp']
 
@@ -128,40 +129,19 @@ export interface DoubaoImageOptions extends BaseOptions {
  */
 function parseSSEResponse(text: string): { data: any[] } {
 	const result: any[] = []
-	const lines = text.trim().split('\n')
-	
-	let currentEvent = ''
-	let currentData = ''
-	
-	for (const line of lines) {
-		if (line.startsWith('event:')) {
-			currentEvent = line.substring(6).trim()
-		} else if (line.startsWith('data:')) {
-			currentData = line.substring(5).trim()
-			
-			// 如果是 [DONE] 标记，跳过
-			if (currentData === '[DONE]') {
-				continue
-			}
-			
-			// 尝试解析 JSON 数据
-			try {
-				const jsonData = JSON.parse(currentData)
-				
-				// 如果是图片数据事件，添加到结果中
-				if (currentEvent === 'image' || currentEvent === '' || jsonData.url || jsonData.b64_json) {
-					result.push(jsonData)
-				}
-			} catch (error) {
-				console.warn('Failed to parse SSE data line:', currentData, error)
-			}
-			
-			// 重置
-			currentEvent = ''
-			currentData = ''
+	const parsed = feedChunk('', `${text}\n\n`)
+	for (const event of parsed.events) {
+		if (event.isDone) continue
+		if (event.parseError) {
+			console.warn('Failed to parse SSE data line:', event.data, event.parseError)
+			continue
+		}
+		const jsonData = event.json as any
+		if (!jsonData) continue
+		if (event.event === 'image' || !event.event || jsonData.url || jsonData.b64_json) {
+			result.push(jsonData)
 		}
 	}
-	
 	return { data: result }
 }
 
