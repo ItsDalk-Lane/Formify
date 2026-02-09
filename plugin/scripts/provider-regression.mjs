@@ -492,6 +492,45 @@ const runPR7 = async () => {
 	}
 }
 
+const runPR8 = () => {
+	const openRouterPath = path.resolve(ROOT, 'src/features/tars/providers/openRouter.ts')
+	const openRouterSource = fs.readFileSync(openRouterPath, 'utf-8')
+	assert(
+		openRouterSource.includes('data.response_format = imageResponseFormat'),
+		'PR8-1: OpenRouter imageResponseFormat must be written into request body response_format'
+	)
+
+	const settingTabPath = path.resolve(ROOT, 'src/features/tars/settingTab.ts')
+	const settingTabSource = fs.readFileSync(settingTabPath, 'utf-8')
+	assert(
+		settingTabSource.includes('response_format 字段'),
+		'PR8-2: settings should explain that imageResponseFormat maps to request body response_format'
+	)
+	assert(
+		settingTabSource.includes('参数生效范围'),
+		'PR8-2: settings should include effective-scope hints for model-specific parameters'
+	)
+
+	const compatibilityDocPath = path.resolve(ROOT, '../docs/provider-compatibility.md')
+	assert(fs.existsSync(compatibilityDocPath), 'PR8-3: docs/provider-compatibility.md must exist')
+	const compatibilityDoc = fs.readFileSync(compatibilityDocPath, 'utf-8')
+	assert(
+		compatibilityDoc.includes('chat.completions') && compatibilityDoc.includes('responses'),
+		'PR8-3: compatibility document should include chat/responses routing notes'
+	)
+
+	const readmePath = path.resolve(ROOT, '../README.md')
+	const readmeText = fs.readFileSync(readmePath, 'utf-8')
+	assert(
+		readmeText.includes('docs/provider-compatibility.md'),
+		'PR8-4: README should link to provider compatibility document'
+	)
+	assert(
+		readmeText.includes('chat.completions -> responses'),
+		'PR8-4: README should include migration notes for chat to responses routing'
+	)
+}
+
 const main = async () => {
 	const pr = parseArgs()
 	if (pr >= 1) {
@@ -514,6 +553,9 @@ const main = async () => {
 	}
 	if (pr >= 7) {
 		await runPR7()
+	}
+	if (pr >= 8) {
+		runPR8()
 	}
 
 	console.log(`provider-regression: PR-${pr} checks passed`)

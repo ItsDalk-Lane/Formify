@@ -205,7 +205,7 @@ form-flow/
 
 - **@anthropic-ai/sdk** - Claude API
 - **openai** - OpenAI API
-- **@google/generative-ai** - Gemini API
+- **@google/genai** - Gemini API（失败时回退 OpenAI-compatible 路径）
 - **ollama** - 本地 Ollama 模型
 - **axios** - HTTP 客户端
 - **gpt-tokenizer** - Token 计数
@@ -240,6 +240,23 @@ form-flow/
 2. 进入 "Skills" 标签
 3. 创建新技能或技能组
 4. 配置提示词和参数
+
+## 🔄 Provider 兼容性与迁移说明
+
+### chat.completions -> responses 路由策略
+
+- OpenAI / Azure / Grok：当“启用推理”开启时，优先使用 `responses`；关闭时走 `chat.completions` 兼容路径。
+- OpenRouter：推理场景走 `responses`；图像生成模型会写入 `response_format`。
+- 参数映射：`max_tokens` 在 `responses` 路径下会映射为 `max_output_tokens`。
+
+### Provider 能力矩阵
+
+- 详细兼容矩阵、模型拉取策略、已知限制见：`docs/provider-compatibility.md`
+
+### 已知限制
+
+- 不同 Provider 的 Tool Calling 返回格式存在差异，插件已做统一格式透传但仍依赖模型原生能力。
+- 第三方模型上下线频繁，建议优先使用“远端拉取模型 + 静态兜底”的模型选择逻辑。
 
 ## 🤝 贡献指南
 

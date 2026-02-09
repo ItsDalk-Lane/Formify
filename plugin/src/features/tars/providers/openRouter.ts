@@ -271,6 +271,7 @@ const sendRequestFunc = (settings: OpenRouterOptions): SendRequest =>
 		// 如果模型支持图像生成，添加 modalities 和 image_config
 		if (supportsImageGeneration) {
 			data.modalities = ['image', 'text']
+			data.response_format = imageResponseFormat
 			
 			// 配置图片宽高比
 			if (imageAspectRatio) {

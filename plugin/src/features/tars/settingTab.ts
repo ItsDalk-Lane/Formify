@@ -4921,6 +4921,10 @@ export class TarsSettingTab {
 	 * 支持配置图片宽高比、流式生成、格式和保存方式
 	 */
 	addOpenRouterImageGenerationSections = (details: HTMLElement, options: OpenRouterOptions) => {
+		new Setting(details)
+			.setName('参数生效范围')
+			.setDesc('以下图像参数仅在支持 Image Generation 的 OpenRouter 模型生效；文本模型会忽略这些参数。')
+
 		// 图片宽高比配置
 		new Setting(details)
 			.setName('图片宽高比')
@@ -4962,7 +4966,7 @@ export class TarsSettingTab {
 		// 图片格式选择
 		new Setting(details)
 			.setName('图片返回格式')
-			.setDesc('选择图片的返回格式：Base64（嵌入在响应中）或 URL（提供下载链接）')
+			.setDesc('选择图片的返回格式。该值会写入请求体 response_format 字段，仅图像生成模型生效。')
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOptions({
@@ -5015,7 +5019,7 @@ export class TarsSettingTab {
 		// Reasoning 努力级别配置
 		new Setting(details)
 			.setName('推理努力级别')
-			.setDesc('控制模型推理的计算努力程度。更高的级别会进行更深入的推理，但会消耗更多 token')
+			.setDesc('仅在启用推理且模型走 Responses API 路径时生效。更高级别推理更深，但消耗更多 token。')
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOptions({
