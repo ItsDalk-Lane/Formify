@@ -1,33 +1,91 @@
 .form--CpsFormFieldSettingHeader {
 	display: flex;
-	align-items: center;
-	cursor: pointer;
+	flex-direction: column;
+	align-items: stretch;
 	padding: var(--size-4-1) var(--size-4-2);
 	font-size: var(--font-ui-small);
 	color: var(--text-muted);
-	gap: 4px;
-	white-space: nowrap;
+	gap: 8px;
 	position: relative;
 	width: 100%;
 	border-bottom: 1px solid var(--color-base-20);
 	border-radius: var(--radius-m) var(--radius-m) 0 0;
 }
 
+.form--CpsFormFieldSettingHeaderMain {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+}
+
 .form--CpsFormFieldSettingToggle {
-	margin-right: 4px;
+	flex-shrink: 0;
 }
 
 .form--CpsFormFieldSettingHeaderControl {
 	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
 }
 
-.form--CpsFormFieldSettingHeaderControl
-	.form--FormTypeSelectButton {
+.form--CpsFormFieldSettingTypeSelect {
+	display: flex;
+	flex-shrink: 0;
+}
+
+.form--CpsFormFieldSettingTypeSelect .form--FormTypeSelectButton {
 	color: var(--text-faint);
 }
 
 .form--CpsFormFieldSettingHeader .form--DragHandler {
 	height: 30px;
+	flex-shrink: 0;
+}
+
+button.form--CpsFormFieldSettingTitlePreview {
+	all: unset;
+	display: flex;
+	align-items: center;
+	flex: 1;
+	min-width: 0;
+	padding: 4px 8px;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+}
+
+button.form--CpsFormFieldSettingTitlePreview:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+button.form--CpsFormFieldSettingTitlePreview:focus-visible {
+	box-shadow: 0 0 0 3px var(--background-modifier-border-focus);
+}
+
+.form--CpsFormFieldSettingTitlePreviewText {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-normal);
+}
+
+.form--CpsFormFieldSettingTitlePreviewText[data-empty="true"] {
+	color: var(--text-faint);
+}
+
+.form--CpsFormFieldSettingHeaderSecondary {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	width: 100%;
+}
+
+.form--CpsFormFieldSettingHeaderSecondary
+	.form--VisibilityConditionButton {
+	flex-shrink: 0;
 }
 
 .form--CpsFormFieldSettingPopover {
@@ -100,6 +158,7 @@ button.form--CpsFormFieldSettingPopoverClose {
 	flex: 1;
 	flex-direction: column;
 	gap: 4px;
+	min-width: 0;
 }
 
 .form--CpsFormFieldSettingLabelInlineInput[data-conflict="true"] {
@@ -148,4 +207,40 @@ button.form--CpsFormFieldSettingPopoverClose {
 	gap: 4px;
 	padding: 0;
 	text-decoration: underline;
+}
+
+button.form--VisibilityConditionButton {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--size-2-1) var(--size-2-3);
+	border-radius: var(--radius-s);
+	color: var(--text-faint);
+	font-size: var(--font-ui-small);
+	background: transparent;
+	border: none;
+	cursor: pointer;
+	box-shadow: none;
+	transition: all 0.2s ease;
+	gap: 4px;
+}
+
+button.form--VisibilityConditionButton[data-has-condition="true"] {
+	color: var(--text-accent);
+}
+
+button.form--VisibilityConditionButton:hover {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+@media (max-width: 768px) {
+	.form--CpsFormFieldSettingHeaderSecondary {
+		flex-direction: column;
+	}
+
+	.form--CpsFormFieldSettingHeaderSecondary
+		.form--VisibilityConditionButton {
+		align-self: flex-end;
+	}
 }
