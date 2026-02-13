@@ -54,14 +54,6 @@ export const CALLOUT_BLOCK_END = '\n\n'
 export const REASONING_BLOCK_START_MARKER = '{{FF_REASONING_START}}'
 export const REASONING_BLOCK_END_MARKER = '{{FF_REASONING_END}}'
 
-// 工具调用标记（用于在流式文本中透传 tool_calls 元信息，不直接展示给用户）
-export const TOOL_CALLS_START_MARKER = '{{FF_TOOL_CALLS_START}}'
-export const TOOL_CALLS_END_MARKER = '{{FF_TOOL_CALLS_END}}'
-
-export const buildToolCallsBlock = (payload: unknown) => {
-	return `${TOOL_CALLS_START_MARKER}${JSON.stringify(payload)}${TOOL_CALLS_END_MARKER}`
-}
-
 export const formatReasoningDuration = (durationMs: number) => {
 	const centiSeconds = Math.max(1, Math.round(durationMs / 10))
 	return `${(centiSeconds / 100).toFixed(2)}s`
@@ -118,8 +110,6 @@ export const getCapabilityEmoji = (capability: Capability): string => {
 			return '✏️'
 		case 'Web Search':
 			return '🔍'
-		case 'Tool Calling':
-			return '🛠️'
 		case 'Reasoning':
 			return '🧠'
 		case 'Structured Output':
@@ -226,7 +216,6 @@ export const getEnabledCapabilities = (vendor: Vendor, options: BaseOptions): Ca
 			case 'Image Vision':
 			case 'PDF Vision':
 			case 'Image Editing':
-			case 'Tool Calling':
 				enabledCapabilities.push(capability)
 				break
 		}

@@ -2,7 +2,7 @@ import OpenAI from 'openai'
 import { Platform, requestUrl } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
-import { buildToolCallsBlock, convertEmbedToImageUrl } from './utils'
+import { convertEmbedToImageUrl } from './utils'
 
 type ContentItem =
 	| {
@@ -56,25 +56,6 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			if (text) {
 				yield text
 			}
-
-			const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : []
-			if (toolCalls.length > 0) {
-				const payload = toolCalls.map((tc: any) => {
-					const rawArgs = tc?.function?.arguments
-					let parsed: any = null
-					try {
-						parsed = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs ?? {}
-					} catch {
-						parsed = { __raw: String(rawArgs ?? '') }
-					}
-					return {
-						id: String(tc?.id ?? ''),
-						name: String(tc?.function?.name ?? ''),
-						arguments: parsed
-					}
-				})
-				yield buildToolCallsBlock(payload)
-			}
 			return
 		}
 
@@ -95,51 +76,12 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			{ signal: controller.signal }
 		)
 
-		const toolCalls: Array<{ id: string; name: string; argumentsText: string }> = []
-		const ensureToolCall = (id: string, name: string) => {
-			let existing = toolCalls.find((t) => t.id === id)
-			if (!existing) {
-				existing = { id, name, argumentsText: '' }
-				toolCalls.push(existing)
-			}
-			return existing
-		}
-
 		for await (const part of stream) {
 			const delta: any = part.choices[0]?.delta
 			const text = delta?.content
 			if (text) {
 				yield text
 			}
-
-			const deltaToolCalls: any[] | undefined = delta?.tool_calls
-			if (Array.isArray(deltaToolCalls)) {
-				for (const tc of deltaToolCalls) {
-					const id = String(tc?.id ?? '')
-					const name = String(tc?.function?.name ?? '')
-					const argsChunk = String(tc?.function?.arguments ?? '')
-					if (!id || !name) continue
-					const acc = ensureToolCall(id, name)
-					acc.argumentsText += argsChunk
-				}
-			}
-		}
-
-		if (toolCalls.length > 0) {
-			const payload = toolCalls.map((tc) => {
-				let parsed: any = null
-				try {
-					parsed = tc.argumentsText ? JSON.parse(tc.argumentsText) : {}
-				} catch {
-					parsed = { __raw: tc.argumentsText }
-				}
-				return {
-					id: tc.id,
-					name: tc.name,
-					arguments: parsed
-				}
-			})
-			yield buildToolCallsBlock(payload)
 		}
 	}
 
@@ -148,14 +90,8 @@ const formatMsg = async (msg: Message, resolveEmbedAsBinary: ResolveEmbedAsBinar
 		role: msg.role
 	}
 
-	if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
-		base.tool_calls = msg.tool_calls
-	}
 	if (msg.role === 'assistant' && typeof msg.reasoning_content === 'string' && msg.reasoning_content.trim()) {
 		base.reasoning_content = msg.reasoning_content
-	}
-	if (msg.role === 'tool' && msg.tool_call_id) {
-		base.tool_call_id = msg.tool_call_id
 	}
 
 	// Poe 的兼容层对纯文本字符串格式更稳定；只有用户消息带图片时才使用数组 content
@@ -218,5 +154,5 @@ export const poeVendor: Vendor = {
 	sendRequestFunc,
 	models: [],
 	websiteToObtainKey: 'https://poe.com/api_key',
-	capabilities: ['Text Generation', 'Image Vision', 'Tool Calling']
+	capabilities: ['Text Generation', 'Image Vision']
 }

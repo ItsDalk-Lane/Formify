@@ -1,11 +1,10 @@
-import { History, MessageCirclePlus, Save, Zap, Paperclip, ImageUp, Wrench } from 'lucide-react';
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { History, MessageCirclePlus, Zap, Paperclip, ImageUp } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
 import { ChatService } from '../services/ChatService';
 import type { ChatState } from '../types/chat';
 import type { ChatHistoryEntry } from '../services/HistoryService';
 import { ChatHistoryPanel } from '../components/ChatHistory';
 import { FileMenuPopup } from '../components/FileMenuPopup';
-import { ToolPanelPopup } from '../components/ToolPanelPopup';
 import { App, TFile, TFolder } from 'obsidian';
 
 interface ChatControlsProps {
@@ -21,14 +20,6 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 	const fileMenuButtonRef = useRef<HTMLSpanElement>(null);
 	const historyPanelRef = useRef<HTMLDivElement>(null);
 	const historyButtonRef = useRef<HTMLSpanElement>(null);
-
-	// 工具管理相关状态
-	const toolButtonRef = useRef<HTMLSpanElement>(null);
-	const [toolPanelOpen, setToolPanelOpen] = useState(false);
-
-	// 获取工具数据
-	const tools = service.getTools();
-	const pendingCount = state.pendingToolExecutions.length;
 
 	useEffect(() => {
 		if (historyOpen) {
@@ -169,24 +160,6 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 				>
 					<ImageUp className="tw-size-4" />
 				</span>
-				<span
-					ref={toolButtonRef}
-					onClick={(e) => {
-						e.preventDefault();
-						e.stopPropagation();
-						setToolPanelOpen(true);
-					}}
-					className="tw-cursor-pointer tw-text-muted hover:tw-text-accent tw-relative"
-					aria-label="工具管理"
-					title="工具管理"
-				>
-					<Wrench className="tw-size-4" />
-					{pendingCount > 0 && (
-						<span className="tw-absolute tw--top-1 tw--right-1 tw-min-w-4 tw-h-4 tw-px-1 tw-rounded-full tw-bg-red-600 tw-text-white tw-text-[10px]">
-							{pendingCount > 99 ? '99+' : pendingCount}
-						</span>
-					)}
-				</span>
 			</div>
 			<div className="tw-flex-1"></div>
 			<div className="tw-flex tw-items-center tw-gap-2">
@@ -223,17 +196,6 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 				app={app}
 				buttonRef={fileMenuButtonRef}
 			/>
-			{/* 工具管理弹窗 */}
-			<ToolPanelPopup
-				isOpen={toolPanelOpen}
-				onClose={() => setToolPanelOpen(false)}
-				anchorRef={toolButtonRef}
-				tools={tools}
-				isBuiltin={(id) => service.isBuiltinTool(id)}
-				onToggleToolEnabled={(id, enabled) => void service.setToolEnabled(id, enabled)}
-				onChangeToolExecutionMode={(id, mode) => void service.setToolExecutionMode(id, mode)}
-			/>
 		</div>
 	);
 };
-

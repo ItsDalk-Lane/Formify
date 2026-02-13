@@ -1,5 +1,5 @@
 import type { App, EmbedCache } from 'obsidian';
-import type { Message as ProviderMessage, MessageToolCall } from 'src/features/tars/providers';
+import type { Message as ProviderMessage } from 'src/features/tars/providers';
 import { SystemPromptMode } from 'src/model/enums/SystemPromptMode';
 import { PromptSourceType } from 'src/model/enums/PromptSourceType';
 import { InternalLinkParserService, ParseOptions } from 'src/service/InternalLinkParserService';
@@ -379,7 +379,6 @@ export class PromptBuilder {
 
 		let messageContent = message.content;
 		let reasoningContent: string | undefined;
-		let toolCalls: MessageToolCall[] | undefined;
 
 		if (message.role === 'user') {
 			const taskUserInput = this.getStringMetadata(message, 'taskUserInput');
@@ -426,31 +425,17 @@ export class PromptBuilder {
 				messageContent = message.metadata.parsedContent;
 			}
 			
-			// 处理工具调用（转换为 DeepSeek/OpenAI 兼容格式）
-			if (message.toolCalls && message.toolCalls.length > 0) {
-				toolCalls = message.toolCalls.map(tc => ({
-					id: tc.id,
-					type: 'function' as const,
-					function: {
-						name: tc.name,
-						arguments: JSON.stringify(tc.arguments)
-					}
-				}));
-			}
-		} else if (message.role === 'tool') {
-			// tool 角色消息：工具执行结果
-			// 不需要特殊处理内容，直接返回
 		} else if (message.metadata?.parsedContent && typeof message.metadata.parsedContent === 'string') {
 			messageContent = message.metadata.parsedContent;
 		}
 
+		const role = message.role === 'tool' ? 'assistant' : message.role;
+
 		return {
-			role: message.role,
+			role,
 			content: messageContent,
 			embeds: embeds.length > 0 ? embeds : undefined,
-			reasoning_content: reasoningContent,
-			tool_calls: toolCalls,
-			tool_call_id: message.toolCallId
+			reasoning_content: reasoningContent
 		};
 	}
 

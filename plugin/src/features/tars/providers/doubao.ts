@@ -5,20 +5,6 @@ import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUr
 import { normalizeProviderError } from './errors'
 import { withRetry } from './retry'
 
-// Web Search 工具配置
-export interface WebSearchTool {
-	type: 'web_search'
-	limit?: number // 最多返回的搜索结果数量，默认10
-	max_keyword?: number // 最多生成的搜索关键词数量
-	sources?: string[] // 优先搜索的来源，如 ['toutiao', 'douyin', 'moji']
-	user_location?: {
-		type: 'approximate'
-		country?: string
-		region?: string
-		city?: string
-	}
-}
-
 export type DoubaoThinkingType = 'enabled' | 'disabled' | 'auto'
 export type DoubaoReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
 
@@ -443,35 +429,11 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 	}
 
 	// 根据 API 类型设置消息字段
-		if (useResponsesAPI) {
+	if (useResponsesAPI) {
 			// Responses API 使用 input 字段
 			data.input = processedMessages
-			
-			// 添加 Web Search 工具配置
+
 			if (useWebSearch) {
-				const webSearchTool: WebSearchTool = {
-					type: 'web_search'
-				}
-
-				// 配置搜索参数
-				if (webSearchConfig?.limit) {
-					webSearchTool.limit = webSearchConfig.limit
-				}
-				if (webSearchConfig?.maxKeyword) {
-					webSearchTool.max_keyword = webSearchConfig.maxKeyword
-				}
-				if (webSearchConfig?.sources && webSearchConfig.sources.length > 0) {
-					webSearchTool.sources = webSearchConfig.sources
-				}
-				if (webSearchConfig?.userLocation) {
-					webSearchTool.user_location = {
-						type: 'approximate',
-						...webSearchConfig.userLocation
-					}
-				}
-
-				data.tools = [webSearchTool]
-
 				// 根据配置决定是否启用思考功能（同时受 enableReasoning 门控）
 				if (
 					isReasoningEnabled &&

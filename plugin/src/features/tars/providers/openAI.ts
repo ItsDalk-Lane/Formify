@@ -4,7 +4,6 @@ import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from 
 import {
 	buildReasoningBlockEnd,
 	buildReasoningBlockStart,
-	buildToolCallsBlock,
 	convertEmbedToImageUrl
 } from './utils'
 import { withToolMessageContext } from './messageFormat'
@@ -116,51 +115,12 @@ const sendRequestFunc = (settings: OpenAIOptions): SendRequest =>
 				{ signal: controller.signal }
 			)
 
-			const toolCalls: Array<{ id: string; name: string; argumentsText: string }> = []
-			const ensureToolCall = (id: string, name: string) => {
-				let existing = toolCalls.find((t) => t.id === id)
-				if (!existing) {
-					existing = { id, name, argumentsText: '' }
-					toolCalls.push(existing)
-				}
-				return existing
-			}
-
 			for await (const part of stream) {
 				const delta: any = part.choices[0]?.delta
 				const text = delta?.content
 				if (text) {
 					yield text
 				}
-
-				const deltaToolCalls: any[] | undefined = delta?.tool_calls
-				if (Array.isArray(deltaToolCalls)) {
-					for (const tc of deltaToolCalls) {
-						const id = String(tc?.id ?? '')
-						const name = String(tc?.function?.name ?? '')
-						const argsChunk = String(tc?.function?.arguments ?? '')
-						if (!id || !name) continue
-						const acc = ensureToolCall(id, name)
-						acc.argumentsText += argsChunk
-					}
-				}
-			}
-
-			if (toolCalls.length > 0) {
-				const payload = toolCalls.map((tc) => {
-					let parsed: any = null
-					try {
-						parsed = tc.argumentsText ? JSON.parse(tc.argumentsText) : {}
-					} catch {
-						parsed = { __raw: tc.argumentsText }
-					}
-					return {
-						id: tc.id,
-						name: tc.name,
-						arguments: parsed
-					}
-				})
-				yield buildToolCallsBlock(payload)
 			}
 		} catch (error) {
 			throw normalizeProviderError(error, 'OpenAI request failed')
@@ -225,5 +185,5 @@ export const openAIVendor: Vendor = {
 	sendRequestFunc,
 	models: [],
 	websiteToObtainKey: 'https://platform.openai.com/api-keys',
-	capabilities: ['Text Generation', 'Image Vision', 'Tool Calling', 'Reasoning']
+	capabilities: ['Text Generation', 'Image Vision', 'Reasoning']
 }

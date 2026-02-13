@@ -3,6 +3,7 @@
 .cursor
 .qoder
 .trae
+.claude
 
 # Intellij
 *.iml

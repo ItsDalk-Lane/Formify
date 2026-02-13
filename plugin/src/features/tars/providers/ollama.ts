@@ -2,7 +2,7 @@ import { Ollama } from 'ollama/browser'
 import type { EmbedCache } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
-import { arrayBufferToBase64, getMimeTypeFromFilename, buildReasoningBlockStart, buildReasoningBlockEnd, buildToolCallsBlock } from './utils'
+import { arrayBufferToBase64, getMimeTypeFromFilename, buildReasoningBlockStart, buildReasoningBlockEnd } from './utils'
 
 // Structured Output Format 类型
 export type StructuredOutputFormat = 'json' | Record<string, unknown>
@@ -111,16 +111,6 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		let reasoningStartMs: number | null = null
 		const isReasoningEnabled = enableReasoning ?? false
 
-		const toolCalls: Array<{ id: string; name: string; arguments: Record<string, any> }> = []
-		const ensureToolCall = (id: string, name: string) => {
-			let existing = toolCalls.find((t) => t.id === id)
-			if (!existing) {
-				existing = { id, name, arguments: {} }
-				toolCalls.push(existing)
-			}
-			return existing
-		}
-
 		for await (const part of response) {
 			if (controller.signal.aborted) {
 				ollama.abort()
@@ -129,28 +119,6 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 
 			const thinkingContent = part.message?.thinking
 			const content = part.message?.content
-
-			// 处理工具调用（Ollama tool_calls 可能在流中任意时刻出现，通常在最终消息上）
-			const rawToolCalls: any[] | undefined = (part as any)?.message?.tool_calls
-			if (Array.isArray(rawToolCalls)) {
-				for (const tc of rawToolCalls) {
-					const fn = tc?.function
-					const name = String(fn?.name ?? '')
-					if (!name) continue
-					const id = String(tc?.id ?? `ollama-tool-call-${toolCalls.length + 1}`)
-					const acc = ensureToolCall(id, name)
-					const args = fn?.arguments
-					if (args && typeof args === 'object') {
-						acc.arguments = args as Record<string, any>
-					} else if (typeof args === 'string' && args.trim()) {
-						try {
-							acc.arguments = JSON.parse(args)
-						} catch {
-							acc.arguments = { __raw: args }
-						}
-					}
-				}
-			}
 
 			// 处理推理内容
 			if (thinkingContent && isReasoningEnabled) {
@@ -178,11 +146,6 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
 			yield buildReasoningBlockEnd(durationMs)
 		}
-
-		// 流结束后透传工具调用信息（不直接展示给用户，由 ChatService 解析并执行/审批）
-		if (toolCalls.length > 0) {
-			yield buildToolCallsBlock(toolCalls)
-		}
 	}
 
 export const ollamaVendor: Vendor = {
@@ -197,5 +160,5 @@ export const ollamaVendor: Vendor = {
 	sendRequestFunc,
 	models: [],
 	websiteToObtainKey: 'https://ollama.com',
-	capabilities: ['Text Generation', 'Image Vision', 'Tool Calling', 'Reasoning', 'Structured Output']
+	capabilities: ['Text Generation', 'Image Vision', 'Reasoning', 'Structured Output']
 }

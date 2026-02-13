@@ -1,40 +1,23 @@
-import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download, Highlighter, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Repeat, Clock3 } from 'lucide-react';
-import { Component, Platform } from 'obsidian';
-import { memo, useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download, Highlighter, ChevronDown, ChevronRight } from 'lucide-react';
+import { Component } from 'obsidian';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
 import type { ChatMessage } from '../types/chat';
-import type { ToolCall, ToolExecution } from '../types/tools';
 import { ChatService } from '../services/ChatService';
 import { MessageService } from '../services/MessageService';
-import { renderMarkdownContent, parseContentBlocks, hasReasoningBlock, ContentBlock } from '../utils/markdown';
+import { renderMarkdownContent, parseContentBlocks, ContentBlock } from '../utils/markdown';
 import { Notice } from 'obsidian';
-import { EmbeddedToolApproval } from './EmbeddedToolApproval';
 
 interface MessageItemProps {
 	message: ChatMessage;
 	service?: ChatService;
 	isGenerating?: boolean;
-	pendingToolExecutions?: ToolExecution[];
-	toolExecutions?: ToolExecution[];
 }
 
 // 格式化推理耗时
 const formatDuration = (durationMs: number): string => {
 	const centiSeconds = Math.max(1, Math.round(durationMs / 10))
 	return `${(centiSeconds / 100).toFixed(2)}s`
-}
-
-// 格式化工具结果（支持 JSON 对象美化显示）
-const formatToolResult = (result: string): string => {
-	try {
-		const parsed = JSON.parse(result);
-		if (typeof parsed === 'object' && parsed !== null) {
-			return JSON.stringify(parsed, null, 2);
-		}
-		return result;
-	} catch {
-		return result;
-	}
 }
 
 // 推理块组件
@@ -44,396 +27,6 @@ interface ReasoningBlockProps {
 	durationMs?: number;
 	isGenerating: boolean;
 }
-
-const formatArgsValue = (value: unknown): string => {
-	if (typeof value === 'string') return value;
-	if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-	try {
-		return JSON.stringify(value, null, 2);
-	} catch {
-		return '';
-	}
-};
-
-const buildArgsText = (pairs: Array<[string, unknown]>): string => {
-	return pairs
-		.filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
-		.map(([label, value]) => `${label}: ${formatArgsValue(value)}`)
-		.join('\n');
-};
-
-const getToolCallDisplay = (call: { name: string; arguments?: Record<string, any>; result?: string }) => {
-	const args = call.arguments ?? {};
-	const toolName = String(call.name ?? '').trim();
-	const lowerName = toolName.toLowerCase();
-
-	switch (lowerName) {
-		case 'write_file': {
-			const filePath = args.filePath ?? args.path ?? args.file_path;
-			const content = args.content ?? args.text ?? args.body ?? args.data;
-			const summaryPath = typeof filePath === 'string' && filePath.trim() ? filePath : '';
-			const length = typeof content === 'string' ? `${content.length}字` : '';
-			return {
-				title: '写入文件',
-				summary: summaryPath ? `${summaryPath}${length ? `（${length}）` : ''}` : '',
-				contentLabel: '写入内容',
-				contentText: typeof content === 'string' ? content : formatArgsValue(content),
-				resultLabel: '写入结果'
-			};
-		}
-		case 'read_file': {
-			const filePath = args.path ?? args.filePath ?? args.file_path;
-			return {
-				title: '读取文件',
-				summary: typeof filePath === 'string' ? filePath : '',
-				contentLabel: '读取路径',
-				contentText: buildArgsText([['path', filePath]]),
-				resultLabel: '读取结果'
-			};
-		}
-		case 'delete_file': {
-			const filePath = args.path ?? args.filePath ?? args.file_path;
-			return {
-				title: '删除文件',
-				summary: typeof filePath === 'string' ? filePath : '',
-				contentLabel: '删除路径',
-				contentText: buildArgsText([['path', filePath]]),
-				resultLabel: '删除结果'
-			};
-		}
-		case 'move_file': {
-			return {
-				title: '移动文件',
-				summary: args.from && args.to ? `${args.from} -> ${args.to}` : '',
-				contentLabel: '移动信息',
-				contentText: buildArgsText([
-					['from', args.from],
-					['to', args.to]
-				]),
-				resultLabel: '移动结果'
-			};
-		}
-		case 'list_directory': {
-			return {
-				title: '列出目录',
-				summary: typeof args.path === 'string' ? args.path : '/',
-				contentLabel: '目录路径',
-				contentText: buildArgsText([['path', args.path || '/']]),
-				resultLabel: '目录条目'
-			};
-		}
-		case 'search_files': {
-			return {
-				title: '文件名搜索',
-				summary: typeof args.query === 'string' ? args.query : '',
-				contentLabel: '搜索参数',
-				contentText: buildArgsText([
-					['query', args.query],
-					['scope', args.scope ?? 'vault'],
-					['limit', args.limit ?? 100]
-				]),
-				resultLabel: '搜索结果'
-			};
-		}
-		case 'search_content': {
-			return {
-				title: '内容搜索',
-				summary: typeof args.query === 'string' ? args.query : '',
-				contentLabel: '搜索参数',
-				contentText: buildArgsText([
-					['query', args.query],
-					['scope', args.scope ?? 'vault'],
-					['limit', args.limit ?? 10]
-				]),
-				resultLabel: '匹配内容'
-			};
-		}
-		case 'open_file': {
-			return {
-				title: '打开文件',
-				summary: typeof args.path === 'string' ? args.path : '',
-				contentLabel: '打开路径',
-				contentText: buildArgsText([['path', args.path]]),
-				resultLabel: '打开结果'
-			};
-		}
-		case 'write_plan': {
-			const tasks = Array.isArray(args.tasks) ? args.tasks.length : 0;
-			return {
-				title: '更新计划',
-				summary: tasks ? `任务数: ${tasks}` : '',
-				contentLabel: '计划任务',
-				contentText: formatArgsValue(args.tasks ?? []),
-				resultLabel: '计划结果'
-			};
-		}
-		case 'web_fetch': {
-			return {
-				title: '抓取网页',
-				summary: typeof args.url === 'string' ? args.url : '',
-				contentLabel: '抓取地址',
-				contentText: buildArgsText([
-					['url', args.url],
-					['maxLength', args.maxLength ?? 50000]
-				]),
-				resultLabel: '抓取结果'
-			};
-		}
-		case 'execute_script': {
-			return {
-				title: '执行脚本',
-				summary: typeof args.script === 'string' ? args.script.slice(0, 30) : '',
-				contentLabel: '执行脚本',
-				contentText: typeof args.script === 'string' ? args.script : '',
-				resultLabel: '执行结果'
-			};
-		}
-		default: {
-			const filePath = args.filePath ?? args.path ?? args.file ?? args.target;
-			const url = args.url ?? args.uri ?? args.link;
-			const name = args.name ?? args.title ?? args.query;
-			const summary =
-				(typeof filePath === 'string' && filePath.trim().length > 0)
-					? filePath
-					: (typeof url === 'string' && url.trim().length > 0)
-						? url
-						: (typeof name === 'string' && name.trim().length > 0)
-							? name
-							: '';
-			return {
-				title: toolName || '工具调用',
-				summary,
-				contentLabel: '参数',
-				contentText: formatArgsValue(args),
-				resultLabel: '结果'
-			};
-		}
-	}
-};
-
-const buildToolCallSignature = (call: ToolCall): string => {
-	const argsText = call.arguments ? formatArgsValue(call.arguments) : '';
-	const resultText = call.result ?? '';
-	return `${call.id}|${call.name}|${call.status}|${argsText}|${resultText}`;
-};
-
-const buildExecutionSignatureMap = (executions: ToolExecution[], toolCallIds: Set<string>) => {
-	const map = new Map<string, string>();
-	executions.forEach((execution) => {
-		if (!execution.toolCallId || !toolCallIds.has(execution.toolCallId)) return;
-		map.set(execution.toolCallId, `${execution.id}|${execution.status}|${execution.error ?? ''}`);
-	});
-	return map;
-};
-
-interface ToolCallListProps {
-	toolCalls: ToolCall[];
-	toolExecutions?: ToolExecution[];
-	service?: ChatService;
-	messageId: string;
-}
-
-const ToolCallList = memo(
-	({ toolCalls, toolExecutions, service, messageId }: ToolCallListProps) => {
-		const executionMap = useMemo(() => {
-			const map = new Map<string, ToolExecution>();
-			(toolExecutions ?? []).forEach((exec) => {
-				if (exec.toolCallId) {
-					map.set(exec.toolCallId, exec);
-				}
-			});
-			return map;
-		}, [toolExecutions]);
-		const completedCount = toolCalls.filter((call) => {
-			const exec = executionMap.get(call.id);
-			return exec?.status === 'completed' || call.status === 'completed';
-		}).length;
-		const failedCount = toolCalls.filter((call) => {
-			const exec = executionMap.get(call.id);
-			return exec?.status === 'failed' || exec?.status === 'rejected' || call.status === 'failed';
-		}).length;
-		const totalCount = toolCalls.length;
-		const inProgressCount = Math.max(totalCount - completedCount - failedCount, 0);
-
-		return (
-			<div className="ff-tool-call-list">
-				<div className="ff-tool-call__progress">
-					{inProgressCount > 0 ? (
-						<span>执行中 {completedCount}/{totalCount} 个工具</span>
-					) : (
-						<span>已完成 {completedCount}/{totalCount} 个工具</span>
-					)}
-				</div>
-				{toolCalls.map((call) => {
-					const exec = executionMap.get(call.id);
-					const canRetry = call.status === 'failed' || exec?.status === 'failed' || exec?.status === 'rejected';
-					return (
-						<ToolCallItem
-							key={call.id}
-							call={call}
-							execution={exec}
-							canRetry={!!service && canRetry}
-							onRetry={
-								service
-									? () => void service.retryToolCall(messageId, call.id)
-									: undefined
-							}
-							onApprove={
-								exec && service ? () => void service.approveToolExecution(exec.id) : undefined
-							}
-							onReject={
-								exec && service ? () => void service.rejectToolExecution(exec.id) : undefined
-							}
-						/>
-					);
-				})}
-			</div>
-		);
-	},
-	(prev, next) => {
-		if (prev.messageId !== next.messageId) return false;
-		if (prev.service !== next.service) return false;
-		if (prev.toolCalls.length !== next.toolCalls.length) return false;
-		const prevSignatures = prev.toolCalls.map(buildToolCallSignature);
-		const nextSignatures = next.toolCalls.map(buildToolCallSignature);
-		for (let i = 0; i < prevSignatures.length; i += 1) {
-			if (prevSignatures[i] !== nextSignatures[i]) return false;
-		}
-
-		const toolCallIds = new Set(prev.toolCalls.map((call) => call.id));
-		const prevExecutionMap = buildExecutionSignatureMap(prev.toolExecutions ?? [], toolCallIds);
-		const nextExecutionMap = buildExecutionSignatureMap(next.toolExecutions ?? [], toolCallIds);
-		if (prevExecutionMap.size !== nextExecutionMap.size) return false;
-		for (const [toolCallId, signature] of prevExecutionMap.entries()) {
-			if (nextExecutionMap.get(toolCallId) !== signature) return false;
-		}
-		return true;
-	}
-);
-
-const ToolCallItem = ({
-	call,
-	execution,
-	canRetry,
-	onRetry,
-	onApprove,
-	onReject
-}: {
-	call: { id: string; name: string; status: string; arguments?: Record<string, any>; result?: string };
-	execution?: ToolExecution;
-	canRetry: boolean;
-	onRetry?: () => void;
-	onApprove?: () => void;
-	onReject?: () => void;
-}) => {
-	const [collapsed, setCollapsed] = useState(true);
-	const display = useMemo(() => getToolCallDisplay(call), [call]);
-	const resolvedStatus = execution?.status ?? call.status;
-	const dotStatus =
-		resolvedStatus === 'completed'
-			? 'success'
-			: resolvedStatus === 'failed' || resolvedStatus === 'rejected'
-				? 'error'
-				: 'pending';
-	const statusText =
-		execution?.status === 'pending'
-			? '待审批'
-			: execution?.status === 'approved' || execution?.status === 'executing'
-				? '执行中'
-				: execution?.status === 'completed' || call.status === 'completed'
-					? '已完成'
-					: execution?.status === 'failed' || call.status === 'failed'
-						? '执行失败'
-						: execution?.status === 'rejected'
-							? '已拒绝'
-							: '待处理';
-	const contentText = display.contentText;
-	const statusIcon =
-		statusText === '执行中' ? (
-			<Loader2 className="tw-size-3 tw-animate-spin" />
-		) : statusText === '已完成' ? (
-			<CheckCircle2 className="tw-size-3" />
-		) : statusText === '执行失败' || statusText === '已拒绝' ? (
-			<AlertCircle className="tw-size-3" />
-		) : (
-			<Clock3 className="tw-size-3" />
-		);
-
-	return (
-		<div className="ff-tool-call">
-			<div className="ff-tool-call__header" onClick={() => setCollapsed((prev) => !prev)}>
-				<span className={`ff-tool-call__dot ff-tool-call__dot--${dotStatus}`} />
-				<span className="ff-tool-call__toggle">
-					{collapsed ? <ChevronRight className="tw-size-4" /> : <ChevronDown className="tw-size-4" />}
-				</span>
-				<span className="ff-tool-call__status">
-					{statusIcon}
-					<span>{statusText}</span>
-				</span>
-				<span className="ff-tool-call__name" title={display.title}>
-					{display.title}
-				</span>
-				{display.summary && (
-					<span className="ff-tool-call__summary" title={display.summary}>
-						{display.summary}
-					</span>
-				)}
-				{canRetry && onRetry && (
-					<button
-						type="button"
-						className="ff-tool-call__retry"
-						onClick={(event) => {
-							event.stopPropagation();
-							onRetry();
-						}}
-						title="重试"
-					>
-						<Repeat className="tw-size-3" />
-						<span>重试</span>
-					</button>
-				)}
-			</div>
-			{!collapsed && (
-				<div className="ff-tool-call__body">
-					<div className="ff-tool-call__section">
-						<div className="ff-tool-call__label">{display.contentLabel}</div>
-						<pre className="ff-tool-call__code">{contentText || '（无内容）'}</pre>
-					</div>
-					{execution?.status === 'pending' && (
-						<div className="ff-tool-call__section ff-tool-call__actions">
-							<button
-								type="button"
-								className="ff-tool-call__action"
-								onClick={(event) => {
-									event.stopPropagation();
-									onApprove?.();
-								}}
-							>
-								允许
-							</button>
-							<button
-								type="button"
-								className="ff-tool-call__action ff-tool-call__action--danger"
-								onClick={(event) => {
-									event.stopPropagation();
-									onReject?.();
-								}}
-							>
-								拒绝
-							</button>
-						</div>
-					)}
-					{call.result && call.result.trim().length > 0 && (
-						<div className="ff-tool-call__section">
-							<div className="ff-tool-call__label">{display.resultLabel}</div>
-							<pre className="ff-tool-call__code">{formatToolResult(call.result)}</pre>
-						</div>
-					)}
-				</div>
-			)}
-		</div>
-	);
-};
 
 const ReasoningBlockComponent = ({ content, startMs, durationMs, isGenerating }: ReasoningBlockProps) => {
 	const [collapsed, setCollapsed] = useState(false);
@@ -501,14 +94,6 @@ const ReasoningBlockComponent = ({ content, startMs, durationMs, isGenerating }:
 	);
 };
 
-interface MessageItemProps {
-	message: ChatMessage;
-	service?: ChatService;
-	isGenerating?: boolean;
-	pendingToolExecutions?: ToolExecution[];
-	toolExecutions?: ToolExecution[];
-}
-
 // 文本块组件 - 用于渲染 Markdown 内容
 interface TextBlockProps {
 	content: string;
@@ -535,7 +120,7 @@ const TextBlockComponent = ({ content, app }: TextBlockProps) => {
 	return <div ref={containerRef}></div>;
 };
 
-export const MessageItem = ({ message, service, isGenerating, pendingToolExecutions, toolExecutions }: MessageItemProps) => {
+export const MessageItem = ({ message, service, isGenerating }: MessageItemProps) => {
 	const app = useObsidianApp();
 	const helper = useMemo(() => new MessageService(), []);
 	const [copied, setCopied] = useState(false);
@@ -667,7 +252,6 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 			: message.role === 'assistant'
 				? 'chat-message--assistant'
 				: 'chat-message--system';
-	const toolCalls = message.toolCalls ?? [];
 
 	return (
 		<>
@@ -724,26 +308,6 @@ export const MessageItem = ({ message, service, isGenerating, pendingToolExecuti
 							</span>
 						</div>
 					</div>
-				)}
-
-				{/* 工具调用徽章 */}
-				{toolCalls.length > 0 && (
-					<ToolCallList
-						toolCalls={toolCalls}
-						toolExecutions={toolExecutions}
-						service={service}
-						messageId={message.id}
-					/>
-				)}
-
-				{/* 内嵌审批界面 */}
-				{toolCalls.length > 0 && pendingToolExecutions && (
-					<EmbeddedToolApproval
-						toolCalls={toolCalls}
-						pendingExecutions={pendingToolExecutions}
-						onApprove={(executionId) => service?.approveToolExecution(executionId)}
-						onReject={(executionId) => service?.rejectToolExecution(executionId)}
-					/>
 				)}
 
 				<div className="chat-message__content tw-break-words">

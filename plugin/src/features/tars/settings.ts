@@ -68,7 +68,7 @@ export interface TarsSettings {
 	/** Tab 补全用户提示词模板（支持 {{rules}} 与 {{context}}） */
 	tabCompletionPromptTemplate: string
 
-	/** 全局工具配置（Tool Calling） */
+	/** 全局工具配置（保留旧配置兼容） */
 	tools?: {
 		globalTools: ToolDefinition[]
 		executionMode: 'manual' | 'auto'

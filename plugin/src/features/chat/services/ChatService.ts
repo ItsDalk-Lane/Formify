@@ -13,23 +13,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { InternalLinkParserService } from '../../../service/InternalLinkParserService';
 import { DebugLogger } from 'src/utils/DebugLogger';
 import { SystemPromptAssembler } from 'src/service/SystemPromptAssembler';
-import { TOOL_CALLS_END_MARKER, TOOL_CALLS_START_MARKER } from 'src/features/tars/providers/utils';
 import type { ToolCall, ToolDefinition, ToolExecution } from '../types/tools';
 import { ToolRegistryService } from './ToolRegistryService';
 import { ToolExecutionManager } from './ToolExecutionManager';
-import {
-	createDeleteFileTool,
-	createExecuteScriptTool,
-	createListDirectoryTool,
-	createMoveFileTool,
-	createOpenFileTool,
-	createReadFileTool,
-	createSearchContentTool,
-	createSearchFilesTool,
-	createWebFetchTool,
-	createWriteFileTool,
-	createWritePlanTool
-} from '../tools';
 
 type ChatSubscriber = (state: ChatState) => void;
 
@@ -60,7 +46,7 @@ export class ChatService {
 	};
 	private subscribers: Set<ChatSubscriber> = new Set();
 	private controller: AbortController | null = null;
-	private ollamaCapabilityCache = new Map<string, { toolCalling: boolean; reasoning: boolean; checkedAt: number; warned?: boolean }>();
+	private ollamaCapabilityCache = new Map<string, { reasoning: boolean; checkedAt: number; warned?: boolean }>();
 	// 跟踪当前活动文件的路径
 	private currentActiveFilePath: string | null = null;
 	// 跟踪在当前活动文件会话期间，用户手动移除的文件路径（仅在当前文件活跃期间有效）
@@ -84,7 +70,6 @@ export class ChatService {
 
 	initialize(initialSettings?: Partial<ChatSettings>) {
 		this.updateSettings(initialSettings ?? {});
-		this.loadBuiltinTools();
 		this.loadGlobalTools();
 		this.syncToolSettingsFromTars();
 		if (!this.state.selectedModelId) {
@@ -260,20 +245,6 @@ export class ChatService {
 
 	private syncToolSettingsFromTars() {
 		this.state.pendingToolExecutions = this.toolExecutionManager.getPending();
-	}
-
-	loadBuiltinTools() {
-		this.toolRegistry.register(createWriteFileTool(this.app), 'builtin');
-		this.toolRegistry.register(createReadFileTool(this.app), 'builtin');
-		this.toolRegistry.register(createDeleteFileTool(this.app), 'builtin');
-		this.toolRegistry.register(createMoveFileTool(this.app), 'builtin');
-		this.toolRegistry.register(createListDirectoryTool(this.app), 'builtin');
-		this.toolRegistry.register(createSearchFilesTool(this.app), 'builtin');
-		this.toolRegistry.register(createSearchContentTool(this.app), 'builtin');
-		this.toolRegistry.register(createOpenFileTool(this.app), 'builtin');
-		this.toolRegistry.register(createWritePlanTool(), 'builtin');
-		this.toolRegistry.register(createWebFetchTool(), 'builtin');
-		this.toolRegistry.register(createExecuteScriptTool(this.app), 'builtin');
 	}
 
 	loadGlobalTools() {
@@ -1215,13 +1186,12 @@ export class ChatService {
 			});
 			const capabilities = Array.isArray(response.json?.capabilities) ? response.json.capabilities : [];
 			const normalized = capabilities.map((cap: string) => String(cap).toLowerCase());
-			const toolCalling = normalized.includes('tool_calling') || normalized.includes('tool-calling') || normalized.includes('tools');
 			const reasoning = normalized.includes('thinking') || normalized.includes('reasoning');
-			const next = { toolCalling, reasoning, checkedAt: now };
+			const next = { reasoning, checkedAt: now };
 			this.ollamaCapabilityCache.set(key, next);
 			return next;
 		} catch (error) {
-			const next = { toolCalling: false, reasoning: false, checkedAt: now, warned: cache?.warned };
+			const next = { reasoning: false, checkedAt: now, warned: cache?.warned };
 			this.ollamaCapabilityCache.set(key, next);
 			return next;
 		}
@@ -1247,7 +1217,6 @@ export class ChatService {
 			let enableReasoning = this.state.enableReasoningToggle && providerEnableReasoning;
 			let enableThinking = this.state.enableReasoningToggle && providerEnableThinking;
 			const enableWebSearch = this.state.enableWebSearchToggle && providerEnableWebSearch;
-			let allowToolCalling = true;
 			const providerOptions = {
 				...providerOptionsRaw,
 				enableReasoning,
@@ -1268,36 +1237,16 @@ export class ChatService {
 					const caps = await this.getOllamaCapabilities(baseURL, modelName);
 					enableReasoning = enableReasoning && caps.reasoning;
 					enableThinking = enableThinking && caps.reasoning;
-					allowToolCalling = caps.toolCalling;
 					(providerOptions as any).enableReasoning = enableReasoning;
 					(providerOptions as any).enableThinking = enableThinking;
-					if (!caps.toolCalling || !caps.reasoning) {
+					if (!caps.reasoning) {
 						const key = `${this.normalizeOllamaBaseUrl(baseURL)}|${modelName}`;
 						const cached = this.ollamaCapabilityCache.get(key);
 						if (cached && !cached.warned) {
 							this.ollamaCapabilityCache.set(key, { ...cached, warned: true });
-							new Notice('已根据 Ollama 模型能力自动关闭不支持的推理/工具功能');
+							new Notice('已根据 Ollama 模型能力自动关闭不支持的推理功能');
 						}
 					}
-				}
-			}
-
-			// 注入全局工具（仅对支持 Tool Calling 的 vendor 生效）
-			if (vendor.capabilities.includes('Tool Calling') && allowToolCalling) {
-				const tools = this.toolRegistry.toOpenAICompatibleTools(true);
-				if (tools.length > 0) {
-					const rawParams = (providerOptions as any).parameters ?? {};
-					const nextParams: Record<string, unknown> = {
-						...rawParams,
-						tools
-					};
-
-					// OpenAI/OpenRouter 支持 tool_choice；Ollama 侧避免注入未知字段导致请求失败
-					if (vendor.name !== 'Ollama') {
-						(nextParams as any).tool_choice = 'auto';
-					}
-
-					(providerOptions as any).parameters = nextParams;
 				}
 			}
 
@@ -1367,83 +1316,6 @@ export class ChatService {
 
 			// 创建一个临时消息对象用于流式更新
 			let accumulatedContent = '';
-			let toolMarkerBuffer = '';
-
-			const handleToolCallsPayload = async (payloadText: string) => {
-				let payload: any;
-				try {
-					payload = JSON.parse(payloadText);
-				} catch (e) {
-					console.warn('[ChatService] tool_calls 解析失败', e);
-					return;
-				}
-
-				if (!Array.isArray(payload)) return;
-
-				for (const raw of payload) {
-					const id = String(raw?.id ?? `tool-call-${uuidv4()}`);
-					const name = String(raw?.name ?? '');
-					const args = (raw?.arguments ?? {}) as Record<string, any>;
-					if (!name) continue;
-
-					const toolCall: ToolCall = {
-						id,
-						name,
-						arguments: args,
-						status: 'pending',
-						timestamp: Date.now()
-					};
-
-					assistantMessage.toolCalls = [...(assistantMessage.toolCalls ?? []), toolCall];
-					this.emitState();
-
-					const exec = this.toolExecutionManager.createPending({
-						toolId: name,
-						toolCallId: id,
-						sessionId: session.id,
-						messageId: assistantMessage.id,
-						args
-					});
-
-					// 根据工具的 executionMode 决定是否自动执行
-					const tool = this.toolRegistry.get(name);
-					const toolExecutionMode = tool?.executionMode ?? 'manual';
-					if (toolExecutionMode === 'auto') {
-						await this.approveToolExecution(exec.id);
-					} else {
-						new Notice(`工具调用待审批：${name}`);
-					}
-				}
-			};
-
-			const processStreamChunk = async (chunk: string): Promise<string> => {
-				const combined = toolMarkerBuffer + chunk;
-				let rest = combined;
-				let output = '';
-
-				while (true) {
-					const start = rest.indexOf(TOOL_CALLS_START_MARKER);
-					if (start === -1) {
-						output += rest;
-						toolMarkerBuffer = '';
-						break;
-					}
-
-					output += rest.slice(0, start);
-					const afterStart = rest.slice(start + TOOL_CALLS_START_MARKER.length);
-					const end = afterStart.indexOf(TOOL_CALLS_END_MARKER);
-					if (end === -1) {
-						toolMarkerBuffer = rest.slice(start);
-						break;
-					}
-
-					const jsonText = afterStart.slice(0, end);
-					await handleToolCallsPayload(jsonText);
-					rest = afterStart.slice(end + TOOL_CALLS_END_MARKER.length);
-				}
-
-				return output;
-			};
 			
 			// 检测是否是图片生成请求
 			const isImageGenerationRequest = this.detectImageGenerationIntent(
@@ -1457,9 +1329,8 @@ export class ChatService {
 			if (isModelSupportImageGeneration) {
 				try {
 					for await (const chunk of sendRequest(messages, this.controller, resolveEmbed, saveAttachment)) {
-						const text = await processStreamChunk(chunk);
-						assistantMessage.content += text;
-						accumulatedContent += text;
+						assistantMessage.content += chunk;
+						accumulatedContent += chunk;
 						session.updatedAt = Date.now();
 						this.emitState();
 					}
@@ -1518,9 +1389,8 @@ export class ChatService {
 			} else {
 				// 不支持图像生成的模型，不传递saveAttachment函数
 				for await (const chunk of sendRequest(messages, this.controller, resolveEmbed)) {
-					const text = await processStreamChunk(chunk);
-					assistantMessage.content += text;
-					accumulatedContent += text;
+					assistantMessage.content += chunk;
+					accumulatedContent += chunk;
 					session.updatedAt = Date.now();
 					this.emitState();
 				}

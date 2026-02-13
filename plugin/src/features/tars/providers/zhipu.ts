@@ -40,23 +40,11 @@ const sendRequestFunc = (settings: ZhipuOptions): SendRequest =>
 			dangerouslyAllowBrowser: true
 		})
 
-		const tools = (enableWebSearch
-			? [
-					{
-						type: 'web_search',
-						web_search: {
-							enable: true
-						}
-					}
-				]
-			: []) as object[] as OpenAI.Chat.Completions.ChatCompletionTool[] // hack, because the zhipu-ai function call type definition is different from openai's type definition
-
 		// 构建请求参数
 		const requestParams: any = {
 			model,
 			messages,
 			stream: true,
-			tools: tools,
 			...remains
 		}
 

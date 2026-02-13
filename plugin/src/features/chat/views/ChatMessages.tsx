@@ -85,8 +85,6 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 							message={message}
 							service={service}
 							isGenerating={message.role === 'assistant' && index === messages.length - 1 && state.isGenerating}
-							pendingToolExecutions={state.pendingToolExecutions}
-							toolExecutions={state.toolExecutions}
 						/>
 					))}
 			</div>
@@ -107,5 +105,4 @@ const RelevantNotes = ({ notes }: { notes: string[] }) => {
 		</section>
 	);
 };
-
 

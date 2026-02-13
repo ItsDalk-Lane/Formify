@@ -1,7 +1,7 @@
 import OpenAI from 'openai'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
-import { buildReasoningBlockStart, buildReasoningBlockEnd, buildToolCallsBlock } from './utils'
+import { buildReasoningBlockStart, buildReasoningBlockEnd } from './utils'
 import { DebugLogger } from '../../../utils/DebugLogger'
 
 // DeepSeek选项接口，扩展基础选项以支持推理功能
@@ -83,16 +83,6 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		let reasoningStartMs: number | null = null
 		const deepSeekOptions = settings as DeepSeekOptions
 		const isReasoningEnabled = deepSeekOptions.enableReasoning ?? false
-		
-		const toolCalls: Array<{ id: string; name: string; argumentsText: string; index: number }> = []
-		const ensureToolCallByIndex = (index: number) => {
-			let existing = toolCalls.find((t) => t.index === index)
-			if (!existing) {
-				existing = { id: '', name: '', argumentsText: '', index }
-				toolCalls.push(existing)
-			}
-			return existing
-		}
 
 		for await (const part of stream) {
 			if (part.usage && part.usage.prompt_tokens && part.usage.completion_tokens)
@@ -100,16 +90,6 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 
 			const delta = part.choices[0]?.delta as DeepSeekDelta
 			const reasonContent = delta?.reasoning_content
-			const deltaToolCalls: any[] | undefined = (delta as any)?.tool_calls
-			if (Array.isArray(deltaToolCalls)) {
-				for (const tc of deltaToolCalls) {
-					const idx = typeof tc?.index === 'number' ? tc.index : toolCalls.length
-					const acc = ensureToolCallByIndex(idx)
-					if (tc?.id) acc.id = String(tc.id)
-					if (tc?.function?.name) acc.name = String(tc.function.name)
-					if (tc?.function?.arguments) acc.argumentsText += String(tc.function.arguments)
-				}
-			}
 
 			// 只有在启用推理功能时才显示推理内容
 			if (reasonContent && isReasoningEnabled) {
@@ -135,25 +115,6 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
 			yield buildReasoningBlockEnd(durationMs)
 		}
-
-		// 过滤有效的 tool_calls（必须有 name）
-		const validToolCalls = toolCalls.filter((tc) => tc.name)
-		if (validToolCalls.length > 0) {
-			const payload = validToolCalls.map((tc) => {
-				let parsed: any = null
-				try {
-					parsed = tc.argumentsText ? JSON.parse(tc.argumentsText) : {}
-				} catch {
-					parsed = { __raw: tc.argumentsText }
-				}
-				return {
-					id: tc.id || `deepseek-tool-call-${tc.index}`,
-					name: tc.name,
-					arguments: parsed
-				}
-			})
-			yield buildToolCallsBlock(payload)
-		}
 	}
 
 const applyPrefixContinuation = (messages: Message[], config: DeepSeekInternalConfig): Message[] => {
@@ -175,38 +136,25 @@ const applyPrefixContinuation = (messages: Message[], config: DeepSeekInternalCo
  * 转换消息格式，处理 DeepSeek 推理模式的特殊要求
  * 
  * 根据 DeepSeek 官方文档：
- * - assistant 消息需要包含 content、reasoning_content、tool_calls 三个字段
- * - 在工具调用过程中，需要回传 reasoning_content 给 API，以让模型继续思考
- * - tool 消息需要包含 role、tool_call_id、content 三个字段
+ * - assistant 消息可包含 reasoning_content 字段
  */
 const transformMessagesForDeepSeek = (messages: Message[]): any[] => {
 	return messages.map(msg => {
 		// 处理 assistant 消息
 		if (msg.role === 'assistant') {
 			const hasReasoningContent = msg.reasoning_content !== undefined && msg.reasoning_content !== '';
-			const hasToolCalls = msg.tool_calls && msg.tool_calls.length > 0;
-			
-			// 如果有 reasoning_content 或 tool_calls，需要特殊处理
-			if (hasReasoningContent || hasToolCalls) {
+
+			// 如果有 reasoning_content，需要特殊处理
+			if (hasReasoningContent) {
 				return {
 					role: msg.role,
 					content: msg.content,
 					...(hasReasoningContent ? { reasoning_content: msg.reasoning_content } : {}),
-					...(hasToolCalls ? { tool_calls: msg.tool_calls } : {}),
 					...(msg.prefix ? { prefix: msg.prefix } : {})
 				}
 			}
 		}
-		
-		// 处理 tool 消息（工具执行结果）
-		if (msg.role === 'tool' && msg.tool_call_id) {
-			return {
-				role: 'tool',
-				tool_call_id: msg.tool_call_id,
-				content: msg.content
-			}
-		}
-		
+
 		return {
 			role: msg.role,
 			content: msg.content,
@@ -230,5 +178,5 @@ export const deepSeekVendor: Vendor = {
 	sendRequestFunc,
 	models: DEEPSEEK_MODELS,
 	websiteToObtainKey: 'https://platform.deepseek.com',
-	capabilities: ['Text Generation', 'Reasoning', 'Tool Calling', 'Structured Output']
+	capabilities: ['Text Generation', 'Reasoning', 'Structured Output']
 }

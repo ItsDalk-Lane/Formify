@@ -1,12 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { EmbedCache, Notice } from 'obsidian'
+import { EmbedCache } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import {
 	arrayBufferToBase64,
 	CALLOUT_BLOCK_END,
 	CALLOUT_BLOCK_START,
-	getCapabilityEmoji,
 	getMimeTypeFromFilename
 } from './utils'
 import { normalizeProviderError } from './errors'
@@ -76,7 +75,7 @@ const sendRequestFunc = (settings: ClaudeOptions): SendRequest =>
 				baseURL: originalBaseURL,
 				model,
 				max_tokens,
-				enableWebSearch = false,
+				enableWebSearch: _enableWebSearch = false,
 				enableThinking = false,
 				budget_tokens = 1600
 			} = options
@@ -117,14 +116,6 @@ const sendRequestFunc = (settings: ClaudeOptions): SendRequest =>
 				messages: formattedMsgs,
 				stream: true,
 				...(system_msg && { system: system_msg.content }),
-				...(enableWebSearch && {
-					tools: [
-						{
-							name: 'web_search',
-							type: 'web_search_20250305'
-						}
-					]
-				}),
 				...(enableThinking && {
 					thinking: {
 						type: 'enabled',
@@ -158,15 +149,6 @@ const sendRequestFunc = (settings: ClaudeOptions): SendRequest =>
 					if (messageStreamEvent.delta.type === 'thinking_delta') {
 						const prefix = !startReasoning ? ((startReasoning = true), CALLOUT_BLOCK_START) : ''
 						yield prefix + messageStreamEvent.delta.thinking.replace(/\n/g, '\n> ') // Each line of the callout needs to have '>' at the beginning
-					}
-				} else if (messageStreamEvent.type === 'content_block_start') {
-					// Handle content block start events, including tool usage
-					// DebugLogger.debug('Content block started', messageStreamEvent.content_block)
-					if (
-						messageStreamEvent.content_block.type === 'server_tool_use' &&
-						messageStreamEvent.content_block.name === 'web_search'
-					) {
-						new Notice(getCapabilityEmoji('Web Search') + 'Web Search')
 					}
 				} else if (messageStreamEvent.type === 'message_delta') {
 					// Handle message-level incremental updates
