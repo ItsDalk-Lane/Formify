@@ -1,406 +1,174 @@
-# CLAUDE.md - AI Assistant Guide for Formify
+# CLAUDE.md
 
-> This file provides comprehensive guidance for AI assistants working with the Formify codebase.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-**Formify** is a powerful Obsidian plugin that combines form workflow systems with AI chat functionality. It merges two open-source projects:
-- **obsidian-form-flow** - Form workflow system foundation
-- **obsidian-tars** - Multi-AI provider integration
-
-**Current Version**: 0.2.8.260203
-**Plugin ID**: `formify`
-**License**: MIT
-**Target Platform**: Obsidian 1.8.0+
-
-### Core Features
-1. **Form Workflow System** - 15+ field types, 20+ action types, serial/parallel execution
-2. **AI Chat Integration** - 17+ AI providers, skill system, tool calling
-3. **TARS Features** - Tab completion, ghost text, reasoning mode support
-
----
-
-## Repository Structure
-
-```
-/home/user/Formify/
-├── plugin/                           # Main plugin source code
-│   ├── src/
-│   │   ├── main.ts                  # Plugin entry point & lifecycle
-│   │   ├── api/                     # External API interface (FormFlowApi)
-│   │   ├── component/               # 30+ React UI components
-│   │   │   ├── modal/               # Modal dialogs
-│   │   │   ├── button/              # Button components
-│   │   │   ├── form-fields/         # Form field inputs
-│   │   │   ├── combobox/            # Auto-suggest components
-│   │   │   ├── filter/              # Filter UI components
-│   │   │   ├── toast/               # Toast notifications
-│   │   │   ├── dialog/              # Dialog components
-│   │   │   ├── dropdown/            # Dropdown menus
-│   │   │   └── popover/             # Floating popovers
-│   │   ├── context/                 # React Context providers
-│   │   │   ├── obsidianAppContext.tsx
-│   │   │   ├── pluginSettingsContext.tsx
-│   │   │   ├── serviceContainerContext.tsx
-│   │   │   └── LoopContext.tsx
-│   │   ├── features/                # Feature modules
-│   │   │   ├── FeatureCoordinator.ts
-│   │   │   ├── chat/                # AI Chat feature
-│   │   │   │   ├── ChatFeatureManager.tsx
-│   │   │   │   ├── services/        # Chat business logic
-│   │   │   │   ├── views/           # Chat UI components
-│   │   │   │   ├── selection-toolbar/
-│   │   │   │   ├── trigger/         # Chat trigger mechanisms
-│   │   │   │   └── tools/           # Tool definitions
-│   │   │   └── tars/                # AI text generation
-│   │   │       ├── TarsFeatureManager.ts
-│   │   │       ├── providers/       # 14+ AI provider implementations
-│   │   │       ├── tab-completion/  # Tab completion system
-│   │   │       └── system-prompts/
-│   │   ├── hooks/                   # 14+ Custom React hooks
-│   │   ├── i18n/                    # Internationalization (en, zh, zhTw)
-│   │   ├── model/                   # Data models and enums
-│   │   │   ├── FormConfig.ts        # Form definition model
-│   │   │   ├── action/              # 22 action type models
-│   │   │   ├── field/               # 12 field type models
-│   │   │   ├── enums/               # 25+ enum definitions
-│   │   │   └── filter/              # Filter/condition models
-│   │   ├── service/                 # Business logic layer (65+ services)
-│   │   │   ├── FormService.ts       # Core form submission
-│   │   │   ├── ServiceContainer.ts  # Dependency injection
-│   │   │   ├── action/              # Action service implementations
-│   │   │   ├── command/             # Command registry
-│   │   │   ├── filter/              # Condition evaluation
-│   │   │   ├── engine/              # Template processing
-│   │   │   └── startup-condition/   # Auto-trigger logic
-│   │   ├── settings/                # Settings management
-│   │   ├── style/                   # CSS files (base.css, chat.css)
-│   │   ├── types/                   # TypeScript type definitions
-│   │   ├── utils/                   # 40+ utility functions
-│   │   └── view/                    # UI view layer
-│   │       ├── edit/                # Form editor (100+ files)
-│   │       ├── preview/             # Form preview/render
-│   │       └── shared/              # Shared form components
-│   ├── esbuild.config.mjs           # Build configuration
-│   ├── tsconfig.json                # TypeScript config
-│   ├── package.json                 # Dependencies
-│   └── manifest.json                # Plugin manifest
-├── docs/                            # Documentation & examples
-└── README.md                        # Main documentation (Chinese)
-```
-
----
-
-## Technology Stack
-
-### Core Technologies
-- **TypeScript 4.7** - Main language (strict mode enabled)
-- **React 18.3** - UI framework with hooks
-- **Obsidian API** - Plugin foundation
-- **esbuild 0.17** - Fast bundling/minification
-
-### UI Libraries
-- **Radix UI** - Accessible component library
-- **Lucide React** - Icon library
-- **@floating-ui/react** - Floating UI positioning
-- **@atlaskit/pragmatic-drag-and-drop** - Drag-and-drop
-- **@tanstack/react-virtual** - Virtual scrolling
-- **CodeMirror 6** - Code/text editor
-
-### AI Integration
-- **@anthropic-ai/sdk** - Claude API
-- **openai** - OpenAI API
-- **@google/generative-ai** - Gemini API
-- **ollama** - Local Ollama models
-- **gpt-tokenizer** - Token counting
-
-### Utilities
-- **luxon** - Date/time handling
-- **handlebars** - Template engine
-- **uuid** - Unique IDs
-- **jose** - JWT encryption
-
----
+**Formify** is an Obsidian plugin combining a form workflow system with multi-AI-provider chat integration. It merges two open-source projects: **obsidian-form-flow** (form workflows) and **obsidian-tars** (AI providers). Plugin ID: `formify`, target: Obsidian 1.8.0+.
 
 ## Development Commands
 
+All commands run from the `plugin/` directory:
+
 ```bash
-# Navigate to plugin directory first
 cd plugin
 
-# Development mode (watch with hot reload)
-npm run dev
-
-# Production build (minified)
-npm run build
-
-# Build and copy to local Obsidian vault
-npm run build:local
-
-# Version bump
-npm run version
+npm run dev          # Development mode with watch + inline source maps
+npm run build        # Production build (minified, no source maps)
+npm run build:local  # Production build + copy to local Obsidian vault
+npm run lint         # ESLint check
+npm run version      # Bump version in manifest.json and versions.json
 ```
 
-### Build Output
-- **Development**: Outputs to `plugin/` directory with inline source maps
-- **Production**: Minified bundle, outputs to configured Obsidian plugin directory
+### Local Development Setup
 
----
+1. Copy `plugin/.env.example` to `plugin/.env`
+2. Set `OBSIDIAN_VAULT_PATH` to your Obsidian vault root (not `.obsidian/plugins/`)
+3. Run `npm run build:local` to build and sync to vault, or `npm run dev` for watch mode with manual copy
 
-## Architecture Patterns
+Build output: `plugin/main.js` + `plugin/styles.css` (CSS is auto-renamed from `main.css` by the esbuild plugin). The `copy-to-vault.mjs` script reads `.env` from either `plugin/.env` or repo root `.env`.
 
-### 1. Plugin Lifecycle (`src/main.ts`)
+### Build System
 
+esbuild bundles `src/main.ts` → `main.js` (CJS format, ES2018 target). External dependencies provided by Obsidian at runtime: `obsidian`, `electron`, `@codemirror/*`, `@lezer/*`, and Node.js builtins.
+
+## Architecture
+
+### Layered Architecture (top-down)
+
+```
+Plugin Entry (main.ts)
+  → FeatureCoordinator          // manages independent feature modules
+    → TarsFeatureManager        // AI text generation, tab completion
+    → ChatFeatureManager        // AI chat interface, tools, skills
+  → ServiceContainer            // dependency injection for all services
+    → FormService               // core form submission + validation
+    → ActionChain               // recursive action execution engine
+    → 15 IActionService impls   // one per action type
+  → Model layer                 // pure data types, enums, configs
+```
+
+### Form Submission Data Flow
+
+This is the critical path to understand:
+
+1. **FormService.submit()** receives a `FormConfig` + user field values
+2. **Field processing**: validates fields → replaces built-in variables (`{{date}}`, `{{clipboard}}`, `{{selection}}`) → builds two parallel value maps:
+   - `idValues` (keyed by field ID — used internally for conditions, variable substitution)
+   - `values` (keyed by field label — used in AI prompts, user-facing output)
+3. **ActionChain.next()** executes actions recursively:
+   - Checks `abortSignal` (timeout/user cancellation)
+   - Evaluates `action.condition` via `FilterService.match()` — skip if false
+   - Finds matching `IActionService` via `accept()` pattern
+   - Calls `service.run(action, context, chain)` → then `chain.next(context)`
+4. **Background execution optimization**: When an AI action is encountered and background mode is enabled, the form UI closes immediately while AI actions continue in background
+
+### ActionChain (src/service/action/IActionService.ts)
+
+The chain is a recursive iterator over `IFormAction[]`. Each `IActionService` implements:
+- `accept(action)` — returns true if this service handles the action type
+- `run(action, context, chain)` — executes the action, then calls `chain.next(context)`
+
+Special flow-control actions: `LOOP` creates nested `ActionChain` with `LoopVariableScope`; `BREAK`/`CONTINUE` throw sentinel values caught by the loop service.
+
+### AI Action Pipeline (src/service/action/ai/AIActionService.ts)
+
+The most complex service (~800 lines). Execution flow:
+
+1. **Runtime model selection** — optionally picks model from form field values or shows a picker dialog
+2. **Build system prompt** — `SystemPromptAssembler` with modes: DEFAULT / CUSTOM / NONE
+3. **Build user prompt** — processes template variables:
+   - `{{@fieldName}}` → field values
+   - `{{output:varName}}` → output from previous actions
+   - `{{[[path/to/file]]}}` → resolves Obsidian internal links (reads file content)
+   - Built-in: `{{date}}`, `{{time}}`, `{{selection}}`, `{{clipboard}}`
+4. **Call AI** via unified `Vendor` interface → async generator yields streaming chunks
+5. **Post-process** — strips reasoning blocks (`$$think$$...$$end$$`), stores result in `state.values`
+
+### AI Provider Architecture (src/features/tars/providers/)
+
+All 17+ providers implement the `Vendor` interface:
 ```typescript
-class FormPlugin extends Plugin {
-    settings: PluginSettings;
-    featureCoordinator: FeatureCoordinator;
-    services: ServiceContainer;
-
-    async onload() {
-        // 1. Load settings
-        // 2. Initialize service container
-        // 3. Setup commands and views
-        // 4. Initialize features on layout ready
-    }
-
-    onunload() {
-        // Cleanup services and features
-    }
+interface Vendor {
+  name: string;
+  sendRequestFunc: (options: BaseOptions) => SendRequest;  // returns async generator
+  models: string[];
+  capabilities: Capability[];
 }
 ```
 
-### 2. Service Container Pattern
+Providers: Claude, OpenAI, Gemini, Ollama, DeepSeek, Qwen, QianFan, Kimi, Azure, Grok, OpenRouter, SiliconFlow, Zhipu, Doubao, Poe, and more.
 
-The `ServiceContainer` class manages all services with dependency injection:
+### ServiceContainer (src/service/ServiceContainer.ts)
 
-```typescript
-// Access services via container
-const container = getServiceContainer();
-container.formService.submit(...);
+Manual dependency injection with two-phase initialization:
 
-// Or via React context
-const { formService } = useServiceContainer();
+- **Phase 1** (constructor): Services that don't need Obsidian `App` instance
+- **Phase 2** (`initializeWithApp`): Services requiring `App` (e.g., `InternalLinkParserService`)
+
+Access pattern: `getServiceContainer()` global function or `useServiceContainer()` React hook.
+
+### React Context Hierarchy
+
+```
+ObsidianAppContext → PluginSettingsContext → ServiceContainerContext → LoopContext
 ```
 
-**Core Services**:
-- `FormService` - Form submission and lifecycle
-- `FormScriptService` - Custom script execution
-- `ApplicationCommandService` - Command registration
-- `ContextMenuService` - Right-click menus
-- `FormIntegrationService` - Form discovery
-- `AutoTriggerService` - Auto-execution
-
-### 3. Feature Coordination
-
-`FeatureCoordinator` manages independent features:
-- **TarsFeatureManager** - Text generation & tab completion
-- **ChatFeatureManager** - AI chat interface & tools
-
-### 4. Action Visitor Pattern
-
-Actions use a visitor pattern with specialized services:
-
-```typescript
-interface IActionService {
-    accept(action: Action): boolean;
-    run(context: ActionContext): Promise<void>;
-}
-```
-
-### 5. React Context Providers
-
-```typescript
-// Obsidian App access
-<ObsidianAppContext.Provider value={app}>
-
-// Plugin settings
-<PluginSettingsContext.Provider value={settings}>
-
-// Service container
-<ServiceContainerContext.Provider value={services}>
-
-// Loop state for iterations
-<LoopContext.Provider value={loopState}>
-```
-
----
+Components access these via hooks: `useObsidianApp()`, `usePluginSettings()`, `useServiceContainer()`.
 
 ## Code Conventions
 
-### TypeScript
+- **Indentation**: Tabs (enforced by ESLint)
+- **TypeScript**: `noImplicitAny` + `strictNullChecks` enabled
+- **Path aliases**: `src/*` → source files, `tars/*` → `src/features/tars/*`
+- **File naming**: PascalCase for components/classes/services, camelCase for utils
+- **Interface naming**: `I` prefix for service interfaces (e.g., `IActionService`)
+- **JSX**: react-jsx (no `React` import needed)
 
-1. **Strict Mode** - `noImplicitAny` and `strictNullChecks` enabled
-2. **Path Aliases**:
-   - `src/*` → source files
-   - `tars/*` → `src/features/tars/*`
-3. **Target**: ES2018
-4. **JSX**: react-jsx
+### File Organization Pattern
 
-### File Organization
+- `model/` — pure data types and enums (no logic)
+- `service/` — business logic (no UI)
+- `component/` — reusable React components
+- `view/` — feature-specific UI (form editor in `view/edit/`, preview in `view/preview/`)
+- `hooks/` — custom React hooks
+- `features/` — independent feature modules (chat, tars)
+- `context/` — React context providers
 
-1. **Models** in `model/` - Pure data types and enums
-2. **Services** in `service/` - Business logic, no UI
-3. **Components** in `component/` - Reusable React components
-4. **Views** in `view/` - Feature-specific UI
-5. **Hooks** in `hooks/` - Custom React hooks
-6. **Utils** in `utils/` - Pure utility functions
-
-### Naming Conventions
-
-- **Files**: PascalCase for components/classes, camelCase for utils
-- **Components**: `ComponentName.tsx`
-- **Services**: `ServiceName.ts`
-- **Hooks**: `useHookName.tsx`
-- **Enums**: `EnumName.ts` with PascalCase values
-- **Interfaces**: Prefix with `I` for service interfaces (e.g., `IActionService`)
-
-### Indentation
-
-- **Tab indentation** (per ESLint config)
-- Exception: Object expressions may use different indentation
-
----
-
-## Key Models
-
-### FormConfig (`model/FormConfig.ts`)
-
-```typescript
-interface FormConfig {
-    id: string;
-    name: string;
-    fields: Field[];
-    actions: Action[];
-    settings: FormSettings;
-}
-```
-
-### Field Types (`model/field/`)
-
-- Text, Textarea, Password, Number
-- Date, DateTime, Time
-- Checkbox, Toggle, Radio, Select
-- PropertyValues, FileList, FolderPath
-
-### Action Types (`model/action/`)
-
-- AI, CreateFile, InsertText, RunScript
-- UpdateFrontmatter, Loop, Break, Continue
-- Button, Collect, GenerateForm, and more
-
----
-
-## Internationalization
-
-**Supported Languages**:
-- English (`i18n/en.ts`)
-- Chinese Simplified (`i18n/zh.ts`)
-- Chinese Traditional (`i18n/zhTw.ts`)
-
-**Usage Pattern**:
-```typescript
-import { localInstance } from 'src/i18n/local';
-const text = localInstance.field_name;
-```
-
-All locale classes implement the `Local` interface.
-
----
-
-## Testing
-
-Currently minimal test coverage. Tests use Jest.
-
----
-
-## Common Tasks for AI Assistants
+## Key Extension Points
 
 ### Adding a New Field Type
 
-1. Create field model in `model/field/`
-2. Add enum value in `model/enums/FieldType.ts`
+1. Add enum in `model/enums/FormFieldType.ts`
+2. Create field model in `model/field/`
 3. Create field component in `component/form-fields/`
-4. Add field reader in `service/field-value/`
-5. Update form editor views
-6. Add i18n strings
+4. Add field value reader in `service/field-value/`
+5. Update form editor in `view/edit/`
+6. Add i18n strings in `i18n/en.ts`, `i18n/zh.ts`, `i18n/zhTw.ts`
 
 ### Adding a New Action Type
 
-1. Create action model in `model/action/`
-2. Add enum value in `model/enums/ActionType.ts`
-3. Create action service in `service/action/`
-4. Register in action chain
-5. Add action editor UI in `view/edit/action/`
+1. Add enum in `model/enums/FormActionType.ts`
+2. Create action model in `model/action/`
+3. Create `IActionService` implementation in `service/action/`
+4. Register in the action service discovery chain
+5. Add editor UI in `view/edit/action/`
 6. Add i18n strings
 
 ### Adding a New AI Provider
 
-1. Create provider in `features/tars/providers/`
-2. Implement provider interface
+1. Create provider file in `features/tars/providers/`
+2. Implement the `Vendor` interface (especially `sendRequestFunc` returning an async generator)
 3. Register in provider factory
-4. Add settings UI
-5. Add i18n strings
+4. Add settings UI and i18n strings
 
-### Adding a Chat Tool
+## i18n
 
-1. Create tool definition in `features/chat/tools/`
-2. Implement tool interface
-3. Register in tool registry
-4. Add approval handling if needed
+Three locales: `en.ts`, `zh.ts`, `zhTw.ts` — all implement the `Local` interface. Access via `localInstance.key_name`.
 
----
-
-## Important Files to Know
-
-| File | Purpose |
-|------|---------|
-| `src/main.ts` | Plugin entry point |
-| `src/service/ServiceContainer.ts` | Dependency injection |
-| `src/service/FormService.ts` | Core form logic |
-| `src/features/FeatureCoordinator.ts` | Feature management |
-| `src/settings/PluginSettings.ts` | Settings schema |
-| `src/model/FormConfig.ts` | Form data model |
-| `esbuild.config.mjs` | Build configuration |
-| `manifest.json` | Plugin metadata |
-
----
-
-## Debug Mode
-
-Enable debug logging via settings:
+## Debug
 
 ```typescript
 DebugLogger.setDebugMode(true);
 DebugLogger.setDebugLevel('debug'); // 'error' | 'warn' | 'info' | 'debug'
 ```
-
-Access via `DebugLogger.debug()`, `DebugLogger.info()`, `DebugLogger.warn()`, `DebugLogger.error()`.
-
----
-
-## External Dependencies Note
-
-The plugin uses several external dependencies that are bundled with esbuild. The following are marked as external and provided by Obsidian:
-- `obsidian`
-- `electron`
-- `@codemirror/*` modules
-- `@lezer/*` modules
-- Node.js built-ins
-
----
-
-## Git Workflow
-
-- Main development happens on feature branches
-- Commit messages should describe the "why" not just the "what"
-- Version bumping uses `npm run version`
-
----
-
-## Questions or Issues
-
-For questions about this codebase or to report issues:
-- Check existing code patterns in similar features
-- Reference the README.md for user-facing documentation
-- Debug logging is available for troubleshooting

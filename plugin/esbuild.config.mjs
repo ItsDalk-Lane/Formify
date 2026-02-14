@@ -16,11 +16,8 @@ const prod = process.argv[2] === "production";
 console.log("📋 构建参数:", process.argv);
 console.log("🔧 构建模式:", prod ? "生产模式 (production)" : "开发模式 (development)");
 
-// Obsidian 插件目标目录
-const OBSIDIAN_PLUGIN_DIR = "C:\\Desktop\\努力成为超级个体\\.obsidian\\plugins\\formify";
-
-// 确定输出目录：生产模式直接输出到 Obsidian 插件目录，开发模式输出到当前目录
-const OUTPUT_DIR = prod ? OBSIDIAN_PLUGIN_DIR : ".";
+// 统一输出到插件目录，由独立同步脚本复制到 Vault
+const OUTPUT_DIR = ".";
 
 console.log("📁 输出目录:", OUTPUT_DIR);
 
@@ -42,14 +39,14 @@ const cssOutputPlugin = () => ({
 				
 				// 生产模式：复制 manifest.json 到输出目录
 				if (prod) {
-					const manifestSource = "manifest.json";
-					const manifestTarget = path.join(parent, "manifest.json");
-					if (fs.existsSync(manifestSource)) {
+					const manifestSource = path.resolve("manifest.json");
+					const manifestTarget = path.resolve(parent, "manifest.json");
+					if (fs.existsSync(manifestSource) && manifestSource !== manifestTarget) {
 						fs.copyFileSync(manifestSource, manifestTarget);
 						console.log(`✅ 已复制 manifest.json 到: ${manifestTarget}`);
 					}
-					
-					console.log(`\n🎉 插件文件已直接构建到 Obsidian 目录: ${OBSIDIAN_PLUGIN_DIR}`);
+
+					console.log(`\n🎉 插件构建完成，产物目录: ${path.resolve(parent)}`);
 				}
 			} catch (e) {
 				console.error("❌ CSS 处理失败:", e);
@@ -96,8 +93,7 @@ const context = await esbuild.context({
 	minify: prod,
 });
 
-// 生产模式：确保输出目录存在
-if (prod && !fs.existsSync(OUTPUT_DIR)) {
+if (!fs.existsSync(OUTPUT_DIR)) {
 	fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 	console.log(`📁 创建输出目录: ${OUTPUT_DIR}`);
 }

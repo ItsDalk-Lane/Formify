@@ -1,63 +1,133 @@
-import { copyFile, mkdir, readFile } from "fs/promises";
-import { existsSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
+import { access, copyFile, mkdir, readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const pluginDir = join(__dirname, "..");
-const projectRootDir = join(pluginDir, "..");
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const pluginDir = resolve(scriptDir, "..");
+const repoRootDir = resolve(pluginDir, "..");
+const ENV_KEY = "OBSIDIAN_VAULT_PATH";
 
-dotenv.config({quiet: true});
-const VAULT_PATH = process.env.VAULT_PATH;
-if (!VAULT_PATH) {
+const requiredBuildFiles = ["main.js"];
+const optionalBuildFiles = ["styles.css", "versions.json"];
+
+function loadEnvFiles() {
+	const envCandidates = [resolve(pluginDir, ".env"), resolve(repoRootDir, ".env")];
+
+	for (const envPath of envCandidates) {
+		if (existsSync(envPath)) {
+			dotenv.config({ path: envPath, quiet: true });
+		}
+	}
+}
+
+async function pathExists(filePath) {
+	try {
+		await access(filePath);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+async function resolveManifestPath() {
+	const candidates = [
+		resolve(pluginDir, "manifest.json"),
+		resolve(repoRootDir, "manifest.json")
+	];
+
+	for (const candidate of candidates) {
+		if (await pathExists(candidate)) {
+			return candidate;
+		}
+	}
+
 	throw new Error(
-		"VAULT_PATH is not defined. Please create a .env file in the project root and add the line: VAULT_PATH=/path/to/your/vault"
+		`[formify] 未找到 manifest.json。已检查: ${candidates.join(", ")}`
 	);
 }
 
-// 文件配置：定义每个文件的相对路径
-const fileConfig = [
-	{
-		name: "manifest.json",
-		sourcePath: projectRootDir, // 在项目根目录
-	},
-	{
-		name: "main.js", 
-		sourcePath: pluginDir, // 在plugin目录
-	},
-	{
-		name: "styles.css",
-		sourcePath: pluginDir, // 在plugin目录
+async function readPluginId(manifestPath) {
+	const manifestContent = await readFile(manifestPath, "utf8");
+	const manifest = JSON.parse(manifestContent);
+	if (!manifest?.id || typeof manifest.id !== "string") {
+		throw new Error(`[formify] manifest.json 缺少有效的 id 字段: ${manifestPath}`);
 	}
-];
+	return manifest.id;
+}
 
-const manifestPath = join(projectRootDir, "manifest.json");
+async function resolveFilesToCopy(manifestPath) {
+	const files = [
+		{ name: "main.js", sourcePath: resolve(pluginDir, "main.js"), required: true },
+		{ name: "manifest.json", sourcePath: manifestPath, required: true }
+	];
 
-async function copyToVault() {
-  try {
-    const manifestContent = await readFile(manifestPath, "utf8");
-		const manifest = JSON.parse(manifestContent);
-		const pluginId = manifest.id;
-
-    const targetPluginDir = join(VAULT_PATH, ".obsidian", "plugins", pluginId);
-
-    if (!existsSync(targetPluginDir)) {
-			await mkdir(targetPluginDir, { recursive: true });
-			console.log(`创建目录: ${targetPluginDir}`);
+	for (const name of optionalBuildFiles) {
+		const sourcePath = resolve(pluginDir, name);
+		if (await pathExists(sourcePath)) {
+			files.push({ name, sourcePath, required: false });
 		}
+	}
 
-    // 复制文件
-		for (const fileInfo of fileConfig) {
-			const sourcePath = join(fileInfo.sourcePath, fileInfo.name);
-			const destPath = join(targetPluginDir, fileInfo.name);
-			await copyFile(sourcePath, destPath);
-			console.log(`复制文件: ${fileInfo.name} -> ${destPath}`);
+	for (const name of requiredBuildFiles) {
+		const sourcePath = resolve(pluginDir, name);
+		if (!(await pathExists(sourcePath))) {
+			throw new Error(`[formify] 缺少构建产物: ${sourcePath}。请先运行构建命令。`);
 		}
-  } catch (error) {
-		console.error("复制文件时出错:", error);
+	}
+
+	return files;
+}
+
+export async function copyToVault(options = {}) {
+	loadEnvFiles();
+
+	const vaultPathFromEnv = process.env[ENV_KEY];
+	const vaultRoot = resolve(options.vaultPath ?? vaultPathFromEnv ?? "");
+	if (!vaultPathFromEnv && !options.vaultPath) {
+		throw new Error(
+			`[formify] 未设置 ${ENV_KEY}。请在 plugin/.env 或仓库根 .env 中添加：${ENV_KEY}=/path/to/your/vault`
+		);
+	}
+
+	const manifestPath = await resolveManifestPath();
+	const pluginId = await readPluginId(manifestPath);
+	const sourceDir = pluginDir;
+	const targetPluginDir = resolve(vaultRoot, ".obsidian", "plugins", pluginId);
+	const filesToCopy = await resolveFilesToCopy(manifestPath);
+
+	await mkdir(targetPluginDir, { recursive: true });
+
+	const copiedFiles = [];
+	for (const file of filesToCopy) {
+		const targetPath = join(targetPluginDir, file.name);
+		await copyFile(file.sourcePath, targetPath);
+		copiedFiles.push(file.name);
+	}
+
+	console.log(`[formify] Source: ${sourceDir}`);
+	console.log(`[formify] Vault: ${vaultRoot}`);
+	console.log(`[formify] Plugin id: ${pluginId}`);
+	console.log(`[formify] Target: ${targetPluginDir}`);
+	console.log(`[formify] Copy: ${copiedFiles.join(", ")}`);
+
+	return {
+		pluginId,
+		sourceDir,
+		targetPluginDir,
+		copiedFiles
+	};
+}
+
+const isDirectRun =
+	process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+
+if (isDirectRun) {
+	try {
+		await copyToVault();
+	} catch (error) {
+		console.error(`[formify] Copy failed: ${error.message}`);
 		process.exit(1);
 	}
 }
-
-copyToVault();

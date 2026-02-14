@@ -111,7 +111,7 @@ Formify 是一个功能强大的 Obsidian 插件，结合了表单工作流系�
 ### 环境要求
 
 - **Obsidian 版本**: 1.8.0 或更高
-- **Node.js 版本**: 18.0 或更高（开发使用）
+- **Node.js 版本**: `>=25.6.1 <26`（开发使用）
 - **操作系统**: Windows / macOS / Linux
 
 ### 安装方式
@@ -139,9 +139,21 @@ npm run dev
 # 生产构建
 npm run build
 
-# 本地测试（构建并复制到本地 vault）
+# 本地构建并同步到 Obsidian Vault（跨平台）
 npm run build:local
 ```
+
+本地开发同步步骤：
+
+1. 进入 `plugin/` 目录，将 `.env.example` 复制为 `.env`。
+2. 在 `.env` 中设置 `OBSIDIAN_VAULT_PATH`（填写 Vault 根目录，不是 `.obsidian/plugins`）。
+3. 执行 `npm run build:local`，脚本会构建并同步到 `.obsidian/plugins/<manifest.id>/`。
+4. 打开 Obsidian：`Settings -> Community plugins -> Installed plugins`，启用 Formify。
+
+常见 Vault 路径模板：
+
+- Windows: `C:/Users/<your-user>/Documents/Obsidian/MyVault`
+- macOS: `/Users/<your-user>/Documents/Obsidian/MyVault`
 
 ### 基础配置
 
