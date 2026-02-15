@@ -3,6 +3,7 @@ import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl } from './utils'
 import { feedChunk, ParsedSSEEvent } from './sse'
+import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
 
 // Kimi选项接口，扩展基础选项以支持推理功能
 export interface KimiOptions extends BaseOptions {
@@ -148,7 +149,7 @@ export const kimiVendor: Vendor = {
 		parameters: {},
 		enableReasoning: false // 默认关闭推理功能
 	} as KimiOptions,
-	sendRequestFunc,
+	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
 	models: [],
 	websiteToObtainKey: 'https://www.moonshot.cn',
 	capabilities: ['Text Generation', 'Image Vision', 'Reasoning']

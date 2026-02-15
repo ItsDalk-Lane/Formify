@@ -4,6 +4,7 @@ import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from 
 import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl, getMimeTypeFromFilename } from './utils'
 import { normalizeProviderError } from './errors'
 import { withRetry } from './retry'
+import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
 
 export type DoubaoThinkingType = 'enabled' | 'disabled' | 'auto'
 export type DoubaoReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
@@ -613,7 +614,7 @@ export const doubaoVendor: Vendor = {
 		parameters: {},
 		enableWebSearch: false // 默认不启用 Web Search
 	},
-	sendRequestFunc,
+	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
 	models,
 	websiteToObtainKey: 'https://www.volcengine.com',
 	capabilities: ['Text Generation', 'Image Vision', 'Web Search', 'Reasoning']

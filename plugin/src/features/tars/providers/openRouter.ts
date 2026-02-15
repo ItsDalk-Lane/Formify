@@ -5,6 +5,7 @@ import { arrayBufferToBase64, buildReasoningBlockStart, buildReasoningBlockEnd, 
 import { withToolMessageContext } from './messageFormat'
 import { normalizeProviderError } from './errors'
 import { withRetry } from './retry'
+import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
 
 // OpenRouter Reasoning Effort 级别
 export type OpenRouterReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
@@ -950,7 +951,7 @@ export const openRouterVendor: Vendor = {
 		reasoningEffort: 'medium',
 		parameters: {}
 	} as OpenRouterOptions,
-	sendRequestFunc,
+	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
 	models: [],
 	websiteToObtainKey: 'https://openrouter.ai',
 	capabilities: ['Text Generation', 'Image Vision', 'PDF Vision', 'Web Search', 'Image Generation', 'Reasoning']

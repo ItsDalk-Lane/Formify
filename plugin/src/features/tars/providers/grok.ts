@@ -2,6 +2,7 @@ import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl } from './utils'
 import { feedChunk } from './sse'
+import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
 
 // Grok选项接口，扩展基础选项以支持推理功能
 export interface GrokOptions extends BaseOptions {
@@ -224,7 +225,7 @@ export const grokVendor: Vendor = {
 		parameters: {},
 		enableReasoning: false // 默认关闭推理功能
 	} as GrokOptions,
-	sendRequestFunc,
+	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
 	models: [],
 	websiteToObtainKey: 'https://x.ai',
 	capabilities: ['Text Generation', 'Reasoning', 'Image Vision']

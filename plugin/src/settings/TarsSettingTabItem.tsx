@@ -30,6 +30,7 @@ export const TarsSettingTabItem = ({ plugin }: Props) => {
 				// 通过插件实例访问 FeatureCoordinator 来刷新技能缓存
 				await plugin.featureCoordinator.refreshSkillsCache();
 			},
+			getMcpClientManager: () => plugin.featureCoordinator.getMcpClientManager(),
 		});
 
 		panel.render(containerRef.current);

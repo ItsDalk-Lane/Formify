@@ -55,7 +55,26 @@ export interface BaseOptions {
 	model: string
 	parameters: Record<string, unknown>
 	enableWebSearch?: boolean
+	/** MCP 工具定义列表（可选，由 McpClientManager 注入） */
+	mcpTools?: McpToolDefinitionForProvider[]
+	/** MCP 工具调用回调（可选，由 McpClientManager 注入） */
+	mcpCallTool?: McpCallToolFnForProvider
 }
+
+/** MCP 工具定义（Provider 使用的精简格式） */
+export interface McpToolDefinitionForProvider {
+	readonly name: string
+	readonly description: string
+	readonly inputSchema: Record<string, unknown>
+	readonly serverId: string
+}
+
+/** MCP 工具调用函数（Provider 使用） */
+export type McpCallToolFnForProvider = (
+	serverId: string,
+	toolName: string,
+	args: Record<string, unknown>,
+) => Promise<string>
 
 export interface ProviderSettings {
 	tag: string

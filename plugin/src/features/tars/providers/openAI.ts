@@ -9,6 +9,7 @@ import {
 import { withToolMessageContext } from './messageFormat'
 import { normalizeProviderError } from './errors'
 import { withRetry } from './retry'
+import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
 
 export interface OpenAIOptions extends BaseOptions {
 	enableReasoning?: boolean
@@ -182,7 +183,7 @@ export const openAIVendor: Vendor = {
 		enableReasoning: false,
 		parameters: {}
 	} as OpenAIOptions,
-	sendRequestFunc,
+	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
 	models: [],
 	websiteToObtainKey: 'https://platform.openai.com/api-keys',
 	capabilities: ['Text Generation', 'Image Vision', 'Reasoning']

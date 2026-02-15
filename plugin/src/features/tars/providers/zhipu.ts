@@ -3,6 +3,7 @@ import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { DebugLogger } from '../../../utils/DebugLogger'
 import { buildReasoningBlockStart, buildReasoningBlockEnd } from './utils'
+import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
 
 export type ZhipuThinkingType = 'enabled' | 'disabled' | 'auto'
 
@@ -128,7 +129,7 @@ export const zhipuVendor: Vendor = {
 		thinkingType: DEFAULT_ZHIPU_THINKING_TYPE,
 		parameters: {}
 	} as ZhipuOptions,
-	sendRequestFunc,
+	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
 	models: ZHIPU_MODELS,
 	websiteToObtainKey: 'https://open.bigmodel.cn/',
 	capabilities: ['Text Generation', 'Web Search', 'Reasoning']

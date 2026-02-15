@@ -18,6 +18,7 @@ import { siliconFlowVendor } from './providers/siliconflow'
 import { zhipuVendor } from './providers/zhipu'
 import type { ToolDefinition } from 'src/features/chat/types/tools'
 import type { SystemPromptsDataFile } from './system-prompts/types'
+import { type McpSettings, DEFAULT_MCP_SETTINGS } from './mcp/types'
 
 export const APP_FOLDER = 'Tars'
 
@@ -74,6 +75,8 @@ export interface TarsSettings {
 		executionMode: 'manual' | 'auto'
 		enabled: boolean
 	}
+	/** MCP 服务器配置 */
+	mcp?: McpSettings
 }
 
 export const DEFAULT_TARS_SETTINGS: TarsSettings = {
@@ -108,7 +111,8 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 		globalTools: [],
 		executionMode: 'manual',
 		enabled: false
-	}
+	},
+	mcp: DEFAULT_MCP_SETTINGS,
 }
 
 export const availableVendors: Vendor[] = [

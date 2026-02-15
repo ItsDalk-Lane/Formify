@@ -5,6 +5,7 @@ import { BaseOptions, Message, ResolveEmbedAsBinary, SaveAttachment, SendRequest
 import { buildReasoningBlockEnd, buildReasoningBlockStart, convertEmbedToImageUrl } from './utils'
 import { withToolMessageContext } from './messageFormat'
 import { DebugLogger } from '../../../utils/DebugLogger'
+import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
 
 export interface QianFanOptions extends BaseOptions {
 	enableThinking?: boolean
@@ -413,7 +414,7 @@ export const qianFanVendor: Vendor = {
 		imageDisplayWidth: 400,
 		parameters: {}
 	} as QianFanOptions,
-	sendRequestFunc,
+	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
 	models: QIANFAN_MODELS,
 	websiteToObtainKey: 'https://qianfan.cloud.baidu.com',
 	capabilities: ['Text Generation', 'Image Vision', 'Reasoning', 'Image Generation']

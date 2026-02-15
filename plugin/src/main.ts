@@ -37,6 +37,7 @@ export default class FormPlugin extends Plugin {
 		await this.services.formIntegrationService.initialize(this);
 		await this.services.contextMenuService.initialize(this, this.services);
 		this.featureCoordinator.initializeTars(this.settings);
+		this.featureCoordinator.initializeMcp(this.settings);
 
 		this.app.workspace.onLayoutReady(async () => {
 			this.conflictMonitor = new ConflictMonitor(this.app);

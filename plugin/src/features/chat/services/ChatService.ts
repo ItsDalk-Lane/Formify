@@ -1217,12 +1217,23 @@ export class ChatService {
 			let enableReasoning = this.state.enableReasoningToggle && providerEnableReasoning;
 			let enableThinking = this.state.enableReasoningToggle && providerEnableThinking;
 			const enableWebSearch = this.state.enableWebSearchToggle && providerEnableWebSearch;
-			const providerOptions = {
+			const providerOptions: Record<string, unknown> = {
 				...providerOptionsRaw,
 				enableReasoning,
 				enableThinking,
 				enableWebSearch
 			};
+
+			// 注入 MCP 工具（如果可用）
+			const mcpManager = this.plugin.featureCoordinator.getMcpClientManager();
+			if (mcpManager) {
+				const mcpTools = mcpManager.getAvailableTools();
+				if (mcpTools.length > 0) {
+					providerOptions.mcpTools = mcpTools;
+					providerOptions.mcpCallTool = (serverId: string, name: string, args: Record<string, unknown>) =>
+						mcpManager.callTool(serverId, name, args);
+				}
+			}
 
 			const vendor = availableVendors.find((item) => item.name === provider.vendor);
 			if (!vendor) {

@@ -19,6 +19,7 @@ import "src/component/modal/AIStreamingModal.css";
 import { ParseOptions } from "src/service/InternalLinkParserService";
 import { PromptBuilder } from "src/service/PromptBuilder";
 import { SystemPromptAssembler } from "src/service/SystemPromptAssembler";
+import type { BaseOptions } from "src/features/tars/providers";
 
 /**
  * AI动作服务
@@ -296,6 +297,23 @@ export default class AIActionService implements IActionService {
     }
 
     /**
+     * 向 providerOptions 注入 MCP 工具（如果可用）
+     */
+    private injectMcpTools(providerOptions: BaseOptions, context: ActionContext): void {
+        const plugin = (context.app as any).plugins?.plugins?.["formify"];
+        const mcpManager = plugin?.featureCoordinator?.getMcpClientManager?.();
+        if (!mcpManager) return;
+
+        const mcpTools = mcpManager.getAvailableTools();
+        if (mcpTools.length > 0) {
+            providerOptions.mcpTools = mcpTools;
+            providerOptions.mcpCallTool = (serverId: string, name: string, args: Record<string, unknown>) =>
+                mcpManager.callTool(serverId, name, args);
+            DebugLogger.debug(`[AIAction] 注入 ${mcpTools.length} 个 MCP 工具`);
+        }
+    }
+
+    /**
      * 调用AI API
      */
     private async callAI(
@@ -318,6 +336,7 @@ export default class AIActionService implements IActionService {
             provider.options,
             provider.vendor
         );
+        this.injectMcpTools(providerOptions, context);
         const sendRequest = vendor.sendRequestFunc(providerOptions);
         
         // 创建中断控制器
@@ -403,8 +422,9 @@ export default class AIActionService implements IActionService {
             provider.options,
             provider.vendor
         );
+        this.injectMcpTools(providerOptions, context);
         const sendRequest = vendor.sendRequestFunc(providerOptions);
-        
+
         // 创建中断控制器
         const controller = new AbortController();
         const linkedAbortHandler = () => {

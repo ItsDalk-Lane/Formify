@@ -3,6 +3,7 @@ import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl } from './utils'
 import { withToolMessageContext } from './messageFormat'
+import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
 
 // SiliconFlow选项接口，扩展基础选项以支持推理功能
 export interface SiliconFlowOptions extends BaseOptions {
@@ -105,7 +106,7 @@ export const siliconFlowVendor: Vendor = {
 		parameters: {},
 		enableReasoning: false // 默认关闭推理功能
 	} as SiliconFlowOptions,
-	sendRequestFunc,
+	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
 	models: [],
 	websiteToObtainKey: 'https://siliconflow.cn',
 	capabilities: ['Text Generation', 'Image Vision', 'Reasoning']

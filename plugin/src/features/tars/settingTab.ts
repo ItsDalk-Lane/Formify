@@ -33,6 +33,8 @@ import { localInstance } from 'src/i18n/locals'
 import { SystemPromptManagerModal } from './system-prompts/SystemPromptManagerModal'
 import { availableVendors, DEFAULT_TARS_SETTINGS } from './settings'
 import type { TarsSettings } from './settings'
+import { McpClientManager, McpConfigImporter, DEFAULT_MCP_SETTINGS } from './mcp'
+import type { McpServerConfig, McpSettings, McpServerState } from './mcp'
 import FolderSuggest from '../../component/combobox/FolderSuggest'
 import type { ChatSettings, SkillType } from '../chat/types/chat'
 import { localInstance } from '../../i18n/locals'
@@ -44,6 +46,7 @@ export interface TarsSettingsContext {
 	saveSettings: () => Promise<void>
 	updateChatSettings: (partial: Partial<ChatSettings>) => Promise<void>
 	refreshSkillsCache?: () => Promise<void>
+	getMcpClientManager?: () => McpClientManager | null
 }
 
 export class TarsSettingTab {
@@ -59,6 +62,7 @@ export class TarsSettingTab {
 	private isSkillManagementCollapsed = true // 默认折叠技能管理
 	private isTabCompletionCollapsed = true // 默认折叠Tab补全设置
 	private isSystemPromptSettingsCollapsed = true // 默认折叠系统提示词设置
+	private isMcpCollapsed = true // 默认折叠MCP设置
 	private isAdvancedCollapsed = true // 默认折叠高级设置
 	private doubaoRenderers = new Map<any, () => void>()
 	private skillGroupExpandedState = new Map<string, boolean>()
@@ -667,6 +671,9 @@ export class TarsSettingTab {
 				})
 			})
 
+		// MCP 服务器设置区域
+		this.renderMcpSettings(containerEl)
+
 		// 高级设置区域（使用 Setting 组件，与上方保持一致）
 		const advancedHeaderSetting = new Setting(containerEl)
 			.setName(t('Advanced'))
@@ -877,6 +884,285 @@ export class TarsSettingTab {
 						DebugLogger.setDebugLevel(value)
 					})
 			)
+	}
+
+	/**
+	 * 渲染 MCP 服务器设置区域
+	 */
+	private renderMcpSettings(containerEl: HTMLElement): void {
+		const mcpSettings = this.settings.mcp ?? DEFAULT_MCP_SETTINGS
+
+		// 标题行
+		const mcpHeaderSetting = new Setting(containerEl)
+			.setName('MCP 服务器')
+
+		const mcpButtonWrapper = mcpHeaderSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
+		mcpButtonWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
+
+		// 添加服务器按钮
+		const addServerBtn = mcpButtonWrapper.createEl('button', { cls: 'clickable-icon' })
+		addServerBtn.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<line x1="12" y1="5" x2="12" y2="19"></line>
+				<line x1="5" y1="12" x2="19" y2="12"></line>
+			</svg>
+		`
+		addServerBtn.title = '添加 MCP 服务器'
+
+		// 导入按钮
+		const importBtn = mcpButtonWrapper.createEl('button', { cls: 'clickable-icon' })
+		importBtn.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+				<polyline points="7 10 12 15 17 10"></polyline>
+				<line x1="12" y1="15" x2="12" y2="3"></line>
+			</svg>
+		`
+		importBtn.title = '导入 mcp.json'
+
+		// Chevron 图标
+		const mcpChevronIcon = mcpButtonWrapper.createEl('div', { cls: 'ai-provider-chevron' })
+		mcpChevronIcon.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="6 9 12 15 18 9"></polyline>
+			</svg>
+		`
+		mcpChevronIcon.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			color: var(--text-muted);
+			cursor: pointer;
+			transition: transform 0.2s ease;
+			transform: ${this.isMcpCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};
+			width: 16px;
+			height: 16px;
+		`
+
+		const mcpHeaderEl = mcpHeaderSetting.settingEl
+		mcpHeaderEl.style.cursor = 'pointer'
+		mcpHeaderEl.style.borderRadius = '0px'
+		mcpHeaderEl.style.border = '1px solid var(--background-modifier-border)'
+		mcpHeaderEl.style.marginBottom = '0px'
+		mcpHeaderEl.style.padding = '12px 12px'
+
+		// 内容容器
+		const mcpSection = containerEl.createDiv({ cls: 'mcp-settings-container' })
+		mcpSection.style.padding = '0 8px 8px 8px'
+		mcpSection.style.backgroundColor = 'var(--background-secondary)'
+		mcpSection.style.border = '1px solid var(--background-modifier-border)'
+		mcpSection.style.borderTop = 'none'
+		mcpSection.style.display = this.isMcpCollapsed ? 'none' : 'block'
+
+		// 折叠/展开逻辑
+		const toggleMcpSection = () => {
+			this.isMcpCollapsed = !this.isMcpCollapsed
+			mcpChevronIcon.style.transform = this.isMcpCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'
+			mcpSection.style.display = this.isMcpCollapsed ? 'none' : 'block'
+		}
+
+		mcpHeaderEl.addEventListener('click', (e) => {
+			if ((e.target as HTMLElement).closest('.clickable-icon') || (e.target as HTMLElement).closest('.ai-provider-chevron')) {
+				return
+			}
+			toggleMcpSection()
+		})
+
+		mcpChevronIcon.addEventListener('click', (e) => {
+			e.stopPropagation()
+			toggleMcpSection()
+		})
+
+		// MCP 总开关
+		new Setting(mcpSection)
+			.setName('启用 MCP')
+			.setDesc('开启后，AI 对话和表单动作可使用 MCP 服务器提供的工具')
+			.addToggle((toggle) =>
+				toggle.setValue(mcpSettings.enabled).onChange(async (value) => {
+					if (!this.settings.mcp) {
+						this.settings.mcp = { ...DEFAULT_MCP_SETTINGS }
+					}
+					this.settings.mcp.enabled = value
+					await this.saveSettings()
+				})
+			)
+
+		// 服务器列表
+		const serverListContainer = mcpSection.createDiv({ cls: 'mcp-server-list' })
+		this.renderMcpServerList(serverListContainer, mcpSettings)
+
+		// 添加服务器按钮事件
+		addServerBtn.addEventListener('click', (e) => {
+			e.stopPropagation()
+			this.openMcpServerEditModal(null, mcpSettings, () => {
+				serverListContainer.empty()
+				this.renderMcpServerList(serverListContainer, this.settings.mcp ?? DEFAULT_MCP_SETTINGS)
+			})
+		})
+
+		// 导入 mcp.json 按钮事件
+		importBtn.addEventListener('click', (e) => {
+			e.stopPropagation()
+			this.openMcpImportDialog(mcpSettings, () => {
+				serverListContainer.empty()
+				this.renderMcpServerList(serverListContainer, this.settings.mcp ?? DEFAULT_MCP_SETTINGS)
+			})
+		})
+	}
+
+	/**
+	 * 渲染 MCP 服务器列表
+	 */
+	private renderMcpServerList(container: HTMLElement, mcpSettings: McpSettings): void {
+		const servers = mcpSettings.servers
+
+		if (servers.length === 0) {
+			const emptyHint = container.createDiv()
+			emptyHint.style.cssText = 'padding: 16px; text-align: center; color: var(--text-muted); font-size: 0.85em;'
+			emptyHint.textContent = '暂无 MCP 服务器配置。点击 + 添加或导入 mcp.json。'
+			return
+		}
+
+		const mcpManager = this.settingsContext.getMcpClientManager?.()
+
+		for (const server of servers) {
+			const serverState = mcpManager?.getState?.(server.id)
+			const statusText = this.getMcpStatusText(serverState?.status ?? 'idle')
+			const statusColor = this.getMcpStatusColor(serverState?.status ?? 'idle')
+
+			const serverSetting = new Setting(container)
+				.setName(server.name || server.id)
+				.setDesc(`${server.transportType.toUpperCase()} · ${statusText}`)
+
+			// 状态指示点
+			const nameEl = serverSetting.nameEl
+			const dot = nameEl.createEl('span')
+			dot.style.cssText = `
+				display: inline-block;
+				width: 8px;
+				height: 8px;
+				border-radius: 50%;
+				background-color: ${statusColor};
+				margin-left: 8px;
+				vertical-align: middle;
+			`
+
+			// 启用/禁用开关
+			serverSetting.addToggle((toggle) =>
+				toggle.setValue(server.enabled).onChange(async (value) => {
+					server.enabled = value
+					await this.saveSettings()
+					if (!value && mcpManager) {
+						mcpManager.disconnectServer(server.id)
+					}
+				})
+			)
+
+			// 编辑按钮
+			serverSetting.addExtraButton((btn) =>
+				btn.setIcon('pencil').setTooltip('编辑').onClick(() => {
+					this.openMcpServerEditModal(server, this.settings.mcp ?? DEFAULT_MCP_SETTINGS, () => {
+						container.empty()
+						this.renderMcpServerList(container, this.settings.mcp ?? DEFAULT_MCP_SETTINGS)
+					})
+				})
+			)
+
+			// 删除按钮
+			serverSetting.addExtraButton((btn) =>
+				btn.setIcon('trash-2').setTooltip('删除').onClick(async () => {
+					if (!this.settings.mcp) return
+					const idx = this.settings.mcp.servers.findIndex((s) => s.id === server.id)
+					if (idx >= 0) {
+						mcpManager?.disconnectServer(server.id)
+						this.settings.mcp.servers.splice(idx, 1)
+						await this.saveSettings()
+						container.empty()
+						this.renderMcpServerList(container, this.settings.mcp)
+					}
+				})
+			)
+		}
+	}
+
+	/**
+	 * 获取 MCP 服务器状态显示文本
+	 */
+	private getMcpStatusText(status: string): string {
+		const map: Record<string, string> = {
+			idle: '空闲',
+			connecting: '连接中...',
+			running: '运行中',
+			stopping: '停止中...',
+			stopped: '已停止',
+			error: '错误',
+		}
+		return map[status] ?? status
+	}
+
+	/**
+	 * 获取 MCP 服务器状态颜色
+	 */
+	private getMcpStatusColor(status: string): string {
+		const map: Record<string, string> = {
+			idle: 'var(--text-muted)',
+			connecting: 'var(--text-accent)',
+			running: 'var(--color-green)',
+			stopping: 'var(--text-accent)',
+			stopped: 'var(--text-muted)',
+			error: 'var(--color-red)',
+		}
+		return map[status] ?? 'var(--text-muted)'
+	}
+
+	/**
+	 * 打开 MCP 服务器编辑模态框
+	 */
+	private openMcpServerEditModal(
+		existingServer: McpServerConfig | null,
+		mcpSettings: McpSettings,
+		onSave: () => void,
+	): void {
+		const modal = new McpServerEditModal(this.app, existingServer, async (serverConfig) => {
+			if (!this.settings.mcp) {
+				this.settings.mcp = { ...DEFAULT_MCP_SETTINGS }
+			}
+			if (existingServer) {
+				// 编辑现有服务器
+				const idx = this.settings.mcp.servers.findIndex((s) => s.id === existingServer.id)
+				if (idx >= 0) {
+					this.settings.mcp.servers[idx] = serverConfig
+				}
+			} else {
+				// 添加新服务器
+				this.settings.mcp.servers.push(serverConfig)
+			}
+			await this.saveSettings()
+			onSave()
+		})
+		modal.open()
+	}
+
+	/**
+	 * 打开 mcp.json 导入对话框
+	 */
+	private openMcpImportDialog(mcpSettings: McpSettings, onImport: () => void): void {
+		const modal = new McpImportModal(this.app, async (jsonContent) => {
+			try {
+				if (!this.settings.mcp) {
+					this.settings.mcp = { ...DEFAULT_MCP_SETTINGS }
+				}
+				const result = McpConfigImporter.importFromJson(jsonContent, this.settings.mcp.servers)
+				this.settings.mcp.servers = result.servers
+				await this.saveSettings()
+				new Notice(`导入成功: 新增 ${result.added} 个, 跳过 ${result.skipped} 个`)
+				onImport()
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err)
+				new Notice(`导入失败: ${msg}`, 5000)
+			}
+		})
+		modal.open()
 	}
 
 	/**
@@ -5537,5 +5823,265 @@ const MODEL_FETCH_CONFIGS: Record<string, ModelFetchConfig> = {
 			}
 		}),
 		parseResponse: parseGenericModels
+	}
+}
+
+/**
+ * MCP 服务器编辑模态框
+ */
+class McpServerEditModal extends Modal {
+	private server: McpServerConfig
+	private isNew: boolean
+	private onSave: (server: McpServerConfig) => Promise<void>
+
+	constructor(
+		app: App,
+		existingServer: McpServerConfig | null,
+		onSave: (server: McpServerConfig) => Promise<void>,
+	) {
+		super(app)
+		this.onSave = onSave
+		this.isNew = !existingServer
+
+		if (existingServer) {
+			// 编辑时拷贝一份，避免直接修改原对象
+			this.server = { ...existingServer }
+		} else {
+			this.server = {
+				id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+				name: '',
+				enabled: true,
+				transportType: 'stdio',
+				timeout: 30000,
+			}
+		}
+	}
+
+	onOpen() {
+		const { contentEl } = this
+		contentEl.empty()
+
+		contentEl.createEl('h3', { text: this.isNew ? '添加 MCP 服务器' : '编辑 MCP 服务器' })
+
+		new Setting(contentEl)
+			.setName('名称')
+			.setDesc('用于标识此 MCP 服务器的名称')
+			.addText((text) =>
+				text
+					.setPlaceholder('例如: filesystem')
+					.setValue(this.server.name)
+					.onChange((value) => {
+						this.server = { ...this.server, name: value }
+					})
+			)
+
+		new Setting(contentEl)
+			.setName('传输类型')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption('stdio', 'Stdio (本地进程)')
+					.addOption('websocket', 'WebSocket (远程)')
+					.setValue(this.server.transportType)
+					.onChange((value) => {
+						this.server = {
+							...this.server,
+							transportType: value as 'stdio' | 'websocket',
+						}
+						this.renderTransportFields(contentEl)
+					})
+			)
+
+		// 传输类型相关字段容器
+		const transportFieldsContainer = contentEl.createDiv({ cls: 'mcp-transport-fields' })
+		this.renderTransportFieldsInto(transportFieldsContainer)
+
+		new Setting(contentEl)
+			.setName('超时时间 (毫秒)')
+			.setDesc('连接和请求的最大等待时间')
+			.addText((text) =>
+				text
+					.setPlaceholder('30000')
+					.setValue(String(this.server.timeout))
+					.onChange((value) => {
+						const num = parseInt(value, 10)
+						if (!isNaN(num) && num > 0) {
+							this.server = { ...this.server, timeout: num }
+						}
+					})
+			)
+
+		// 保存/取消按钮
+		new Setting(contentEl)
+			.addButton((btn) =>
+				btn.setButtonText('保存').setCta().onClick(async () => {
+					if (!this.server.name.trim()) {
+						new Notice('请输入服务器名称')
+						return
+					}
+					if (this.server.transportType === 'stdio' && !this.server.command?.trim()) {
+						new Notice('请输入启动命令')
+						return
+					}
+					if (this.server.transportType === 'websocket' && !this.server.url?.trim()) {
+						new Notice('请输入 WebSocket URL')
+						return
+					}
+					await this.onSave(this.server)
+					this.close()
+				})
+			)
+			.addButton((btn) =>
+				btn.setButtonText('取消').onClick(() => {
+					this.close()
+				})
+			)
+	}
+
+	private renderTransportFields(contentEl: HTMLElement): void {
+		const container = contentEl.querySelector('.mcp-transport-fields') as HTMLElement
+		if (container) {
+			container.empty()
+			this.renderTransportFieldsInto(container)
+		}
+	}
+
+	private renderTransportFieldsInto(container: HTMLElement): void {
+		if (this.server.transportType === 'stdio') {
+			new Setting(container)
+				.setName('命令')
+				.setDesc('启动 MCP 服务器的命令')
+				.addText((text) =>
+					text
+						.setPlaceholder('例如: npx')
+						.setValue(this.server.command ?? '')
+						.onChange((value) => {
+							this.server = { ...this.server, command: value }
+						})
+				)
+
+			new Setting(container)
+				.setName('参数')
+				.setDesc('以逗号分隔的命令行参数')
+				.addText((text) =>
+					text
+						.setPlaceholder('例如: -y,@modelcontextprotocol/server-filesystem,/path')
+						.setValue((this.server.args ?? []).join(','))
+						.onChange((value) => {
+							this.server = {
+								...this.server,
+								args: value ? value.split(',').map((s) => s.trim()) : [],
+							}
+						})
+				)
+
+			new Setting(container)
+				.setName('环境变量')
+				.setDesc('以 KEY=VALUE 形式，每行一个')
+				.addTextArea((text) => {
+					text.setPlaceholder('例如:\nNODE_ENV=production\nDEBUG=true')
+						.setValue(
+							Object.entries(this.server.env ?? {})
+								.map(([k, v]) => `${k}=${v}`)
+								.join('\n')
+						)
+						.onChange((value) => {
+							const env: Record<string, string> = {}
+							for (const line of value.split('\n')) {
+								const eqIdx = line.indexOf('=')
+								if (eqIdx > 0) {
+									env[line.slice(0, eqIdx).trim()] = line.slice(eqIdx + 1).trim()
+								}
+							}
+							this.server = { ...this.server, env }
+						})
+					text.inputEl.rows = 3
+				})
+
+			new Setting(container)
+				.setName('工作目录')
+				.setDesc('可选，进程的工作目录')
+				.addText((text) =>
+					text
+						.setPlaceholder('默认为插件目录')
+						.setValue(this.server.cwd ?? '')
+						.onChange((value) => {
+							this.server = { ...this.server, cwd: value || undefined }
+						})
+				)
+		} else {
+			// WebSocket
+			new Setting(container)
+				.setName('WebSocket URL')
+				.addText((text) =>
+					text
+						.setPlaceholder('ws://localhost:8080')
+						.setValue(this.server.url ?? '')
+						.onChange((value) => {
+							this.server = { ...this.server, url: value }
+						})
+				)
+		}
+	}
+
+	onClose() {
+		this.contentEl.empty()
+	}
+}
+
+/**
+ * MCP 配置导入模态框
+ */
+class McpImportModal extends Modal {
+	private onImport: (jsonContent: string) => Promise<void>
+
+	constructor(app: App, onImport: (jsonContent: string) => Promise<void>) {
+		super(app)
+		this.onImport = onImport
+	}
+
+	onOpen() {
+		const { contentEl } = this
+		contentEl.empty()
+
+		contentEl.createEl('h3', { text: '导入 MCP 配置' })
+		contentEl.createEl('p', {
+			text: '粘贴 mcp.json 文件内容（兼容 Claude Desktop 格式）',
+			cls: 'setting-item-description',
+		})
+
+		let jsonValue = ''
+		new Setting(contentEl)
+			.setName('JSON 内容')
+			.addTextArea((text) => {
+				text.setPlaceholder(
+					'{\n  "mcpServers": {\n    "server-name": {\n      "command": "npx",\n      "args": [...]\n    }\n  }\n}'
+				).onChange((value) => {
+					jsonValue = value
+				})
+				text.inputEl.rows = 10
+				text.inputEl.style.width = '100%'
+				text.inputEl.style.fontFamily = 'monospace'
+			})
+
+		new Setting(contentEl)
+			.addButton((btn) =>
+				btn.setButtonText('导入').setCta().onClick(async () => {
+					if (!jsonValue.trim()) {
+						new Notice('请输入 JSON 内容')
+						return
+					}
+					await this.onImport(jsonValue)
+					this.close()
+				})
+			)
+			.addButton((btn) =>
+				btn.setButtonText('取消').onClick(() => {
+					this.close()
+				})
+			)
+	}
+
+	onClose() {
+		this.contentEl.empty()
 	}
 }

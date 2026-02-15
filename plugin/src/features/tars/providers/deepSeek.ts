@@ -3,6 +3,7 @@ import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { buildReasoningBlockStart, buildReasoningBlockEnd } from './utils'
 import { DebugLogger } from '../../../utils/DebugLogger'
+import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
 
 // DeepSeek选项接口，扩展基础选项以支持推理功能
 export interface DeepSeekOptions extends BaseOptions {
@@ -175,7 +176,7 @@ export const deepSeekVendor: Vendor = {
 		parameters: {},
 		enableReasoning: false // 默认关闭推理功能
 	} as DeepSeekOptions,
-	sendRequestFunc,
+	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
 	models: DEEPSEEK_MODELS,
 	websiteToObtainKey: 'https://platform.deepseek.com',
 	capabilities: ['Text Generation', 'Reasoning', 'Structured Output']

@@ -3,6 +3,7 @@ import { Platform, requestUrl } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { convertEmbedToImageUrl } from './utils'
+import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
 
 type ContentItem =
 	| {
@@ -151,7 +152,7 @@ export const poeVendor: Vendor = {
 		model: 'Claude-Sonnet-4',
 		parameters: {}
 	},
-	sendRequestFunc,
+	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
 	models: [],
 	websiteToObtainKey: 'https://poe.com/api_key',
 	capabilities: ['Text Generation', 'Image Vision']
