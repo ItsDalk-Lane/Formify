@@ -12,6 +12,23 @@ function generateId(): string {
 	return Date.now().toString(36) + Math.random().toString(36).substring(2, 8)
 }
 
+function normalizeStringMap(value: unknown): Record<string, string> | undefined {
+	if (!value || typeof value !== 'object') return undefined
+
+	const result: Record<string, string> = {}
+	for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+		const normalizedKey = key.trim()
+		if (!normalizedKey) continue
+		result[normalizedKey] = String(val)
+	}
+
+	return Object.keys(result).length > 0 ? result : undefined
+}
+
+function normalizeArgs(value: unknown): string[] {
+	return Array.isArray(value) ? value.map((item) => String(item)) : []
+}
+
 /** 导入结果 */
 export interface McpImportResult {
 	/** 合并后的完整列表 */
@@ -62,7 +79,73 @@ export class McpConfigImporter {
 				continue
 			}
 
-			if (!def.command || typeof def.command !== 'string') {
+			const type = typeof def.type === 'string' ? def.type.trim().toLowerCase() : ''
+			const normalizedType =
+				type === 'streamable-http' || type === 'streamablehttp' || type === 'streamable_http'
+					? 'http'
+					: type
+			const url = typeof def.url === 'string' ? def.url.trim() : ''
+			const command = typeof def.command === 'string' ? def.command.trim() : ''
+			const args = normalizeArgs(def.args)
+			const env = normalizeStringMap(def.env)
+			const headers = normalizeStringMap(def.headers)
+
+			if (normalizedType === 'http') {
+				if (!url) {
+					errors.push(`服务器 "${name}" 缺少 url 字段（type=${type || 'http'}）`)
+					continue
+				}
+
+				servers.push({
+					id: generateId(),
+					name,
+					enabled: true,
+					transportType: 'http',
+					url,
+					headers,
+					timeout: 30000,
+				})
+				continue
+			}
+
+			if (normalizedType === 'sse' || normalizedType === 'remote-sse') {
+				if (!url) {
+					errors.push(`服务器 "${name}" 缺少 url 字段（type=${type || 'sse'}）`)
+					continue
+				}
+
+				servers.push({
+					id: generateId(),
+					name,
+					enabled: true,
+					transportType: 'remote-sse',
+					url,
+					headers,
+					timeout: 30000,
+				})
+				continue
+			}
+
+			if (normalizedType === 'websocket') {
+				if (!url) {
+					errors.push(`服务器 "${name}" 缺少 url 字段（type=${type || 'websocket'}）`)
+					continue
+				}
+
+				servers.push({
+					id: generateId(),
+					name,
+					enabled: true,
+					transportType: 'websocket',
+					url,
+					headers,
+					timeout: 30000,
+				})
+				continue
+			}
+
+			// 默认按本地 stdio 解析（兼容 Claude Desktop 风格）
+			if (!command) {
 				errors.push(`服务器 "${name}" 缺少 command 字段`)
 				continue
 			}
@@ -72,13 +155,9 @@ export class McpConfigImporter {
 				name,
 				enabled: true,
 				transportType: 'stdio',
-				command: def.command,
-				args: Array.isArray(def.args) ? def.args.map(String) : [],
-				env: def.env && typeof def.env === 'object'
-					? Object.fromEntries(
-						Object.entries(def.env).map(([k, v]) => [k, String(v)])
-					)
-					: undefined,
+				command,
+				args,
+				env,
 				timeout: 30000,
 			})
 		}

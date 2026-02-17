@@ -32,6 +32,7 @@ import type { BaseOptions } from "src/features/tars/providers";
  * 6. 结果存储到输出变量
  */
 export default class AIActionService implements IActionService {
+    private lastMcpNoticeAt = 0;
 
     accept(action: IFormAction, context: ActionContext): boolean {
         return action.type === FormActionType.AI;
@@ -299,17 +300,31 @@ export default class AIActionService implements IActionService {
     /**
      * 向 providerOptions 注入 MCP 工具（如果可用）
      */
-    private injectMcpTools(providerOptions: BaseOptions, context: ActionContext): void {
+    private async injectMcpTools(providerOptions: BaseOptions, context: ActionContext): Promise<void> {
         const plugin = (context.app as any).plugins?.plugins?.["formify"];
         const mcpManager = plugin?.featureCoordinator?.getMcpClientManager?.();
         if (!mcpManager) return;
 
-        const mcpTools = mcpManager.getAvailableTools();
-        if (mcpTools.length > 0) {
-            providerOptions.mcpTools = mcpTools;
-            providerOptions.mcpCallTool = (serverId: string, name: string, args: Record<string, unknown>) =>
-                mcpManager.callTool(serverId, name, args);
-            DebugLogger.debug(`[AIAction] 注入 ${mcpTools.length} 个 MCP 工具`);
+        try {
+            const mcpTools = await mcpManager.getAvailableToolsWithLazyStart();
+            if (mcpTools.length > 0) {
+                providerOptions.mcpTools = mcpTools;
+                providerOptions.mcpCallTool = (serverId: string, name: string, args: Record<string, unknown>) =>
+                    mcpManager.callTool(serverId, name, args);
+                DebugLogger.debug(`[AIAction] 注入 ${mcpTools.length} 个 MCP 工具`);
+                return;
+            }
+
+            const hasEnabledMcpServer =
+                mcpManager.getSettings().enabled
+                && mcpManager.getSettings().servers.some((server: { enabled: boolean }) => server.enabled);
+            if (hasEnabledMcpServer) {
+                this.showMcpNoticeOnce("MCP 已启用，但当前没有可用工具，请检查服务器状态与配置。");
+            }
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            this.showMcpNoticeOnce(`MCP 工具初始化失败: ${msg}`);
+            DebugLogger.error("[AIAction] 注入 MCP 工具失败", err);
         }
     }
 
@@ -336,7 +351,7 @@ export default class AIActionService implements IActionService {
             provider.options,
             provider.vendor
         );
-        this.injectMcpTools(providerOptions, context);
+        await this.injectMcpTools(providerOptions, context);
         const sendRequest = vendor.sendRequestFunc(providerOptions);
         
         // 创建中断控制器
@@ -396,6 +411,13 @@ export default class AIActionService implements IActionService {
                 context.abortSignal.removeEventListener("abort", linkedAbortHandler);
             }
         }
+    }
+
+    private showMcpNoticeOnce(message: string): void {
+        const now = Date.now();
+        if (now - this.lastMcpNoticeAt < 10000) return;
+        this.lastMcpNoticeAt = now;
+        new Notice(message, 5000);
     }
 
     /**

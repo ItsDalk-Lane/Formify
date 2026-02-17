@@ -29,6 +29,7 @@ export class McpClientManager {
 			(states) => this.notifyStateChange(states),
 		)
 		this.healthChecker = new McpHealthChecker(this.processManager)
+		void this.autoConnectEnabledServers()
 	}
 
 	/** 获取当前 MCP 设置 */
@@ -59,6 +60,8 @@ export class McpClientManager {
 				await this.processManager.disconnect(state.serverId)
 			}
 		}
+
+		void this.autoConnectEnabledServers()
 	}
 
 	/**
@@ -201,5 +204,26 @@ export class McpClientManager {
 				DebugLogger.error('[MCP] 状态监听器执行出错', err)
 			}
 		}
+	}
+
+	/** 自动连接所有已启用服务器 */
+	private async autoConnectEnabledServers(): Promise<void> {
+		if (!this.settings.enabled) return
+
+		const enabledServers = this.settings.servers.filter((s) => s.enabled)
+		if (enabledServers.length === 0) return
+
+		const tasks = enabledServers.map(async (server) => {
+			const state = this.processManager.getState(server.id)
+			if (state?.status === 'running' || state?.status === 'connecting') return
+
+			try {
+				await this.processManager.ensureConnected(server)
+			} catch (err) {
+				DebugLogger.error(`[MCP] 自动连接服务器失败: ${server.name}`, err)
+			}
+		})
+
+		await Promise.allSettled(tasks)
 	}
 }

@@ -14,7 +14,7 @@ export type McpServerStatus =
 	| 'error'       // 错误
 
 /** MCP 传输类型 */
-export type McpTransportType = 'stdio' | 'sse' | 'websocket'
+export type McpTransportType = 'stdio' | 'sse' | 'websocket' | 'http' | 'remote-sse'
 
 /** MCP 服务器配置（持久化存储在 settings 中） */
 export interface McpServerConfig {
@@ -26,16 +26,18 @@ export interface McpServerConfig {
 	enabled: boolean
 	/** 传输类型 */
 	transportType: McpTransportType
-	/** 启动命令（stdio/sse 类型，如 "npx"、"node"、"python"） */
+	/** 启动命令（stdio/legacy sse 类型，如 "npx"、"node"、"python"） */
 	command?: string
-	/** 命令参数（stdio/sse 类型） */
+	/** 命令参数（stdio/legacy sse 类型） */
 	args?: string[]
-	/** 环境变量（stdio/sse 类型） */
+	/** 环境变量（stdio/legacy sse 类型） */
 	env?: Record<string, string>
-	/** 工作目录（stdio/sse 类型） */
+	/** 工作目录（stdio/legacy sse 类型） */
 	cwd?: string
-	/** WebSocket URL（websocket 类型） */
+	/** 服务 URL（websocket/http/remote-sse 类型） */
 	url?: string
+	/** 自定义 HTTP 请求头（http/remote-sse 类型） */
+	headers?: Record<string, string>
 	/** 连接超时（毫秒），默认 30000 */
 	timeout: number
 }
@@ -118,8 +120,11 @@ export const DEFAULT_MCP_SETTINGS: McpSettings = {
 /** mcp.json 标准配置文件格式（Claude Desktop 兼容） */
 export interface McpConfigFile {
 	mcpServers: Record<string, {
-		command: string
-		args?: string[]
-		env?: Record<string, string>
+		type?: string
+		url?: string
+		command?: string
+		args?: unknown[]
+		env?: Record<string, unknown>
+		headers?: Record<string, unknown>
 	}>
 }

@@ -894,7 +894,7 @@ export class TarsSettingTab {
 
 		// 标题行
 		const mcpHeaderSetting = new Setting(containerEl)
-			.setName('MCP 服务器')
+			.setName(t('MCP Servers'))
 
 		const mcpButtonWrapper = mcpHeaderSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
 		mcpButtonWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
@@ -907,7 +907,21 @@ export class TarsSettingTab {
 				<line x1="5" y1="12" x2="19" y2="12"></line>
 			</svg>
 		`
-		addServerBtn.title = '添加 MCP 服务器'
+		addServerBtn.title = t('Add MCP server')
+
+		// 手动配置按钮（JSON 文本输入）
+		const manualConfigBtn = mcpButtonWrapper.createEl('button', { cls: 'clickable-icon' })
+		manualConfigBtn.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+				<path d="M16 3h3a2 2 0 0 1 2 2v3"></path>
+				<path d="M8 21H5a2 2 0 0 1-2-2v-3"></path>
+				<path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+				<path d="M10 9l-2 3 2 3"></path>
+				<path d="M14 9l2 3-2 3"></path>
+			</svg>
+		`
+		manualConfigBtn.title = '手动配置'
 
 		// 导入按钮
 		const importBtn = mcpButtonWrapper.createEl('button', { cls: 'clickable-icon' })
@@ -918,7 +932,7 @@ export class TarsSettingTab {
 				<line x1="12" y1="15" x2="12" y2="3"></line>
 			</svg>
 		`
-		importBtn.title = '导入 mcp.json'
+		importBtn.title = t('Import mcp.json')
 
 		// Chevron 图标
 		const mcpChevronIcon = mcpButtonWrapper.createEl('div', { cls: 'ai-provider-chevron' })
@@ -975,8 +989,8 @@ export class TarsSettingTab {
 
 		// MCP 总开关
 		new Setting(mcpSection)
-			.setName('启用 MCP')
-			.setDesc('开启后，AI 对话和表单动作可使用 MCP 服务器提供的工具')
+			.setName(t('Enable MCP'))
+			.setDesc(t('Enable MCP description'))
 			.addToggle((toggle) =>
 				toggle.setValue(mcpSettings.enabled).onChange(async (value) => {
 					if (!this.settings.mcp) {
@@ -994,7 +1008,17 @@ export class TarsSettingTab {
 		// 添加服务器按钮事件
 		addServerBtn.addEventListener('click', (e) => {
 			e.stopPropagation()
+			// 保留原有配置方式：新增时打开字段表单
 			this.openMcpServerEditModal(null, mcpSettings, () => {
+				serverListContainer.empty()
+				this.renderMcpServerList(serverListContainer, this.settings.mcp ?? DEFAULT_MCP_SETTINGS)
+			})
+		})
+
+		// 手动配置按钮事件
+		manualConfigBtn.addEventListener('click', (e) => {
+			e.stopPropagation()
+			this.openMcpManualConfigDialog(mcpSettings, () => {
 				serverListContainer.empty()
 				this.renderMcpServerList(serverListContainer, this.settings.mcp ?? DEFAULT_MCP_SETTINGS)
 			})
@@ -1019,7 +1043,7 @@ export class TarsSettingTab {
 		if (servers.length === 0) {
 			const emptyHint = container.createDiv()
 			emptyHint.style.cssText = 'padding: 16px; text-align: center; color: var(--text-muted); font-size: 0.85em;'
-			emptyHint.textContent = '暂无 MCP 服务器配置。点击 + 添加或导入 mcp.json。'
+			emptyHint.textContent = t('No MCP servers configured')
 			return
 		}
 
@@ -1060,7 +1084,7 @@ export class TarsSettingTab {
 
 			// 编辑按钮
 			serverSetting.addExtraButton((btn) =>
-				btn.setIcon('pencil').setTooltip('编辑').onClick(() => {
+				btn.setIcon('pencil').setTooltip(t('Edit MCP server')).onClick(() => {
 					this.openMcpServerEditModal(server, this.settings.mcp ?? DEFAULT_MCP_SETTINGS, () => {
 						container.empty()
 						this.renderMcpServerList(container, this.settings.mcp ?? DEFAULT_MCP_SETTINGS)
@@ -1090,12 +1114,12 @@ export class TarsSettingTab {
 	 */
 	private getMcpStatusText(status: string): string {
 		const map: Record<string, string> = {
-			idle: '空闲',
-			connecting: '连接中...',
-			running: '运行中',
-			stopping: '停止中...',
-			stopped: '已停止',
-			error: '错误',
+			idle: t('MCP status idle'),
+			connecting: t('MCP status connecting'),
+			running: t('MCP status running'),
+			stopping: t('MCP status stopping'),
+			stopped: t('MCP status stopped'),
+			error: t('MCP status error'),
 		}
 		return map[status] ?? status
 	}
@@ -1144,24 +1168,68 @@ export class TarsSettingTab {
 	}
 
 	/**
+	 * 打开手动配置对话框
+	 */
+	private openMcpManualConfigDialog(mcpSettings: McpSettings, onImport: () => void): void {
+		const modal = new McpImportModal(
+			this.app,
+			{
+				title: '手动配置',
+				description: '请从 MCP Servers 介绍页复制配置 JSON 并粘贴到输入框中，然后点击确认。',
+				label: '原始配置（JSON）',
+				placeholder:
+					'{\n  "mcpServers": {\n    "zread": {\n      "type": "streamable-http",\n      "url": "https://open.bigmodel.cn/api/mcp/zread/mcp",\n      "headers": {\n        "Authorization": "Bearer your_api_key"\n      }\n    }\n  }\n}',
+				confirmText: '确认',
+			},
+			async (jsonContent) => {
+				try {
+					if (!this.settings.mcp) {
+						this.settings.mcp = { ...DEFAULT_MCP_SETTINGS }
+					}
+					const result = McpConfigImporter.importFromJson(jsonContent, this.settings.mcp.servers)
+					this.settings.mcp.servers = result.merged
+					await this.saveSettings()
+					new Notice(`${t('MCP import success')}: 新增 ${result.added.length} 个, 跳过 ${result.skipped.length} 个`)
+					onImport()
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err)
+					new Notice(`${t('MCP import failed')}: ${msg}`, 5000)
+				}
+			}
+		)
+		modal.open()
+	}
+
+	/**
 	 * 打开 mcp.json 导入对话框
 	 */
 	private openMcpImportDialog(mcpSettings: McpSettings, onImport: () => void): void {
-		const modal = new McpImportModal(this.app, async (jsonContent) => {
-			try {
-				if (!this.settings.mcp) {
-					this.settings.mcp = { ...DEFAULT_MCP_SETTINGS }
+		const modal = new McpImportModal(
+			this.app,
+			{
+				title: '导入 MCP 配置',
+				description: '粘贴 mcp.json 文件内容（兼容 Claude Desktop 格式）',
+				label: 'mcp.json 内容',
+				placeholder:
+					'{\n  "mcpServers": {\n    "server-name": {\n      "command": "npx",\n      "args": ["-y", "@modelcontextprotocol/server-filesystem"]\n    }\n  }\n}',
+				confirmText: '导入',
+			},
+			async (jsonContent) => {
+				try {
+					if (!this.settings.mcp) {
+						this.settings.mcp = { ...DEFAULT_MCP_SETTINGS }
+					}
+					const result = McpConfigImporter.importFromJson(jsonContent, this.settings.mcp.servers)
+					this.settings.mcp.servers = result.merged
+					await this.saveSettings()
+					new Notice(`${t('MCP import success')}: 新增 ${result.added.length} 个, 跳过 ${result.skipped.length} 个`)
+					onImport()
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err)
+					new Notice(`${t('MCP import failed')}: ${msg}`, 5000)
 				}
-				const result = McpConfigImporter.importFromJson(jsonContent, this.settings.mcp.servers)
-				this.settings.mcp.servers = result.servers
-				await this.saveSettings()
-				new Notice(`导入成功: 新增 ${result.added} 个, 跳过 ${result.skipped} 个`)
-				onImport()
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err)
-				new Notice(`导入失败: ${msg}`, 5000)
 			}
-		})
+		)
 		modal.open()
 	}
 
@@ -5845,7 +5913,11 @@ class McpServerEditModal extends Modal {
 
 		if (existingServer) {
 			// 编辑时拷贝一份，避免直接修改原对象
-			this.server = { ...existingServer }
+			this.server = {
+				...existingServer,
+				// legacy sse 与 stdio 配置字段一致，UI 中统一展示为 stdio
+				transportType: existingServer.transportType === 'sse' ? 'stdio' : existingServer.transportType,
+			}
 		} else {
 			this.server = {
 				id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -5861,11 +5933,11 @@ class McpServerEditModal extends Modal {
 		const { contentEl } = this
 		contentEl.empty()
 
-		contentEl.createEl('h3', { text: this.isNew ? '添加 MCP 服务器' : '编辑 MCP 服务器' })
+		contentEl.createEl('h3', { text: this.isNew ? t('Add MCP server') : t('Edit MCP server') })
 
 		new Setting(contentEl)
-			.setName('名称')
-			.setDesc('用于标识此 MCP 服务器的名称')
+			.setName(t('MCP server name'))
+			.setDesc(t('MCP server name desc'))
 			.addText((text) =>
 				text
 					.setPlaceholder('例如: filesystem')
@@ -5876,16 +5948,18 @@ class McpServerEditModal extends Modal {
 			)
 
 		new Setting(contentEl)
-			.setName('传输类型')
+			.setName(t('MCP transport type'))
 			.addDropdown((dropdown) =>
 				dropdown
-					.addOption('stdio', 'Stdio (本地进程)')
-					.addOption('websocket', 'WebSocket (远程)')
+					.addOption('stdio', t('MCP transport stdio'))
+					.addOption('websocket', t('MCP transport websocket'))
+					.addOption('http', t('MCP transport http'))
+					.addOption('remote-sse', t('MCP transport remote sse'))
 					.setValue(this.server.transportType)
 					.onChange((value) => {
 						this.server = {
 							...this.server,
-							transportType: value as 'stdio' | 'websocket',
+							transportType: value as McpServerConfig['transportType'],
 						}
 						this.renderTransportFields(contentEl)
 					})
@@ -5896,8 +5970,8 @@ class McpServerEditModal extends Modal {
 		this.renderTransportFieldsInto(transportFieldsContainer)
 
 		new Setting(contentEl)
-			.setName('超时时间 (毫秒)')
-			.setDesc('连接和请求的最大等待时间')
+			.setName(t('MCP timeout'))
+			.setDesc(t('MCP timeout desc'))
 			.addText((text) =>
 				text
 					.setPlaceholder('30000')
@@ -5915,15 +5989,15 @@ class McpServerEditModal extends Modal {
 			.addButton((btn) =>
 				btn.setButtonText('保存').setCta().onClick(async () => {
 					if (!this.server.name.trim()) {
-						new Notice('请输入服务器名称')
+						new Notice(t('MCP server name required'))
 						return
 					}
-					if (this.server.transportType === 'stdio' && !this.server.command?.trim()) {
-						new Notice('请输入启动命令')
+					if (this.isLocalProcessTransport(this.server.transportType) && !this.server.command?.trim()) {
+						new Notice(t('MCP command required'))
 						return
 					}
-					if (this.server.transportType === 'websocket' && !this.server.url?.trim()) {
-						new Notice('请输入 WebSocket URL')
+					if (this.isRemoteUrlTransport(this.server.transportType) && !this.server.url?.trim()) {
+						new Notice(t('MCP url required'))
 						return
 					}
 					await this.onSave(this.server)
@@ -5946,10 +6020,10 @@ class McpServerEditModal extends Modal {
 	}
 
 	private renderTransportFieldsInto(container: HTMLElement): void {
-		if (this.server.transportType === 'stdio') {
+		if (this.isLocalProcessTransport(this.server.transportType)) {
 			new Setting(container)
-				.setName('命令')
-				.setDesc('启动 MCP 服务器的命令')
+				.setName(t('MCP command'))
+				.setDesc(t('MCP command desc'))
 				.addText((text) =>
 					text
 						.setPlaceholder('例如: npx')
@@ -5960,8 +6034,8 @@ class McpServerEditModal extends Modal {
 				)
 
 			new Setting(container)
-				.setName('参数')
-				.setDesc('以逗号分隔的命令行参数')
+				.setName(t('MCP args'))
+				.setDesc(t('MCP args desc'))
 				.addText((text) =>
 					text
 						.setPlaceholder('例如: -y,@modelcontextprotocol/server-filesystem,/path')
@@ -5975,8 +6049,8 @@ class McpServerEditModal extends Modal {
 				)
 
 			new Setting(container)
-				.setName('环境变量')
-				.setDesc('以 KEY=VALUE 形式，每行一个')
+				.setName(t('MCP env'))
+				.setDesc(t('MCP env desc'))
 				.addTextArea((text) => {
 					text.setPlaceholder('例如:\nNODE_ENV=production\nDEBUG=true')
 						.setValue(
@@ -5998,8 +6072,8 @@ class McpServerEditModal extends Modal {
 				})
 
 			new Setting(container)
-				.setName('工作目录')
-				.setDesc('可选，进程的工作目录')
+				.setName(t('MCP cwd'))
+				.setDesc(t('MCP cwd desc'))
 				.addText((text) =>
 					text
 						.setPlaceholder('默认为插件目录')
@@ -6008,10 +6082,12 @@ class McpServerEditModal extends Modal {
 							this.server = { ...this.server, cwd: value || undefined }
 						})
 				)
-		} else {
-			// WebSocket
+			return
+		}
+
+		if (this.server.transportType === 'websocket') {
 			new Setting(container)
-				.setName('WebSocket URL')
+				.setName(t('MCP websocket url'))
 				.addText((text) =>
 					text
 						.setPlaceholder('ws://localhost:8080')
@@ -6020,7 +6096,107 @@ class McpServerEditModal extends Modal {
 							this.server = { ...this.server, url: value }
 						})
 				)
+			return
 		}
+
+		// HTTP / Remote SSE
+		new Setting(container)
+			.setName(t('MCP url'))
+			.setDesc(t('MCP url desc'))
+			.addText((text) =>
+				text
+					.setPlaceholder('https://example.com/mcp')
+					.setValue(this.server.url ?? '')
+					.onChange((value) => {
+						this.server = { ...this.server, url: value }
+					})
+			)
+
+		this.renderHeadersEditor(container)
+	}
+
+	private renderHeadersEditor(container: HTMLElement): void {
+		const headerRows = Object.entries(this.server.headers ?? {}).map(([key, value]) => ({
+			key,
+			value,
+		}))
+
+		const updateHeaders = () => {
+			const headers: Record<string, string> = {}
+			for (const row of headerRows) {
+				const key = row.key.trim()
+				if (!key) continue
+				headers[key] = row.value
+			}
+			this.server = {
+				...this.server,
+				headers: Object.keys(headers).length > 0 ? headers : undefined,
+			}
+		}
+
+		const renderRows = () => {
+			rowsContainer.empty()
+
+			for (let index = 0; index < headerRows.length; index++) {
+				const row = headerRows[index]
+				const rowEl = rowsContainer.createDiv({ cls: 'mcp-header-row' })
+				rowEl.style.cssText = 'display: flex; gap: 8px; align-items: center;'
+
+				const keyInput = new TextComponent(rowEl)
+				keyInput
+					.setPlaceholder(t('MCP header key placeholder'))
+					.setValue(row.key)
+					.onChange((value) => {
+						row.key = value
+						updateHeaders()
+					})
+				keyInput.inputEl.style.flex = '1'
+
+				const valueInput = new TextComponent(rowEl)
+				valueInput
+					.setPlaceholder(t('MCP header value placeholder'))
+					.setValue(row.value)
+					.onChange((value) => {
+						row.value = value
+						updateHeaders()
+					})
+				valueInput.inputEl.style.flex = '1'
+
+				const removeBtn = rowEl.createEl('button', {
+					text: t('MCP remove header'),
+					cls: 'mod-muted',
+				})
+				removeBtn.addEventListener('click', () => {
+					headerRows.splice(index, 1)
+					updateHeaders()
+					renderRows()
+				})
+			}
+		}
+
+		new Setting(container)
+			.setName(t('MCP headers'))
+			.setDesc(t('MCP headers desc'))
+			.addButton((btn) =>
+				btn.setButtonText(t('MCP add header')).onClick(() => {
+					headerRows.push({ key: '', value: '' })
+					renderRows()
+				})
+			)
+
+		const rowsContainer = container.createDiv({ cls: 'mcp-header-rows' })
+		rowsContainer.style.cssText = 'display: flex; flex-direction: column; gap: 8px; margin-top: 8px;'
+
+		renderRows()
+		updateHeaders()
+	}
+
+	private isLocalProcessTransport(type: McpServerConfig['transportType']): boolean {
+		return type === 'stdio' || type === 'sse'
+	}
+
+	private isRemoteUrlTransport(type: McpServerConfig['transportType']): boolean {
+		return type === 'websocket' || type === 'http' || type === 'remote-sse'
 	}
 
 	onClose() {
@@ -6031,11 +6207,25 @@ class McpServerEditModal extends Modal {
 /**
  * MCP 配置导入模态框
  */
+interface McpImportModalOptions {
+	title: string
+	description: string
+	label: string
+	placeholder: string
+	confirmText: string
+}
+
 class McpImportModal extends Modal {
+	private options: McpImportModalOptions
 	private onImport: (jsonContent: string) => Promise<void>
 
-	constructor(app: App, onImport: (jsonContent: string) => Promise<void>) {
+	constructor(
+		app: App,
+		options: McpImportModalOptions,
+		onImport: (jsonContent: string) => Promise<void>,
+	) {
 		super(app)
+		this.options = options
 		this.onImport = onImport
 	}
 
@@ -6043,29 +6233,27 @@ class McpImportModal extends Modal {
 		const { contentEl } = this
 		contentEl.empty()
 
-		contentEl.createEl('h3', { text: '导入 MCP 配置' })
+		contentEl.createEl('h3', { text: this.options.title })
 		contentEl.createEl('p', {
-			text: '粘贴 mcp.json 文件内容（兼容 Claude Desktop 格式）',
+			text: this.options.description,
 			cls: 'setting-item-description',
 		})
 
 		let jsonValue = ''
-		new Setting(contentEl)
-			.setName('JSON 内容')
-			.addTextArea((text) => {
-				text.setPlaceholder(
-					'{\n  "mcpServers": {\n    "server-name": {\n      "command": "npx",\n      "args": [...]\n    }\n  }\n}'
-				).onChange((value) => {
-					jsonValue = value
-				})
-				text.inputEl.rows = 10
-				text.inputEl.style.width = '100%'
-				text.inputEl.style.fontFamily = 'monospace'
-			})
+		const jsonLabel = contentEl.createDiv({ text: this.options.label })
+		jsonLabel.style.cssText = 'font-weight: 600; margin: 10px 0 8px 0;'
+
+		const jsonTextarea = contentEl.createEl('textarea')
+		jsonTextarea.placeholder = this.options.placeholder
+		jsonTextarea.rows = 13
+		jsonTextarea.style.cssText = 'width: 100%; font-family: monospace;'
+		jsonTextarea.addEventListener('input', () => {
+			jsonValue = jsonTextarea.value
+		})
 
 		new Setting(contentEl)
 			.addButton((btn) =>
-				btn.setButtonText('导入').setCta().onClick(async () => {
+				btn.setButtonText(this.options.confirmText).setCta().onClick(async () => {
 					if (!jsonValue.trim()) {
 						new Notice('请输入 JSON 内容')
 						return

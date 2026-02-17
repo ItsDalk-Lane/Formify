@@ -47,6 +47,7 @@ export class ChatService {
 	private subscribers: Set<ChatSubscriber> = new Set();
 	private controller: AbortController | null = null;
 	private ollamaCapabilityCache = new Map<string, { reasoning: boolean; checkedAt: number; warned?: boolean }>();
+	private lastMcpNoticeAt = 0;
 	// 跟踪当前活动文件的路径
 	private currentActiveFilePath: string | null = null;
 	// 跟踪在当前活动文件会话期间，用户手动移除的文件路径（仅在当前文件活跃期间有效）
@@ -1227,11 +1228,24 @@ export class ChatService {
 			// 注入 MCP 工具（如果可用）
 			const mcpManager = this.plugin.featureCoordinator.getMcpClientManager();
 			if (mcpManager) {
-				const mcpTools = mcpManager.getAvailableTools();
-				if (mcpTools.length > 0) {
-					providerOptions.mcpTools = mcpTools;
-					providerOptions.mcpCallTool = (serverId: string, name: string, args: Record<string, unknown>) =>
-						mcpManager.callTool(serverId, name, args);
+				try {
+					const mcpTools = await mcpManager.getAvailableToolsWithLazyStart();
+					if (mcpTools.length > 0) {
+						providerOptions.mcpTools = mcpTools;
+						providerOptions.mcpCallTool = (serverId: string, name: string, args: Record<string, unknown>) =>
+							mcpManager.callTool(serverId, name, args);
+					} else {
+						const hasEnabledMcpServer =
+							mcpManager.getSettings().enabled
+							&& mcpManager.getSettings().servers.some((server) => server.enabled)
+						if (hasEnabledMcpServer) {
+							this.showMcpNoticeOnce('MCP 已启用，但当前没有可用工具，请检查服务器状态与配置。')
+						}
+					}
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err)
+					this.showMcpNoticeOnce(`MCP 工具初始化失败: ${msg}`)
+					DebugLogger.error('[MCP] Chat 注入工具失败', err)
 				}
 			}
 
@@ -1459,6 +1473,13 @@ export class ChatService {
 			this.emitState();
 			new Notice(errorMessage, 10000); // 显示10秒，让用户有足够时间阅读
 		}
+	}
+
+	private showMcpNoticeOnce(message: string): void {
+		const now = Date.now()
+		if (now - this.lastMcpNoticeAt < 10000) return
+		this.lastMcpNoticeAt = now
+		new Notice(message, 5000)
 	}
 
 	private resolveProvider(): ProviderSettings | null {
