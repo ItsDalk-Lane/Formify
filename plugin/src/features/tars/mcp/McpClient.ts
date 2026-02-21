@@ -22,6 +22,35 @@ const MCP_TOOL_CALL_MAX_RETRIES = 2
 /** tools/call 重试退避（毫秒） */
 const MCP_TOOL_CALL_RETRY_DELAYS_MS = [600, 1500]
 
+/**
+ * JSON-RPC 错误（附带错误码），用于区分业务错误和通信故障
+ *
+ * 业务级错误（如 -400 ~ -499，表示参数/资源不存在等）不应触发 Notice 弹窗，
+ * 而应作为工具结果返回给 AI 继续推理。
+ */
+class McpJsonRpcError extends Error {
+	readonly code: number
+	constructor(message: string, code: number) {
+		super(message)
+		this.name = 'McpJsonRpcError'
+		this.code = code
+	}
+}
+
+/**
+ * 判断 MCP JSON-RPC 错误码是否属于业务级错误
+ *
+ * 业务级错误：工具调用的远端 API 返回的语义性错误，如 "repo not found"、"permission denied"。
+ * 这些错误应作为工具结果文本返回给 AI，而非作为系统级失败弹窗通知用户。
+ */
+function isBusinessLevelMcpError(err: unknown): boolean {
+	if (!(err instanceof McpJsonRpcError)) return false
+	const code = err.code
+	// 通常负值的 4xx 范围或自定义业务码视为业务级错误
+	// MCP 规范中常见的业务错误码：-400（参数/资源问题）
+	return (code <= -400 && code > -500) || (code >= 400 && code < 500)
+}
+
 /** 待处理请求 */
 interface PendingRequest {
 	resolve: (result: unknown) => void
@@ -145,7 +174,10 @@ export class McpClient {
 				const text = textParts.join('\n')
 
 				if (result.isError) {
-					throw new Error(`MCP 工具调用失败 [${name}]: ${text}`)
+					// MCP 协议层面的 isError 标记：工具执行本身返回了错误信息
+					// 这属于业务级反馈，直接返回错误文本给调用方（AI 可据此推理）
+					DebugLogger.warn(`[MCP] 工具返回业务错误: ${name}: ${text.slice(0, 200)}`)
+					return `[工具执行错误] ${text}`
 				}
 
 				DebugLogger.debug(`[MCP] 工具调用完成: ${name}, 返回 ${text.length} 字符`)
@@ -153,13 +185,21 @@ export class McpClient {
 			} catch (err) {
 				lastError = err
 
-					const canRetry =
-						attempt < MCP_TOOL_CALL_MAX_RETRIES && this.isRetryableToolCallError(err)
+				// 业务级错误（如 -400: repo not found）不重试、不弹 Notice，
+				// 直接返回错误信息作为工具结果让 AI 继续推理
+				if (isBusinessLevelMcpError(err)) {
+					const msg = err instanceof Error ? err.message : String(err)
+					DebugLogger.warn(`[MCP] 工具业务级错误（不重试）: ${name}: ${msg}`)
+					return `[工具执行错误] ${msg}`
+				}
 
-					if (!canRetry) {
-						this.reportToolCallFailure(name, args, err)
-						throw err
-					}
+				const canRetry =
+					attempt < MCP_TOOL_CALL_MAX_RETRIES && this.isRetryableToolCallError(err)
+
+				if (!canRetry) {
+					this.reportToolCallFailure(name, args, err)
+					throw err
+				}
 
 				if (this.shouldReconnectBeforeRetry(err, attempt)) {
 					try {
@@ -331,9 +371,11 @@ export class McpClient {
 		this.pendingRequests.delete(response.id)
 
 		if (response.error) {
-			pending.reject(new Error(
-				`MCP 错误 [${response.error.code}]: ${response.error.message}`
-			))
+			const err = new McpJsonRpcError(
+				`MCP error ${response.error.code}: ${response.error.message}`,
+				response.error.code,
+			)
+			pending.reject(err)
 		} else {
 			pending.resolve(response.result)
 		}

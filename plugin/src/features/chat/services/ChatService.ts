@@ -1,4 +1,4 @@
-import { MarkdownView, Notice, requestUrl, TFile, TFolder } from 'obsidian';
+import { MarkdownView, Notice, requestUrl, TFile, TFolder, normalizePath } from 'obsidian';
 import FormPlugin from 'src/main';
 import type { ProviderSettings, SaveAttachment } from 'src/features/tars/providers';
 import type { Message as ProviderMessage, ResolveEmbedAsBinary } from 'src/features/tars/providers';
@@ -7,12 +7,13 @@ import { isImageGenerationModel } from 'src/features/tars/providers/openRouter';
 import { MessageService } from './MessageService';
 import { HistoryService, ChatHistoryEntry } from './HistoryService';
 import { FileContentService } from './FileContentService';
-import type { ChatMessage, ChatSession, ChatSettings, ChatState, SelectedFile, SelectedFolder } from '../types/chat';
+import type { ChatMessage, ChatSession, ChatSettings, ChatState, McpToolMode, SelectedFile, SelectedFolder } from '../types/chat';
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
 import { v4 as uuidv4 } from 'uuid';
 import { InternalLinkParserService } from '../../../service/InternalLinkParserService';
 import { DebugLogger } from 'src/utils/DebugLogger';
 import { SystemPromptAssembler } from 'src/service/SystemPromptAssembler';
+import { arrayBufferToBase64, getMimeTypeFromFilename } from 'src/features/tars/providers/utils';
 import type { ToolCall, ToolDefinition, ToolExecution } from '../types/tools';
 import { ToolRegistryService } from './ToolRegistryService';
 import { ToolExecutionManager } from './ToolExecutionManager';
@@ -42,7 +43,9 @@ export class ChatService {
 		showTemplateSelector: false,
 		shouldSaveHistory: true, // 默认保存历史记录
 		pendingToolExecutions: [],
-		toolExecutions: []
+		toolExecutions: [],
+		mcpToolMode: 'auto',
+		mcpSelectedServerIds: [],
 	};
 	private subscribers: Set<ChatSubscriber> = new Set();
 	private controller: AbortController | null = null;
@@ -122,6 +125,8 @@ export class ChatService {
 		this.state.enableTemplateAsSystemPrompt = false;
 		this.state.selectedPromptTemplate = undefined;
 		this.state.showTemplateSelector = false;
+		this.state.mcpToolMode = 'auto';
+		this.state.mcpSelectedServerIds = [];
 		// 注意：不清空手动移除记录，这是插件级别的持久化数据
 		this.emitState();
 		return session;
@@ -154,6 +159,14 @@ export class ChatService {
 
 	setSelectedImages(images: string[]) {
 		this.state.selectedImages = images;
+		this.emitState();
+	}
+
+	addSelectedImages(images: string[]) {
+		if (images.length === 0) {
+			return;
+		}
+		this.state.selectedImages = this.mergeSelectedImages(this.state.selectedImages, images);
 		this.emitState();
 	}
 
@@ -619,6 +632,33 @@ export class ChatService {
 		this.emitState();
 	}
 
+	/**
+	 * 返回所有已启用的 MCP 服务器配置（供 UI 展示 MCP 服务器列表）
+	 */
+	getEnabledMcpServers(): Array<{ id: string; name: string }> {
+		const mcpManager = this.plugin.featureCoordinator.getMcpClientManager();
+		if (!mcpManager) return [];
+		return mcpManager.getSettings().servers
+			.filter((server) => server.enabled)
+			.map((server) => ({ id: server.id, name: server.name }));
+	}
+
+	/**
+	 * 设置当前会话的 MCP 工具调用模式
+	 */
+	setMcpToolMode(mode: McpToolMode) {
+		this.state.mcpToolMode = mode;
+		this.emitState();
+	}
+
+	/**
+	 * 设置手动模式下选中的 MCP 服务器 ID 列表
+	 */
+	setMcpSelectedServerIds(ids: string[]) {
+		this.state.mcpSelectedServerIds = [...ids];
+		this.emitState();
+	}
+
 	async selectPromptTemplate(templatePath: string) {
 		try {
 			// 读取模板文件内容
@@ -679,7 +719,13 @@ export class ChatService {
 			return;
 		}
 
-		let trimmed = (content ?? this.state.inputValue).trim();
+		const contentToSend = content ?? this.state.inputValue;
+		const inputReferencedImages = await this.resolveImagesFromInputReferences(contentToSend);
+		if (inputReferencedImages.length > 0) {
+			this.state.selectedImages = this.mergeSelectedImages(this.state.selectedImages, inputReferencedImages);
+		}
+
+		let trimmed = contentToSend.trim();
 		if (!trimmed && this.state.selectedImages.length === 0 &&
 			this.state.selectedFiles.length === 0 && this.state.selectedFolders.length === 0) {
 			return;
@@ -1170,6 +1216,291 @@ export class ChatService {
 		return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
 	}
 
+	private mergeSelectedImages(existingImages: string[], incomingImages: string[]): string[] {
+		const mergedSet = new Set(existingImages);
+		for (const image of incomingImages) {
+			if (image && image.trim().length > 0) {
+				mergedSet.add(image);
+			}
+		}
+		return Array.from(mergedSet);
+	}
+
+	private isSupportedImageMimeType(mimeType: string): boolean {
+		return ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml'].includes(mimeType);
+	}
+
+	private sanitizeCandidateToken(token: string): string {
+		const trimmed = token.trim();
+		const unwrapped = trimmed.replace(/^<|>$/g, '').replace(/^['"]|['"]$/g, '');
+		return unwrapped.replace(/[),.;]+$/g, '');
+	}
+
+	private extractImageReferenceCandidates(input: string): string[] {
+		if (!input || input.trim().length === 0) {
+			return [];
+		}
+
+		const candidates = new Set<string>();
+		const pushCandidate = (value: string) => {
+			const normalized = this.sanitizeCandidateToken(value);
+			if (normalized.length > 0) {
+				candidates.add(normalized);
+			}
+		};
+
+		const markdownImageRegex = /!\[[^\]]*\]\(([^)]+)\)/gi;
+		for (const match of input.matchAll(markdownImageRegex)) {
+			if (match[1]) {
+				pushCandidate(match[1]);
+			}
+		}
+
+		const wikiImageRegex = /!\[\[([^\]]+)\]\]/gi;
+		for (const match of input.matchAll(wikiImageRegex)) {
+			if (match[1]) {
+				pushCandidate(match[1]);
+			}
+		}
+
+		const rawImageLinkRegex = /\[\[([^\]]+\.(?:png|jpe?g|gif|webp|bmp|svg)[^\]]*)\]\]/gi;
+		for (const match of input.matchAll(rawImageLinkRegex)) {
+			if (match[1]) {
+				pushCandidate(match[1]);
+			}
+		}
+
+		const dataUrlRegex = /data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g;
+		for (const match of input.matchAll(dataUrlRegex)) {
+			if (match[0]) {
+				pushCandidate(match[0]);
+			}
+		}
+
+		const httpImageRegex = /https?:\/\/[^\s)\]>]+\.(?:png|jpe?g|gif|webp|bmp|svg)(?:\?[^\s)\]>]*)?/gi;
+		for (const match of input.matchAll(httpImageRegex)) {
+			if (match[0]) {
+				pushCandidate(match[0]);
+			}
+		}
+
+		const obsidianUrlRegex = /obsidian:\/\/[^\s)\]>]+/gi;
+		for (const match of input.matchAll(obsidianUrlRegex)) {
+			if (match[0]) {
+				pushCandidate(match[0]);
+			}
+		}
+
+		const quotedWindowsPathRegex = /["']([a-zA-Z]:\\[^"']+\.(?:png|jpe?g|gif|webp|bmp|svg))["']/g;
+		for (const match of input.matchAll(quotedWindowsPathRegex)) {
+			if (match[1]) {
+				pushCandidate(match[1]);
+			}
+		}
+
+		const plainWindowsPathRegex = /[a-zA-Z]:\\[^\s"'<>|?*]+\.(?:png|jpe?g|gif|webp|bmp|svg)/g;
+		for (const match of input.matchAll(plainWindowsPathRegex)) {
+			if (match[0]) {
+				pushCandidate(match[0]);
+			}
+		}
+
+		const relativePathRegex = /(?:\.\/|\.\.\/)?[^\s"'<>]+(?:\/[^\s"'<>]+)*\.(?:png|jpe?g|gif|webp|bmp|svg)/gi;
+		for (const match of input.matchAll(relativePathRegex)) {
+			if (match[0]) {
+				pushCandidate(match[0]);
+			}
+		}
+
+		return Array.from(candidates);
+	}
+
+	private stripObsidianLinkDecorators(candidate: string): string {
+		const withoutAlias = candidate.split('|')[0] ?? candidate;
+		const withoutHeading = withoutAlias.split('#')[0] ?? withoutAlias;
+		return this.sanitizeCandidateToken(withoutHeading);
+	}
+
+	private dataUrlToMimeType(dataUrl: string): string {
+		const match = dataUrl.match(/^data:([^;]+);base64,/i);
+		return match?.[1]?.toLowerCase() ?? 'application/octet-stream';
+	}
+
+	private arrayBufferToDataUrl(buffer: ArrayBuffer, mimeType: string): string {
+		const base64 = arrayBufferToBase64(buffer);
+		return `data:${mimeType};base64,${base64}`;
+	}
+
+	private toSafeArrayBuffer(data: Uint8Array | Buffer): ArrayBuffer {
+		return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+	}
+
+	private async loadVaultImageAsDataUrl(vaultPath: string): Promise<string | null> {
+		const normalized = normalizePath(vaultPath.replace(/^\//, ''));
+		const abstractFile = this.app.vault.getAbstractFileByPath(normalized);
+		if (!(abstractFile instanceof TFile)) {
+			return null;
+		}
+		const mimeType = getMimeTypeFromFilename(abstractFile.name);
+		if (!this.isSupportedImageMimeType(mimeType)) {
+			return null;
+		}
+		const binary = await this.app.vault.readBinary(abstractFile);
+		return this.arrayBufferToDataUrl(binary, mimeType);
+	}
+
+	private tryResolveVaultPathFromObsidianUrl(urlText: string): string | null {
+		try {
+			const url = new URL(urlText);
+			if (url.protocol !== 'obsidian:') {
+				return null;
+			}
+
+			if (url.hostname === 'open') {
+				const pathParam = url.searchParams.get('path');
+				if (pathParam) {
+					return decodeURIComponent(pathParam);
+				}
+
+				const fileParam = url.searchParams.get('file');
+				if (fileParam) {
+					const vaultName = url.searchParams.get('vault');
+					if (!vaultName || vaultName === this.app.vault.getName()) {
+						return decodeURIComponent(fileParam);
+					}
+				}
+			}
+
+			if (url.hostname === 'vault') {
+				const path = decodeURIComponent(url.pathname.replace(/^\//, ''));
+				const [vaultName, ...segments] = path.split('/');
+				if (vaultName && vaultName === this.app.vault.getName() && segments.length > 0) {
+					return segments.join('/');
+				}
+			}
+		} catch {
+			return null;
+		}
+
+		return null;
+	}
+
+	private buildVaultPathCandidates(rawPath: string): string[] {
+		const cleaned = this.stripObsidianLinkDecorators(rawPath).replace(/\\/g, '/');
+		if (!cleaned) {
+			return [];
+		}
+
+		const candidates = new Set<string>();
+		candidates.add(cleaned);
+
+		const activeFilePath = this.app.workspace.getActiveFile()?.path;
+		if (activeFilePath && (cleaned.startsWith('./') || cleaned.startsWith('../'))) {
+			const activeSegments = activeFilePath.split('/');
+			activeSegments.pop();
+			for (const segment of cleaned.split('/')) {
+				if (segment === '.' || segment.length === 0) {
+					continue;
+				}
+				if (segment === '..') {
+					if (activeSegments.length > 0) {
+						activeSegments.pop();
+					}
+					continue;
+				}
+				activeSegments.push(segment);
+			}
+			candidates.add(activeSegments.join('/'));
+		}
+
+		return Array.from(candidates).map((item) => normalizePath(item.replace(/^\//, '')));
+	}
+
+	private async loadExternalImageAsDataUrl(filePath: string): Promise<string | null> {
+		try {
+			const pathModule = await import('node:path');
+			const fs = await import('node:fs/promises');
+			const normalizedPath = this.stripObsidianLinkDecorators(filePath);
+			const mimeType = getMimeTypeFromFilename(pathModule.basename(normalizedPath));
+			if (!this.isSupportedImageMimeType(mimeType)) {
+				return null;
+			}
+
+			const nodeBuffer = await fs.readFile(normalizedPath);
+			const arrayBuffer = this.toSafeArrayBuffer(nodeBuffer);
+			return this.arrayBufferToDataUrl(arrayBuffer, mimeType);
+		} catch {
+			return null;
+		}
+	}
+
+	private async loadRemoteImageAsDataUrl(urlText: string): Promise<string | null> {
+		try {
+			const response = await requestUrl({
+				url: urlText,
+				method: 'GET'
+			});
+			const guessedMimeType = getMimeTypeFromFilename(urlText);
+			const mimeType = this.isSupportedImageMimeType(guessedMimeType) ? guessedMimeType : 'image/png';
+			return this.arrayBufferToDataUrl(response.arrayBuffer, mimeType);
+		} catch {
+			return null;
+		}
+	}
+
+	private async resolveSingleImageReference(candidate: string): Promise<string | null> {
+		const sanitized = this.sanitizeCandidateToken(candidate);
+		if (!sanitized) {
+			return null;
+		}
+
+		if (sanitized.startsWith('data:image/')) {
+			const mimeType = this.dataUrlToMimeType(sanitized);
+			return this.isSupportedImageMimeType(mimeType) ? sanitized : null;
+		}
+
+		if (sanitized.startsWith('http://') || sanitized.startsWith('https://')) {
+			return this.loadRemoteImageAsDataUrl(sanitized);
+		}
+
+		if (sanitized.startsWith('obsidian://')) {
+			const resolvedPath = this.tryResolveVaultPathFromObsidianUrl(sanitized);
+			if (resolvedPath) {
+				const fromVault = await this.loadVaultImageAsDataUrl(resolvedPath);
+				if (fromVault) {
+					return fromVault;
+				}
+				return this.loadExternalImageAsDataUrl(resolvedPath);
+			}
+			return null;
+		}
+
+		if (/^[a-zA-Z]:\\/.test(sanitized)) {
+			return this.loadExternalImageAsDataUrl(sanitized);
+		}
+
+		const vaultPathCandidates = this.buildVaultPathCandidates(sanitized);
+		for (const vaultPath of vaultPathCandidates) {
+			const dataUrl = await this.loadVaultImageAsDataUrl(vaultPath);
+			if (dataUrl) {
+				return dataUrl;
+			}
+		}
+
+		return null;
+	}
+
+	private async resolveImagesFromInputReferences(input: string): Promise<string[]> {
+		const candidates = this.extractImageReferenceCandidates(input);
+		if (candidates.length === 0) {
+			return [];
+		}
+
+		const resolved = await Promise.all(candidates.map((candidate) => this.resolveSingleImageReference(candidate)));
+		const valid = resolved.filter((item): item is string => typeof item === 'string' && item.length > 0);
+		return Array.from(new Set(valid));
+	}
+
 	private async getOllamaCapabilities(baseURL: string, model: string) {
 		const normalizedBase = this.normalizeOllamaBaseUrl(baseURL);
 		const key = `${normalizedBase}|${model}`;
@@ -1225,19 +1556,26 @@ export class ChatService {
 				enableWebSearch
 			};
 
-			// 注入 MCP 工具（如果可用）
+			// 注入 MCP 工具（根据会话 MCP 模式进行过滤）
 			const mcpManager = this.plugin.featureCoordinator.getMcpClientManager();
-			if (mcpManager) {
+			const mcpMode = this.state.mcpToolMode;
+			if (mcpManager && mcpMode !== 'disabled') {
 				try {
-					const mcpTools = await mcpManager.getAvailableToolsWithLazyStart();
+					const allMcpTools = await mcpManager.getAvailableToolsWithLazyStart();
+					// 按模式过滤工具：auto 全量，manual 仅选中服务器
+					const mcpTools = mcpMode === 'manual'
+						? allMcpTools.filter((tool) => this.state.mcpSelectedServerIds.includes(tool.serverId))
+						: allMcpTools;
 					if (mcpTools.length > 0) {
 						providerOptions.mcpTools = mcpTools;
 						providerOptions.mcpCallTool = (serverId: string, name: string, args: Record<string, unknown>) =>
 							mcpManager.callTool(serverId, name, args);
+						const maxLoops = mcpManager.getSettings().maxToolCallLoops;
+						if (typeof maxLoops === 'number' && maxLoops > 0) {
+							providerOptions.mcpMaxToolCallLoops = maxLoops;
+						}
 					} else {
-						const hasEnabledMcpServer =
-							mcpManager.getSettings().enabled
-							&& mcpManager.getSettings().servers.some((server) => server.enabled)
+						const hasEnabledMcpServer = mcpManager.getSettings().servers.some((server) => server.enabled);
 						if (hasEnabledMcpServer) {
 							this.showMcpNoticeOnce('MCP 已启用，但当前没有可用工具，请检查服务器状态与配置。')
 						}
@@ -1296,47 +1634,10 @@ export class ChatService {
 				return new ArrayBuffer(0);
 			};
 
-			// 创建saveAttachment函数，用于保存生成的图片
+			// 保存图片附件：与 editor.ts 保持一致，直接使用 Obsidian 内置附件路径解析
 			const saveAttachment: SaveAttachment = async (filename: string, data: ArrayBuffer): Promise<void> => {
-				try {
-					// 获取当前附件文件夹路径
-					const attachmentFolderPath = this.plugin.app.vault.getConfig('attachmentFolderPath');
-					
-					// 确定保存路径
-					let savePath = filename;
-					if (attachmentFolderPath) {
-						// 如果配置了附件文件夹路径，使用该路径
-						// 处理相对路径和绝对路径
-						if (attachmentFolderPath === '/') {
-							// 根目录，直接使用文件名
-							savePath = filename;
-						} else if (typeof attachmentFolderPath === 'string' && attachmentFolderPath.startsWith('/')) {
-							// 绝对路径
-							savePath = attachmentFolderPath.slice(1) + '/' + filename;
-						} else {
-							// 相对于当前文件夹的路径
-							const activeFile = this.plugin.app.workspace.getActiveFile();
-							if (activeFile) {
-								const currentDir = activeFile.parent?.path || '';
-								savePath = currentDir ? `${currentDir}/${attachmentFolderPath}/${filename}` : `${attachmentFolderPath}/${filename}`;
-							} else {
-								savePath = `${attachmentFolderPath}/${filename}`;
-							}
-						}
-					} else {
-						// 没有配置附件文件夹，使用默认行为（保存在当前文件同一目录）
-						const activeFile = this.plugin.app.workspace.getActiveFile();
-						if (activeFile && activeFile.parent) {
-							savePath = `${activeFile.parent.path}/${filename}`;
-						}
-					}
-					
-					// 创建文件
-					await this.plugin.app.vault.createBinary(savePath, data);
-				} catch (error) {
-					console.error('[ChatService] 保存图片附件失败:', error);
-					throw new Error(`保存图片附件失败: ${error instanceof Error ? error.message : String(error)}`);
-				}
+				const attachmentPath = await this.plugin.app.fileManager.getAvailablePathForAttachment(filename);
+				await this.plugin.app.vault.createBinary(attachmentPath, data);
 			};
 
 			// 创建一个临时消息对象用于流式更新

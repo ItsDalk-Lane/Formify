@@ -643,6 +643,9 @@ ${body}
 			const extracted = this.messageService.extractToolCallsFromHistory(content);
 			content = extracted.content;
 
+			// 将历史文件中的 MCP 工具 callout 格式转换回标记格式
+			content = this.messageService.parseMcpToolBlocksFromHistory(content);
+
 			// 清理转换后可能产生的多余空行（将3个或以上的连续换行缩减为2个）
 			content = content.replace(/\n{3,}/g, '\n\n').trim();
 			
@@ -710,6 +713,8 @@ ${body}
 						content = this.messageService.parseReasoningBlocksFromHistory(content);
 						const extracted = this.messageService.extractToolCallsFromHistory(content);
 						content = extracted.content;
+						// 将历史文件中的 MCP 工具 callout 格式转换回标记格式
+						content = this.messageService.parseMcpToolBlocksFromHistory(content);
 						// 清理转换后可能产生的多余空行
 						content = content.replace(/\n{3,}/g, '\n\n').trim();
 
@@ -743,6 +748,8 @@ ${body}
 				let content = currentMessage.trim();
 				// 将历史文件中的 callout 格式转换回推理标记格式
 				content = this.messageService.parseReasoningBlocksFromHistory(content);
+				// 将历史文件中的 MCP 工具 callout 格式转换回标记格式
+				content = this.messageService.parseMcpToolBlocksFromHistory(content);
 				// 清理转换后可能产生的多余空行
 				content = content.replace(/\n{3,}/g, '\n\n').trim();
 				messages.push(this.messageService.createMessage(currentRole, content, {

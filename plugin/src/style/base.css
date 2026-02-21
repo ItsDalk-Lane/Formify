@@ -11,6 +11,11 @@ body {
                 rgba(255, 255, 255, 0.05) 0px 0px 0px 1px inset;
 }
 
+/* 确保 Obsidian Notice 始终显示在 Modal 上层 */
+body > .notice-container {
+	z-index: 999;
+}
+
 /* Tars AI Provider Settings Styles */
 summary.tars-setting-h4 {
         font-variant: var(--h4-variant);

@@ -81,6 +81,25 @@ export const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
 
 export const convertEmbedToImageUrl = async (embed: EmbedCache, resolveEmbedAsBinary: ResolveEmbedAsBinary) => {
 	const mimeType = getMimeTypeFromFilename(embed.link)
+	const originalBase64 = (embed as any)?.[Symbol.for('originalBase64')] as string | undefined
+	const originalMimeType = ((embed as any)?.[Symbol.for('mimeType')] as string | undefined)?.toLowerCase()
+
+	if (typeof originalBase64 === 'string' && originalBase64.length > 0) {
+		const dataUrl = originalBase64.startsWith('data:')
+			? originalBase64
+			: `data:${originalMimeType || mimeType || 'image/png'};base64,${originalBase64}`
+
+		const dataMimeTypeMatch = dataUrl.match(/^data:([^;]+);base64,/i)
+		const dataMimeType = dataMimeTypeMatch?.[1]?.toLowerCase() ?? (originalMimeType || mimeType)
+		if (['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml'].includes(dataMimeType)) {
+			return {
+				type: 'image_url' as const,
+				image_url: {
+					url: dataUrl
+				}
+			}
+		}
+	}
 
 	if (['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(mimeType) === false) {
 		throw new Error(t('Only PNG, JPEG, GIF, and WebP images are supported.'))

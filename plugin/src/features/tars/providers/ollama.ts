@@ -3,6 +3,7 @@ import type { EmbedCache } from 'obsidian'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { arrayBufferToBase64, getMimeTypeFromFilename, buildReasoningBlockStart, buildReasoningBlockEnd } from './utils'
+import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
 
 // Structured Output Format 类型
 export type StructuredOutputFormat = 'json' | Record<string, unknown>
@@ -70,7 +71,7 @@ const formatMsgForOllama = async (
 	}
 }
 
-const sendRequestFunc = (settings: BaseOptions): SendRequest =>
+const sendRequestFuncBase = (settings: BaseOptions): SendRequest =>
 	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary) {
 		const { parameters, ...optionsExcludingParams } = settings
 		const options = { ...optionsExcludingParams, ...parameters } as OllamaOptions
@@ -147,6 +148,17 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			yield buildReasoningBlockEnd(durationMs)
 		}
 	}
+
+/** Ollama 的 OpenAI 兼容端点：在 baseURL 后追加 /v1 */
+const ollamaTransformBaseURL = (url: string): string => {
+	const trimmed = (url || 'http://127.0.0.1:11434').trim().replace(/\/+$/, '')
+	return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`
+}
+
+const sendRequestFunc = withOpenAIMcpToolCallSupport(
+	sendRequestFuncBase,
+	{ transformBaseURL: ollamaTransformBaseURL },
+)
 
 export const ollamaVendor: Vendor = {
 	name: 'Ollama',

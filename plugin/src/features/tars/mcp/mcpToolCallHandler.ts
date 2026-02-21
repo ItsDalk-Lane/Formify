@@ -12,11 +12,13 @@ import type {
 	McpCallToolFnForProvider,
 	McpToolDefinitionForProvider,
 	Message,
+	ResolveEmbedAsBinary,
 	SendRequest,
 } from '../providers'
+import { convertEmbedToImageUrl } from '../providers/utils'
 
-/** 工具调用循环最大次数 */
-const MAX_TOOL_CALL_LOOPS = 10
+/** 工具调用循环最大次数（默认值） */
+const DEFAULT_MAX_TOOL_CALL_LOOPS = 10
 
 /** OpenAI 兼容格式的工具定义 */
 export interface OpenAIToolDefinition {
@@ -38,10 +40,15 @@ export interface OpenAIToolCall {
 	}
 }
 
+/** 多模态内容项（文本或图片） */
+export type ContentPart =
+	| { type: 'text'; text: string }
+	| { type: 'image_url'; image_url: { url: string } }
+
 /** 工具调用循环中的消息 */
 export interface ToolLoopMessage {
 	role: 'user' | 'assistant' | 'system' | 'tool'
-	content: string | null
+	content: string | null | ContentPart[]
 	tool_calls?: OpenAIToolCall[]
 	tool_call_id?: string
 	name?: string
@@ -699,21 +706,100 @@ function shouldFallbackToPlainRequest(err: unknown): boolean {
 }
 
 /**
- * 包装 OpenAI 兼容的 sendRequestFunc，添加 MCP 工具调用支持
+ * 需要从 API 请求参数中过滤的内部配置键
  *
- * 当 settings.mcpTools 存在时：
- * 1. 使用流式请求发送消息（含工具定义）
- * 2. 如果响应包含 tool_calls → 执行工具 → 追加结果 → 重新请求
- * 3. 如果响应为纯文本 → 流式 yield 给调用方
- * 4. 循环直到无工具调用或达到最大循环次数
- *
- * 当 settings.mcpTools 不存在时，直接委托给原始函数。
- *
- * @param originalFactory - 原始的 sendRequestFunc 工厂函数
- * @returns 包装后的 sendRequestFunc
+ * 这些键是插件内部/MCP 使用的，不应传递给 AI Provider API
  */
+const INTERNAL_OPTION_KEYS = new Set([
+	'apiKey', 'baseURL', 'model', 'parameters',
+	'mcpTools', 'mcpCallTool', 'mcpMaxToolCallLoops',
+	'enableReasoning', 'enableThinking', 'enableWebSearch',
+	'tag', 'vendor',
+])
+
+/**
+ * 从合并后的选项中提取可安全传递给 OpenAI 兼容 API 的参数
+ *
+ * 过滤掉内部配置键，仅保留 temperature, max_tokens 等 API 参数
+ */
+function extractApiParams(allOptions: Record<string, unknown>): Record<string, unknown> {
+	const apiParams: Record<string, unknown> = {}
+	for (const [key, value] of Object.entries(allOptions)) {
+		if (INTERNAL_OPTION_KEYS.has(key)) continue
+		if (value === undefined || value === null) continue
+		// 跳过函数类型（回调等内部逻辑）
+		if (typeof value === 'function') continue
+		// 跳过以双下划线开头的内部参数（如 __ff_deepseek）
+		if (key.startsWith('__')) continue
+		apiParams[key] = value
+	}
+	return apiParams
+}
+
+/**
+ * 将 ProviderMessage 数组转换为 ToolLoopMessage 数组
+ * 处理嵌入的图片（embeds），将其转换为 OpenAI 兼容的多模态内容格式
+ *
+ * @param messages - Provider 消息数组（可能包含 embeds）
+ * @param resolveEmbedAsBinary - 嵌入对象的二进制解析回调
+ * @returns 适用于 OpenAI SDK 的消息数组
+ */
+async function buildLoopMessages(
+	messages: readonly Message[],
+	resolveEmbedAsBinary: ResolveEmbedAsBinary,
+): Promise<ToolLoopMessage[]> {
+	const result: ToolLoopMessage[] = []
+
+	for (const msg of messages) {
+		// 无 embeds → 直接转为纯文本消息
+		if (!msg.embeds || msg.embeds.length === 0) {
+			result.push({ role: msg.role, content: msg.content })
+			continue
+		}
+
+		// 有 embeds → 构建多模态内容数组（text + image_url）
+		const contentParts: ContentPart[] = []
+
+		if (msg.content) {
+			contentParts.push({ type: 'text', text: msg.content })
+		}
+
+		for (const embed of msg.embeds) {
+			try {
+				const isHttpUrl = embed.link.startsWith('http://') || embed.link.startsWith('https://')
+				if (isHttpUrl) {
+					contentParts.push({ type: 'image_url', image_url: { url: embed.link } })
+				} else {
+					const imageUrlObj = await convertEmbedToImageUrl(embed, resolveEmbedAsBinary)
+					contentParts.push(imageUrlObj)
+				}
+			} catch (err) {
+				DebugLogger.warn(`[MCP] 处理嵌入图片失败: ${err instanceof Error ? err.message : String(err)}`)
+			}
+		}
+
+		result.push({
+			role: msg.role,
+			content: contentParts.length > 0 ? contentParts : msg.content ?? '',
+		})
+	}
+
+	return result
+}
+
+/**
+ * withOpenAIMcpToolCallSupport 的可选配置
+ * - transformBaseURL: 对 baseURL 做自定义转换（用于 Ollama、Gemini 等需要转换路径的 Provider）
+ * - createClient: 自定义 OpenAI 客户端工厂（用于 Azure 等需要非标准初始化的 Provider）
+ */
+export interface OpenAIMcpSupportOptions {
+	transformBaseURL?: (url: string) => string
+	createClient?: (allOptions: Record<string, unknown>) => OpenAI
+}
+
 export function withOpenAIMcpToolCallSupport(
 	originalFactory: (settings: BaseOptions) => SendRequest,
+	mcpOptions?: OpenAIMcpSupportOptions,
 ): (settings: BaseOptions) => SendRequest {
 	return (settings: BaseOptions): SendRequest => {
 		const { mcpTools, mcpCallTool } = settings
@@ -726,40 +812,64 @@ export function withOpenAIMcpToolCallSupport(
 				const { parameters, ...optionsExcludingParams } = settings
 				const allOptions = { ...optionsExcludingParams, ...parameters }
 				const { apiKey, baseURL, model } = allOptions
+				const maxToolCallLoops =
+					typeof settings.mcpMaxToolCallLoops === 'number' && settings.mcpMaxToolCallLoops > 0
+						? settings.mcpMaxToolCallLoops
+						: DEFAULT_MAX_TOOL_CALL_LOOPS
 
-				// 规范化 baseURL：部分 Provider 的 baseURL 已包含 /chat/completions，
-				// 但 OpenAI SDK 会自动追加该路径，需要移除以避免重复
-				let normalizedBaseURL = baseURL as string
-				if (normalizedBaseURL.endsWith('/chat/completions')) {
-					normalizedBaseURL = normalizedBaseURL.replace(/\/chat\/completions$/, '')
+				// 提取可传递给 API 的参数（temperature, max_tokens 等）
+				const apiParams = extractApiParams(allOptions)
+
+				// 创建 OpenAI 兼容客户端
+				// - 优先使用自定义工厂（Azure 等）
+				// - 其次使用 transformBaseURL 转换路径（Ollama、Gemini 等）
+				// - 默认：移除 /chat/completions 后缀后创建标准 OpenAI 客户端
+				let client: OpenAI
+				if (mcpOptions?.createClient) {
+					client = mcpOptions.createClient(allOptions as Record<string, unknown>)
+				} else {
+					let normalizedBaseURL: string
+					if (mcpOptions?.transformBaseURL) {
+						normalizedBaseURL = mcpOptions.transformBaseURL(baseURL as string)
+					} else {
+						normalizedBaseURL = baseURL as string
+						if (normalizedBaseURL.endsWith('/chat/completions')) {
+							normalizedBaseURL = normalizedBaseURL.replace(/\/chat\/completions$/, '')
+						}
+					}
+					client = new OpenAI({
+						apiKey: apiKey as string,
+						baseURL: normalizedBaseURL,
+						dangerouslyAllowBrowser: true,
+					})
 				}
-
-				const client = new OpenAI({
-					apiKey: apiKey as string,
-					baseURL: normalizedBaseURL,
-					dangerouslyAllowBrowser: true,
-				})
 
 				const tools = toOpenAITools(mcpTools)
 
-				// 将原始消息转换为工具循环格式
-				const loopMessages: ToolLoopMessage[] = messages.map((msg) => ({
-					role: msg.role,
-					content: msg.content,
-				}))
+				DebugLogger.debug(
+					`[MCP] 工具调用循环启动: ${mcpTools.length} 个工具可用, model=${model}, ` +
+					`maxLoops=${maxToolCallLoops}, apiParams=${JSON.stringify(Object.keys(apiParams))}`,
+				)
 
-				for (let loop = 0; loop < MAX_TOOL_CALL_LOOPS; loop++) {
+				// 将原始消息转换为工具循环格式，保留多模态图片内容
+				const loopMessages: ToolLoopMessage[] = await buildLoopMessages(
+					messages,
+					resolveEmbedAsBinary,
+				)
+
+				for (let loop = 0; loop < maxToolCallLoops; loop++) {
 					if (controller.signal.aborted) return
 
 					DebugLogger.debug(`[MCP] 工具调用循环 #${loop + 1}`)
 
-					// 流式请求（含工具定义）
+					// 流式请求（含工具定义和 Provider 参数）
 					const stream = await client.chat.completions.create(
 						{
 							model: model as string,
 							messages: loopMessages as OpenAI.ChatCompletionMessageParam[],
 							tools,
 							stream: true,
+							...apiParams,
 						},
 						{ signal: controller.signal },
 					)
@@ -798,7 +908,7 @@ export function withOpenAIMcpToolCallSupport(
 						return
 					}
 
-					// 有工具调用 → 执行工具
+					// 有工具调用 → 逐个执行，每完成一个立即 yield 对应的 MCP 工具标记
 					const toolCalls = finalizeToolCalls(toolCallsMap)
 
 					loopMessages.push({
@@ -807,7 +917,18 @@ export function withOpenAIMcpToolCallSupport(
 						tool_calls: toolCalls,
 					})
 
-					const toolResults = await executeMcpToolCalls(toolCalls, mcpTools, mcpCallTool)
+					const toolResults: ToolLoopMessage[] = []
+					for (const call of toolCalls) {
+						const singleResults = await executeMcpToolCalls([call], mcpTools, mcpCallTool)
+						toolResults.push(...singleResults)
+
+						// 将工具调用结果注入流式输出，使聊天界面实时展示
+						const resultContent = typeof singleResults[0]?.content === 'string'
+							? singleResults[0].content
+							: ''
+						yield `{{FF_MCP_TOOL_START}}:${call.function.name}:${resultContent}{{FF_MCP_TOOL_END}}:`
+					}
+
 					loopMessages.push(...toolResults)
 
 					DebugLogger.debug(
@@ -816,13 +937,14 @@ export function withOpenAIMcpToolCallSupport(
 				}
 
 				// 达到最大循环次数，做最后一次流式请求（不带工具）
-				DebugLogger.warn(`[MCP] 达到最大工具调用循环次数 (${MAX_TOOL_CALL_LOOPS})`)
+				DebugLogger.warn(`[MCP] 达到最大工具调用循环次数 (${maxToolCallLoops})`)
 
 				const finalStream = await client.chat.completions.create(
 					{
 						model: model as string,
 						messages: loopMessages as OpenAI.ChatCompletionMessageParam[],
 						stream: true,
+						...apiParams,
 					},
 					{ signal: controller.signal },
 				)
@@ -841,9 +963,21 @@ export function withOpenAIMcpToolCallSupport(
 					throw err
 				}
 
-				DebugLogger.warn(
+				DebugLogger.error(
 					`[MCP] 工具调用链路失败，回退普通请求（不带 MCP 工具）: ${errorText}`,
+					err,
 				)
+
+				// 向用户发出回退通知，避免静默丢弃工具导致幻觉
+				try {
+					const { Notice } = await import('obsidian')
+					new Notice(
+						`⚠️ MCP 工具调用失败，已回退为普通请求。\n原因: ${errorText.slice(0, 120)}`,
+						8000,
+					)
+				} catch {
+					// Notice 不可用时忽略（不影响核心功能）
+				}
 
 				const fallbackSettings: BaseOptions = {
 					...settings,

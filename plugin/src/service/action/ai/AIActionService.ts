@@ -444,7 +444,7 @@ export default class AIActionService implements IActionService {
             provider.options,
             provider.vendor
         );
-        this.injectMcpTools(providerOptions, context);
+        await this.injectMcpTools(providerOptions, context);
         const sendRequest = vendor.sendRequestFunc(providerOptions);
 
         // 创建中断控制器

@@ -2,6 +2,7 @@ import OpenAI from 'openai'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { arrayBufferToBase64, getMimeTypeFromFilename } from './utils'
+import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
 
 type GeminiContentItem = { text?: string; inlineData?: { mimeType?: string; data?: string } }
 type GeminiContent = { role: 'user' | 'model'; parts: GeminiContentItem[] }
@@ -158,7 +159,7 @@ const sendViaOpenAICompatible = async function* (
 	}
 }
 
-const sendRequestFunc = (settings: BaseOptions): SendRequest =>
+const sendRequestFuncBase = (settings: BaseOptions): SendRequest =>
 	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary) {
 		const { parameters, ...optionsExcludingParams } = settings
 		const options = { ...optionsExcludingParams, ...parameters }
@@ -222,6 +223,12 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			throw error
 		}
 	}
+
+/** Gemini 的 OpenAI 兼容端点通过 geminiNormalizeOpenAIBaseURL 规范化，支持 MCP 工具调用 */
+const sendRequestFunc = withOpenAIMcpToolCallSupport(
+	sendRequestFuncBase,
+	{ transformBaseURL: geminiNormalizeOpenAIBaseURL },
+)
 
 export const geminiVendor: Vendor = {
 	name: 'Gemini',

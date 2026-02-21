@@ -232,6 +232,39 @@ interface ChatModalAppProps {
 
 const ChatModalApp = ({ service, app }: ChatModalAppProps) => {
 	const [state, setState] = useState<ChatState>(service.getState());
+	const MODAL_VIEWPORT_PADDING = 8;
+
+	const keepModalInViewport = () => {
+		const modalEl = document.querySelector<HTMLElement>('.chat-modal');
+		if (!modalEl) {
+			return;
+		}
+
+		const computedStyle = window.getComputedStyle(modalEl);
+		const hasFixedPosition = computedStyle.position === 'fixed';
+		if (!hasFixedPosition) {
+			return;
+		}
+
+		const currentTop = Number.parseFloat(modalEl.style.top || computedStyle.top || '0');
+		if (!Number.isFinite(currentTop)) {
+			return;
+		}
+
+		const rect = modalEl.getBoundingClientRect();
+		let adjustedTop = currentTop;
+
+		if (rect.bottom > window.innerHeight - MODAL_VIEWPORT_PADDING) {
+			adjustedTop -= rect.bottom - (window.innerHeight - MODAL_VIEWPORT_PADDING);
+		}
+		if (rect.top < MODAL_VIEWPORT_PADDING) {
+			adjustedTop += MODAL_VIEWPORT_PADDING - rect.top;
+		}
+
+		if (adjustedTop !== currentTop) {
+			modalEl.style.top = `${Math.max(MODAL_VIEWPORT_PADDING, adjustedTop)}px`;
+		}
+	};
 
 	useEffect(() => {
 		const unsubscribe = service.subscribe((next) => {
@@ -254,6 +287,9 @@ const ChatModalApp = ({ service, app }: ChatModalAppProps) => {
 			} else {
 				modalEl.classList.remove('auto-height');
 			}
+			window.requestAnimationFrame(() => {
+				keepModalInViewport();
+			});
 		}
 	}, [hasMessages]);
 

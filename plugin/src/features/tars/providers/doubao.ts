@@ -1,10 +1,17 @@
 import { requestUrl } from 'obsidian'
 import { t } from 'tars/lang/helper'
-import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
+import { BaseOptions, Message, ResolveEmbedAsBinary, SaveAttachment, SendRequest, Vendor } from '.'
 import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl, getMimeTypeFromFilename } from './utils'
 import { normalizeProviderError } from './errors'
 import { withRetry } from './retry'
 import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
+import {
+	DEFAULT_DOUBAO_IMAGE_OPTIONS,
+	doubaoImageVendor,
+	DOUBAO_IMAGE_MODELS,
+	DoubaoImageOptions,
+	isDoubaoImageGenerationModel,
+} from './doubaoImage'
 
 export type DoubaoThinkingType = 'enabled' | 'disabled' | 'auto'
 export type DoubaoReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
@@ -57,6 +64,15 @@ export interface DoubaoOptions extends BaseOptions {
 		systemPrompt?: string // 系统提示词，用于指导搜索行为
 		enableThinking?: boolean // 是否启用思考过程（边想边搜）
 	}
+	// 图片生成参数（与 DoubaoImage 兼容）
+	displayWidth?: number
+	size?: DoubaoImageOptions['size']
+	response_format?: DoubaoImageOptions['response_format']
+	watermark?: boolean
+	sequential_image_generation?: DoubaoImageOptions['sequential_image_generation']
+	max_images?: number
+	stream?: boolean
+	optimize_prompt_mode?: DoubaoImageOptions['optimize_prompt_mode']
 }
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp']
@@ -222,6 +238,16 @@ const createDoubaoHTTPError = (status: number, detail: string) => {
 	return error
 }
 
+const resolveDoubaoImageEndpoint = (baseURL: string): string => {
+	const fallback = 'https://ark.cn-beijing.volces.com/api/v3/images/generations'
+	try {
+		const origin = new URL((baseURL || '').trim()).origin
+		return `${origin}/api/v3/images/generations`
+	} catch {
+		return fallback
+	}
+}
+
 // 处理消息，支持文本和图片的多模态输入
 // 当启用 Web Search 时，需要转换为 Responses API 的消息格式
 const processMessages = async (
@@ -342,7 +368,12 @@ const processMessages = async (
 }
 
 const sendRequestFunc = (settings: BaseOptions): SendRequest =>
-	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary) {
+	async function* (
+		messages: Message[],
+		controller: AbortController,
+		resolveEmbedAsBinary: ResolveEmbedAsBinary,
+		saveAttachment?: SaveAttachment
+	) {
 		try {
 			const { parameters, ...optionsExcludingParams } = settings
 			const options = { ...optionsExcludingParams, ...parameters } as DoubaoOptions
@@ -361,6 +392,26 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			} = options
 			if (!apiKey) throw new Error(t('API key is required'))
 			if (!model) throw new Error(t('Model is required'))
+
+			// 图片生成模型走图像接口，统一由 Doubao Provider 承载
+			if (isDoubaoImageGenerationModel(model)) {
+				const imageOptions: DoubaoImageOptions = {
+					...options,
+					baseURL: resolveDoubaoImageEndpoint(baseURL),
+					displayWidth: options.displayWidth ?? DEFAULT_DOUBAO_IMAGE_OPTIONS.displayWidth,
+					size: options.size ?? DEFAULT_DOUBAO_IMAGE_OPTIONS.size,
+					response_format: options.response_format ?? DEFAULT_DOUBAO_IMAGE_OPTIONS.response_format,
+					watermark: options.watermark ?? DEFAULT_DOUBAO_IMAGE_OPTIONS.watermark,
+					sequential_image_generation:
+						options.sequential_image_generation ?? DEFAULT_DOUBAO_IMAGE_OPTIONS.sequential_image_generation,
+					stream: options.stream ?? DEFAULT_DOUBAO_IMAGE_OPTIONS.stream,
+					optimize_prompt_mode: options.optimize_prompt_mode ?? DEFAULT_DOUBAO_IMAGE_OPTIONS.optimize_prompt_mode,
+					max_images: options.max_images ?? 5,
+				}
+				const imageSendRequest = doubaoImageVendor.sendRequestFunc(imageOptions)
+				yield* imageSendRequest(messages, controller, resolveEmbedAsBinary, saveAttachment)
+				return
+			}
 
 			// 判断是否启用 Web Search
 			const useWebSearch = enableWebSearch === true
@@ -603,7 +654,7 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		}
 	}
 
-const models = Object.keys(DOUBAO_MODEL_CAPABILITY_MAP)
+const models = Array.from(new Set([...Object.keys(DOUBAO_MODEL_CAPABILITY_MAP), ...DOUBAO_IMAGE_MODELS]))
 
 export const doubaoVendor: Vendor = {
 	name: 'Doubao',
@@ -617,5 +668,5 @@ export const doubaoVendor: Vendor = {
 	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
 	models,
 	websiteToObtainKey: 'https://www.volcengine.com',
-	capabilities: ['Text Generation', 'Image Vision', 'Web Search', 'Reasoning']
+	capabilities: ['Text Generation', 'Image Vision', 'Image Generation', 'Web Search', 'Reasoning']
 }

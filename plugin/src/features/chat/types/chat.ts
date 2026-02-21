@@ -180,6 +180,14 @@ export interface ChatSettings {
 	skills?: Skill[]; // 技能列表（持久化存储于 data.json.chat.skills）
 }
 
+/**
+ * 会话级 MCP 工具调用模式
+ * - disabled: 禁用，不向 AI 请求附加任何 MCP 工具
+ * - auto: 自动，附加所有已连接且运行中的 MCP 服务器工具
+ * - manual: 手动，仅附加用户选中的 MCP 服务器工具
+ */
+export type McpToolMode = 'disabled' | 'auto' | 'manual';
+
 export interface ChatState {
 	activeSession: ChatSession | null;
 	isGenerating: boolean;
@@ -207,6 +215,12 @@ export interface ChatState {
 	// 工具相关状态
 	pendingToolExecutions: ToolExecution[];
 	toolExecutions?: ToolExecution[];
+
+	// MCP 会话级控制（运行时状态，不持久化）
+	/** 当前会话的 MCP 工具调用模式，默认 'auto' */
+	mcpToolMode: McpToolMode;
+	/** 手动模式下用户选中的 MCP 服务器 ID 数组 */
+	mcpSelectedServerIds: string[];
 }
 
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {

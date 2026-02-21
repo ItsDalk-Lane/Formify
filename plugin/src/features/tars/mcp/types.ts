@@ -105,16 +105,25 @@ export type McpCallToolFn = (
 
 /** MCP 设置（嵌入 TarsSettings） */
 export interface McpSettings {
-	/** 是否启用 MCP 功能 */
-	enabled: boolean
 	/** MCP 服务器配置列表 */
 	servers: McpServerConfig[]
+	/**
+	 * 工具调用循环最大次数
+	 * 即一次对话中 AI 最多可连续调用 MCP 工具的轮数
+	 * @default 10
+	 */
+	maxToolCallLoops?: number
+	/**
+	 * @deprecated 已移除全局开关，MCP 功能始终启用。
+	 * 保留此字段仅用于向下兼容读取旧配置文件，写入时忽略。
+	 */
+	enabled?: boolean
 }
 
 /** MCP 设置默认值 */
 export const DEFAULT_MCP_SETTINGS: McpSettings = {
-	enabled: false,
 	servers: [],
+	maxToolCallLoops: 10,
 }
 
 /** mcp.json 标准配置文件格式（Claude Desktop 兼容） */

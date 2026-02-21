@@ -3,7 +3,6 @@ import { azureVendor } from './providers/azure'
 import { claudeVendor } from './providers/claude'
 import { deepSeekVendor } from './providers/deepSeek'
 import { doubaoVendor } from './providers/doubao'
-import { doubaoImageVendor } from './providers/doubaoImage'
 import { geminiVendor } from './providers/gemini'
 import { gptImageVendor } from './providers/gptImage'
 import { grokVendor } from './providers/grok'
@@ -122,7 +121,6 @@ export const availableVendors: Vendor[] = [
 	claudeVendor,
 	deepSeekVendor,
 	doubaoVendor,
-	doubaoImageVendor,
 	geminiVendor,
 	gptImageVendor,
 	grokVendor,

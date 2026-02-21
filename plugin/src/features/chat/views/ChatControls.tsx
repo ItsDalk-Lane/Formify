@@ -5,6 +5,7 @@ import type { ChatState } from '../types/chat';
 import type { ChatHistoryEntry } from '../services/HistoryService';
 import { ChatHistoryPanel } from '../components/ChatHistory';
 import { FileMenuPopup } from '../components/FileMenuPopup';
+import { McpModeSelector } from '../components/McpModeSelector';
 import { App, TFile, TFolder } from 'obsidian';
 
 interface ChatControlsProps {
@@ -86,18 +87,19 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 			const target = e.target as HTMLInputElement;
 			const files = Array.from(target.files || []);
 			if (files.length > 0) {
-				// 将图片转换为base64格式
-				const newImageBase64Array: string[] = [];
-				for (const file of files) {
+				const converted = await Promise.all(files.map(async (file) => {
 					try {
-						const base64 = await fileToBase64(file);
-						newImageBase64Array.push(base64);
+						return await fileToBase64(file);
 					} catch (error) {
 						console.error('Failed to convert image to base64:', error);
+						return null;
 					}
+				}));
+
+				const validImages = converted.filter((item): item is string => typeof item === 'string' && item.length > 0);
+				if (validImages.length > 0) {
+					service.addSelectedImages(validImages);
 				}
-				const updatedImages = [...state.selectedImages, ...newImageBase64Array];
-				service.setSelectedImages(updatedImages);
 			}
 		};
 		input.click();
@@ -135,6 +137,11 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 					<Zap className="tw-size-3" />
 					<span>选择模板</span>
 				</span>
+				<McpModeSelector
+					mode={state.mcpToolMode}
+					selectedServerIds={state.mcpSelectedServerIds}
+					service={service}
+				/>
 				<span
 					ref={fileMenuButtonRef}
 					onClick={(e) => {

@@ -59,6 +59,8 @@ export interface BaseOptions {
 	mcpTools?: McpToolDefinitionForProvider[]
 	/** MCP 工具调用回调（可选，由 McpClientManager 注入） */
 	mcpCallTool?: McpCallToolFnForProvider
+	/** MCP 工具调用循环最大次数（可选，默认 10） */
+	mcpMaxToolCallLoops?: number
 }
 
 /** MCP 工具定义（Provider 使用的精简格式） */

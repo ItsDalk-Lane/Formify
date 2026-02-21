@@ -94,6 +94,39 @@ const ReasoningBlockComponent = ({ content, startMs, durationMs, isGenerating }:
 	);
 };
 
+// MCP 工具调用块组件
+interface McpToolBlockProps {
+	toolName: string;
+	content: string;
+}
+
+const McpToolBlockComponent = ({ toolName, content }: McpToolBlockProps) => {
+	const [collapsed, setCollapsed] = useState(true);
+
+	const toggleCollapse = useCallback(() => {
+		setCollapsed(prev => !prev);
+	}, []);
+
+	return (
+		<div className="ff-reasoning-block">
+			<div
+				className="ff-reasoning-header"
+				onClick={toggleCollapse}
+			>
+				<span className="ff-reasoning-toggle">
+					{collapsed ? <ChevronRight className="tw-size-4" /> : <ChevronDown className="tw-size-4" />}
+				</span>
+				<span className="ff-reasoning-title">{toolName}</span>
+			</div>
+			{!collapsed && (
+				<div className="ff-reasoning-content">
+					{content}
+				</div>
+			)}
+		</div>
+	);
+};
+
 // 文本块组件 - 用于渲染 Markdown 内容
 interface TextBlockProps {
 	content: string;
@@ -329,6 +362,15 @@ export const MessageItem = ({ message, service, isGenerating }: MessageItemProps
 										startMs={block.startMs}
 										durationMs={block.durationMs}
 										isGenerating={isGenerating ?? false}
+									/>
+								);
+							}
+							if (block.type === 'mcpTool') {
+								return (
+									<McpToolBlockComponent
+										key={`mcpTool-${index}`}
+										toolName={block.toolName}
+										content={block.content}
 									/>
 								);
 							}

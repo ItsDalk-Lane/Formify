@@ -79,6 +79,8 @@ export class MessageService {
 		let content = message.content;
 		// 历史文件展示：将推理标记转换为可折叠 callout（不影响聊天界面渲染）
 		content = this.formatReasoningBlocksForHistory(content);
+		// 历史文件展示：将 MCP 工具调用标记转换为可折叠 callout
+		content = this.formatMcpToolBlocksForHistory(content);
 
 		// 如果有错误标记，在内容前添加错误标识
 		if (message.isError) {
@@ -361,6 +363,13 @@ export class MessageService {
 				continue;
 			}
 
+			if (block.type === 'mcpTool') {
+				// MCP 工具标记由 formatMcpToolBlocksForHistory 处理，此处原样保留
+				result += `{{FF_MCP_TOOL_START}}:${block.toolName}:${block.content}{{FF_MCP_TOOL_END}}:`;
+				continue;
+			}
+
+			// reasoning block
 			const title = block.durationMs
 				? `深度思考 ${formatReasoningDuration(block.durationMs)}`
 				: '深度思考';
@@ -375,6 +384,53 @@ export class MessageService {
 		}
 
 		return result.replace(/\n{3,}/g, '\n\n');
+	}
+
+	/**
+	 * 将消息内容中的 MCP 工具标记转换为 Obsidian callout 格式用于历史文件展示
+	 *
+	 * {{FF_MCP_TOOL_START}}:toolName:content{{FF_MCP_TOOL_END}}:
+	 * → > [!info]- toolName
+	 *    > content
+	 */
+	private formatMcpToolBlocksForHistory(content: string): string {
+		if (!content || !content.includes('{{FF_MCP_TOOL_START}}')) {
+			return content;
+		}
+
+		const pattern = /\{\{FF_MCP_TOOL_START\}\}:([^:]+):([\s\S]*?)\{\{FF_MCP_TOOL_END\}\}:/g;
+
+		return content.replace(pattern, (_, toolName: string, toolContent: string) => {
+			const normalized = (toolContent ?? '').replace(/\s+$/g, '');
+			const lines = normalized.split('\n');
+			const quotedLines = lines.map(line => (line ? `> ${line}` : '>')).join('\n');
+			return `\n\n> [!info]- ${toolName}\n${quotedLines}\n\n`;
+		}).replace(/\n{3,}/g, '\n\n');
+	}
+
+	/**
+	 * 将历史文件中的 MCP 工具 callout 格式转换回标记格式
+	 * 用于在加载历史消息时恢复 MCP 工具块的原始格式
+	 *
+	 * 注意：仅匹配标题不以 ** 开头的 [!info] callout（有 **的是工具调用记录）
+	 */
+	public parseMcpToolBlocksFromHistory(content: string): string {
+		if (!content || !content.includes('> [!info]-')) {
+			return content;
+		}
+
+		// 匹配：> [!info]- toolName（标题不以 ** 开头，区别工具调用记录）
+		// 后面跟着一个或多个引用内容行
+		const pattern = /> \[!info\]- (?!\*\*)([^\n]+)\n((?:>[^\n]*(?:\n|$))+)/g;
+
+		return content.replace(pattern, (match: string, toolName: string, quotedContent: string) => {
+			const toolContent = quotedContent
+				.split('\n')
+				.map((line: string) => line.replace(/^>\s*/, ''))
+				.filter((line: string) => line.length > 0)
+				.join('\n');
+			return `{{FF_MCP_TOOL_START}}:${toolName}:${toolContent}{{FF_MCP_TOOL_END}}:`;
+		});
 	}
 
 	/**

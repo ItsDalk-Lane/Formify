@@ -27,6 +27,10 @@ interface ProviderConfig {
 export class SettingsManager {
     constructor(private plugin: Plugin) {}
 
+    private normalizeProviderVendor(vendor: string): string {
+        return vendor === 'DoubaoImage' ? 'Doubao' : vendor;
+    }
+
     async load(): Promise<PluginSettings> {
         const persisted = (await this.plugin.loadData()) ?? {};
         const rawChatSettings = persisted?.chat ?? {};
@@ -155,6 +159,7 @@ export class SettingsManager {
             const options = provider.options || {};
             return {
                 ...provider,
+                vendor: this.normalizeProviderVendor(provider.vendor),
                 options: {
                     ...options,
                     apiKey: decryptApiKey(options.apiKey || ''),
@@ -181,6 +186,7 @@ export class SettingsManager {
             }
             return {
                 ...provider,
+                vendor: this.normalizeProviderVendor(provider.vendor),
                 options: encrypted,
             };
         });

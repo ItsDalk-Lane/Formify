@@ -92,9 +92,19 @@ export class PromptBuilder {
 		// 2) Context (User/XML)
 		// - 文件/文件夹（由 UI 手动或自动添加）
 		// - 选中文本/符号触发全文（来自最后一次用户输入的 metadata.selectedText）
-		// - 图片（来自最后一次用户输入的 images，按场景规则归入 Context）
+		// - 图片：仅当存在其他上下文内容（文件/文本）时才归入 Context，
+		//   否则保留在 Task 消息中，避免图片与用户问题分属不同消息导致模型无法关联
 		const selectedText = isLastUser ? this.getStringMetadata(last, 'selectedText') : null;
-		const contextEmbeds = isLastUser ? this.createEmbedsFromImages(last.images ?? []) : [];
+		const hasContextData = selectedFiles.length > 0
+			|| selectedFolders.length > 0
+			|| contextNotes.some((n) => (n ?? '').trim().length > 0)
+			|| (selectedText != null && selectedText.trim().length > 0);
+
+		const imageEmbeds = isLastUser ? this.createEmbedsFromImages(last.images ?? []) : [];
+		// 图片归入 Context 还是 Task：有其他上下文时归入 Context，否则留在 Task
+		const contextEmbeds = hasContextData ? imageEmbeds : [];
+		const taskEmbeds = hasContextData ? [] : imageEmbeds;
+
 		const contextMessage = await this.buildContextMessage({
 			selectedFiles,
 			selectedFolders,
@@ -121,16 +131,25 @@ export class PromptBuilder {
 		}
 
 		if (isLastUser) {
-			// Task 消息中不再携带 images（按规则归入 Context）
+			// Task 消息：清除原始 images（改用已构建的 embeds 直接注入）
 			const taskMessage: ChatMessage = {
 				...last,
 				images: []
 			};
-			result.push(await this.mapChatMessageToProviderMessage(taskMessage, {
+			const taskProviderMsg = await this.mapChatMessageToProviderMessage(taskMessage, {
 				linkParseOptions,
 				parseLinksInTemplates,
 				sourcePath
-			}));
+			});
+			// 注入图片 embeds（当图片未归入 Context 时）
+			if (taskEmbeds.length > 0) {
+				result.push({
+					...taskProviderMsg,
+					embeds: taskEmbeds
+				});
+			} else {
+				result.push(taskProviderMsg);
+			}
 		}
 
 		return result;

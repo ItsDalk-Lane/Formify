@@ -15,7 +15,12 @@ import {
 	DEFAULT_DOUBAO_THINKING_TYPE,
 	getDoubaoModelCapability
 } from './providers/doubao'
-import { DoubaoImageOptions, doubaoImageVendor, DOUBAO_IMAGE_SIZE_PRESETS } from './providers/doubaoImage'
+import {
+	DoubaoImageOptions,
+	DOUBAO_IMAGE_SIZE_PRESETS,
+	DEFAULT_DOUBAO_IMAGE_OPTIONS,
+	isDoubaoImageGenerationModel
+} from './providers/doubaoImage'
 import { GptImageOptions, gptImageVendor } from './providers/gptImage'
 import { grokVendor, GrokOptions } from './providers/grok'
 import { kimiVendor, KimiOptions } from './providers/kimi'
@@ -29,7 +34,6 @@ import { qwenVendor, QwenOptions } from './providers/qwen'
 import { siliconFlowVendor } from './providers/siliconflow'
 import { zhipuVendor, ZhipuOptions, ZHIPU_THINKING_TYPE_OPTIONS, DEFAULT_ZHIPU_THINKING_TYPE, isReasoningModel } from './providers/zhipu'
 import { getCapabilityEmoji, getCapabilityDisplayText } from './providers/utils'
-import { localInstance } from 'src/i18n/locals'
 import { SystemPromptManagerModal } from './system-prompts/SystemPromptManagerModal'
 import { availableVendors, DEFAULT_TARS_SETTINGS } from './settings'
 import type { TarsSettings } from './settings'
@@ -987,23 +991,36 @@ export class TarsSettingTab {
 			toggleMcpSection()
 		})
 
-		// MCP 总开关
-		new Setting(mcpSection)
-			.setName(t('Enable MCP'))
-			.setDesc(t('Enable MCP description'))
-			.addToggle((toggle) =>
-				toggle.setValue(mcpSettings.enabled).onChange(async (value) => {
-					if (!this.settings.mcp) {
-						this.settings.mcp = { ...DEFAULT_MCP_SETTINGS }
-					}
-					this.settings.mcp.enabled = value
-					await this.saveSettings()
-				})
-			)
-
 		// 服务器列表
 		const serverListContainer = mcpSection.createDiv({ cls: 'mcp-server-list' })
 		this.renderMcpServerList(serverListContainer, mcpSettings)
+
+		// 工具调用循环次数设置
+		const loopsSetting = new Setting(mcpSection)
+			.setName('工具调用最大循环次数')
+			.setDesc('每轮对话中 AI 最多可连续调用 MCP 工具的轮数，默认为 10。')
+		loopsSetting.settingEl.style.borderTop = '1px solid var(--background-modifier-border)'
+		loopsSetting.settingEl.style.paddingTop = '8px'
+		loopsSetting.settingEl.style.marginTop = '4px'
+		loopsSetting.addText((text) => {
+			text
+				.setPlaceholder('10')
+				.setValue(String(mcpSettings.maxToolCallLoops ?? 10))
+			text.inputEl.type = 'number'
+			text.inputEl.min = '1'
+			text.inputEl.max = '50'
+			text.inputEl.style.width = '72px'
+			text.inputEl.addEventListener('change', async () => {
+				const raw = parseInt(text.inputEl.value, 10)
+				const value = Number.isFinite(raw) && raw >= 1 ? Math.min(raw, 50) : 10
+				text.inputEl.value = String(value)
+				if (!this.settings.mcp) {
+					this.settings.mcp = { ...DEFAULT_MCP_SETTINGS }
+				}
+				this.settings.mcp.maxToolCallLoops = value
+				await this.saveSettings()
+			})
+		})
 
 		// 添加服务器按钮事件
 		addServerBtn.addEventListener('click', (e) => {
@@ -1053,10 +1070,17 @@ export class TarsSettingTab {
 			const serverState = mcpManager?.getState?.(server.id)
 			const statusText = this.getMcpStatusText(serverState?.status ?? 'idle')
 			const statusColor = this.getMcpStatusColor(serverState?.status ?? 'idle')
+			const lastError = serverState?.lastError
+
+			// 构建描述文本：包含传输类型、状态，以及错误信息（如有）
+			const descParts = [`${server.transportType.toUpperCase()} · ${statusText}`]
+			if (lastError && serverState?.status === 'error') {
+				descParts.push(lastError.length > 120 ? `${lastError.slice(0, 120)}...` : lastError)
+			}
 
 			const serverSetting = new Setting(container)
 				.setName(server.name || server.id)
-				.setDesc(`${server.transportType.toUpperCase()} · ${statusText}`)
+				.setDesc(descParts.join('\n'))
 
 			// 状态指示点
 			const nameEl = serverSetting.nameEl
@@ -3860,24 +3884,25 @@ export class TarsSettingTab {
 			modal.open()
 		}
 
-        card.addEventListener('click', (e) => {
-            // 如果点击的是删除按钮，不触发卡片点击
-            if (e.target === deleteBtn || (e.target as HTMLElement).closest('button') === deleteBtn) return
-            openConfigModal()
-        })
+		card.addEventListener('click', (e) => {
+			// 如果点击的是删除按钮，不触发卡片点击
+			if (e.target === deleteBtn || (e.target as HTMLElement).closest('button') === deleteBtn) return
+			this.currentOpenProviderIndex = index
+			openConfigModal()
+		})
 
-        // 删除按钮点击事件
-        deleteBtn.addEventListener('click', async (e) => {
-            e.stopPropagation()
-            this.settings.providers.splice(index, 1)
-            await this.settingsContext.saveSettings()
-            this.render(this.containerEl)
-        })
+		// 删除按钮点击事件
+		deleteBtn.addEventListener('click', async (e) => {
+			e.stopPropagation()
+			this.settings.providers.splice(index, 1)
+			await this.settingsContext.saveSettings()
+			this.render(this.containerEl)
+		})
 
-        if (isOpen) {
-            this.currentOpenProviderIndex = index
-            openConfigModal()
-        }
+		if (isOpen) {
+			this.currentOpenProviderIndex = index
+			openConfigModal()
+		}
     }
 
 	/**
@@ -4004,7 +4029,13 @@ export class TarsSettingTab {
 		}
 
 		if (vendor.name === doubaoVendor.name) {
-			this.addDoubaoSections(container, settings.options as DoubaoOptions)
+			const doubaoOptions = settings.options as DoubaoOptions & Partial<DoubaoImageOptions>
+			if (isDoubaoImageGenerationModel(doubaoOptions.model)) {
+				this.ensureDoubaoImageDefaults(doubaoOptions)
+				this.addDoubaoImageSections(container, doubaoOptions as DoubaoImageOptions)
+			} else {
+				this.addDoubaoSections(container, doubaoOptions)
+			}
 		}
 
 		if (vendor.name === zhipuVendor.name) {
@@ -4021,10 +4052,6 @@ export class TarsSettingTab {
 
 		if (vendor.name === gptImageVendor.name) {
 			this.addGptImageSections(container, settings.options as GptImageOptions)
-		}
-
-		if (vendor.name === doubaoImageVendor.name) {
-			this.addDoubaoImageSections(container, settings.options as DoubaoImageOptions)
 		}
 
 		// 添加Kimi、DeepSeek和Grok的推理功能开关
@@ -4074,11 +4101,17 @@ export class TarsSettingTab {
 						btn.setDisabled(true)
 						btn.setButtonText(t('Testing model...'))
 						try {
-							await this.testProviderConfiguration(settings)
-						} finally {
+							const success = await this.testProviderConfiguration(settings)
+							btn.setButtonText(success ? '✅ ' + t('Model test succeeded') : '❌ ' + t('Model test failed'))
+						} catch (error) {
+							const msg = error instanceof Error ? error.message : String(error)
+							new Notice(`${t('Model test failed')}: ${msg}`)
+							btn.setButtonText('❌ ' + t('Model test failed'))
+						}
+						setTimeout(() => {
 							btn.setDisabled(false)
 							btn.setButtonText(testButtonLabel)
-						}
+						}, 2500)
 					})
 			})
 
@@ -4314,14 +4347,13 @@ export class TarsSettingTab {
 							options.model = selectedModel
 							await this.saveSettings()
 							btn.setButtonText(selectedModel)
-							// OpenRouter: 模型改变时更新功能显示和配置界面
-							if (vendorName === openRouterVendor.name && index !== undefined && settings) {
+							// 模型改变时更新功能显示和配置界面（适用于所有提供商）
+							if (index !== undefined && settings) {
 								// 更新Provider卡片中的功能显示
 								this.updateProviderCapabilities(index, settings)
 
-								// 如果当前配置Modal是打开的，重新渲染Modal内容以更新配置项
-								if (this.currentOpenProviderIndex === index && modal && vendor) {
-									// 清空Modal容器并重新渲染配置内容
+								// 重新渲染Modal内容以更新配置项（使用闭包中的modal引用，不依赖currentOpenProviderIndex）
+								if (modal && vendor) {
 									modal.configContainer.empty()
 									this.renderProviderConfig(modal.configContainer, index, settings, vendor, modal)
 								}
@@ -4357,14 +4389,13 @@ export class TarsSettingTab {
 					if (buttonComponent) {
 						buttonComponent.textContent = value.trim() || t('Select the model to use')
 					}
-					// OpenRouter: 模型改变时更新功能显示和配置界面
-					if (vendorName === openRouterVendor.name && index !== undefined && settings) {
+					// 模型改变时更新功能显示和配置界面（适用于所有提供商）
+					if (index !== undefined && settings) {
 						// 更新Provider卡片中的功能显示
 						this.updateProviderCapabilities(index, settings)
 
-						// 如果当前配置Modal是打开的，重新渲染Modal内容以更新配置项
-						if (this.currentOpenProviderIndex === index && modal && vendor) {
-							// 清空Modal容器并重新渲染配置内容
+						// 重新渲染Modal内容以更新配置项（使用闭包中的modal引用，不依赖currentOpenProviderIndex）
+						if (modal && vendor) {
 							modal.configContainer.empty()
 							this.renderProviderConfig(modal.configContainer, index, settings, vendor, modal)
 						}
@@ -5089,6 +5120,17 @@ export class TarsSettingTab {
 			})
 	}
 
+	private ensureDoubaoImageDefaults = (options: DoubaoOptions & Partial<DoubaoImageOptions>) => {
+		options.displayWidth ??= DEFAULT_DOUBAO_IMAGE_OPTIONS.displayWidth
+		options.size ??= DEFAULT_DOUBAO_IMAGE_OPTIONS.size
+		options.response_format ??= DEFAULT_DOUBAO_IMAGE_OPTIONS.response_format
+		options.watermark ??= DEFAULT_DOUBAO_IMAGE_OPTIONS.watermark
+		options.sequential_image_generation ??= DEFAULT_DOUBAO_IMAGE_OPTIONS.sequential_image_generation
+		options.stream ??= DEFAULT_DOUBAO_IMAGE_OPTIONS.stream
+		options.optimize_prompt_mode ??= DEFAULT_DOUBAO_IMAGE_OPTIONS.optimize_prompt_mode
+		options.max_images ??= 5
+	}
+
 	addDoubaoImageSections = (details: HTMLElement, options: DoubaoImageOptions) => {
 		// 图片显示宽度
 		new Setting(details)
@@ -5686,6 +5728,7 @@ type ModelFetchConfig = {
 	fallbackModels: string[]
 	buildRequest: (options: ModelFetchOptions) => Promise<ModelFetchRequest> | ModelFetchRequest
 	parseResponse?: (result: any) => string[]
+	sortModels?: (models: string[]) => string[]
 }
 type FetchModelsResult = {
 	models: string[]
@@ -5701,6 +5744,37 @@ const sanitizeModelList = (models: unknown[]): string[] => {
 				.filter((model) => model.length > 0)
 		)
 	)
+}
+
+const parseModelDate = (model: string): number | null => {
+	const matches = [...model.matchAll(/(?:^|[-_])(\d{8}|\d{6})(?=$|[^0-9])/g)]
+	if (matches.length === 0) return null
+	const value = matches[matches.length - 1][1]
+	if (value.length === 8) {
+		const year = Number(value.slice(0, 4))
+		const month = Number(value.slice(4, 6))
+		const day = Number(value.slice(6, 8))
+		if (year < 2000 || month < 1 || month > 12 || day < 1 || day > 31) return null
+		return Number(value)
+	}
+	const year = Number(value.slice(0, 2))
+	const month = Number(value.slice(2, 4))
+	const day = Number(value.slice(4, 6))
+	if (month < 1 || month > 12 || day < 1 || day > 31) return null
+	return Number(`${2000 + year}${value.slice(2)}`)
+}
+
+const sortModelsByDateDesc = (models: string[]): string[] => {
+	return [...models]
+		.map((model, index) => ({ model, index, date: parseModelDate(model) }))
+		.sort((a, b) => {
+			if (a.date === null && b.date === null) return a.index - b.index
+			if (a.date === null) return 1
+			if (b.date === null) return -1
+			if (a.date !== b.date) return b.date - a.date
+			return a.index - b.index
+		})
+		.map((item) => item.model)
 }
 
 const parseOpenAICompatibleModels = (result: any): string[] => {
@@ -5759,13 +5833,15 @@ const fetchModels = async (config: ModelFetchConfig, options: ModelFetchOptions)
 			throw new Error(`Model request failed (${response.status})`)
 		}
 		const parser = config.parseResponse ?? parseGenericModels
-		const models = sanitizeModelList(parser(response.json))
+		const parsedModels = sanitizeModelList(parser(response.json))
+		const models = config.sortModels ? config.sortModels(parsedModels) : parsedModels
 		if (models.length > 0) {
 			return { models, usedFallback: false }
 		}
 		throw new Error('Model response did not include valid model IDs')
 	} catch (error) {
-		const fallbackModels = sanitizeModelList(config.fallbackModels)
+		const rawFallbackModels = sanitizeModelList(config.fallbackModels)
+		const fallbackModels = config.sortModels ? config.sortModels(rawFallbackModels) : rawFallbackModels
 		if (fallbackModels.length > 0) {
 			return {
 				models: fallbackModels,
@@ -5881,16 +5957,17 @@ const MODEL_FETCH_CONFIGS: Record<string, ModelFetchConfig> = {
 		}),
 		parseResponse: parseGenericModels
 	},
-	[doubaoImageVendor.name]: {
+	[doubaoVendor.name]: {
 		requiresApiKey: true,
-		fallbackModels: [...doubaoImageVendor.models],
+		fallbackModels: [...doubaoVendor.models],
 		buildRequest: (options) => ({
 			url: `${resolveOrigin(options.baseURL, 'https://ark.cn-beijing.volces.com')}/api/v3/models`,
 			headers: {
 				Authorization: `Bearer ${options.apiKey}`
 			}
 		}),
-		parseResponse: parseGenericModels
+		parseResponse: parseGenericModels,
+		sortModels: sortModelsByDateDesc
 	}
 }
 

@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { EmbedCache } from 'obsidian'
 import { t } from 'tars/lang/helper'
-import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
+import { BaseOptions, McpCallToolFnForProvider, McpToolDefinitionForProvider, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import {
 	arrayBufferToBase64,
 	CALLOUT_BLOCK_END,
@@ -10,6 +10,7 @@ import {
 } from './utils'
 import { normalizeProviderError } from './errors'
 import { withRetry } from './retry'
+import { toClaudeTools, findToolServerId } from '../mcp/mcpToolCallHandler'
 
 export interface ClaudeOptions extends BaseOptions {
 	max_tokens: number
@@ -65,7 +66,7 @@ const formatEmbed = async (embed: EmbedCache, resolveEmbedAsBinary: ResolveEmbed
 	}
 }
 
-const sendRequestFunc = (settings: ClaudeOptions): SendRequest =>
+const sendRequestFuncBase = (settings: ClaudeOptions): SendRequest =>
 	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary) {
 		try {
 			const { parameters, ...optionsExcludingParams } = settings
@@ -166,6 +167,203 @@ const sendRequestFunc = (settings: ClaudeOptions): SendRequest =>
 			throw normalizeProviderError(error, 'Claude request failed')
 		}
 	}
+
+/** 最大工具调用循环次数（与 OpenAI MCP 路径保持一致） */
+const CLAUDE_MAX_TOOL_LOOPS = 10
+
+/**
+ * 为 Claude (Anthropic) Provider 包装 MCP 工具调用支持
+ * 使用 Anthropic 原生的 tool_use / tool_result 内容块格式
+ */
+function withAnthropicMcpToolCallSupport(
+	originalFactory: (settings: ClaudeOptions) => SendRequest,
+): (settings: ClaudeOptions) => SendRequest {
+	return (settings: ClaudeOptions): SendRequest => {
+		const mcpTools = settings.mcpTools as McpToolDefinitionForProvider[] | undefined
+		const mcpCallTool = settings.mcpCallTool as McpCallToolFnForProvider | undefined
+		if (!mcpTools?.length || !mcpCallTool) {
+			return originalFactory(settings)
+		}
+
+		return async function* (messages, controller, resolveEmbedAsBinary) {
+			try {
+				const { parameters, ...optionsExcludingParams } = settings
+				const options = { ...optionsExcludingParams, ...parameters } as ClaudeOptions
+				const {
+					apiKey,
+					baseURL: originalBaseURL,
+					model,
+					max_tokens = 8192,
+					enableThinking = false,
+					budget_tokens = 1600,
+				} = options
+
+				if (!apiKey) throw new Error(t('API key is required'))
+
+				let baseURL = originalBaseURL as string
+				if (baseURL.endsWith('/v1/messages/')) {
+					baseURL = baseURL.slice(0, -'/v1/messages/'.length)
+				} else if (baseURL.endsWith('/v1/messages')) {
+					baseURL = baseURL.slice(0, -'/v1/messages'.length)
+				}
+
+				const client = new Anthropic({ apiKey, baseURL, fetch: globalThis.fetch, dangerouslyAllowBrowser: true })
+				const claudeTools = toClaudeTools(mcpTools)
+
+				const [systemMsg, nonSystemMsgs] =
+					messages[0]?.role === 'system' ? [messages[0], messages.slice(1)] : [null, messages]
+
+				let loopMessages: Anthropic.MessageParam[] = await Promise.all(
+					nonSystemMsgs.map((msg) => formatMsgForClaudeAPI(msg, resolveEmbedAsBinary))
+				)
+
+				for (let loop = 0; loop < CLAUDE_MAX_TOOL_LOOPS; loop++) {
+					if (controller.signal.aborted) return
+
+					const stream = await client.messages.create(
+						{
+							model: model as string,
+							max_tokens: max_tokens as number,
+							messages: loopMessages,
+							tools: claudeTools,
+							stream: true,
+							...(systemMsg && { system: systemMsg.content }),
+							...(enableThinking && { thinking: { type: 'enabled', budget_tokens: budget_tokens as number } }),
+						},
+						{ signal: controller.signal },
+					)
+
+					const contentBlocks: Anthropic.ContentBlock[] = []
+					const toolInputJsonBuffers: Record<number, string> = {}
+					let hasToolUse = false
+					let startReasoning = false
+
+					for await (const event of stream) {
+						const e = event as any
+						if (e.type === 'content_block_start') {
+							const block = e.content_block
+							if (block.type === 'tool_use') {
+								hasToolUse = true
+								contentBlocks[e.index] = { type: 'tool_use', id: block.id, name: block.name, input: {} } as Anthropic.ToolUseBlock
+								toolInputJsonBuffers[e.index] = ''
+							} else if (block.type === 'text') {
+								contentBlocks[e.index] = { type: 'text', text: '' } as Anthropic.TextBlock
+							} else if (block.type === 'thinking') {
+								contentBlocks[e.index] = { type: 'thinking', thinking: '' } as any
+							}
+						} else if (e.type === 'content_block_delta') {
+							const delta = e.delta
+							if (delta.type === 'text_delta') {
+								const text: string = delta.text ?? ''
+								if ((contentBlocks[e.index] as Anthropic.TextBlock)?.type === 'text') {
+									(contentBlocks[e.index] as Anthropic.TextBlock).text += text
+								}
+								if (text && !hasToolUse) {
+									if (startReasoning) {
+										startReasoning = false
+										yield CALLOUT_BLOCK_END + text
+									} else {
+										yield text
+									}
+								}
+							} else if (delta.type === 'input_json_delta') {
+								toolInputJsonBuffers[e.index] = (toolInputJsonBuffers[e.index] ?? '') + (delta.partial_json ?? '')
+							} else if (delta.type === 'thinking_delta') {
+								const prefix = !startReasoning ? ((startReasoning = true), CALLOUT_BLOCK_START) : ''
+								yield prefix + (delta.thinking ?? '').replace(/\n/g, '\n> ')
+							}
+						} else if (e.type === 'content_block_stop') {
+							const block = contentBlocks[e.index]
+							if (block?.type === 'tool_use' && toolInputJsonBuffers[e.index] !== undefined) {
+								try {
+									(block as Anthropic.ToolUseBlock).input = JSON.parse(toolInputJsonBuffers[e.index] || '{}')
+								} catch {
+									// JSON 解析失败时保留空 input
+								}
+							}
+						} else if (e.type === 'message_delta') {
+							if (startReasoning) {
+								startReasoning = false
+								yield CALLOUT_BLOCK_END
+							}
+							const stopReason = e.delta?.stop_reason
+							if (stopReason && stopReason !== 'end_turn' && stopReason !== 'tool_use') {
+								throw new Error(`🔴 Unexpected stop reason: ${stopReason}`)
+							}
+						}
+					}
+
+					if (!hasToolUse) {
+						// 无工具调用，文本已实时 yield，结束
+						return
+					}
+
+					// 将本轮 assistant 内容块追加到循环消息
+					const validBlocks = contentBlocks.filter(Boolean) as Anthropic.ContentBlock[]
+					loopMessages.push({ role: 'assistant', content: validBlocks })
+
+					// 依次执行 tool_use 块并收集 tool_result
+					const toolResultContents: Anthropic.ToolResultBlockParam[] = []
+					const toolUseBlocks = validBlocks.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
+
+					for (const toolBlock of toolUseBlocks) {
+						const serverId = findToolServerId(toolBlock.name, mcpTools)
+						let resultText: string
+						if (!serverId) {
+							resultText = `错误: 未找到工具 "${toolBlock.name}"`
+						} else {
+							try {
+								resultText = await mcpCallTool(serverId, toolBlock.name, toolBlock.input as Record<string, unknown>)
+							} catch (err) {
+								resultText = `工具调用失败: ${err instanceof Error ? err.message : String(err)}`
+							}
+						}
+						toolResultContents.push({ type: 'tool_result', tool_use_id: toolBlock.id, content: resultText })
+						yield `{{FF_MCP_TOOL_START}}:${toolBlock.name}:${resultText}{{FF_MCP_TOOL_END}}:`
+					}
+
+					loopMessages.push({ role: 'user', content: toolResultContents })
+				}
+
+				// 达到最大循环次数，做最后一次请求（不带工具）
+				const finalStream = await client.messages.create(
+					{
+						model: model as string,
+						max_tokens: max_tokens as number,
+						messages: loopMessages,
+						stream: true,
+						...(systemMsg && { system: systemMsg.content }),
+						...(enableThinking && { thinking: { type: 'enabled', budget_tokens: budget_tokens as number } }),
+					},
+					{ signal: controller.signal },
+				)
+
+				let finalStartReasoning = false
+				for await (const event of finalStream) {
+					const e = event as any
+					if (e.type === 'content_block_delta') {
+						if (e.delta?.type === 'text_delta') {
+							if (finalStartReasoning) {
+								finalStartReasoning = false
+								yield CALLOUT_BLOCK_END + (e.delta.text ?? '')
+							} else {
+								yield e.delta.text ?? ''
+							}
+						} else if (e.delta?.type === 'thinking_delta') {
+							const prefix = !finalStartReasoning ? ((finalStartReasoning = true), CALLOUT_BLOCK_START) : ''
+							yield prefix + (e.delta.thinking ?? '').replace(/\n/g, '\n> ')
+						}
+					}
+				}
+			} catch (error) {
+				if (controller.signal.aborted) return
+				throw normalizeProviderError(error, 'Claude MCP request failed')
+			}
+		}
+	}
+}
+
+const sendRequestFunc = withAnthropicMcpToolCallSupport(sendRequestFuncBase)
 
 export const CLAUDE_MODELS = [
 	'claude-sonnet-4-0',

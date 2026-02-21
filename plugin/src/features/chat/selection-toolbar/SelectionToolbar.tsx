@@ -53,8 +53,13 @@ export const SelectionToolbar = ({
 	const groupMenuRefs = useRef(new Map<string, HTMLDivElement>());
 	const groupSubmenuAnchorRefs = useRef(new Map<string, HTMLDivElement>());
 	const groupSubmenuMenuRefs = useRef(new Map<string, HTMLDivElement>());
-	const closeTimerRef = useRef<NodeJS.Timeout | null>(null);
+	const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const [groupSubmenuPath, setGroupSubmenuPath] = useState<string[]>([]);
+	const MENU_VIEWPORT_PADDING = 8;
+	const MENU_MIN_WIDTH = 120;
+	const MENU_MAX_WIDTH = 200;
+	const MENU_MAX_HEIGHT = 240;
+	const MENU_ITEM_ESTIMATED_HEIGHT = 34;
 
 	// 截断按钮名称，最多显示4个字符
 	const truncateName = (name: string): string => {
@@ -314,11 +319,28 @@ export const SelectionToolbar = ({
 		}
 		const spaceBelow = window.innerHeight - rect.bottom;
 		const spaceAbove = rect.top;
-		if (spaceBelow >= estimatedMenuHeight + 8) {
+		if (spaceBelow >= estimatedMenuHeight + MENU_VIEWPORT_PADDING) {
 			return false;
 		}
-		return spaceAbove >= estimatedMenuHeight + 8;
+		return spaceAbove >= estimatedMenuHeight + MENU_VIEWPORT_PADDING;
+	}, [MENU_VIEWPORT_PADDING]);
+
+	const getEstimatedMenuHeight = useCallback((itemCount: number) => {
+		const estimatedHeight = itemCount * MENU_ITEM_ESTIMATED_HEIGHT + 8;
+		const safeHeight = Math.max(MENU_ITEM_ESTIMATED_HEIGHT, estimatedHeight);
+		return Math.min(MENU_MAX_HEIGHT, safeHeight);
+	}, [MENU_ITEM_ESTIMATED_HEIGHT, MENU_MAX_HEIGHT]);
+
+	const clampToViewport = useCallback((value: number, min: number, max: number) => {
+		if (max < min) {
+			return min;
+		}
+		return Math.min(Math.max(value, min), max);
 	}, []);
+
+	const moreMenuShouldOpenUp = isMoreDropdownOpen
+		? computeMenuShouldOpenUp(getEstimatedMenuHeight(Math.max(1, dropdownItems.length)))
+		: false;
 
 	// 鼠标悬停在"更多"按钮上时打开下拉菜单
 	const handleMoreButtonMouseEnter = useCallback(() => {
@@ -475,6 +497,10 @@ export const SelectionToolbar = ({
 				}
 
 				const group = item;
+				const groupChildren = getMenuChildren(group.id);
+				const groupMenuShouldOpenUp = openGroupId === group.id
+					? computeMenuShouldOpenUp(getEstimatedMenuHeight(Math.max(1, groupChildren.length)))
+					: false;
 				return (
 					<div
 						key={group.id}
@@ -510,7 +536,7 @@ export const SelectionToolbar = ({
 
 						{openGroupId === group.id && (
 							<div
-								className="selection-toolbar-dropdown-menu"
+								className={`selection-toolbar-dropdown-menu ${groupMenuShouldOpenUp ? 'selection-toolbar-dropdown-menu-up' : ''}`}
 								ref={(el) => {
 									if (el) {
 										groupMenuRefs.current.set(group.id, el);
@@ -581,17 +607,24 @@ export const SelectionToolbar = ({
 							return null;
 						}
 						const rect = anchorEl.getBoundingClientRect();
-						const estimatedWidth = 220;
-						const estimatedHeight = 260;
-						const gap = 2;
-						let left = rect.right + gap;
-						let top = rect.top;
-						left = Math.min(left, window.innerWidth - estimatedWidth - 8);
-						top = Math.min(top, window.innerHeight - estimatedHeight - 8);
-						left = Math.max(8, left);
-						top = Math.max(8, top);
-
 						const submenuChildren = getMenuChildren(submenuGroupId);
+						const estimatedWidth = MENU_MAX_WIDTH;
+						const estimatedHeight = getEstimatedMenuHeight(Math.max(1, submenuChildren.length));
+						const gap = 2;
+						const spaceRight = window.innerWidth - rect.right;
+						const spaceLeft = rect.left;
+						const shouldOpenLeft = spaceRight < MENU_MIN_WIDTH && spaceLeft > spaceRight;
+						const preferredLeft = shouldOpenLeft ? rect.left - estimatedWidth - gap : rect.right + gap;
+						const left = clampToViewport(
+							preferredLeft,
+							MENU_VIEWPORT_PADDING,
+							window.innerWidth - estimatedWidth - MENU_VIEWPORT_PADDING
+						);
+						const top = clampToViewport(
+							rect.top,
+							MENU_VIEWPORT_PADDING,
+							window.innerHeight - estimatedHeight - MENU_VIEWPORT_PADDING
+						);
 						const panel = (
 							<div
 								className="selection-toolbar-dropdown-menu selection-toolbar-dropdown-menu-submenu"
@@ -682,7 +715,7 @@ export const SelectionToolbar = ({
 
 					{isMoreDropdownOpen && (
 						<div
-							className="selection-toolbar-dropdown-menu"
+							className={`selection-toolbar-dropdown-menu ${moreMenuShouldOpenUp ? 'selection-toolbar-dropdown-menu-up' : ''}`}
 							ref={dropdownMenuRef}
 							onMouseEnter={handleDropdownMenuMouseEnter}
 						>

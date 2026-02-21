@@ -19,18 +19,30 @@ interface VendorGroup {
 }
 
 export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps) => {
+	const VIEWPORT_PADDING = 8;
+	const PROVIDER_LIST_MIN_WIDTH = 200;
+	const PROVIDER_LIST_MAX_WIDTH = 250;
+	const PROVIDER_LIST_MAX_HEIGHT = 400;
+	const PROVIDER_ITEM_ESTIMATED_HEIGHT = 40;
+	const SUBMENU_MIN_WIDTH = 250;
+	const SUBMENU_MAX_WIDTH = 350;
+	const SUBMENU_MAX_HEIGHT = 400;
+	const SUBMENU_TITLE_HEIGHT = 45;
+	const SUBMENU_ITEM_ESTIMATED_HEIGHT = 38;
+
 	const [isOpen, setIsOpen] = useState(false);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 	const providerListRef = useRef<HTMLDivElement>(null);
 	const submenuRef = useRef<HTMLDivElement>(null);
 	const vendorItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 	const [dropdownDirection, setDropdownDirection] = useState<'up' | 'down'>('down');
+	const [, forcePositionUpdate] = useState(0);
 
 	// 当前悬停的提供商
 	const [hoveredVendor, setHoveredVendor] = useState<string | null>(null);
 
 	// 用于延迟清除悬停状态的定时器
-	const clearHoverTimerRef = useRef<NodeJS.Timeout | null>(null);
+	const clearHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	// 将 providers 按 vendor 分组
 	const [vendorGroups, setVendorGroups] = useState<VendorGroup[]>([]);
@@ -81,24 +93,58 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 		setHoveredVendor(null);
 	}, [onChange]);
 
+	const clampToViewport = useCallback((value: number, min: number, max: number) => {
+		if (max < min) {
+			return min;
+		}
+		return Math.min(Math.max(value, min), max);
+	}, []);
+
+	const getProviderListEstimatedHeight = useCallback(() => {
+		const estimated = vendorGroups.length * PROVIDER_ITEM_ESTIMATED_HEIGHT + 8;
+		return Math.min(PROVIDER_LIST_MAX_HEIGHT, Math.max(PROVIDER_ITEM_ESTIMATED_HEIGHT, estimated));
+	}, [vendorGroups]);
+
 	const updateDropdownDirection = useCallback(() => {
 		if (!dropdownRef.current) return;
 		const rect = dropdownRef.current.getBoundingClientRect();
+		const listHeight = getProviderListEstimatedHeight();
 		const spaceBelow = window.innerHeight - rect.bottom;
 		const spaceAbove = rect.top;
-		const shouldOpenUp = spaceBelow < 240 && spaceAbove > spaceBelow;
+		const shouldOpenUp = spaceBelow < listHeight && spaceAbove > spaceBelow;
 		setDropdownDirection(shouldOpenUp ? 'up' : 'down');
-	}, []);
+	}, [getProviderListEstimatedHeight]);
 
 	// Get button position for portal dropdown
 	const getButtonPosition = useCallback(() => {
-		if (!dropdownRef.current) return { left: 0, top: 0, transform: 'none' };
+		if (!dropdownRef.current) return { left: 0, top: 0 };
 		const rect = dropdownRef.current.getBoundingClientRect();
+		const renderedListHeight = providerListRef.current?.getBoundingClientRect().height;
+		const listHeight = renderedListHeight ?? getProviderListEstimatedHeight();
+		const left = clampToViewport(
+			rect.left,
+			VIEWPORT_PADDING,
+			window.innerWidth - PROVIDER_LIST_MAX_WIDTH - VIEWPORT_PADDING
+		);
+
 		if (dropdownDirection === 'up') {
-			return { left: rect.left, top: rect.top - 2, transform: 'translateY(-100%)' };
+			const preferredTop = rect.top - 2 - listHeight;
+			const top = clampToViewport(
+				preferredTop,
+				VIEWPORT_PADDING,
+				window.innerHeight - listHeight - VIEWPORT_PADDING
+			);
+			return { left, top };
 		}
-		return { left: rect.left, top: rect.bottom + 2, transform: 'none' };
-	}, [dropdownDirection]);
+
+		const preferredTop = rect.bottom + 2;
+		const top = clampToViewport(
+			preferredTop,
+			VIEWPORT_PADDING,
+			window.innerHeight - listHeight - VIEWPORT_PADDING
+		);
+		return { left, top };
+	}, [dropdownDirection, getProviderListEstimatedHeight, clampToViewport]);
 
 	// 获取侧边弹窗位置（在当前提供商列表项的右侧）
 	const getSubmenuPosition = useCallback(() => {
@@ -106,11 +152,35 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 		const vendorEl = vendorItemRefs.current.get(hoveredVendor);
 		if (!vendorEl) return { left: 0, top: 0 };
 		const rect = vendorEl.getBoundingClientRect();
+		const group = vendorGroups.find((item) => item.vendorName === hoveredVendor);
+		const providerCount = group?.providers.length ?? 0;
+		const estimatedSubmenuHeight = Math.min(
+			SUBMENU_MAX_HEIGHT,
+			SUBMENU_TITLE_HEIGHT + providerCount * SUBMENU_ITEM_ESTIMATED_HEIGHT + 8
+		);
+		const renderedSubmenuHeight = submenuRef.current?.getBoundingClientRect().height;
+		const submenuHeight = renderedSubmenuHeight ?? estimatedSubmenuHeight;
+
+		const spaceRight = window.innerWidth - rect.right;
+		const spaceLeft = rect.left;
+		const shouldOpenLeft = spaceRight < SUBMENU_MIN_WIDTH && spaceLeft > spaceRight;
+		const preferredLeft = shouldOpenLeft ? rect.left - SUBMENU_MAX_WIDTH - 4 : rect.right + 4;
+		const left = clampToViewport(
+			preferredLeft,
+			VIEWPORT_PADDING,
+			window.innerWidth - SUBMENU_MAX_WIDTH - VIEWPORT_PADDING
+		);
+		const top = clampToViewport(
+			rect.top,
+			VIEWPORT_PADDING,
+			window.innerHeight - submenuHeight - VIEWPORT_PADDING
+		);
+
 		return {
-			left: rect.right + 4,
-			top: rect.top
+			left,
+			top
 		};
-	}, [hoveredVendor]);
+	}, [hoveredVendor, vendorGroups, clampToViewport]);
 
 	useEffect(() => {
 		if (!isOpen) return;
@@ -174,6 +244,18 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 		}
 	}, [isOpen]);
 
+	useEffect(() => {
+		if (!isOpen) {
+			return;
+		}
+		const frameId = window.requestAnimationFrame(() => {
+			forcePositionUpdate((previous) => previous + 1);
+		});
+		return () => {
+			window.cancelAnimationFrame(frameId);
+		};
+	}, [isOpen, hoveredVendor, vendorGroups.length]);
+
 	if (!providers.length) {
 		return <div className="tw-text-sm tw-text-error">尚未配置AI模型</div>;
 	}
@@ -225,8 +307,8 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 						style={{
 							position: 'fixed',
 							...getButtonPosition(),
-							minWidth: '200px',
-							maxWidth: '250px',
+							minWidth: `${PROVIDER_LIST_MIN_WIDTH}px`,
+							maxWidth: `${PROVIDER_LIST_MAX_WIDTH}px`,
 							zIndex: 1305,
 							pointerEvents: 'auto'
 						}}
@@ -243,7 +325,7 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 								padding: '0.25rem',
 								color: 'var(--text-normal)',
 								boxShadow: 'var(--shadow-s)',
-								maxHeight: '400px',
+								maxHeight: `${PROVIDER_LIST_MAX_HEIGHT}px`,
 								overflowY: 'auto'
 							}}
 							tabIndex={-1}
@@ -297,9 +379,9 @@ export const ModelSelector = ({ providers, value, onChange }: ModelSelectorProps
 							style={{
 								position: 'fixed',
 								...getSubmenuPosition(),
-								minWidth: '250px',
-								maxWidth: '350px',
-								maxHeight: '400px',
+								minWidth: `${SUBMENU_MIN_WIDTH}px`,
+								maxWidth: `${SUBMENU_MAX_WIDTH}px`,
+								maxHeight: `${SUBMENU_MAX_HEIGHT}px`,
 								overflowY: 'auto',
 								zIndex: 1306,
 								pointerEvents: 'auto'

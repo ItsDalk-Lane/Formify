@@ -1,7 +1,7 @@
 {
 	"id": "formify",
 	"name": "Formify",
-	"version": "0.2.8.260217",
+	"version": "0.2.9.260221",
 	"minAppVersion": "1.8.0",
 	"description": "Create simple, one-action workflows — with ease.",
 	"author": "superior",

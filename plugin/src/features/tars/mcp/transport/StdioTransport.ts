@@ -32,8 +32,10 @@ export class StdioTransport implements ITransport {
 	constructor(private readonly config: StdioConfig) {}
 
 	async start(): Promise<void> {
-		// 动态引入 child_process（Electron 环境可用）
-		const { spawn } = await import('child_process')
+		// 使用 require 引入 child_process（CJS 格式，Electron 环境可用）
+		// 注意：不能使用 import()，esbuild CJS 输出中动态 import 无法解析 Node 内置模块
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		const { spawn } = require('child_process') as typeof import('child_process')
 
 		const env = {
 			...process.env,
@@ -47,6 +49,9 @@ export class StdioTransport implements ITransport {
 			cwd: this.config.cwd,
 			windowsHide: true,
 		})
+
+		// 等待进程就绪或失败，避免在进程尚未启动时就发送 initialize 请求
+		await this.waitForProcessReady()
 
 		// stdout: 按行缓冲，解析 JSON-RPC 消息
 		this.process.stdout?.on('data', (data: Buffer) => {
@@ -73,6 +78,48 @@ export class StdioTransport implements ITransport {
 		this.process.on('error', (err) => {
 			DebugLogger.error(`[MCP:stdio] 进程错误`, err)
 			this.onError?.(err)
+		})
+	}
+
+	/**
+	 * 等待子进程就绪
+	 *
+	 * 监听 'spawn' 事件确认进程已成功创建，或 'error' 事件捕获启动失败
+	 * 超时 10 秒防止长时间阻塞
+	 */
+	private waitForProcessReady(): Promise<void> {
+		const proc = this.process
+		if (!proc) return Promise.reject(new Error('进程未创建'))
+
+		return new Promise<void>((resolve, reject) => {
+			const READY_TIMEOUT_MS = 10000
+
+			const cleanup = () => {
+				clearTimeout(timer)
+				proc.removeListener('spawn', onSpawn)
+				proc.removeListener('error', onError)
+			}
+
+			const timer = setTimeout(() => {
+				cleanup()
+				// 超时不一定是错误（进程可能在静默启动），继续后续握手
+				DebugLogger.warn(`[MCP:stdio] 等待进程就绪超时（${READY_TIMEOUT_MS}ms），继续尝试握手...`)
+				resolve()
+			}, READY_TIMEOUT_MS)
+
+			const onSpawn = () => {
+				cleanup()
+				DebugLogger.info(`[MCP:stdio] 进程已启动，PID=${proc.pid}`)
+				resolve()
+			}
+
+			const onError = (err: Error) => {
+				cleanup()
+				reject(new Error(`MCP 进程启动失败: ${err.message}`))
+			}
+
+			proc.once('spawn', onSpawn)
+			proc.once('error', onError)
 		})
 	}
 

@@ -77,6 +77,16 @@ export const DOUBAO_IMAGE_MODELS = [
 	'doubao-seedream-3.0-t2i'
 ]
 
+export const isDoubaoImageGenerationModel = (model: string): boolean => {
+	const normalized = (model || '').trim().toLowerCase()
+	if (!normalized) return false
+	if (DOUBAO_IMAGE_MODELS.includes(normalized)) return true
+	if (normalized.includes('seedream')) return true
+	if (normalized.includes('-t2i')) return true
+	if (normalized.includes('image') && normalized.includes('generation')) return true
+	return false
+}
+
 // 推荐的图片尺寸预设值
 export const DOUBAO_IMAGE_SIZE_PRESETS = {
 	'1K': '1K',
@@ -380,8 +390,9 @@ const sendRequestFunc = (settings: DoubaoImageOptions): SendRequest =>
 				await saveAttachment(filename, imageBuffer)
 				yield `![[${filename}|${displayWidth}]]\n\n`
 			} catch (error) {
+				const detail = error instanceof Error ? error.message : String(error)
 				console.error(`Failed to save image ${i + 1}:`, error)
-				yield `❌ 图片 ${i + 1} 保存失败\n\n`
+				yield `❌ 图片 ${i + 1} 保存失败: ${detail}\n\n`
 			}
 		}
 	}

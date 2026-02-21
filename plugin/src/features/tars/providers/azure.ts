@@ -3,6 +3,7 @@ import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { buildReasoningBlockEnd, buildReasoningBlockStart } from './utils'
 import { DebugLogger } from '../../../utils/DebugLogger'
+import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
 
 export interface AzureOptions extends BaseOptions {
 	endpoint: string
@@ -20,7 +21,7 @@ export const azureMapResponsesParams = (params: Record<string, unknown>) => {
 	return mapped
 }
 
-const sendRequestFunc = (settings: AzureOptions): SendRequest =>
+const sendRequestFuncBase = (settings: AzureOptions): SendRequest =>
 	async function* (messages: Message[], controller: AbortController, resolveEmbedAsBinary: ResolveEmbedAsBinary) {
 		const { parameters, ...optionsExcludingParams } = settings
 		const options = { ...optionsExcludingParams, ...parameters }
@@ -135,6 +136,34 @@ const sendRequestFunc = (settings: AzureOptions): SendRequest =>
 			yield buildReasoningBlockEnd(durationMs)
 		}
 	}
+
+/**
+ * Azure OpenAI MCP 包装器：使用 AzureOpenAI SDK 创建客户端以支持工具调用
+ * Responses API（推理模式）不支持 tools，遇到时跳过 MCP 直接使用原始函数
+ */
+const sendRequestFuncWithMcp = withOpenAIMcpToolCallSupport(
+	sendRequestFuncBase as unknown as (settings: BaseOptions) => SendRequest,
+	{
+		createClient: (allOptions) => {
+			return new AzureOpenAI({
+				endpoint: allOptions.endpoint as string,
+				apiKey: allOptions.apiKey as string,
+				apiVersion: allOptions.apiVersion as string,
+				deployment: allOptions.model as string,
+				dangerouslyAllowBrowser: true,
+			})
+		},
+	},
+)
+
+const sendRequestFunc = (settings: AzureOptions): SendRequest => {
+	// Responses API 路径（推理模式）不支持 tools，回退到原始函数
+	const merged = { ...settings, ...(settings.parameters || {}) } as AzureOptions
+	if (azureUseResponsesAPI(merged)) {
+		return sendRequestFuncBase(settings)
+	}
+	return sendRequestFuncWithMcp(settings as unknown as BaseOptions)
+}
 
 const formatMsgForResponses = async (msg: Message, _resolveEmbedAsBinary: ResolveEmbedAsBinary) => {
 	return {
