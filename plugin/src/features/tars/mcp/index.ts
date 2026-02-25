@@ -6,6 +6,14 @@ export { McpClientManager } from './McpClientManager'
 export { McpConfigImporter } from './McpConfigImporter'
 export type { McpImportResult } from './McpConfigImporter'
 export {
+	BUILTIN_VAULT_SERVER_ID,
+	BUILTIN_VAULT_SERVER_NAME,
+	BUILTIN_MEMORY_SERVER_ID,
+	BUILTIN_MEMORY_SERVER_NAME,
+	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
+	BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
+} from '../../../builtin-mcp/constants'
+export {
 	type McpSettings,
 	type McpServerConfig,
 	type McpServerState,
@@ -16,6 +24,7 @@ export {
 	type McpHealthResult,
 	type McpConfigFile,
 	type McpTransportType,
+	DEFAULT_BUILTIN_MEMORY_FILE_PATH,
 	DEFAULT_MCP_SETTINGS,
 } from './types'
 export {

@@ -103,10 +103,37 @@ export type McpCallToolFn = (
 	args: Record<string, unknown>
 ) => Promise<string>
 
+export const DEFAULT_BUILTIN_MEMORY_FILE_PATH = 'System/formify/mcp-memory.jsonl'
+
 /** MCP 设置（嵌入 TarsSettings） */
 export interface McpSettings {
 	/** MCP 服务器配置列表 */
 	servers: McpServerConfig[]
+	/**
+	 * 是否启用内置 Vault MCP Server
+	 * @default true
+	 */
+	builtinVaultEnabled?: boolean
+	/**
+	 * 是否启用内置 Memory MCP Server
+	 * @default true
+	 */
+	builtinMemoryEnabled?: boolean
+	/**
+	 * 是否启用内置 Sequential Thinking MCP Server
+	 * @default true
+	 */
+	builtinSequentialThinkingEnabled?: boolean
+	/**
+	 * 内置 Memory MCP 的持久化文件路径（相对于 Vault）
+	 * @default "System/formify/mcp-memory.jsonl"
+	 */
+	builtinMemoryFilePath?: string
+	/**
+	 * 是否关闭内置 Sequential Thinking MCP 的思维日志输出
+	 * @default true
+	 */
+	builtinSequentialThinkingDisableThoughtLogging?: boolean
 	/**
 	 * 工具调用循环最大次数
 	 * 即一次对话中 AI 最多可连续调用 MCP 工具的轮数
@@ -123,6 +150,11 @@ export interface McpSettings {
 /** MCP 设置默认值 */
 export const DEFAULT_MCP_SETTINGS: McpSettings = {
 	servers: [],
+	builtinVaultEnabled: true,
+	builtinMemoryEnabled: true,
+	builtinSequentialThinkingEnabled: true,
+	builtinMemoryFilePath: DEFAULT_BUILTIN_MEMORY_FILE_PATH,
+	builtinSequentialThinkingDisableThoughtLogging: true,
 	maxToolCallLoops: 10,
 }
 

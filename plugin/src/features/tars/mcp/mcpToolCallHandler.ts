@@ -712,6 +712,7 @@ function shouldFallbackToPlainRequest(err: unknown): boolean {
  */
 const INTERNAL_OPTION_KEYS = new Set([
 	'apiKey', 'baseURL', 'model', 'parameters',
+	'apiSecret', 'vendorApiKeys', 'vendorApiKeysByDevice',
 	'mcpTools', 'mcpCallTool', 'mcpMaxToolCallLoops',
 	'enableReasoning', 'enableThinking', 'enableWebSearch',
 	'tag', 'vendor',

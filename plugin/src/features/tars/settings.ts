@@ -28,6 +28,10 @@ export interface EditorStatus {
 export interface TarsSettings {
 	editorStatus: EditorStatus
 	providers: ProviderSettings[]
+	/** 按供应商保存的当前设备 API Key（运行时明文，不直接持久化） */
+	vendorApiKeys?: Record<string, string>
+	/** 按供应商保存的设备密钥槽（持久化密文） */
+	vendorApiKeysByDevice?: Record<string, Record<string, string>>
 	/** 是否启用全局系统提示词（由系统提示词管理器提供） */
 	enableGlobalSystemPrompts: boolean
 	// 统一的内链解析配置
@@ -81,6 +85,8 @@ export interface TarsSettings {
 export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 	editorStatus: { isTextInserting: false },
 	providers: [],
+	vendorApiKeys: {},
+	vendorApiKeysByDevice: {},
 	enableGlobalSystemPrompts: false,
 	// 统一的内链解析配置默认值
 	internalLinkParsing: {

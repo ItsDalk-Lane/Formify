@@ -6,6 +6,7 @@ import { encryptApiKey, decryptApiKey } from 'src/features/tars/utils/cryptoUtil
 import { DEFAULT_CHAT_SETTINGS, type ChatSettings } from 'src/features/chat';
 import { DebugLogger } from 'src/utils/DebugLogger';
 import { SystemPromptDataService } from 'src/features/tars/system-prompts/SystemPromptDataService';
+import { generateDeviceFingerprint } from 'src/features/tars/utils/cryptoUtils';
 
 interface BaseOptions {
     apiKey: string;
@@ -14,7 +15,7 @@ interface BaseOptions {
     parameters: Record<string, unknown>;
     enableWebSearch?: boolean;
     apiSecret?: string;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 interface ProviderConfig {
@@ -24,11 +25,67 @@ interface ProviderConfig {
     [key: string]: any;
 }
 
+type VendorApiKeysByDevice = Record<string, Record<string, string>>;
+
 export class SettingsManager {
-    constructor(private plugin: Plugin) {}
+    private readonly currentDeviceFingerprint: string;
+
+    constructor(private plugin: Plugin) {
+        this.currentDeviceFingerprint = generateDeviceFingerprint();
+    }
 
     private normalizeProviderVendor(vendor: string): string {
         return vendor === 'DoubaoImage' ? 'Doubao' : vendor;
+    }
+
+    private decryptVendorApiKeys(vendorApiKeysByDevice?: VendorApiKeysByDevice): Record<string, string> {
+        if (!vendorApiKeysByDevice) return {};
+        const result: Record<string, string> = {};
+        for (const [vendor, slots] of Object.entries(vendorApiKeysByDevice)) {
+            const encrypted = slots?.[this.currentDeviceFingerprint] ?? '';
+            const plain = encrypted ? decryptApiKey(encrypted) : '';
+            if (plain) {
+                result[vendor] = plain;
+            }
+        }
+        return result;
+    }
+
+    private encryptVendorApiKeys(
+        current: VendorApiKeysByDevice | undefined,
+        plainApiKeys: Record<string, string> | undefined
+    ): VendorApiKeysByDevice | undefined {
+        const next: VendorApiKeysByDevice = { ...(current ?? {}) };
+        const normalized: Record<string, string> = {};
+        for (const [vendor, key] of Object.entries(plainApiKeys ?? {})) {
+            const normalizedVendor = this.normalizeProviderVendor(vendor);
+            const trimmed = key.trim();
+            if (!trimmed) continue;
+            normalized[normalizedVendor] = trimmed;
+        }
+
+        const allVendors = new Set<string>([
+            ...Object.keys(next),
+            ...Object.keys(normalized),
+        ]);
+
+        for (const vendor of allVendors) {
+            const plain = normalized[vendor] ?? '';
+            const slots = { ...(next[vendor] ?? {}) };
+            if (plain) {
+                slots[this.currentDeviceFingerprint] = encryptApiKey(plain);
+            } else {
+                delete slots[this.currentDeviceFingerprint];
+            }
+
+            if (Object.keys(slots).length > 0) {
+                next[vendor] = slots;
+            } else {
+                delete next[vendor];
+            }
+        }
+
+        return Object.keys(next).length > 0 ? next : undefined;
     }
 
     async load(): Promise<PluginSettings> {
@@ -155,34 +212,47 @@ export class SettingsManager {
         if (!settings) {
             return cloneTarsSettings();
         }
+        const vendorApiKeys = this.decryptVendorApiKeys(settings.vendorApiKeysByDevice);
         const providers = (settings.providers ?? []).map((provider: ProviderConfig) => {
             const options = provider.options || {};
+            const normalizedVendor = this.normalizeProviderVendor(provider.vendor);
+            const resolvedApiKey = vendorApiKeys[normalizedVendor] ?? '';
+            const nextOptions: BaseOptions = {
+                ...options,
+                apiKey: resolvedApiKey,
+            };
+            delete (nextOptions as Record<string, unknown>).apiKeyByDevice;
+            delete (nextOptions as Record<string, unknown>).apiSecretByDevice;
+
             return {
                 ...provider,
-                vendor: this.normalizeProviderVendor(provider.vendor),
-                options: {
-                    ...options,
-                    apiKey: decryptApiKey(options.apiKey || ''),
-                    ...(options.apiSecret ? { apiSecret: decryptApiKey(options.apiSecret) } : {}),
-                },
+                vendor: normalizedVendor,
+                options: nextOptions,
             };
         });
-        DebugLogger.debug('[SettingsManager] API 密钥解密完成');
+        DebugLogger.debug('[SettingsManager] API 密钥按供应商解密完成');
         return cloneTarsSettings({
             ...settings,
+            vendorApiKeys,
             providers,
         });
     }
 
     private encryptTarsSettings(settings: TarsSettings): TarsSettings {
+        const vendorApiKeysByDevice = this.encryptVendorApiKeys(
+            settings.vendorApiKeysByDevice,
+            settings.vendorApiKeys
+        );
         const providers = (settings.providers ?? []).map((provider: ProviderConfig) => {
             const options = provider.options || {};
             const encrypted: BaseOptions = {
                 ...options,
-                apiKey: encryptApiKey(options.apiKey || ''),
+                apiKey: '',
             };
-            if (options.apiSecret) {
-                encrypted.apiSecret = encryptApiKey(options.apiSecret);
+            delete (encrypted as Record<string, unknown>).apiKeyByDevice;
+            delete (encrypted as Record<string, unknown>).apiSecretByDevice;
+            if (Object.prototype.hasOwnProperty.call(options, 'apiSecret')) {
+                encrypted.apiSecret = '';
             }
             return {
                 ...provider,
@@ -190,9 +260,11 @@ export class SettingsManager {
                 options: encrypted,
             };
         });
-        DebugLogger.debug('[SettingsManager] API 密钥加密完成');
+        DebugLogger.debug('[SettingsManager] API 密钥按供应商加密完成');
         return cloneTarsSettings({
             ...settings,
+            vendorApiKeys: {},
+            vendorApiKeysByDevice,
             providers,
         });
     }

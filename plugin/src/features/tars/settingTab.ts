@@ -37,8 +37,18 @@ import { getCapabilityEmoji, getCapabilityDisplayText } from './providers/utils'
 import { SystemPromptManagerModal } from './system-prompts/SystemPromptManagerModal'
 import { availableVendors, DEFAULT_TARS_SETTINGS } from './settings'
 import type { TarsSettings } from './settings'
-import { McpClientManager, McpConfigImporter, DEFAULT_MCP_SETTINGS } from './mcp'
-import type { McpServerConfig, McpSettings, McpServerState } from './mcp'
+import {
+	McpClientManager,
+	McpConfigImporter,
+	DEFAULT_MCP_SETTINGS,
+	BUILTIN_MEMORY_SERVER_ID,
+	BUILTIN_MEMORY_SERVER_NAME,
+	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
+	BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
+	BUILTIN_VAULT_SERVER_ID,
+	BUILTIN_VAULT_SERVER_NAME
+} from './mcp'
+import type { McpServerConfig, McpSettings, McpServerState, McpToolInfo } from './mcp'
 import FolderSuggest from '../../component/combobox/FolderSuggest'
 import type { ChatSettings, SkillType } from '../chat/types/chat'
 import { localInstance } from '../../i18n/locals'
@@ -68,6 +78,7 @@ export class TarsSettingTab {
 	private isSystemPromptSettingsCollapsed = true // 默认折叠系统提示词设置
 	private isMcpCollapsed = true // 默认折叠MCP设置
 	private isAdvancedCollapsed = true // 默认折叠高级设置
+	private isVendorApiKeysCollapsed = true // 默认折叠模型提供商密钥设置
 	private doubaoRenderers = new Map<any, () => void>()
 	private skillGroupExpandedState = new Map<string, boolean>()
 
@@ -91,9 +102,145 @@ export class TarsSettingTab {
 		await this.settingsContext.updateChatSettings(partial)
 	}
 
+	private normalizeProviderVendor(vendor: string): string {
+		return vendor === 'DoubaoImage' ? 'Doubao' : vendor
+	}
+
+	private ensureVendorApiKeys(): Record<string, string> {
+		if (!this.settings.vendorApiKeys) {
+			this.settings.vendorApiKeys = {}
+		}
+		return this.settings.vendorApiKeys
+	}
+
+	private getVendorApiKey(vendor: string): string {
+		const normalizedVendor = this.normalizeProviderVendor(vendor)
+		return this.settings.vendorApiKeys?.[normalizedVendor] ?? ''
+	}
+
+	private setVendorApiKey(vendor: string, value: string): void {
+		const normalizedVendor = this.normalizeProviderVendor(vendor)
+		const map = this.ensureVendorApiKeys()
+		const trimmed = value.trim()
+		if (trimmed) {
+			map[normalizedVendor] = trimmed
+		} else {
+			delete map[normalizedVendor]
+		}
+		this.syncProviderApiKeysByVendor(normalizedVendor)
+	}
+
+	private syncProviderApiKeysByVendor(vendor: string): void {
+		const normalizedVendor = this.normalizeProviderVendor(vendor)
+		const resolvedApiKey = this.getVendorApiKey(normalizedVendor)
+		for (const provider of this.settings.providers) {
+			if (provider.vendor === ollamaVendor.name) continue
+			if (this.normalizeProviderVendor(provider.vendor) !== normalizedVendor) continue
+			provider.options.apiKey = resolvedApiKey
+		}
+	}
+
+	private syncAllProviderApiKeys(): void {
+		for (const provider of this.settings.providers) {
+			if (provider.vendor === ollamaVendor.name) continue
+			provider.options.apiKey = this.getVendorApiKey(provider.vendor)
+		}
+	}
+
+	private renderVendorApiKeySection(containerEl: HTMLElement): void {
+		const sectionHeader = new Setting(containerEl)
+			.setName('模型提供商密钥')
+			.setDesc('在这里按提供商统一配置 API Key；配置后新增该提供商模型无需重复输入。')
+		const headerControl = sectionHeader.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
+		headerControl.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
+		const headerChevron = headerControl.createEl('div', { cls: 'ai-provider-chevron' })
+		headerChevron.innerHTML = `
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="6 9 12 15 18 9"></polyline>
+			</svg>
+		`
+		headerChevron.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			color: var(--text-muted);
+			cursor: pointer;
+			transition: transform 0.2s ease;
+			transform: ${this.isVendorApiKeysCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};
+			width: 16px;
+			height: 16px;
+		`
+		sectionHeader.settingEl.style.borderRadius = '0px'
+		sectionHeader.settingEl.style.border = '1px solid var(--background-modifier-border)'
+		sectionHeader.settingEl.style.marginBottom = '0px'
+		sectionHeader.settingEl.style.padding = '12px 12px'
+		sectionHeader.settingEl.style.cursor = 'pointer'
+
+		const section = containerEl.createDiv({ cls: 'vendor-api-keys-container' })
+		section.style.padding = '0 8px 8px 8px'
+		section.style.backgroundColor = 'var(--background-secondary)'
+		section.style.borderRadius = '0px'
+		section.style.border = '1px solid var(--background-modifier-border)'
+		section.style.borderTop = 'none'
+		section.style.display = this.isVendorApiKeysCollapsed ? 'none' : 'block'
+
+		const toggleSection = () => {
+			this.isVendorApiKeysCollapsed = !this.isVendorApiKeysCollapsed
+			headerChevron.style.transform = this.isVendorApiKeysCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'
+			section.style.display = this.isVendorApiKeysCollapsed ? 'none' : 'block'
+		}
+		sectionHeader.settingEl.addEventListener('click', (e) => {
+			if ((e.target as HTMLElement).closest('.ai-provider-chevron')) {
+				return
+			}
+			toggleSection()
+		})
+		headerChevron.addEventListener('click', (e) => {
+			e.stopPropagation()
+			toggleSection()
+		})
+
+		const vendors = availableVendors
+			.filter((vendor) => vendor.name !== ollamaVendor.name)
+			.map((vendor) => this.normalizeProviderVendor(vendor.name))
+		const uniqueVendors = Array.from(new Set(vendors))
+
+		for (const vendorName of uniqueVendors) {
+			let inputEl: HTMLInputElement | null = null
+			let isPasswordVisible = false
+			new Setting(section)
+				.setName(`${vendorName} API key`)
+				.setDesc('留空表示当前设备不配置该提供商密钥')
+				.addText((text) => {
+					inputEl = text.inputEl
+					inputEl.type = 'password'
+					text
+						.setPlaceholder('API key')
+						.setValue(this.getVendorApiKey(vendorName))
+						.onChange(async (value) => {
+							this.setVendorApiKey(vendorName, value)
+							await this.saveSettings()
+						})
+				})
+				.addButton((btn) => {
+					btn
+						.setIcon('eye-off')
+						.setTooltip('显示/隐藏密钥')
+						.onClick(() => {
+							isPasswordVisible = !isPasswordVisible
+							if (inputEl) {
+								inputEl.type = isPasswordVisible ? 'text' : 'password'
+							}
+							btn.setIcon(isPasswordVisible ? 'eye' : 'eye-off')
+						})
+				})
+		}
+	}
+
 	render(containerEl: HTMLElement, expandLastProvider = false, keepOpenIndex: number = -1): void {
 		this.containerEl = containerEl
 		containerEl.empty()
+		this.syncAllProviderApiKeys()
 
 		// 每次渲染时清空标题元素引用，避免引用过期
 		this.providerTitleEls.clear()
@@ -119,6 +266,9 @@ export class TarsSettingTab {
 				const newTag = isTagDuplicate ? '' : defaultTag
 
 				const deepCopiedOptions = JSON.parse(JSON.stringify(vendor.defaultOptions))
+				if (vendor.name !== ollamaVendor.name) {
+					deepCopiedOptions.apiKey = this.getVendorApiKey(vendor.name)
+				}
 				this.settings.providers.push({
 					tag: newTag,
 					vendor: vendor.name,
@@ -211,6 +361,8 @@ export class TarsSettingTab {
 			// 按提供商分组渲染 AI 助手列表
 			this.renderProvidersGroupedByVendor(expandLastProvider, keepOpenIndex)
 		}
+
+		this.renderVendorApiKeySection(containerEl)
 
 		// 移除间隔行，使区域直接相邻
 
@@ -1056,30 +1208,61 @@ export class TarsSettingTab {
 	 */
 	private renderMcpServerList(container: HTMLElement, mcpSettings: McpSettings): void {
 		const servers = mcpSettings.servers
+		const mcpManager = this.settingsContext.getMcpClientManager?.()
+		const entries: Array<
+			| { kind: 'builtin'; enabled: boolean; name: string; serverId: string; transportLabel: string }
+			| { kind: 'external'; server: McpServerConfig }
+		> = [
+			{
+				kind: 'builtin',
+				enabled: mcpSettings.builtinVaultEnabled !== false,
+				name: BUILTIN_VAULT_SERVER_NAME,
+				serverId: BUILTIN_VAULT_SERVER_ID,
+				transportLabel: 'IN-MEMORY',
+			},
+			{
+				kind: 'builtin',
+				enabled: mcpSettings.builtinMemoryEnabled !== false,
+				name: BUILTIN_MEMORY_SERVER_NAME,
+				serverId: BUILTIN_MEMORY_SERVER_ID,
+				transportLabel: 'IN-MEMORY',
+			},
+			{
+				kind: 'builtin',
+				enabled: mcpSettings.builtinSequentialThinkingEnabled !== false,
+				name: BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
+				serverId: BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
+				transportLabel: 'IN-MEMORY',
+			},
+			...servers.map((server) => ({ kind: 'external' as const, server })),
+		]
 
-		if (servers.length === 0) {
+		if (entries.length === 0) {
 			const emptyHint = container.createDiv()
 			emptyHint.style.cssText = 'padding: 16px; text-align: center; color: var(--text-muted); font-size: 0.85em;'
 			emptyHint.textContent = t('No MCP servers configured')
 			return
 		}
 
-		const mcpManager = this.settingsContext.getMcpClientManager?.()
-
-		for (const server of servers) {
-			const serverState = mcpManager?.getState?.(server.id)
+		for (const entry of entries) {
+			const isBuiltin = entry.kind === 'builtin'
+			const serverId = isBuiltin ? entry.serverId : entry.server.id
+			const serverName = isBuiltin ? entry.name : (entry.server.name || entry.server.id)
+			const isEnabled = isBuiltin ? entry.enabled : entry.server.enabled
+			const transportLabel = isBuiltin ? entry.transportLabel : entry.server.transportType.toUpperCase()
+			const serverState = mcpManager?.getState?.(serverId)
 			const statusText = this.getMcpStatusText(serverState?.status ?? 'idle')
 			const statusColor = this.getMcpStatusColor(serverState?.status ?? 'idle')
 			const lastError = serverState?.lastError
 
 			// 构建描述文本：包含传输类型、状态，以及错误信息（如有）
-			const descParts = [`${server.transportType.toUpperCase()} · ${statusText}`]
+			const descParts = [`${transportLabel} · ${statusText}`]
 			if (lastError && serverState?.status === 'error') {
 				descParts.push(lastError.length > 120 ? `${lastError.slice(0, 120)}...` : lastError)
 			}
 
 			const serverSetting = new Setting(container)
-				.setName(server.name || server.id)
+				.setName(serverName)
 				.setDesc(descParts.join('\n'))
 
 			// 状态指示点
@@ -1097,40 +1280,89 @@ export class TarsSettingTab {
 
 			// 启用/禁用开关
 			serverSetting.addToggle((toggle) =>
-				toggle.setValue(server.enabled).onChange(async (value) => {
-					server.enabled = value
-					await this.saveSettings()
-					if (!value && mcpManager) {
-						mcpManager.disconnectServer(server.id)
+				toggle.setValue(isEnabled).onChange(async (value) => {
+					if (!this.settings.mcp) {
+						this.settings.mcp = { ...DEFAULT_MCP_SETTINGS }
 					}
+					if (isBuiltin) {
+						switch (serverId) {
+						case BUILTIN_VAULT_SERVER_ID:
+							this.settings.mcp.builtinVaultEnabled = value
+							break
+						case BUILTIN_MEMORY_SERVER_ID:
+							this.settings.mcp.builtinMemoryEnabled = value
+							break
+						case BUILTIN_SEQUENTIAL_THINKING_SERVER_ID:
+							this.settings.mcp.builtinSequentialThinkingEnabled = value
+							break
+						default:
+							break
+						}
+					} else {
+						entry.server.enabled = value
+					}
+					await this.saveSettings()
+					if (!mcpManager) return
+					try {
+						if (value) {
+							await mcpManager.connectServer(serverId)
+						} else {
+							await mcpManager.disconnectServer(serverId)
+						}
+					} catch (error) {
+						const msg = error instanceof Error ? error.message : String(error)
+						new Notice(`MCP 服务器切换失败: ${msg}`)
+					}
+					container.empty()
+					this.renderMcpServerList(container, this.settings.mcp ?? DEFAULT_MCP_SETTINGS)
 				})
 			)
 
 			// 编辑按钮
 			serverSetting.addExtraButton((btn) =>
-				btn.setIcon('pencil').setTooltip(t('Edit MCP server')).onClick(() => {
-					this.openMcpServerEditModal(server, this.settings.mcp ?? DEFAULT_MCP_SETTINGS, () => {
+				btn
+					.setIcon('pencil')
+					.setTooltip(isBuiltin ? '查看工具列表' : t('Edit MCP server'))
+					.onClick(() => {
+					if (isBuiltin) {
+						void this.openBuiltinMcpToolListModal(serverId, serverName)
+						return
+					}
+					this.openMcpServerEditModal(entry.server, this.settings.mcp ?? DEFAULT_MCP_SETTINGS, () => {
 						container.empty()
 						this.renderMcpServerList(container, this.settings.mcp ?? DEFAULT_MCP_SETTINGS)
 					})
-				})
+					})
 			)
 
-			// 删除按钮
-			serverSetting.addExtraButton((btn) =>
-				btn.setIcon('trash-2').setTooltip('删除').onClick(async () => {
-					if (!this.settings.mcp) return
-					const idx = this.settings.mcp.servers.findIndex((s) => s.id === server.id)
-					if (idx >= 0) {
-						mcpManager?.disconnectServer(server.id)
-						this.settings.mcp.servers.splice(idx, 1)
-						await this.saveSettings()
-						container.empty()
-						this.renderMcpServerList(container, this.settings.mcp)
-					}
-				})
-			)
+			// 删除按钮（内置服务不可删除）
+			if (!isBuiltin) {
+				serverSetting.addExtraButton((btn) =>
+					btn.setIcon('trash-2').setTooltip('删除').onClick(async () => {
+						if (!this.settings.mcp) return
+						const idx = this.settings.mcp.servers.findIndex((s) => s.id === entry.server.id)
+						if (idx >= 0) {
+							mcpManager?.disconnectServer(entry.server.id)
+							this.settings.mcp.servers.splice(idx, 1)
+							await this.saveSettings()
+							container.empty()
+							this.renderMcpServerList(container, this.settings.mcp)
+						}
+					})
+				)
+			}
 		}
+	}
+
+	private async openBuiltinMcpToolListModal(serverId: string, serverName: string): Promise<void> {
+		const manager = this.settingsContext.getMcpClientManager?.()
+		let tools: McpToolInfo[] = []
+		try {
+			tools = manager ? await manager.getToolsForServer(serverId) : []
+		} catch (error) {
+			DebugLogger.warn('[MCP] 读取内置工具列表失败', error)
+		}
+		new BuiltinMcpToolsModal(this.app, serverName, tools).open()
 	}
 
 	/**
@@ -3945,16 +4177,8 @@ export class TarsSettingTab {
 			}
 		}
 
-		if (vendor.name !== ollamaVendor.name) {
-			this.addAPIkeySection(
-				container,
-				settings.options,
-				vendor.websiteToObtainKey ? t('Obtain key from ') + vendor.websiteToObtainKey : ''
-			)
-		}
-
-		if ('apiSecret' in settings.options && vendor.name !== qianFanVendor.name)
-			this.addAPISecretOptional(container, settings.options as BaseOptions & Pick<Optional, 'apiSecret'>)
+		// API Secret 输入框已弃用：现有供应商模型拉取与请求流程均不依赖该字段。
+		// 历史配置里可能残留 apiSecret 字段（如跨版本数据），这里统一不再展示，避免误导。
 
 		// OpenRouter 特殊处理：根据模型判断显示不同功能配置
 		if (vendor.name === openRouterVendor.name) {
@@ -4322,6 +4546,9 @@ export class TarsSettingTab {
 				.setButtonText(options.model ? options.model : t('Select the model to use'))
 				.onClick(async () => {
 					const modelOptions = options as ModelFetchOptions
+					if (vendorName && vendorName !== ollamaVendor.name) {
+						modelOptions.apiKey = this.getVendorApiKey(vendorName)
+					}
 					// Check if API key is required but not provided
 					if (modelConfig.requiresApiKey && !modelOptions.apiKey) {
 						new Notice(t('Please input API key first'))
@@ -5445,7 +5672,11 @@ export class TarsSettingTab {
 
 		new Notice(t('Testing model...'))
 		try {
-			const sendRequest = vendor.sendRequestFunc(provider.options)
+			const providerOptions: BaseOptions = {
+				...provider.options,
+				apiKey: this.getVendorApiKey(provider.vendor),
+			}
+			const sendRequest = vendor.sendRequestFunc(providerOptions)
 			const controller = new AbortController()
 			const resolveEmbed: ResolveEmbedAsBinary = async () => {
 				throw new Error(t('Model test embed unsupported'))
@@ -6344,6 +6575,55 @@ class McpImportModal extends Modal {
 					this.close()
 				})
 			)
+	}
+
+	onClose() {
+		this.contentEl.empty()
+	}
+}
+
+class BuiltinMcpToolsModal extends Modal {
+	constructor(
+		app: App,
+		private readonly serverName: string,
+		private readonly tools: McpToolInfo[],
+	) {
+		super(app)
+	}
+
+	onOpen() {
+		const { contentEl } = this
+		contentEl.empty()
+
+		contentEl.createEl('h3', { text: `${this.serverName} 工具列表` })
+		contentEl.createEl('p', {
+			text: '以下是内置 MCP Server 当前可用的工具名称与说明。',
+			cls: 'setting-item-description',
+		})
+
+		if (this.tools.length === 0) {
+			const empty = contentEl.createDiv({
+				text: '暂无可用工具',
+				cls: 'setting-item-description',
+			})
+			empty.style.cssText = 'padding: 8px 0 12px;'
+		} else {
+			const list = contentEl.createDiv()
+			list.style.cssText = 'display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px;'
+			for (const tool of this.tools) {
+				const item = list.createDiv()
+				item.style.cssText = 'padding: 8px 10px; border: 1px solid var(--background-modifier-border); border-radius: 6px;'
+				item.createEl('div', { text: tool.name }).style.cssText = 'font-weight: 600;'
+				item.createEl('div', {
+					text: tool.description || '无描述',
+					cls: 'setting-item-description',
+				})
+			}
+		}
+
+		new Setting(contentEl).addButton((btn) =>
+			btn.setButtonText('关闭').setCta().onClick(() => this.close())
+		)
 	}
 
 	onClose() {

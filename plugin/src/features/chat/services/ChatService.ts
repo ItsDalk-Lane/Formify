@@ -638,9 +638,7 @@ export class ChatService {
 	getEnabledMcpServers(): Array<{ id: string; name: string }> {
 		const mcpManager = this.plugin.featureCoordinator.getMcpClientManager();
 		if (!mcpManager) return [];
-		return mcpManager.getSettings().servers
-			.filter((server) => server.enabled)
-			.map((server) => ({ id: server.id, name: server.name }));
+		return mcpManager.getEnabledServerSummaries();
 	}
 
 	/**

@@ -36,7 +36,7 @@ export class FeatureCoordinator {
     initializeMcp(settings: PluginSettings) {
         const mcpSettings = settings.tars.settings.mcp ?? DEFAULT_MCP_SETTINGS;
         if (!this.mcpClientManager) {
-            this.mcpClientManager = new McpClientManager(mcpSettings);
+            this.mcpClientManager = new McpClientManager(this.plugin.app, mcpSettings);
         } else {
             this.mcpClientManager.updateSettings(mcpSettings);
         }

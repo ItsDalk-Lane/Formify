@@ -1,0 +1,20 @@
+export const BUILTIN_VAULT_SERVER_ID = '__builtin__:vault-tools';
+export const BUILTIN_VAULT_SERVER_NAME = '内置 Vault 工具';
+export const BUILTIN_VAULT_SERVER_VERSION = '1.0.0';
+export const BUILTIN_VAULT_CLIENT_NAME = 'vault-builtin-client';
+export const BUILTIN_MEMORY_SERVER_ID = '__builtin__:mcp-memory';
+export const BUILTIN_MEMORY_SERVER_NAME = '内置 Memory 工具';
+export const BUILTIN_MEMORY_SERVER_VERSION = '1.0.0';
+export const BUILTIN_MEMORY_CLIENT_NAME = 'memory-builtin-client';
+export const BUILTIN_SEQUENTIAL_THINKING_SERVER_ID = '__builtin__:mcp-sequentialthinking';
+export const BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME = '内置 Sequential Thinking 工具';
+export const BUILTIN_SEQUENTIAL_THINKING_SERVER_VERSION = '1.0.0';
+export const BUILTIN_SEQUENTIAL_THINKING_CLIENT_NAME = 'sequentialthinking-builtin-client';
+
+export const DEFAULT_SCRIPT_TIMEOUT_MS = 15_000;
+export const DEFAULT_QUERY_TIMEOUT_MS = 8_000;
+export const DEFAULT_QUERY_MAX_ROWS = 2_000;
+export const DEFAULT_SHELL_TIMEOUT_MS = 15_000;
+export const DEFAULT_SHELL_MAX_BUFFER = 1024 * 1024;
+export const DEFAULT_SEARCH_FILES_MAX_RESULTS = 100;
+export const DEFAULT_SEARCH_CONTENT_MAX_RESULTS = 50;
