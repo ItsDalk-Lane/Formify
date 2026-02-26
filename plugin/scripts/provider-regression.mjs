@@ -52,6 +52,12 @@ const assert = (condition, message) => {
 	}
 }
 
+const MCP_HANDLER_MOCK = {
+	withOpenAIMcpToolCallSupport: (factory) => factory,
+	toOpenAITools: (tools) => tools,
+	executeMcpToolCalls: async () => []
+}
+
 const runPR1 = () => {
 	const ssePath = path.resolve(ROOT, 'src/features/tars/providers/sse.ts')
 	const { feedChunk } = loadTsModule(ssePath)
@@ -112,6 +118,7 @@ const runPR2 = () => {
 		},
 		'tars/lang/helper': { t: (text) => text },
 		'.': {},
+		'../mcp/mcpToolCallHandler': MCP_HANDLER_MOCK,
 		'./utils': {
 			buildReasoningBlockEnd: () => '',
 			buildReasoningBlockStart: () => '',
@@ -195,6 +202,7 @@ const runPR3 = async () => {
 		openai: class MockOpenAI {},
 		'tars/lang/helper': { t: (text) => text },
 		'.': {},
+		'../mcp/mcpToolCallHandler': MCP_HANDLER_MOCK,
 		'./utils': {
 			arrayBufferToBase64: () => 'ZmFrZQ==',
 			getMimeTypeFromFilename: () => 'image/png'
@@ -253,6 +261,7 @@ const runPR4 = () => {
 		openai: class MockOpenAI {},
 		'tars/lang/helper': { t: (text) => text },
 		'.': {},
+		'../mcp/mcpToolCallHandler': MCP_HANDLER_MOCK,
 		'./utils': {
 			buildReasoningBlockEnd: () => '',
 			buildReasoningBlockStart: () => '',
@@ -286,6 +295,7 @@ const runPR4 = () => {
 		openai: { AzureOpenAI: class MockAzureOpenAI {} },
 		'tars/lang/helper': { t: (text) => text },
 		'.': {},
+		'../mcp/mcpToolCallHandler': MCP_HANDLER_MOCK,
 		'./utils': {
 			buildReasoningBlockEnd: () => '',
 			buildReasoningBlockStart: () => ''
@@ -303,6 +313,7 @@ const runPR4 = () => {
 	const grokModule = loadTsModule(grokPath, {
 		'tars/lang/helper': { t: (text) => text },
 		'.': {},
+		'../mcp/mcpToolCallHandler': MCP_HANDLER_MOCK,
 		'./utils': {
 			buildReasoningBlockEnd: () => '',
 			buildReasoningBlockStart: () => '',
@@ -389,7 +400,7 @@ const runPR5 = () => {
 
 const runPR6 = () => {
 	const settingTabText = fs.readFileSync(path.resolve(ROOT, 'src/features/tars/settingTab.ts'), 'utf-8')
-	for (const vendorName of ['claudeVendor.name', 'qwenVendor.name', 'zhipuVendor.name', 'deepSeekVendor.name', 'qianFanVendor.name', 'doubaoImageVendor.name']) {
+	for (const vendorName of ['claudeVendor.name', 'qwenVendor.name', 'zhipuVendor.name', 'deepSeekVendor.name', 'qianFanVendor.name']) {
 		assert(
 			settingTabText.includes(`[${vendorName}]`),
 			`PR6-1: MODEL_FETCH_CONFIGS should include ${vendorName}`
@@ -414,6 +425,7 @@ const runPR6 = () => {
 		openai: class MockOpenAI {},
 		'tars/lang/helper': { t: (text) => text },
 		'.': {},
+		'../mcp/mcpToolCallHandler': MCP_HANDLER_MOCK,
 		'./utils': {
 			buildReasoningBlockEnd: () => '',
 			buildReasoningBlockStart: () => '',
@@ -430,6 +442,7 @@ const runPR6 = () => {
 		openai: class MockOpenAI {},
 		'tars/lang/helper': { t: (text) => text },
 		'.': {},
+		'../mcp/mcpToolCallHandler': MCP_HANDLER_MOCK,
 		'../../../utils/DebugLogger': { DebugLogger: { debug: () => {} } },
 		'./utils': {
 			buildReasoningBlockEnd: () => '',
@@ -553,6 +566,7 @@ const runPR9 = () => {
 		},
 		'tars/lang/helper': { t: (text) => text },
 		'.': {},
+		'../mcp/mcpToolCallHandler': MCP_HANDLER_MOCK,
 		'./utils': {
 			buildReasoningBlockEnd: () => '',
 			buildReasoningBlockStart: () => '',
@@ -600,16 +614,116 @@ const runPR9 = () => {
 	const settingTabPath = path.resolve(ROOT, 'src/features/tars/settingTab.ts')
 	const settingTabSource = fs.readFileSync(settingTabPath, 'utf-8')
 	assert(
-		settingTabSource.includes('vendor.name !== qianFanVendor.name'),
-		'PR9-4: setting page should not render legacy API secret field for QianFan'
-	)
-	assert(
 		settingTabSource.includes('resolveQianFanModelListURL'),
 		'PR9-4: QianFan model list fetching should resolve official /v2/models URL'
 	)
 	assert(
 		settingTabSource.includes('qianFanNormalizeBaseURL(baseURL)'),
 		'PR9-4: QianFan model list URL should reuse provider baseURL normalization'
+	)
+}
+
+const runPR10 = () => {
+	const poePath = path.resolve(ROOT, 'src/features/tars/providers/poe.ts')
+	const poeModule = loadTsModule(poePath, {
+		openai: class MockOpenAI {},
+		obsidian: {
+			Platform: { isDesktopApp: false },
+			requestUrl: async () => ({ status: 200, json: {}, text: '' })
+		},
+		'tars/lang/helper': { t: (text) => text },
+		'.': {},
+		'../mcp/mcpToolCallHandler': MCP_HANDLER_MOCK,
+		'./errors': {
+			normalizeProviderError: (error, prefix = 'error') =>
+				error instanceof Error ? new Error(`${prefix}: ${error.message}`) : new Error(String(error))
+		},
+		'./retry': {
+			withRetry: async (operation) => operation()
+		},
+		'./utils': {
+			buildReasoningBlockEnd: () => '',
+			buildReasoningBlockStart: () => '',
+			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } })
+		}
+	})
+
+	const mapped = poeModule.poeMapResponsesParams({ max_tokens: 2048, temperature: 0.3 })
+	assert(mapped.max_output_tokens === 2048, 'PR10-1: Poe max_tokens should map to max_output_tokens')
+	assert(mapped.max_tokens === undefined, 'PR10-1: Poe mapped params should drop max_tokens')
+	assert(
+		poeModule.poeResolveResponsesURL('https://api.poe.com/v1/chat/completions') ===
+			'https://api.poe.com/v1/responses',
+		'PR10-2: Poe responses URL should convert from chat/completions'
+	)
+	assert(
+		poeModule.poeResolveChatCompletionsURL('https://api.poe.com/v1/responses') ===
+			'https://api.poe.com/v1/chat/completions',
+		'PR10-2: Poe chat URL should convert from responses'
+	)
+	assert(
+		poeModule.poeVendor.defaultOptions.enableReasoning === false,
+		'PR10-3: Poe default options should disable reasoning by default'
+	)
+	assert(
+		poeModule.poeVendor.defaultOptions.enableWebSearch === false,
+		'PR10-3: Poe default options should disable web search by default'
+	)
+	assert(
+		poeModule.poeVendor.capabilities.includes('Web Search') &&
+			poeModule.poeVendor.capabilities.includes('Reasoning'),
+		'PR10-3: Poe capabilities should include Web Search and Reasoning'
+	)
+	const poeSource = fs.readFileSync(poePath, 'utf-8')
+	assert(
+		poeSource.includes('shouldRetryFunctionOutputTurn400'),
+		'PR10-3: Poe should include 400 compatibility retry for function_call_output turns'
+	)
+	assert(
+		poeSource.includes('toToolResultContinuationInput'),
+		'PR10-3: Poe should convert function_call_output turns to message input when provider requires protocol messages'
+	)
+	assert(
+		poeSource.includes("message.includes('protocol_messages')"),
+		'PR10-3: Poe should detect protocol_messages compatibility errors for function_call_output retry'
+	)
+	assert(
+		poeSource.includes('throw: false'),
+		'PR10-3: Poe requestUrl path should keep non-2xx response body for diagnostics'
+	)
+	assert(
+		poeSource.includes('error.status = response.status'),
+		'PR10-3: Poe requestUrl errors should expose status for retry classification'
+	)
+	assert(
+		poeSource.includes('parsePoeJsonResponseText'),
+		'PR10-3: Poe requestUrl path should parse response text safely without relying on response.json'
+	)
+	assert(
+		poeSource.includes('if (hasMcpToolRuntime)') &&
+			poeSource.includes('runResponsesWithDesktopRequestUrl()'),
+		'PR10-3: Poe should route MCP runtime through requestUrl responses loop for stable continuation handling'
+	)
+	assert(
+		poeSource.includes('POE_RETRY_OPTIONS') &&
+			poeSource.includes('baseDelayMs: 250') &&
+			poeSource.includes('withRetry('),
+		'PR10-3: Poe should apply exponential retry for transient 429/5xx errors'
+	)
+
+	const settingTabPath = path.resolve(ROOT, 'src/features/tars/settingTab.ts')
+	const settingTabSource = fs.readFileSync(settingTabPath, 'utf-8')
+	assert(
+		settingTabSource.includes('[poeVendor.name]'),
+		'PR10-4: MODEL_FETCH_CONFIGS should include Poe'
+	)
+	assert(
+		settingTabSource.includes('resolvePoeModelListURL'),
+		'PR10-4: settingTab should define resolvePoeModelListURL helper'
+	)
+	assert(
+		settingTabSource.includes('https://api.poe.com/v1/models'),
+		'PR10-4: Poe model list should fall back to official /v1/models endpoint'
 	)
 }
 
@@ -641,6 +755,9 @@ const main = async () => {
 	}
 	if (pr >= 9) {
 		runPR9()
+	}
+	if (pr >= 10) {
+		runPR10()
 	}
 
 	console.log(`provider-regression: PR-${pr} checks passed`)

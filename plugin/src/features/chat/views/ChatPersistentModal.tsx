@@ -96,8 +96,8 @@ export class ChatPersistentModal extends Modal {
 		modalEl.style.setProperty('--chat-modal-width', `${this.options.width}px`);
 		modalEl.style.setProperty('--chat-modal-height', `${this.options.height}px`);
 
-		// 确保历史记录保存开启(与ChatModal不同)
-		this.service.setShouldSaveHistory(true);
+		// 按全局配置同步历史记录保存开关，避免与“自动保存聊天记录”设置冲突
+		this.service.setShouldSaveHistory(this.service.getAutosaveChatEnabled());
 
 		// 不创建新会话,继续使用当前会话(与ChatModal不同)
 		// 不保存会话状态(与ChatModal不同)

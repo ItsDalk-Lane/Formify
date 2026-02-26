@@ -885,8 +885,8 @@
 .ff-reasoning-block {
 	margin: 8px 0;
 	border-radius: var(--radius-m);
-	background-color: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
+	background-color: transparent;
+	border: none;
 	overflow: hidden;
 }
 
@@ -894,15 +894,15 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	padding: 8px 12px;
-	background-color: var(--background-modifier-hover);
+	padding: 8px 0;
+	background-color: transparent;
 	cursor: pointer;
 	user-select: none;
-	border-bottom: 1px solid var(--background-modifier-border);
+	border-bottom: none;
 }
 
 .ff-reasoning-header:hover {
-	background-color: var(--background-modifier-active-hover);
+	background-color: transparent;
 }
 
 .ff-reasoning-toggle {
@@ -912,6 +912,10 @@
 	color: var(--text-muted);
 }
 
+.ff-reasoning-toggle--right {
+	margin-left: auto;
+}
+
 .ff-reasoning-title {
 	font-weight: 500;
 	font-size: var(--font-ui-small);
@@ -919,14 +923,14 @@
 }
 
 .ff-reasoning-time {
-	margin-left: auto;
+	margin-left: 4px;
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
 	font-variant-numeric: tabular-nums;
 }
 
 .ff-reasoning-content {
-	padding: 12px;
+	padding: 8px 0 0 0;
 	max-height: 400px;
 	overflow-y: auto;
 	font-size: var(--font-ui-small);
@@ -934,7 +938,7 @@
 	color: var(--text-muted);
 	white-space: pre-wrap;
 	word-break: break-word;
-	background-color: var(--background-secondary-alt);
+	background-color: transparent;
 }
 
 /* 推理内容滚动条样式 */

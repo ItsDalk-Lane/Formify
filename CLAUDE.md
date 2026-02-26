@@ -20,6 +20,8 @@ npm run lint         # ESLint check
 npm run version      # Bump version in manifest.json and versions.json
 ```
 
+> Build rule for this project: when building the plugin, always use `npm run build:local`.
+
 ### Local Development Setup
 
 1. Copy `plugin/.env.example` to `plugin/.env`

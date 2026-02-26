@@ -52,6 +52,8 @@ interface BuiltinDescriptor {
 	initErrorLogMessage: string;
 }
 
+const EXTERNAL_CONNECT_RETRY_COOLDOWN_MS = 15_000;
+
 export class McpClientManager {
 	private processManager: McpProcessManager;
 	private healthChecker: McpHealthChecker;
@@ -59,6 +61,7 @@ export class McpClientManager {
 	private builtinRuntimes = new Map<string, BuiltinRuntime>();
 	private builtinRuntimePromises = new Map<string, Promise<void>>();
 	private builtinStates = new Map<string, McpServerState>();
+	private externalConnectCooldownUntil = new Map<string, number>();
 	private disposed = false;
 	/** 状态变更监听器 */
 	private stateListeners: Array<(states: McpServerState[]) => void> = [];
@@ -260,6 +263,7 @@ export class McpClientManager {
 				!newServerIds.has(state.serverId)
 			) {
 				await this.processManager.disconnect(state.serverId);
+				this.externalConnectCooldownUntil.delete(state.serverId);
 			}
 		}
 
@@ -312,23 +316,22 @@ export class McpClientManager {
 	async getAvailableToolsWithLazyStart(): Promise<McpToolDefinition[]> {
 		if (!this.isMcpEnabled()) return [];
 
-		for (const descriptor of this.getEnabledBuiltinDescriptors()) {
-			await this.ensureBuiltinRuntime(descriptor.serverId);
-		}
+		await Promise.allSettled(
+			this.getEnabledBuiltinDescriptors().map((descriptor) =>
+				this.ensureBuiltinRuntime(descriptor.serverId)
+			)
+		);
 
 		const enabledServers = this.settings.servers.filter((server) => server.enabled);
 
-		// 确保所有启用的服务器都已连接
-		for (const server of enabledServers) {
+		// 并行懒启动外部服务，避免单点失败拖慢全部 MCP
+		const tasks = enabledServers.map(async (server) => {
 			const state = this.processManager.getState(server.id);
-			if (!state || state.status !== 'running') {
-				try {
-					await this.processManager.ensureConnected(server);
-				} catch (err) {
-					DebugLogger.error(`[MCP] 懒启动服务器失败: ${server.name}`, err);
-				}
-			}
-		}
+			if (state?.status === 'running' || state?.status === 'connecting') return;
+			await this.tryEnsureExternalConnected(server, 'lazy');
+		});
+
+		await Promise.allSettled(tasks);
 
 		return await this.getAvailableTools();
 	}
@@ -387,6 +390,7 @@ export class McpClientManager {
 			throw new Error(`MCP 服务器不存在: ${serverId}`);
 		}
 		await this.processManager.ensureConnected(config);
+		this.externalConnectCooldownUntil.delete(serverId);
 	}
 
 	/** 手动断开指定服务器 */
@@ -521,9 +525,11 @@ export class McpClientManager {
 	private async autoConnectEnabledServers(): Promise<void> {
 		if (!this.isMcpEnabled()) return;
 
-		for (const descriptor of this.getEnabledBuiltinDescriptors()) {
-			await this.ensureBuiltinRuntime(descriptor.serverId);
-		}
+		await Promise.allSettled(
+			this.getEnabledBuiltinDescriptors().map((descriptor) =>
+				this.ensureBuiltinRuntime(descriptor.serverId)
+			)
+		);
 
 		const enabledServers = this.settings.servers.filter((server) => server.enabled);
 		if (enabledServers.length === 0) return;
@@ -531,15 +537,49 @@ export class McpClientManager {
 		const tasks = enabledServers.map(async (server) => {
 			const state = this.processManager.getState(server.id);
 			if (state?.status === 'running' || state?.status === 'connecting') return;
-
-			try {
-				await this.processManager.ensureConnected(server);
-			} catch (err) {
-				DebugLogger.error(`[MCP] 自动连接服务器失败: ${server.name}`, err);
-			}
+			await this.tryEnsureExternalConnected(server, 'auto');
 		});
 
 		await Promise.allSettled(tasks);
+	}
+
+	private shouldSkipExternalConnect(serverId: string): boolean {
+		const blockedUntil = this.externalConnectCooldownUntil.get(serverId);
+		return typeof blockedUntil === 'number' && blockedUntil > Date.now();
+	}
+
+	private markExternalConnectFailure(serverId: string): void {
+		this.externalConnectCooldownUntil.set(
+			serverId,
+			Date.now() + EXTERNAL_CONNECT_RETRY_COOLDOWN_MS
+		);
+	}
+
+	private clearExternalConnectFailure(serverId: string): void {
+		this.externalConnectCooldownUntil.delete(serverId);
+	}
+
+	private async tryEnsureExternalConnected(
+		server: McpServerConfig,
+		reason: 'lazy' | 'auto'
+	): Promise<void> {
+		if (this.shouldSkipExternalConnect(server.id)) {
+			DebugLogger.debug(
+				`[MCP] 跳过 ${reason === 'lazy' ? '懒启动' : '自动连接'}（冷却中）: ${server.name}`
+			);
+			return;
+		}
+
+		try {
+			await this.processManager.ensureConnected(server);
+			this.clearExternalConnectFailure(server.id);
+		} catch (err) {
+			this.markExternalConnectFailure(server.id);
+			DebugLogger.error(
+				`[MCP] ${reason === 'lazy' ? '懒启动' : '自动连接'}服务器失败: ${server.name}`,
+				err
+			);
+		}
 	}
 
 	private async getBuiltinTools(): Promise<McpToolDefinition[]> {

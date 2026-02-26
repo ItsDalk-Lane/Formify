@@ -28,6 +28,7 @@ import { deepSeekVendor, DeepSeekOptions } from './providers/deepSeek'
 import { ollamaVendor } from './providers/ollama'
 import { OpenAIOptions, openAIVendor } from './providers/openAI'
 import { OpenRouterOptions, openRouterVendor, isImageGenerationModel } from './providers/openRouter'
+import { PoeOptions, poeVendor } from './providers/poe'
 import { AzureOptions, azureVendor } from './providers/azure'
 import { QianFanOptions, qianFanNormalizeBaseURL, qianFanVendor } from './providers/qianFan'
 import { qwenVendor, QwenOptions } from './providers/qwen'
@@ -4295,6 +4296,10 @@ export class TarsSettingTab {
 			this.addOpenAISections(container, settings.options as OpenAIOptions, index, settings)
 		}
 
+		if (vendor.name === poeVendor.name) {
+			this.addPoeSections(container, settings.options as PoeOptions, index, settings)
+		}
+
 		if (vendor.name === azureVendor.name) {
 			this.addAzureSections(container, settings.options as AzureOptions, index, settings)
 		}
@@ -5908,6 +5913,19 @@ export class TarsSettingTab {
 			)
 	}
 
+	addPoeSections = (details: HTMLElement, options: PoeOptions, index: number, settings: ProviderSettings) => {
+		new Setting(details)
+			.setName('启用推理功能')
+			.setDesc('启用后 Poe 会在 Responses API 中请求 reasoning 并显示推理过程。')
+			.addToggle((toggle) =>
+				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
+					options.enableReasoning = value
+					await this.saveSettings()
+					this.updateProviderCapabilities(index, settings)
+				})
+			)
+	}
+
 	addAzureSections = (details: HTMLElement, options: AzureOptions, index: number, settings: ProviderSettings) => {
 		new Setting(details)
 			.setName('启用推理功能')
@@ -6048,6 +6066,16 @@ const resolveQianFanModelListURL = (baseURL: string | undefined) => {
 	return `${qianFanNormalizeBaseURL(baseURL)}/models`
 }
 
+const resolvePoeModelListURL = (baseURL: string | undefined) => {
+	const trimmed = (baseURL || '').trim()
+	if (!trimmed) return 'https://api.poe.com/v1/models'
+
+	let normalized = trimTrailingSlash(trimmed)
+	normalized = normalized.replace(/\/chat\/completions$/i, '')
+	normalized = normalized.replace(/\/responses$/i, '')
+	return `${normalized}/models`
+}
+
 const fetchModels = async (config: ModelFetchConfig, options: ModelFetchOptions): Promise<FetchModelsResult> => {
 	try {
 		const request = await config.buildRequest(options)
@@ -6113,6 +6141,17 @@ const MODEL_FETCH_CONFIGS: Record<string, ModelFetchConfig> = {
 		fallbackModels: [...openRouterVendor.models],
 		buildRequest: () => ({
 			url: 'https://openrouter.ai/api/v1/models'
+		}),
+		parseResponse: parseOpenAICompatibleModels
+	},
+	[poeVendor.name]: {
+		requiresApiKey: true,
+		fallbackModels: [...poeVendor.models],
+		buildRequest: (options) => ({
+			url: resolvePoeModelListURL(options.baseURL),
+			headers: {
+				Authorization: `Bearer ${options.apiKey}`
+			}
 		}),
 		parseResponse: parseOpenAICompatibleModels
 	},

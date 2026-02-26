@@ -192,6 +192,10 @@ export class ChatService {
 		this.emitState();
 	}
 
+	getAutosaveChatEnabled(): boolean {
+		return Boolean(this.settings.autosaveChat);
+	}
+
 	setReasoningToggle(enabled: boolean) {
 		this.state.enableReasoningToggle = enabled;
 		this.emitState();
@@ -949,6 +953,9 @@ export class ChatService {
 	updateSettings(settings: Partial<ChatSettings>) {
 		this.settings = { ...this.settings, ...settings };
 		this.historyService.setFolder(this.settings.chatFolder);
+		if ('autosaveChat' in settings) {
+			this.state.shouldSaveHistory = Boolean(this.settings.autosaveChat);
+		}
 		if (!this.state.selectedModelId) {
 			this.state.selectedModelId = this.settings.defaultModel || this.getDefaultProviderTag();
 		}

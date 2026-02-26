@@ -76,11 +76,11 @@ const ReasoningBlockComponent = ({ content, startMs, durationMs, isGenerating }:
 				className="ff-reasoning-header"
 				onClick={toggleCollapse}
 			>
-				<span className="ff-reasoning-toggle">
-					{collapsed ? <ChevronRight className="tw-size-4" /> : <ChevronDown className="tw-size-4" />}
-				</span>
 				<span className="ff-reasoning-title">深度思考</span>
 				<span className="ff-reasoning-time">{elapsedTime}</span>
+				<span className="ff-reasoning-toggle ff-reasoning-toggle--right">
+					{collapsed ? <ChevronRight className="tw-size-4" /> : <ChevronDown className="tw-size-4" />}
+				</span>
 			</div>
 			{!collapsed && (
 				<div 
@@ -113,10 +113,10 @@ const McpToolBlockComponent = ({ toolName, content }: McpToolBlockProps) => {
 				className="ff-reasoning-header"
 				onClick={toggleCollapse}
 			>
-				<span className="ff-reasoning-toggle">
+				<span className="ff-reasoning-title">{toolName}</span>
+				<span className="ff-reasoning-toggle ff-reasoning-toggle--right">
 					{collapsed ? <ChevronRight className="tw-size-4" /> : <ChevronDown className="tw-size-4" />}
 				</span>
-				<span className="ff-reasoning-title">{toolName}</span>
 			</div>
 			{!collapsed && (
 				<div className="ff-reasoning-content">
