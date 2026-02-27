@@ -15,7 +15,12 @@ import type {
 	ResolveEmbedAsBinary,
 	SendRequest,
 } from '../providers'
-import { convertEmbedToImageUrl } from '../providers/utils'
+import {
+	convertEmbedToImageUrl,
+	REASONING_BLOCK_START_MARKER,
+	REASONING_BLOCK_END_MARKER,
+	formatReasoningDuration,
+} from '../providers/utils'
 
 /** 工具调用循环最大次数（默认值） */
 const DEFAULT_MAX_TOOL_CALL_LOOPS = 10
@@ -709,12 +714,17 @@ function shouldFallbackToPlainRequest(err: unknown): boolean {
  * 需要从 API 请求参数中过滤的内部配置键
  *
  * 这些键是插件内部/MCP 使用的，不应传递给 AI Provider API
+ *
+ * 注意：enableReasoning 和 enableThinking 需要传递给某些 Provider（如 DeepSeek、Qwen）
+ * 因此不被过滤；enableWebSearch 保留用于某些 Provider 的联网搜索功能
  */
 const INTERNAL_OPTION_KEYS = new Set([
 	'apiKey', 'baseURL', 'model', 'parameters',
 	'apiSecret', 'vendorApiKeys', 'vendorApiKeysByDevice',
 	'mcpTools', 'mcpCallTool', 'mcpMaxToolCallLoops',
-	'enableReasoning', 'enableThinking', 'enableWebSearch',
+	// 'enableReasoning',  // 移除：某些 Provider 需要此参数启用推理功能
+	// 'enableThinking',   // 移除：某些 Provider 需要此参数启用思考功能
+	// 'enableWebSearch',  // 移除：某些 Provider 需要此参数启用联网搜索
 	'tag', 'vendor',
 ])
 
@@ -740,8 +750,9 @@ function extractApiParams(allOptions: Record<string, unknown>): Record<string, u
 /**
  * 将 ProviderMessage 数组转换为 ToolLoopMessage 数组
  * 处理嵌入的图片（embeds），将其转换为 OpenAI 兼容的多模态内容格式
+ * 保留推理内容（reasoning_content）字段
  *
- * @param messages - Provider 消息数组（可能包含 embeds）
+ * @param messages - Provider 消息数组（可能包含 embeds 和 reasoning_content）
  * @param resolveEmbedAsBinary - 嵌入对象的二进制解析回调
  * @returns 适用于 OpenAI SDK 的消息数组
  */
@@ -752,9 +763,20 @@ async function buildLoopMessages(
 	const result: ToolLoopMessage[] = []
 
 	for (const msg of messages) {
-		// 无 embeds → 直接转为纯文本消息
+		// 构建 ToolLoopMessage，保留 reasoning_content 字段
+		const loopMsg: ToolLoopMessage = {
+			role: msg.role,
+			content: msg.content,
+		}
+
+		// 保留推理内容字段（如果存在）
+		if (typeof msg === 'object' && msg !== null && 'reasoning_content' in msg) {
+			;(loopMsg as { reasoning_content?: string }).reasoning_content = (msg as { reasoning_content?: string }).reasoning_content
+		}
+
+		// 无 embeds → 直接使用纯文本消息
 		if (!msg.embeds || msg.embeds.length === 0) {
-			result.push({ role: msg.role, content: msg.content })
+			result.push(loopMsg)
 			continue
 		}
 
@@ -779,10 +801,8 @@ async function buildLoopMessages(
 			}
 		}
 
-		result.push({
-			role: msg.role,
-			content: contentParts.length > 0 ? contentParts : msg.content ?? '',
-		})
+		loopMsg.content = contentParts.length > 0 ? contentParts : msg.content ?? ''
+		result.push(loopMsg)
 	}
 
 	return result
@@ -796,6 +816,72 @@ async function buildLoopMessages(
 export interface OpenAIMcpSupportOptions {
 	transformBaseURL?: (url: string) => string
 	createClient?: (allOptions: Record<string, unknown>) => OpenAI
+}
+
+/**
+ * 推理内容累积器状态
+ */
+interface ReasoningAccumulator {
+	startMs: number
+	content: string
+	isActive: boolean
+}
+
+/**
+ * 流式输出包装器：支持推理内容检测和转换
+ *
+ * 检测 OpenAI 兼容 API 返回的推理内容（reasoning_content 字段或内联标签），
+ * 将其转换为 {{FF_REASONING_START}}:timestamp:content:{{FF_REASONING_END}}:durationMs: 格式
+ */
+async function* wrapWithReasoningDetection(
+	source: AsyncGenerator<string, void, undefined>,
+	enableReasoning: boolean,
+): AsyncGenerator<string, void, unknown> {
+	if (!enableReasoning) {
+		yield* source
+		return
+	}
+
+	const reasoningAccumulator: ReasoningAccumulator = {
+		startMs: 0,
+		content: '',
+		isActive: false,
+	}
+
+	for await (const chunk of source) {
+		// 检查是否是推理块的开始或结束标记
+		if (chunk.includes(REASONING_BLOCK_START_MARKER)) {
+			// 开始新的推理块
+			const match = chunk.match(new RegExp(`${REASONING_BLOCK_START_MARKER.replace(/[{}]/g, '\\$&')}:(\\d+):`))
+			if (match) {
+				reasoningAccumulator.startMs = parseInt(match[1], 10)
+				reasoningAccumulator.content = ''
+				reasoningAccumulator.isActive = true
+				// 输出推理块开始标记
+				yield chunk
+			}
+			continue
+		}
+
+		if (chunk.includes(REASONING_BLOCK_END_MARKER)) {
+			// 结束推理块
+			const match = chunk.match(new RegExp(`:${REASONING_BLOCK_END_MARKER.replace(/[{}]/g, '\\$&')}:(\\d+):`))
+			if (match && reasoningAccumulator.isActive) {
+				reasoningAccumulator.isActive = false
+				// 输出推理块结束标记
+				yield chunk
+			}
+			continue
+		}
+
+		// 检查是否包含 MCP 工具标记
+		if (chunk.includes('{{FF_MCP_TOOL_START}}') || chunk.includes('{{FF_MCP_TOOL_END}}')) {
+			yield chunk
+			continue
+		}
+
+		yield chunk
+	}
 }
 
 export function withOpenAIMcpToolCallSupport(
@@ -846,13 +932,15 @@ export function withOpenAIMcpToolCallSupport(
 				}
 
 				const tools = toOpenAITools(mcpTools)
+				const enableReasoning = (settings as { enableReasoning?: boolean }).enableReasoning ?? false
 
 				DebugLogger.debug(
 					`[MCP] 工具调用循环启动: ${mcpTools.length} 个工具可用, model=${model}, ` +
-					`maxLoops=${maxToolCallLoops}, apiParams=${JSON.stringify(Object.keys(apiParams))}`,
+					`maxLoops=${maxToolCallLoops}, enableReasoning=${enableReasoning}, ` +
+					`apiParams=${JSON.stringify(Object.keys(apiParams))}`,
 				)
 
-				// 将原始消息转换为工具循环格式，保留多模态图片内容
+				// 将原始消息转换为工具循环格式，保留多模态图片内容和推理内容
 				const loopMessages: ToolLoopMessage[] = await buildLoopMessages(
 					messages,
 					resolveEmbedAsBinary,
@@ -876,6 +964,9 @@ export function withOpenAIMcpToolCallSupport(
 					)
 
 					let contentBuffer = ''
+					let reasoningBuffer = ''
+					let reasoningStartMs = 0
+					let reasoningActive = false
 					const toolCallsMap = new Map<number, { id: string; name: string; args: string }>()
 					let hasToolCalls = false
 
@@ -883,9 +974,31 @@ export function withOpenAIMcpToolCallSupport(
 						const delta = part.choices[0]?.delta as Record<string, unknown> | undefined
 						if (!delta) continue
 
+						// 处理推理内容（reasoning_content 字段）
+						const reasoningContent = delta.reasoning_content as string | undefined
+						if (reasoningContent && enableReasoning) {
+							if (!reasoningActive) {
+								reasoningActive = true
+								reasoningStartMs = Date.now()
+								yield `${REASONING_BLOCK_START_MARKER}:${reasoningStartMs}:`
+							}
+							reasoningBuffer += reasoningContent
+							yield reasoningContent
+						}
+
 						// 累积文本内容
 						const textContent = delta.content as string | undefined
 						if (textContent) {
+							// 如果之前有推理内容，现在推理结束
+							// 注意：某些模型（如 DeepSeek）在推理后直接返回 tool_calls 而不是 content
+							// 所以只有当确实有 content 时才结束推理块
+							if (reasoningActive && reasoningBuffer.length > 0) {
+								const reasoningDurationMs = Date.now() - reasoningStartMs
+								yield `:${REASONING_BLOCK_END_MARKER}:${reasoningDurationMs}:`
+								reasoningActive = false
+								reasoningBuffer = ''
+							}
+
 							contentBuffer += textContent
 							// 如果还没检测到 tool_calls，先流式输出文本
 							// 注意：OpenAI 不会同时返回 content 和 tool_calls
@@ -899,9 +1012,25 @@ export function withOpenAIMcpToolCallSupport(
 							| Array<{ index: number; id?: string; function?: { name?: string; arguments?: string } }>
 							| undefined
 						if (deltaToolCalls) {
+							// 如果之前有推理内容，现在推理结束
+							// 推理模型会在思考后直接调用工具（不返回 content）
+							if (reasoningActive && reasoningBuffer.length > 0) {
+								const reasoningDurationMs = Date.now() - reasoningStartMs
+								yield `:${REASONING_BLOCK_END_MARKER}:${reasoningDurationMs}:`
+								reasoningActive = false
+								reasoningBuffer = ''
+							}
+
 							hasToolCalls = true
 							accumulateToolCall(toolCallsMap, deltaToolCalls)
 						}
+					}
+
+					// 如果推理块还未结束，现在结束它
+					if (reasoningActive && reasoningBuffer.length > 0) {
+						const reasoningDurationMs = Date.now() - reasoningStartMs
+						yield `:${REASONING_BLOCK_END_MARKER}:${reasoningDurationMs}:`
+						reasoningActive = false
 					}
 
 					if (!hasToolCalls) {
@@ -950,9 +1079,45 @@ export function withOpenAIMcpToolCallSupport(
 					{ signal: controller.signal },
 				)
 
+				let finalReasoningBuffer = ''
+				let finalReasoningStartMs = 0
+				let finalReasoningActive = false
+
 				for await (const part of finalStream) {
-					const text = (part.choices[0]?.delta as Record<string, unknown> | undefined)?.content as string | undefined
-					if (text) yield text
+					const delta = part.choices[0]?.delta as Record<string, unknown> | undefined
+					if (!delta) continue
+
+					// 处理推理内容
+					const reasoningContent = delta.reasoning_content as string | undefined
+					if (reasoningContent && enableReasoning) {
+						if (!finalReasoningActive) {
+							finalReasoningActive = true
+							finalReasoningStartMs = Date.now()
+							yield `${REASONING_BLOCK_START_MARKER}:${finalReasoningStartMs}:`
+						}
+						finalReasoningBuffer += reasoningContent
+						yield reasoningContent
+						continue
+					}
+
+					// 处理普通文本内容
+					const text = delta.content as string | undefined
+					if (text) {
+						// 如果之前有推理内容，现在推理结束
+						if (finalReasoningActive && finalReasoningBuffer.length > 0) {
+							const reasoningDurationMs = Date.now() - finalReasoningStartMs
+							yield `:${REASONING_BLOCK_END_MARKER}:${reasoningDurationMs}:`
+							finalReasoningActive = false
+							finalReasoningBuffer = ''
+						}
+						yield text
+					}
+				}
+
+				// 如果推理块还未结束，现在结束它
+				if (finalReasoningActive && finalReasoningBuffer.length > 0) {
+					const reasoningDurationMs = Date.now() - finalReasoningStartMs
+					yield `:${REASONING_BLOCK_END_MARKER}:${reasoningDurationMs}:`
 				}
 			} catch (err) {
 				if (controller.signal.aborted) return

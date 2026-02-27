@@ -641,6 +641,7 @@ const runPR10 = () => {
 		'./retry': {
 			withRetry: async (operation) => operation()
 		},
+		'./sse': { feedChunk: () => ({ events: [], rest: '', done: false }) },
 		'./utils': {
 			buildReasoningBlockEnd: () => '',
 			buildReasoningBlockStart: () => '',

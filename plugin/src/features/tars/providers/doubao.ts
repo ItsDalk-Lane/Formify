@@ -656,6 +656,12 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 
 const models = Array.from(new Set([...Object.keys(DOUBAO_MODEL_CAPABILITY_MAP), ...DOUBAO_IMAGE_MODELS]))
 
+// 包装原始函数（用于 Responses API 模式）
+const sendRequestFuncBase = sendRequestFunc
+
+// MCP 支持的包装函数（用于普通模式）
+const sendRequestFuncWithMcp = withOpenAIMcpToolCallSupport(sendRequestFunc)
+
 export const doubaoVendor: Vendor = {
 	name: 'Doubao',
 	defaultOptions: {
@@ -665,7 +671,14 @@ export const doubaoVendor: Vendor = {
 		parameters: {},
 		enableWebSearch: false // 默认不启用 Web Search
 	},
-	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
+	sendRequestFunc: (settings: DoubaoOptions): SendRequest => {
+		const merged = { ...settings, ...(settings.parameters || {}) } as DoubaoOptions
+		// Responses API（推理模式/Web Search）可能不支持 tools，跳过 MCP 直接使用原始函数
+		if (doubaoUseResponsesAPI(merged)) {
+			return sendRequestFuncBase(settings)
+		}
+		return sendRequestFuncWithMcp(settings as unknown as BaseOptions)
+	},
 	models,
 	websiteToObtainKey: 'https://www.volcengine.com',
 	capabilities: ['Text Generation', 'Image Vision', 'Image Generation', 'Web Search', 'Reasoning']

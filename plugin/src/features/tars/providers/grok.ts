@@ -216,6 +216,12 @@ const formatMsg = async (msg: Message, resolveEmbedAsBinary: ResolveEmbedAsBinar
 	}
 }
 
+// 包装原始函数（用于推理模式）
+const sendRequestFuncBase = sendRequestFunc
+
+// MCP 支持的包装函数（用于普通模式）
+const sendRequestFuncWithMcp = withOpenAIMcpToolCallSupport(sendRequestFunc)
+
 export const grokVendor: Vendor = {
 	name: 'Grok',
 	defaultOptions: {
@@ -225,7 +231,14 @@ export const grokVendor: Vendor = {
 		parameters: {},
 		enableReasoning: false // 默认关闭推理功能
 	} as GrokOptions,
-	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
+	sendRequestFunc: (settings: GrokOptions): SendRequest => {
+		const merged = { ...settings, ...(settings.parameters || {}) } as GrokOptions
+		// Responses API（推理模式）可能不支持 tools，跳过 MCP 直接使用原始函数
+		if (grokUseResponsesAPI(merged)) {
+			return sendRequestFuncBase(settings)
+		}
+		return sendRequestFuncWithMcp(settings as unknown as BaseOptions)
+	},
 	models: [],
 	websiteToObtainKey: 'https://x.ai',
 	capabilities: ['Text Generation', 'Reasoning', 'Image Vision']
