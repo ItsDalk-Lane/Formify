@@ -214,7 +214,7 @@ export function FileExpiryMonitorSettingTab(props: FileExpiryMonitorSettingTabPr
 									? localInstance.monitor_type_folder
 									: localInstance.monitor_type_file}
 								{' · '}
-								{item.expiryDays} {localInstance.expiry_days}
+								{item.expiryHours !== undefined ? `${item.expiryHours} 小时` : `${item.expiryDays} ${localInstance.expiry_days}`}
 								{item.recursive ? ` · ${localInstance.recursive}` : ''}
 							</div>
 						</div>

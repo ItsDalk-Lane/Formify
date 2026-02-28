@@ -82,6 +82,8 @@ export class TarsSettingTab {
 	private isVendorApiKeysCollapsed = true // 默认折叠模型提供商密钥设置
 	private doubaoRenderers = new Map<any, () => void>()
 	private skillGroupExpandedState = new Map<string, boolean>()
+	/** 各服务商分组的展开/折叠状态（vendorName → isExpanded） */
+	private vendorGroupExpandedState = new Map<string, boolean>()
 
 	constructor(private readonly app: App, private readonly settingsContext: TarsSettingsContext) {}
 
@@ -1161,11 +1163,10 @@ export class TarsSettingTab {
 				.setValue(String(mcpSettings.maxToolCallLoops ?? 10))
 			text.inputEl.type = 'number'
 			text.inputEl.min = '1'
-			text.inputEl.max = '50'
 			text.inputEl.style.width = '72px'
 			text.inputEl.addEventListener('change', async () => {
 				const raw = parseInt(text.inputEl.value, 10)
-				const value = Number.isFinite(raw) && raw >= 1 ? Math.min(raw, 50) : 10
+				const value = Number.isFinite(raw) && raw >= 1 ? raw : 10
 				text.inputEl.value = String(value)
 				if (!this.settings.mcp) {
 					this.settings.mcp = { ...DEFAULT_MCP_SETTINGS }
@@ -3814,12 +3815,12 @@ export class TarsSettingTab {
 			transition: background-color 0.15s ease;
 		`
 
-		// 存储分组状态
-		let isCollapsed = true
+		// 从持久化状态中读取分组展开/折叠状态（默认折叠）
+		let isCollapsed = !(this.vendorGroupExpandedState.get(vendorName) ?? false)
 
 		// 折叠图标
 		const collapseIcon = groupHeader.createEl('span', { cls: 'vendor-group-collapse-icon' })
-		collapseIcon.textContent = '▶'
+		collapseIcon.textContent = isCollapsed ? '▶' : '▼'
 		collapseIcon.style.cssText = `
 			margin-right: 8px;
 			font-size: 10px;
@@ -3841,7 +3842,7 @@ export class TarsSettingTab {
 		groupContent.style.cssText = `
 			margin-top: 8px;
 			padding-left: 12px;
-			display: none;
+			display: ${isCollapsed ? 'none' : 'block'};
 		`
 
 		// 点击标题切换折叠状态
@@ -3849,6 +3850,8 @@ export class TarsSettingTab {
 			isCollapsed = !isCollapsed
 			collapseIcon.textContent = isCollapsed ? '▶' : '▼'
 			groupContent.style.display = isCollapsed ? 'none' : 'block'
+			// 持久化分组展开状态
+			this.vendorGroupExpandedState.set(vendorName, !isCollapsed)
 		})
 
 		// 悬停效果
@@ -3994,6 +3997,8 @@ export class TarsSettingTab {
 		// 删除按钮点击事件
 		deleteBtn.addEventListener('click', async (e) => {
 			e.stopPropagation()
+			// 记录被删除 provider 所属的 vendor 分组，确保删除后该分组仍保持展开
+			this.vendorGroupExpandedState.set(vendor.name, true)
 			this.settings.providers.splice(index, 1)
 			await this.settingsContext.saveSettings()
 			this.render(this.containerEl)
@@ -4127,6 +4132,8 @@ export class TarsSettingTab {
 		// 删除按钮点击事件
 		deleteBtn.addEventListener('click', async (e) => {
 			e.stopPropagation()
+			// 记录被删除 provider 所属的 vendor 分组，确保删除后该分组仍保持展开
+			this.vendorGroupExpandedState.set(vendor.name, true)
 			this.settings.providers.splice(index, 1)
 			await this.settingsContext.saveSettings()
 			this.render(this.containerEl)

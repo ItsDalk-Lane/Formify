@@ -94,7 +94,12 @@ export class ExpiryCheckService {
 		for (const monitor of monitors) {
 			// 展开该监控配置下的所有文件
 			const monitoredFiles = this.getFilesForMonitor(monitor.id);
-			const expiryMs = monitor.expiryDays * 24 * 60 * 60 * 1000;
+			// 支持小时粒度：若配置了 expiryHours 则以小时为单位计算过期阈值，否则使用 expiryDays（向后兼容）
+			const expiryMs = (
+				monitor.expiryHours !== undefined
+					? monitor.expiryHours * 60 * 60 * 1000
+					: monitor.expiryDays * 24 * 60 * 60 * 1000
+			);
 
 			for (const filePath of monitoredFiles) {
 				const record = this.dataService.getAccessRecord(filePath);
@@ -107,6 +112,7 @@ export class ExpiryCheckService {
 
 				const elapsed = now - record.lastOpenedAt;
 				if (elapsed > expiryMs) {
+					// 计算访问间隔：如果以小时为单位配置，则以小时为单位向下取整，否则以整天计算
 					const daysSinceAccess = Math.floor(elapsed / (24 * 60 * 60 * 1000));
 					expiredFiles.push({
 						filePath,

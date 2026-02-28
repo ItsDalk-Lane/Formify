@@ -29,9 +29,11 @@ export function MonitorConfigEditor(props: MonitorConfigEditorProps) {
 	const [targetType, setTargetType] = useState<MonitorTargetType>(
 		config?.targetType ?? DEFAULT_MONITOR_CONFIG.targetType
 	);
-	const [expiryDays, setExpiryDays] = useState(
-		config?.expiryDays ?? DEFAULT_MONITOR_CONFIG.expiryDays
-	);
+	// 支持以 天 / 小时 为单位的过期阈值（向后兼容）
+	const initialExpiryUnit = config?.expiryHours !== undefined ? 'hours' : 'days'
+	const initialExpiryValue = config?.expiryHours !== undefined ? config!.expiryHours! : (config?.expiryDays ?? DEFAULT_MONITOR_CONFIG.expiryDays)
+	const [expiryUnit, setExpiryUnit] = useState<'days' | 'hours'>(initialExpiryUnit as 'days' | 'hours');
+	const [expiryValue, setExpiryValue] = useState<number>(initialExpiryValue);
 	const [recursive, setRecursive] = useState(
 		config?.recursive ?? DEFAULT_MONITOR_CONFIG.recursive
 	);
@@ -86,14 +88,21 @@ export function MonitorConfigEditor(props: MonitorConfigEditorProps) {
 
 	const handleSave = () => {
 		if (!path.trim()) return;
-		onSave({
+		const result: MonitorConfig = {
 			id: config?.id ?? v4(),
 			path: path.trim(),
 			targetType,
-			expiryDays: Math.max(1, expiryDays),
+			// 始终写入 expiryDays 用于旧逻辑与显示兼容；若选择小时则同时写入 expiryHours
+			expiryDays: Math.max(1, expiryUnit === 'days' ? expiryValue : Math.ceil(expiryValue / 24)),
 			recursive,
 			minStayMinutes: Math.max(1, minStayMinutes),
-		});
+		} as MonitorConfig;
+
+		if (expiryUnit === 'hours') {
+			(result as any).expiryHours = Math.max(1, expiryValue);
+		}
+
+		onSave(result);
 	};
 
 	return (
@@ -136,16 +145,27 @@ export function MonitorConfigEditor(props: MonitorConfigEditorProps) {
 				</div>
 			</div>
 
-			{/* 过期天数 */}
+			{/* 过期阈值（支持 天 / 小时） */}
 			<div className="fem-config-editor__row">
 				<label className="fem-config-editor__label">{localInstance.expiry_days}</label>
-				<input
-					type="number"
-					className="fem-config-editor__input fem-config-editor__input--narrow"
-					value={expiryDays}
-					min={1}
-					onChange={(e) => setExpiryDays(Number(e.target.value) || 30)}
-				/>
+				<div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+					<input
+						type="number"
+						className="fem-config-editor__input fem-config-editor__input--narrow"
+						value={expiryValue}
+						min={1}
+						onChange={(e) => setExpiryValue(Number(e.target.value) || 1)}
+					/>
+					<select
+						value={expiryUnit}
+						onChange={(e) => setExpiryUnit(e.target.value as 'days' | 'hours')}
+						className="fem-config-editor__input fem-config-editor__input--narrow"
+						style={{ width: 120 }}
+					>
+						<option value="days">天</option>
+						<option value="hours">小时</option>
+					</select>
+				</div>
 			</div>
 
 			{/* 递归（仅文件夹模式） */}

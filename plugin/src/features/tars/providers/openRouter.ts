@@ -951,7 +951,21 @@ export const openRouterVendor: Vendor = {
 		reasoningEffort: 'medium',
 		parameters: {}
 	} as OpenRouterOptions,
-	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
+	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc, {
+		// OpenRouter 的 Chat Completions API 需要 reasoning 参数来启用推理功能
+		// 将插件内部的 enableReasoning + reasoningEffort 转换为 API 所需的 reasoning 对象
+		transformApiParams: (apiParams, allOptions) => {
+			const enableReasoning = allOptions.enableReasoning as boolean | undefined
+			const reasoningEffort = (allOptions.reasoningEffort as string) || 'medium'
+			if (enableReasoning) {
+				return {
+					...apiParams,
+					reasoning: { effort: reasoningEffort }
+				}
+			}
+			return apiParams
+		}
+	}),
 	models: [],
 	websiteToObtainKey: 'https://openrouter.ai',
 	capabilities: ['Text Generation', 'Image Vision', 'PDF Vision', 'Web Search', 'Image Generation', 'Reasoning']

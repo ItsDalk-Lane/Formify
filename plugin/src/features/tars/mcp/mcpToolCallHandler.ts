@@ -57,6 +57,8 @@ export interface ToolLoopMessage {
 	tool_calls?: OpenAIToolCall[]
 	tool_call_id?: string
 	name?: string
+	/** DeepSeek 推理模型的思维链内容（工具调用循环中需回传给 API） */
+	reasoning_content?: string
 }
 
 /**
@@ -715,14 +717,17 @@ function shouldFallbackToPlainRequest(err: unknown): boolean {
  *
  * 这些键是插件内部/MCP 使用的，不应传递给 AI Provider API
  *
- * 注意：enableReasoning 和 enableThinking 需要传递给某些 Provider（如 DeepSeek、Qwen）
- * 因此不被过滤；enableWebSearch 保留用于某些 Provider 的联网搜索功能
+ * 注意：enableReasoning 是插件内部标志（控制推理内容 UI 展示），不是 API 参数，需要过滤
+ * reasoningEffort 同样需要过滤，由 Provider 通过 transformApiParams 转换为对应格式
+ * enableThinking 需要传递给某些 Provider（如 Qwen），因此不被过滤
+ * enableWebSearch 保留用于某些 Provider 的联网搜索功能
  */
 const INTERNAL_OPTION_KEYS = new Set([
 	'apiKey', 'baseURL', 'model', 'parameters',
 	'apiSecret', 'vendorApiKeys', 'vendorApiKeysByDevice',
 	'mcpTools', 'mcpCallTool', 'mcpMaxToolCallLoops',
-	// 'enableReasoning',  // 移除：某些 Provider 需要此参数启用推理功能
+	'enableReasoning',   // 插件内部标志，非 API 参数（DeepSeek 通过 model 名称启用推理）
+	'reasoningEffort',   // 推理努力级别，Provider 通过 transformApiParams 转换为对应格式
 	// 'enableThinking',   // 移除：某些 Provider 需要此参数启用思考功能
 	// 'enableWebSearch',  // 移除：某些 Provider 需要此参数启用联网搜索
 	'tag', 'vendor',
@@ -816,6 +821,12 @@ async function buildLoopMessages(
 export interface OpenAIMcpSupportOptions {
 	transformBaseURL?: (url: string) => string
 	createClient?: (allOptions: Record<string, unknown>) => OpenAI
+	/**
+	 * 在发送 API 请求前转换参数
+	 * 用于 Provider 特定的参数格式转换
+	 * 例如 OpenRouter 需要将 enableReasoning+reasoningEffort 转换为 reasoning: { effort: ... }
+	 */
+	transformApiParams?: (apiParams: Record<string, unknown>, allOptions: Record<string, unknown>) => Record<string, unknown>
 }
 
 /**
@@ -905,7 +916,12 @@ export function withOpenAIMcpToolCallSupport(
 						: DEFAULT_MAX_TOOL_CALL_LOOPS
 
 				// 提取可传递给 API 的参数（temperature, max_tokens 等）
-				const apiParams = extractApiParams(allOptions)
+				let apiParams = extractApiParams(allOptions)
+
+				// 允许 Provider 自定义 API 参数转换（如 OpenRouter 的 reasoning 参数格式）
+				if (mcpOptions?.transformApiParams) {
+					apiParams = mcpOptions.transformApiParams(apiParams, allOptions)
+				}
 
 				// 创建 OpenAI 兼容客户端
 				// - 优先使用自定义工厂（Azure 等）
@@ -965,6 +981,7 @@ export function withOpenAIMcpToolCallSupport(
 
 					let contentBuffer = ''
 					let reasoningBuffer = ''
+					let reasoningForMessage = ''  // 保留推理内容用于回传 API（DeepSeek 思考模式要求）
 					let reasoningStartMs = 0
 					let reasoningActive = false
 					const toolCallsMap = new Map<number, { id: string; name: string; args: string }>()
@@ -996,6 +1013,7 @@ export function withOpenAIMcpToolCallSupport(
 								const reasoningDurationMs = Date.now() - reasoningStartMs
 								yield `:${REASONING_BLOCK_END_MARKER}:${reasoningDurationMs}:`
 								reasoningActive = false
+								reasoningForMessage = reasoningBuffer  // 保留推理内容用于 assistant 消息
 								reasoningBuffer = ''
 							}
 
@@ -1018,6 +1036,7 @@ export function withOpenAIMcpToolCallSupport(
 								const reasoningDurationMs = Date.now() - reasoningStartMs
 								yield `:${REASONING_BLOCK_END_MARKER}:${reasoningDurationMs}:`
 								reasoningActive = false
+								reasoningForMessage = reasoningBuffer  // 保留推理内容用于 assistant 消息
 								reasoningBuffer = ''
 							}
 
@@ -1031,6 +1050,7 @@ export function withOpenAIMcpToolCallSupport(
 						const reasoningDurationMs = Date.now() - reasoningStartMs
 						yield `:${REASONING_BLOCK_END_MARKER}:${reasoningDurationMs}:`
 						reasoningActive = false
+						reasoningForMessage = reasoningBuffer  // 保留推理内容用于 assistant 消息
 					}
 
 					if (!hasToolCalls) {
@@ -1041,11 +1061,17 @@ export function withOpenAIMcpToolCallSupport(
 					// 有工具调用 → 逐个执行，每完成一个立即 yield 对应的 MCP 工具标记
 					const toolCalls = finalizeToolCalls(toolCallsMap)
 
-					loopMessages.push({
+					// DeepSeek 思考模式要求在工具调用循环中回传 reasoning_content
+					// 否则 API 会返回 400 错误，导致无法继续多轮工具调用
+					const assistantMsg: ToolLoopMessage = {
 						role: 'assistant',
 						content: contentBuffer || null,
 						tool_calls: toolCalls,
-					})
+					}
+					if (reasoningForMessage) {
+						assistantMsg.reasoning_content = reasoningForMessage
+					}
+					loopMessages.push(assistantMsg)
 
 					const toolResults: ToolLoopMessage[] = []
 					for (const call of toolCalls) {

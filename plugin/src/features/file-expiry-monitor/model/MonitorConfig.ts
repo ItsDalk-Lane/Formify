@@ -19,8 +19,10 @@ export interface MonitorConfig {
 	path: string;
 	/** 监控类型：文件 / 文件夹 */
 	targetType: MonitorTargetType;
-	/** 过期天数（超过该天数未打开即视为过期） */
+	/** 过期阈值 - 向后兼容：优先使用 expiryHours（如果存在），否则使用 expiryDays */
 	expiryDays: number;
+	/** 过期阈值（小时） - 可选，若存在则以小时为单位判断过期 */
+	expiryHours?: number;
 	/** 是否递归子文件夹（仅当 targetType 为 FOLDER 时有效） */
 	recursive: boolean;
 	/** 最小保持时间（分钟），文件需持续打开达到此时长才计为"已访问" */

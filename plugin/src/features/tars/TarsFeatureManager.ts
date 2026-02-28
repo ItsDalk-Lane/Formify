@@ -66,16 +66,14 @@ export class TarsFeatureManager {
 	updateSettings(settings: TarsSettings) {
 		// 检测 provider 是否有实质性变化（API key、baseURL、model 等）
 		const hasProviderChanges = this.hasProviderConfigChanges(this.settings.providers, settings.providers)
-		
+
 		// 检测 Tab 补全设置是否有变化
 		const hasTabCompletionChanges = this.hasTabCompletionChanges(this.settings, settings)
-		
+
 		this.settings = settings
-		
-		// 如果 provider 配置有变化，需要更新 Tab 补全的 providers
-		if (hasProviderChanges) {
-			updateTabCompletionProviders(settings.providers)
-		}
+
+		// 无论怎样都同步 providers 到 TabCompletionService，避免某些场景下内存中的 providers 不跟随设置变化（导致需要重启才能生效）
+		updateTabCompletionProviders(settings.providers)
 		
 		// 处理 Tab 补全设置变化
 		if (hasTabCompletionChanges) {
