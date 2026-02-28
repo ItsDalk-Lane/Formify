@@ -887,4 +887,33 @@ export class ZhTw implements Local {
 	folder_created = "資料夾建立成功";
 	folder_already_exists = "資料夾已存在";
 	batch_create_success = "批量建立成功：{0} 個項目";
+	// === 檔案過期監控 ===
+	file_expiry_monitor = "檔案過期監控";
+	monitor_enabled = "啟用監控";
+	expiry_days = "過期天數";
+	recursive = "遞迴子資料夾";
+	min_stay_minutes = "最小保持時間（分鐘）";
+	data_file_path = "資料檔案路徑";
+	confirm_before_delete = "刪除前確認";
+	add_to_monitor = "加入檔案過期監控";
+	remove_from_monitor = "從檔案過期監控移除";
+	expired_files_title = "以下檔案已過期";
+	select_all = "全選";
+	deselect_all = "取消全選";
+	move_selected = "移動選中";
+	delete_selected = "刪除選中";
+	choose_folder = "選擇資料夾";
+	no_files_selected = "未選擇任何檔案";
+	delete_confirm_message = "確定刪除選中的 {count} 個檔案嗎？";
+	add_monitor_path = "新增監控路徑";
+	monitor_path_empty_hint = "請新增監控路徑";
+	monitor_path = "監控路徑";
+	monitor_type = "監控類型";
+	monitor_type_file = "檔案";
+	monitor_type_folder = "資料夾";
+	edit = "編輯";
+	path_not_valid_warning = "資料檔案路徑無效，已使用預設路徑";
+	expired_days_ago = "{0} 天前";
+	check_now = "立即檢查";
+	no_expired_files = "未發現過期檔案";
 }

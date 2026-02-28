@@ -11,6 +11,9 @@ import { cloneTarsSettings } from './features/tars';
 import { DebugLogger } from './utils/DebugLogger';
 import { getStartupFormService } from './service/command/StartupFormService';
 import { ConflictMonitor } from './service/conflict/ConflictMonitor';
+import { MonitorContextMenu } from './features/file-expiry-monitor/service/MonitorContextMenu';
+import { ExpiryNoticeManager } from './features/file-expiry-monitor/service/ExpiryNoticeManager';
+import { localInstance } from './i18n/locals';
 
 export default class FormPlugin extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
@@ -21,6 +24,8 @@ export default class FormPlugin extends Plugin {
 	featureCoordinator = new FeatureCoordinator(this);
 	private services = new ServiceContainer();
 	private conflictMonitor: ConflictMonitor | null = null;
+	private monitorContextMenu: MonitorContextMenu | null = null;
+	private expiryNoticeManager: ExpiryNoticeManager | null = null;
 
 
 	async onload() {
@@ -47,6 +52,9 @@ export default class FormPlugin extends Plugin {
 			await this.services.formScriptService.initialize(this.app, this.settings.scriptFolder);
 			await this.executeStartupForms();
 			await this.services.autoTriggerService.initialize(this, this.services.formService);
+
+			// 初始化文件过期监控服务
+			await this.initializeFileExpiryMonitor();
 		});
 	}
 
@@ -62,10 +70,68 @@ export default class FormPlugin extends Plugin {
 		}
 	}
 
+	/**
+	 * 初始化文件过期监控服务
+	 * 加载数据文件、启动访问追踪和过期检查、注册右键菜单和命令
+	 */
+	private async initializeFileExpiryMonitor(): Promise<void> {
+		try {
+			const { monitorDataService, fileAccessTracker, expiryCheckService } = this.services;
+
+			// 先加载持久化数据（包括设置）
+			await monitorDataService.loadData();
+
+			// 在 loadData 之后读取设置，确保已从文件恢复
+			const monitorSettings = monitorDataService.getSettings();
+
+			// 初始化通知管理器
+			this.expiryNoticeManager = new ExpiryNoticeManager(this.app);
+
+			// 初始化右键菜单
+			this.monitorContextMenu = new MonitorContextMenu(this, monitorDataService);
+			this.monitorContextMenu.initialize();
+
+			// 注册手动检查命令
+			this.addCommand({
+				id: 'file-expiry-check-now',
+				name: localInstance.check_now,
+				callback: async () => {
+					const expiredFiles = await expiryCheckService.triggerManualCheck();
+					if (expiredFiles.length > 0 && this.expiryNoticeManager) {
+						this.expiryNoticeManager.show(expiredFiles);
+					} else {
+						const { Notice } = await import('obsidian');
+						new Notice(localInstance.no_expired_files);
+					}
+				},
+			});
+
+			// 仅在功能开启时启动追踪和检查服务
+			if (monitorSettings.enabled) {
+				fileAccessTracker.initialize();
+				expiryCheckService.initialize();
+
+				// 订阅过期文件发现事件
+				expiryCheckService.onExpiredFilesFound((expiredFiles) => {
+					if (this.expiryNoticeManager && expiredFiles.length > 0) {
+						this.expiryNoticeManager.show(expiredFiles);
+					}
+				});
+			}
+		} catch (error) {
+			DebugLogger.error('[FormPlugin] 初始化文件过期监控失败', error);
+		}
+	}
+
 
 	onunload() {
 		this.conflictMonitor?.dispose();
 		this.conflictMonitor = null;
+
+		this.expiryNoticeManager?.cleanup();
+		this.expiryNoticeManager = null;
+		this.monitorContextMenu?.cleanup();
+		this.monitorContextMenu = null;
 
 		this.services.dispose();
 		this.services.applicationCommandService.unload(this);

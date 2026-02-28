@@ -1,0 +1,159 @@
+.fem-setting-section {
+  padding: 12px 0;
+}
+
+.fem-setting-section__title {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin-bottom: 12px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.fem-setting-section__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  gap: 12px;
+}
+
+.fem-setting-section__row-label {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.fem-setting-section__row-label-name {
+  font-weight: 500;
+}
+
+.fem-setting-section__row-label-desc {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.fem-setting-section__input {
+  max-width: 280px;
+  width: 100%;
+}
+
+/* 监控配置编辑器 */
+.fem-config-editor {
+  padding: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-secondary);
+  margin-bottom: 8px;
+}
+
+.fem-config-editor__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  gap: 12px;
+}
+
+.fem-config-editor__label {
+  font-weight: 500;
+  min-width: 100px;
+}
+
+.fem-config-editor__input {
+  flex: 1;
+  min-width: 0;
+}
+
+.fem-config-editor__input--narrow {
+  max-width: 100px;
+}
+
+.fem-config-editor__radio-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.fem-config-editor__radio-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.fem-config-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.fem-config-editor__btn {
+  padding: 4px 16px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+.fem-config-editor__btn--save {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.fem-config-editor__btn--save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fem-config-editor__btn--cancel:hover {
+  background: var(--background-modifier-hover);
+}
+
+/* 监控列表项 */
+.fem-monitor-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  width: 100%;
+}
+
+.fem-monitor-item__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.fem-monitor-item__path {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fem-monitor-item__meta {
+  font-size: 0.8em;
+  color: var(--text-muted);
+}
+
+.fem-monitor-item__edit-btn {
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.fem-monitor-item__edit-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}

@@ -862,4 +862,33 @@ export class En implements Local {
 	folder_created = "Folder created successfully";
 	folder_already_exists = "Folder already exists";
 	batch_create_success = "Batch create success: {0} items";
+	// === 文件过期监控 ===
+	file_expiry_monitor = "File Expiry Monitor";
+	monitor_enabled = "Enable Monitor";
+	expiry_days = "Expiry Days";
+	recursive = "Recursive Subfolders";
+	min_stay_minutes = "Min Stay Minutes";
+	data_file_path = "Data File Path";
+	confirm_before_delete = "Confirm Before Delete";
+	add_to_monitor = "Add to File Expiry Monitor";
+	remove_from_monitor = "Remove from File Expiry Monitor";
+	expired_files_title = "Expired Files";
+	select_all = "Select All";
+	deselect_all = "Deselect All";
+	move_selected = "Move Selected";
+	delete_selected = "Delete Selected";
+	choose_folder = "Choose Folder";
+	no_files_selected = "No files selected";
+	delete_confirm_message = "Delete {count} selected files?";
+	add_monitor_path = "Add Monitor Path";
+	monitor_path_empty_hint = "Please add a monitor path";
+	monitor_path = "Monitor Path";
+	monitor_type = "Monitor Type";
+	monitor_type_file = "File";
+	monitor_type_folder = "Folder";
+	edit = "Edit";
+	path_not_valid_warning = "Data file path is invalid, using default path";
+	expired_days_ago = "{0} days ago";
+	check_now = "Check Now";
+	no_expired_files = "No expired files found";
 }

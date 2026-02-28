@@ -871,4 +871,33 @@ export class Zh implements Local {
 	folder_created = "文件夹创建成功";
 	folder_already_exists = "文件夹已存在";
 	batch_create_success = "批量创建成功：{0} 个项目";
+	// === 文件过期监控 ===
+	file_expiry_monitor = "文件过期监控";
+	monitor_enabled = "启用监控";
+	expiry_days = "过期天数";
+	recursive = "递归子文件夹";
+	min_stay_minutes = "最小保持时间（分钟）";
+	data_file_path = "数据文件路径";
+	confirm_before_delete = "删除前确认";
+	add_to_monitor = "添加到文件过期监控";
+	remove_from_monitor = "从文件过期监控移除";
+	expired_files_title = "以下文件已过期";
+	select_all = "全选";
+	deselect_all = "取消全选";
+	move_selected = "移动选中";
+	delete_selected = "删除选中";
+	choose_folder = "选择文件夹";
+	no_files_selected = "未选择任何文件";
+	delete_confirm_message = "确定删除选中的 {count} 个文件吗？";
+	add_monitor_path = "添加监控路径";
+	monitor_path_empty_hint = "请添加监控路径";
+	monitor_path = "监控路径";
+	monitor_type = "监控类型";
+	monitor_type_file = "文件";
+	monitor_type_folder = "文件夹";
+	edit = "编辑";
+	path_not_valid_warning = "数据文件路径无效，已使用默认路径";
+	expired_days_ago = "{0} 天前";
+	check_now = "立即检查";
+	no_expired_files = "未发现过期文件";
 }

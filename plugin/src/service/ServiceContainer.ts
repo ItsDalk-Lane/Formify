@@ -7,6 +7,9 @@ import { ContextMenuService } from './command/ContextMenuService';
 import { FormIntegrationService } from './command/FormIntegrationService';
 import { InternalLinkParserService } from './InternalLinkParserService';
 import { AutoTriggerService } from './startup-condition/AutoTriggerService';
+import { MonitorDataService } from 'src/features/file-expiry-monitor/service/MonitorDataService';
+import { FileAccessTracker } from 'src/features/file-expiry-monitor/service/FileAccessTracker';
+import { ExpiryCheckService } from 'src/features/file-expiry-monitor/service/ExpiryCheckService';
 
 /**
  * 全局服务容器实例
@@ -42,6 +45,11 @@ export class ServiceContainer {
     // 可选服务（需要 App 实例初始化）
     private _internalLinkParserService: InternalLinkParserService | null = null;
 
+    // 文件过期监控服务（需要 App 实例初始化）
+    private _monitorDataService: MonitorDataService | null = null;
+    private _fileAccessTracker: FileAccessTracker | null = null;
+    private _expiryCheckService: ExpiryCheckService | null = null;
+
     private _app: App | null = null;
     private _initialized = false;
 
@@ -73,6 +81,12 @@ export class ServiceContainer {
         }
         this._app = app;
         this._internalLinkParserService = new InternalLinkParserService(app);
+
+        // 初始化文件过期监控服务
+        this._monitorDataService = new MonitorDataService(app);
+        this._fileAccessTracker = new FileAccessTracker(app, this._monitorDataService);
+        this._expiryCheckService = new ExpiryCheckService(this._monitorDataService);
+
         this._initialized = true;
     }
 
@@ -88,6 +102,39 @@ export class ServiceContainer {
     }
 
     /**
+     * 获取监控数据服务
+     * @throws Error 如果服务未初始化
+     */
+    get monitorDataService(): MonitorDataService {
+        if (!this._monitorDataService) {
+            throw new Error('MonitorDataService 未初始化，请先调用 initializeWithApp()');
+        }
+        return this._monitorDataService;
+    }
+
+    /**
+     * 获取文件访问追踪服务
+     * @throws Error 如果服务未初始化
+     */
+    get fileAccessTracker(): FileAccessTracker {
+        if (!this._fileAccessTracker) {
+            throw new Error('FileAccessTracker 未初始化，请先调用 initializeWithApp()');
+        }
+        return this._fileAccessTracker;
+    }
+
+    /**
+     * 获取过期检查服务
+     * @throws Error 如果服务未初始化
+     */
+    get expiryCheckService(): ExpiryCheckService {
+        if (!this._expiryCheckService) {
+            throw new Error('ExpiryCheckService 未初始化，请先调用 initializeWithApp()');
+        }
+        return this._expiryCheckService;
+    }
+
+    /**
      * 检查容器是否已初始化
      */
     get isInitialized(): boolean {
@@ -99,6 +146,13 @@ export class ServiceContainer {
      */
     dispose(): void {
         this.autoTriggerService.cleanup();
+
+        // 清理文件过期监控服务
+        this._expiryCheckService?.cleanup();
+        this._fileAccessTracker?.cleanup();
+        this._expiryCheckService = null;
+        this._fileAccessTracker = null;
+        this._monitorDataService = null;
 
         // 清理需要显式销毁的服务
         this.formScriptService.unload();

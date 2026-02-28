@@ -7,6 +7,7 @@ import { localInstance } from "src/i18n/locals";
 import FormPlugin from "src/main";
 import { GeneralSettingTabItem } from "./GeneralSettingTabItem";
 import { TarsSettingTabItem } from "./TarsSettingTabItem";
+import { FileExpiryMonitorSettingTab } from "src/features/file-expiry-monitor/settings/FileExpiryMonitorSettingTab";
 
 export class PluginSettingTab extends ObPluginSettingTab {
 	plugin: FormPlugin;
@@ -38,6 +39,11 @@ export class PluginSettingTab extends ObPluginSettingTab {
 								id: "tars_setting",
 								title: localInstance.tars_setting,
 								content: <TarsSettingTabItem plugin={this.plugin} />,
+							},
+							{
+								id: "file_expiry_monitor",
+								title: localInstance.file_expiry_monitor,
+								content: <FileExpiryMonitorSettingTab />,
 							}
 						]}
 					></Tab>

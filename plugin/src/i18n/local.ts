@@ -797,4 +797,33 @@ export interface Local {
 	folder_created: string;
 	folder_already_exists: string;
 	batch_create_success: string;
+	// === 文件过期监控 ===
+	file_expiry_monitor: string;
+	monitor_enabled: string;
+	expiry_days: string;
+	recursive: string;
+	min_stay_minutes: string;
+	data_file_path: string;
+	confirm_before_delete: string;
+	add_to_monitor: string;
+	remove_from_monitor: string;
+	expired_files_title: string;
+	select_all: string;
+	deselect_all: string;
+	move_selected: string;
+	delete_selected: string;
+	choose_folder: string;
+	no_files_selected: string;
+	delete_confirm_message: string;
+	add_monitor_path: string;
+	monitor_path_empty_hint: string;
+	monitor_path: string;
+	monitor_type: string;
+	monitor_type_file: string;
+	monitor_type_folder: string;
+	edit: string;
+	path_not_valid_warning: string;
+	expired_days_ago: string;
+	check_now: string;
+	no_expired_files: string;
 }
