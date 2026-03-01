@@ -1097,7 +1097,9 @@ export class ChatService {
 			new Notice('只能对AI消息执行重新生成操作');
 			return;
 		}
-		session.messages.splice(index, 1);
+		// 重新生成历史消息时，目标消息及其后的对话都应被移除
+		// 否则会残留后续上下文，导致对话历史不一致
+		session.messages = session.messages.slice(0, index);
 		session.updatedAt = Date.now();
 		this.emitState();
 		

@@ -728,6 +728,797 @@ const runPR10 = () => {
 	)
 }
 
+const runPR11 = async () => {
+	const mcpPath = path.resolve(ROOT, 'src/features/tars/mcp/mcpToolCallHandler.ts')
+	const streamQueue = []
+	class MockOpenAI {
+		constructor() {
+			this.chat = {
+				completions: {
+					create: async () => {
+						const parts = streamQueue.shift()
+						if (!parts) {
+							throw new Error('PR11 mock stream queue is empty')
+						}
+						return (async function* () {
+							for (const part of parts) {
+								yield part
+							}
+						})()
+					}
+				}
+			}
+		}
+	}
+
+	const mcpModule = loadTsModule(mcpPath, {
+		openai: MockOpenAI,
+		'src/utils/DebugLogger': {
+			DebugLogger: {
+				debug: () => {},
+				warn: () => {},
+				error: () => {}
+			}
+		},
+		'../providers': {},
+		'../providers/utils': {
+			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } }),
+			REASONING_BLOCK_START_MARKER: '{{FF_REASONING_START}}',
+			REASONING_BLOCK_END_MARKER: '{{FF_REASONING_END}}',
+			formatReasoningDuration: () => '0.00s'
+		}
+	})
+
+	const { withOpenAIMcpToolCallSupport } = mcpModule
+
+	const wrappedFactory = withOpenAIMcpToolCallSupport(() =>
+		async function* () {
+			yield 'fallback'
+		}
+	)
+
+	const sendRequest = wrappedFactory({
+		apiKey: 'test-key',
+		baseURL: 'https://openrouter.ai/api/v1/chat/completions',
+		model: 'openrouter/test-model',
+		parameters: {},
+		enableReasoning: true,
+		mcpTools: [{
+			name: 'mock_tool',
+			description: 'mock tool',
+			inputSchema: { type: 'object', properties: {} },
+			serverId: 'mock-server'
+		}],
+		mcpCallTool: async () => 'ok'
+	})
+
+	const collectOutput = async (parts) => {
+		streamQueue.push(parts)
+		let output = ''
+		for await (const chunk of sendRequest(
+			[{ role: 'user', content: 'test question' }],
+			new AbortController(),
+			async () => new ArrayBuffer(0)
+		)) {
+			output += chunk
+		}
+		return output
+	}
+
+	{
+		const output = await collectOutput([
+			{ choices: [{ delta: { reasoning: '先分析问题' } }] },
+			{ choices: [{ delta: { content: '最终答案A' } }] }
+		])
+		assert(
+			output.includes('{{FF_REASONING_START}}') && output.includes(':{{FF_REASONING_END}}:'),
+			'PR11-1: delta.reasoning should render reasoning block markers'
+		)
+		assert(output.includes('先分析问题'), 'PR11-1: delta.reasoning text should be streamed')
+		assert(output.includes('最终答案A'), 'PR11-1: final answer should still be streamed')
+	}
+
+	{
+		const output = await collectOutput([
+			{
+				choices: [{
+					delta: {
+						reasoning_details: [
+							{ type: 'reasoning_text', text: '细节推理内容' },
+							{ type: 'summary', summary_text: '摘要片段' }
+						]
+					}
+				}]
+			},
+			{ choices: [{ delta: { content: '最终答案B' } }] }
+		])
+		assert(
+			output.includes('{{FF_REASONING_START}}') && output.includes(':{{FF_REASONING_END}}:'),
+			'PR11-2: delta.reasoning_details should render reasoning block markers'
+		)
+		assert(
+			output.includes('细节推理内容') || output.includes('摘要片段'),
+			'PR11-2: delta.reasoning_details should be converted to visible reasoning text'
+		)
+		assert(output.includes('最终答案B'), 'PR11-2: final answer should still be streamed')
+	}
+}
+
+const runPR12 = () => {
+	const capabilityPath = path.resolve(ROOT, 'src/features/tars/providers/modelCapability.ts')
+	const capabilityModule = loadTsModule(capabilityPath)
+	const record = capabilityModule.resolveReasoningCapability({
+		vendorName: 'Doubao',
+		baseURL: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+		model: 'doubao-seed-2-0-pro-260215',
+		cache: {}
+	})
+	assert(
+		record.state === 'unknown',
+		'PR12-1: Doubao model without explicit metadata/cached signal should default to unknown (optimistic allow)'
+	)
+	assert(
+		record.source === 'default',
+		'PR12-1: Doubao unknown capability should come from default source'
+	)
+}
+
+const runPR13 = async () => {
+	const zhipuPath = path.resolve(ROOT, 'src/features/tars/providers/zhipu.ts')
+	let capturedRequest = null
+
+	class MockOpenAI {
+		constructor() {
+			this.chat = {
+				completions: {
+					create: async (request) => {
+						capturedRequest = request
+						return (async function* () {
+							yield { choices: [{ delta: { content: 'ok' } }] }
+						})()
+					}
+				}
+			}
+		}
+	}
+
+	const zhipuModule = loadTsModule(zhipuPath, {
+		openai: MockOpenAI,
+		'tars/lang/helper': { t: (text) => text },
+		'.': {},
+		'../mcp/mcpToolCallHandler': MCP_HANDLER_MOCK,
+		'../../../utils/DebugLogger': { DebugLogger: { debug: () => {} } },
+		'./utils': {
+			buildReasoningBlockEnd: () => '',
+			buildReasoningBlockStart: () => ''
+		}
+	})
+
+	const sendRequest = zhipuModule.zhipuVendor.sendRequestFunc({
+		apiKey: 'test-key',
+		baseURL: 'https://open.bigmodel.cn/api/paas/v4/',
+		model: 'glm-4.5-custom-new',
+		enableWebSearch: false,
+		enableReasoning: true,
+		thinkingType: 'enabled',
+		parameters: {}
+	})
+
+	for await (const _chunk of sendRequest(
+		[{ role: 'user', content: 'test' }],
+		new AbortController(),
+		async () => new ArrayBuffer(0)
+	)) {
+		break
+	}
+
+	assert(capturedRequest !== null, 'PR13-1: Zhipu request should be sent')
+	assert(
+		capturedRequest?.thinking?.type === 'enabled',
+		'PR13-1: Zhipu non-whitelist model should still send thinking when reasoning is enabled'
+	)
+}
+
+const runPR14 = () => {
+	const capabilityPath = path.resolve(ROOT, 'src/features/tars/providers/modelCapability.ts')
+	const capabilityModule = loadTsModule(capabilityPath)
+	const supported = capabilityModule.inferReasoningCapabilityFromMetadata('OpenRouter', {
+		id: 'openrouter/reasoning-model',
+		supported_parameters: ['tools', 'reasoning', 'web_search']
+	})
+	assert(
+		supported?.state === 'supported',
+		'PR14-1: OpenRouter metadata with supported_parameters.reasoning should be marked as supported'
+	)
+
+	const unsupported = capabilityModule.inferReasoningCapabilityFromMetadata('OpenRouter', {
+		id: 'openrouter/non-reasoning-model',
+		supported_parameters: ['tools', 'web_search']
+	})
+	assert(
+		unsupported?.state === 'unsupported',
+		'PR14-1: OpenRouter metadata without reasoning in supported_parameters should be marked as unsupported'
+	)
+}
+
+const runPR15 = () => {
+	const capabilityPath = path.resolve(ROOT, 'src/features/tars/providers/modelCapability.ts')
+	const capabilityModule = loadTsModule(capabilityPath)
+	const key = capabilityModule.buildReasoningCapabilityCacheKey(
+		'OpenRouter',
+		'https://openrouter.ai/api/v1/chat/completions',
+		'openai/gpt-5'
+	)
+
+	const written = capabilityModule.writeReasoningCapabilityCache(
+		{},
+		key,
+		{
+			state: 'supported',
+			source: 'probe',
+			confidence: 0.8,
+			checkedAt: 0
+		},
+		1000,
+		100
+	)
+	const hit = capabilityModule.readReasoningCapabilityCache(written, key, 1050)
+	assert(Boolean(hit), 'PR15-1: capability cache should hit before TTL expires')
+
+	const miss = capabilityModule.readReasoningCapabilityCache(written, key, 1201)
+	assert(miss === undefined, 'PR15-1: capability cache should miss after TTL expires')
+
+	const pruned = capabilityModule.pruneExpiredReasoningCapabilityCache(written, 1201)
+	assert(
+		Object.keys(pruned).length === 0,
+		'PR15-1: pruneExpiredReasoningCapabilityCache should remove expired entries'
+	)
+}
+
+const runPR16 = () => {
+	const doubaoPath = path.resolve(ROOT, 'src/features/tars/providers/doubao.ts')
+	let capturedTransformApiParams = null
+
+	const doubaoModule = loadTsModule(doubaoPath, {
+		obsidian: {
+			requestUrl: async () => ({ status: 200, json: {}, text: '' })
+		},
+		'tars/lang/helper': { t: (text) => text },
+		'.': {},
+		'./utils': {
+			buildReasoningBlockEnd: () => '',
+			buildReasoningBlockStart: () => '',
+			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } }),
+			getMimeTypeFromFilename: () => 'image/png'
+		},
+		'./errors': {
+			normalizeProviderError: (error) => error
+		},
+		'./retry': {
+			withRetry: async (operation) => operation()
+		},
+		'../mcp/mcpToolCallHandler': {
+			withOpenAIMcpToolCallSupport: (factory, options) => {
+				capturedTransformApiParams = options?.transformApiParams
+				return factory
+			}
+		},
+		'./doubaoImage': {
+			DEFAULT_DOUBAO_IMAGE_OPTIONS: {
+				displayWidth: 400,
+				size: '1024x1024',
+				response_format: 'b64_json',
+				watermark: false,
+				sequential_image_generation: false,
+				stream: false,
+				optimize_prompt_mode: 'auto'
+			},
+			doubaoImageVendor: {
+				sendRequestFunc: () =>
+					async function* () {
+						yield ''
+					}
+			},
+			DOUBAO_IMAGE_MODELS: [],
+			isDoubaoImageGenerationModel: () => false
+		}
+	})
+
+	assert(
+		doubaoModule.doubaoUseResponsesAPI({ enableReasoning: true, enableWebSearch: false }) === false,
+		'PR16-1: Doubao reasoning-only mode should stay on chat.completions (MCP-compatible path)'
+	)
+	assert(
+		doubaoModule.doubaoUseResponsesAPI({ enableReasoning: false, enableWebSearch: true }) === true,
+		'PR16-1: Doubao web-search mode should use responses API'
+	)
+	assert(
+		typeof capturedTransformApiParams === 'function',
+		'PR16-2: Doubao MCP wrapper should provide transformApiParams'
+	)
+
+	const transformedEnabled = capturedTransformApiParams(
+		{ temperature: 0.2, thinkingType: 'enabled' },
+		{ enableReasoning: true, thinkingType: 'auto' }
+	)
+	assert(
+		transformedEnabled.thinking?.type === 'auto',
+		'PR16-2: Doubao MCP transform should map thinkingType to thinking.type when reasoning is enabled'
+	)
+	assert(
+		transformedEnabled.thinkingType === undefined,
+		'PR16-2: Doubao MCP transform should strip thinkingType from direct API params'
+	)
+
+	const transformedDisabled = capturedTransformApiParams(
+		{ temperature: 0.2, thinkingType: 'enabled' },
+		{ enableReasoning: false, thinkingType: 'enabled' }
+	)
+	assert(
+		transformedDisabled.thinking === undefined,
+		'PR16-2: Doubao MCP transform should not inject thinking when reasoning is disabled'
+	)
+}
+
+const runPR17 = async () => {
+	const mcpPath = path.resolve(ROOT, 'src/features/tars/mcp/mcpToolCallHandler.ts')
+	const streamQueue = []
+
+	class MockOpenAI {
+		constructor() {
+			this.chat = {
+				completions: {
+					create: async () => {
+						const parts = streamQueue.shift()
+						if (!parts) {
+							throw new Error('PR17 mock stream queue is empty')
+						}
+						return (async function* () {
+							for (const part of parts) {
+								yield part
+							}
+						})()
+					}
+				}
+			}
+		}
+	}
+
+	const mcpModule = loadTsModule(mcpPath, {
+		openai: MockOpenAI,
+		'src/utils/DebugLogger': {
+			DebugLogger: {
+				debug: () => {},
+				warn: () => {},
+				error: () => {}
+			}
+		},
+		'../providers': {},
+		'../providers/utils': {
+			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } }),
+			REASONING_BLOCK_START_MARKER: '{{FF_REASONING_START}}',
+			REASONING_BLOCK_END_MARKER: '{{FF_REASONING_END}}',
+			formatReasoningDuration: () => '0.00s'
+		}
+	})
+
+	const { withOpenAIMcpToolCallSupport } = mcpModule
+
+	const wrappedFactory = withOpenAIMcpToolCallSupport(() =>
+		async function* () {
+			yield 'fallback'
+		}
+	)
+
+	const sendRequest = wrappedFactory({
+		apiKey: 'test-key',
+		baseURL: 'https://qianfan.baidubce.com/v2/chat/completions',
+		model: 'qwen3-235b-a22b',
+		parameters: {},
+		enableThinking: true,
+		mcpTools: [{
+			name: 'mock_tool',
+			description: 'mock tool',
+			inputSchema: { type: 'object', properties: {} },
+			serverId: 'mock-server'
+		}],
+		mcpCallTool: async () => 'ok'
+	})
+
+	streamQueue.push([
+		{ choices: [{ delta: { reasoning_content: '先思考' } }] },
+		{ choices: [{ delta: { content: '最终答案' } }] }
+	])
+
+	let output = ''
+	for await (const chunk of sendRequest(
+		[{ role: 'user', content: 'test question' }],
+		new AbortController(),
+		async () => new ArrayBuffer(0)
+	)) {
+		output += chunk
+	}
+
+	assert(
+		output.includes('{{FF_REASONING_START}}') && output.includes(':{{FF_REASONING_END}}:'),
+		'PR17-1: MCP reasoning display should honor enableThinking for QianFan-like providers'
+	)
+	assert(output.includes('先思考'), 'PR17-1: reasoning_content should be streamed when enableThinking is true')
+	assert(output.includes('最终答案'), 'PR17-1: normal content should still be streamed')
+}
+
+const runPR18 = () => {
+	const qianFanPath = path.resolve(ROOT, 'src/features/tars/providers/qianFan.ts')
+	let capturedTransformApiParams = null
+	loadTsModule(qianFanPath, {
+		openai: class MockOpenAI {},
+		obsidian: {
+			Notice: class {},
+			requestUrl: async () => ({ status: 200, json: {}, text: '', arrayBuffer: new ArrayBuffer(0) })
+		},
+		'tars/lang/helper': { t: (text) => text },
+		'.': {},
+		'../mcp/mcpToolCallHandler': {
+			withOpenAIMcpToolCallSupport: (factory, options) => {
+				capturedTransformApiParams = options?.transformApiParams
+				return factory
+			}
+		},
+		'./utils': {
+			buildReasoningBlockEnd: () => '',
+			buildReasoningBlockStart: () => '',
+			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } })
+		},
+		'./messageFormat': {
+			withToolMessageContext: (_msg, payload) => payload
+		},
+		'../../../utils/DebugLogger': { DebugLogger: { debug: () => {} } }
+	})
+
+	assert(
+		typeof capturedTransformApiParams === 'function',
+		'PR18-1: QianFan MCP wrapper should provide transformApiParams'
+	)
+
+	const transformed = capturedTransformApiParams(
+		{ temperature: 0.2, enableThinking: true },
+		{ enableThinking: true }
+	)
+	assert(
+		transformed.enable_thinking === true,
+		'PR18-1: QianFan MCP transform should map enableThinking to enable_thinking'
+	)
+	assert(
+		transformed.enableThinking === undefined,
+		'PR18-1: QianFan MCP transform should strip enableThinking from direct API params'
+	)
+
+	const settingTabPath = path.resolve(ROOT, 'src/features/tars/settingTab.ts')
+	const settingTabSource = fs.readFileSync(settingTabPath, 'utf-8')
+	assert(
+		/\[kimiVendor\.name\][\s\S]*Authorization:\s*`Bearer \$\{options\.apiKey\}`/.test(settingTabSource),
+		'PR18-2: Kimi model fetch request should include Authorization header'
+	)
+}
+
+const runPR19 = async () => {
+	const mcpPath = path.resolve(ROOT, 'src/features/tars/mcp/mcpToolCallHandler.ts')
+
+	class MockOpenAI {
+		constructor() {
+			this.chat = {
+				completions: {
+					create: async () => {
+						throw new Error('Connection error.')
+					}
+				}
+			}
+		}
+	}
+
+	const mcpModule = loadTsModule(mcpPath, {
+		openai: MockOpenAI,
+		'src/utils/DebugLogger': {
+			DebugLogger: {
+				debug: () => {},
+				warn: () => {},
+				error: () => {}
+			}
+		},
+		'../providers': {},
+		'../providers/utils': {
+			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } }),
+			REASONING_BLOCK_START_MARKER: '{{FF_REASONING_START}}',
+			REASONING_BLOCK_END_MARKER: '{{FF_REASONING_END}}',
+			formatReasoningDuration: () => '0.00s'
+		}
+	})
+
+	const { withOpenAIMcpToolCallSupport } = mcpModule
+	const wrappedFactory = withOpenAIMcpToolCallSupport(() =>
+		async function* () {
+			yield 'fallback-success'
+		}
+	)
+
+	const sendRequest = wrappedFactory({
+		apiKey: 'test-key',
+		baseURL: 'https://api.moonshot.cn/v1/chat/completions',
+		model: 'kimi-k2',
+		parameters: {},
+		mcpTools: [{
+			name: 'mock_tool',
+			description: 'mock tool',
+			inputSchema: { type: 'object', properties: {} },
+			serverId: 'mock-server'
+		}],
+		mcpCallTool: async () => 'ok'
+	})
+
+	let output = ''
+	for await (const chunk of sendRequest(
+		[{ role: 'user', content: 'test question' }],
+		new AbortController(),
+		async () => new ArrayBuffer(0)
+	)) {
+		output += chunk
+	}
+
+	assert(
+		output.includes('fallback-success'),
+		'PR19-1: Kimi MCP connection error should fallback to plain request path'
+	)
+}
+
+const runPR20 = async () => {
+	const mcpPath = path.resolve(ROOT, 'src/features/tars/mcp/mcpToolCallHandler.ts')
+	const streamQueue = []
+
+	class MockOpenAI {
+		constructor() {
+			this.chat = {
+				completions: {
+					create: async () => {
+						const parts = streamQueue.shift()
+						if (!parts) {
+							throw new Error('PR20 mock stream queue is empty')
+						}
+						return (async function* () {
+							for (const part of parts) {
+								yield part
+							}
+						})()
+					}
+				}
+			}
+		}
+	}
+
+	const mcpModule = loadTsModule(mcpPath, {
+		openai: MockOpenAI,
+		'src/utils/DebugLogger': {
+			DebugLogger: {
+				debug: () => {},
+				warn: () => {},
+				error: () => {}
+			}
+		},
+		'../providers': {},
+		'../providers/utils': {
+			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } }),
+			REASONING_BLOCK_START_MARKER: '{{FF_REASONING_START}}',
+			REASONING_BLOCK_END_MARKER: '{{FF_REASONING_END}}',
+			formatReasoningDuration: () => '0.00s'
+		}
+	})
+
+	const { withOpenAIMcpToolCallSupport } = mcpModule
+	const wrappedFactory = withOpenAIMcpToolCallSupport(() =>
+		async function* () {
+			yield 'fallback'
+		}
+	)
+
+	const sendRequest = wrappedFactory({
+		apiKey: 'test-key',
+		baseURL: 'https://api.moonshot.cn/v1/chat/completions',
+		model: 'kimi-k2',
+		parameters: {},
+		mcpTools: [{
+			name: 'list_directory',
+			description: 'list files',
+			inputSchema: { type: 'object', properties: {} },
+			serverId: 'mock-server'
+		}],
+		mcpCallTool: async () => 'tool-result'
+	})
+
+	// 第一轮：Provider 仅返回 legacy function_call 增量字段
+	streamQueue.push([
+		{ choices: [{ delta: { function_call: { name: 'list_directory' } } }] },
+		{ choices: [{ delta: { function_call: { arguments: '{"folder_name_or_path":"Inbox"}' } } }] }
+	])
+	// 第二轮：拿到工具结果后返回正常文本
+	streamQueue.push([
+		{ choices: [{ delta: { content: '最终总结' } }] }
+	])
+
+	let output = ''
+	for await (const chunk of sendRequest(
+		[{ role: 'user', content: 'summarize inbox' }],
+		new AbortController(),
+		async () => new ArrayBuffer(0)
+	)) {
+		output += chunk
+	}
+
+	assert(
+		output.includes('{{FF_MCP_TOOL_START}}:list_directory:tool-result{{FF_MCP_TOOL_END}}:'),
+		'PR20-1: legacy function_call should still execute MCP tools'
+	)
+	assert(
+		output.includes('最终总结'),
+		'PR20-2: response should continue after legacy function_call tool execution'
+	)
+}
+
+const runPR21 = () => {
+	const kimiPath = path.resolve(ROOT, 'src/features/tars/providers/kimi.ts')
+	let capturedMcpOptions = null
+
+	loadTsModule(kimiPath, {
+		axios: {
+			post: async () => {
+				throw new Error('not implemented in regression test')
+			}
+		},
+		openai: class MockOpenAI {
+			constructor(opts) { this._opts = opts }
+		},
+		'tars/lang/helper': { t: (text) => text },
+		'.': {},
+		'../mcp/mcpToolCallHandler': {
+			withOpenAIMcpToolCallSupport: (factory, options) => {
+				capturedMcpOptions = options
+				return factory
+			}
+		},
+		'./utils': {
+			buildReasoningBlockEnd: () => '',
+			buildReasoningBlockStart: () => '',
+			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } })
+		},
+		'./sse': {
+			feedChunk: () => ({ events: [], rest: '', done: false })
+		}
+	})
+
+	assert(
+		Boolean(capturedMcpOptions),
+		'PR21-1: Kimi MCP wrapper options should be captured'
+	)
+	assert(
+		capturedMcpOptions.preferNonStreamingToolLoop !== true,
+		'PR21-1: Kimi MCP wrapper should use streaming tool loop (Moonshot recommends stream=true for thinking models)'
+	)
+	assert(
+		typeof capturedMcpOptions.createClient === 'function',
+		'PR21-1: Kimi MCP wrapper should provide a custom createClient to strip non-standard SDK headers'
+	)
+
+	const transformed = capturedMcpOptions.transformApiParams(
+		{ temperature: 0.7, enableThinking: false, enableWebSearch: false },
+		{ enableReasoning: true, mcpTools: [{ name: 'list_directory' }] }
+	)
+	assert(
+		transformed.tool_choice === 'auto',
+		'PR21-1: Kimi MCP params should include tool_choice=auto by default'
+	)
+	assert(
+		typeof transformed.max_tokens === 'number' && transformed.max_tokens >= 16000,
+		'PR21-1: Kimi MCP reasoning requests should enforce max_tokens >= 16000'
+	)
+	assert(
+		transformed.temperature === 1.0,
+		'PR21-1: Kimi MCP reasoning requests should enforce temperature=1.0 per Moonshot docs'
+	)
+	assert(
+		transformed.enableThinking === undefined && transformed.enableWebSearch === undefined,
+		'PR21-1: Kimi MCP params should strip non-standard fields (enableThinking, enableWebSearch)'
+	)
+
+	const chatServicePath = path.resolve(ROOT, 'src/features/chat/services/ChatService.ts')
+	const chatServiceSource = fs.readFileSync(chatServicePath, 'utf-8')
+	assert(
+		/session\.messages\s*=\s*session\.messages\.slice\(0,\s*index\)/.test(chatServiceSource),
+		'PR21-2: regenerateFromMessage should truncate the target assistant message and all following messages'
+	)
+}
+
+const runPR22 = async () => {
+	const mcpPath = path.resolve(ROOT, 'src/features/tars/mcp/mcpToolCallHandler.ts')
+	let capturedRequest = null
+
+	class MockOpenAI {
+		constructor() {
+			this.chat = {
+				completions: {
+					create: async (request) => {
+						capturedRequest = request
+						return (async function* () {
+							yield { choices: [{ delta: { content: 'ok' } }] }
+						})()
+					}
+				}
+			}
+		}
+	}
+
+	const mcpModule = loadTsModule(mcpPath, {
+		openai: MockOpenAI,
+		'src/utils/DebugLogger': {
+			DebugLogger: {
+				debug: () => {},
+				warn: () => {},
+				error: () => {}
+			}
+		},
+		'../providers': {},
+		'../providers/utils': {
+			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } }),
+			REASONING_BLOCK_START_MARKER: '{{FF_REASONING_START}}',
+			REASONING_BLOCK_END_MARKER: '{{FF_REASONING_END}}',
+			formatReasoningDuration: () => '0.00s'
+		}
+	})
+
+	const { withOpenAIMcpToolCallSupport } = mcpModule
+	const wrappedFactory = withOpenAIMcpToolCallSupport(() =>
+		async function* () {
+			yield 'fallback'
+		}
+	)
+	const sendRequest = wrappedFactory({
+		apiKey: 'test-key',
+		baseURL: 'https://api.moonshot.cn/v1/chat/completions',
+		model: 'kimi-k2-thinking',
+		parameters: {
+			tools: [],
+			stream: false,
+			model: 'malicious-override'
+		},
+		mcpTools: [{
+			name: 'list_directory',
+			description: 'list files',
+			inputSchema: { type: 'object', properties: {} },
+			serverId: 'mock-server'
+		}],
+		mcpCallTool: async () => 'ok'
+	})
+
+	for await (const _chunk of sendRequest(
+		[{ role: 'user', content: 'test question' }],
+		new AbortController(),
+		async () => new ArrayBuffer(0)
+	)) {
+		break
+	}
+
+	assert(Boolean(capturedRequest), 'PR22-1: MCP request payload should be captured')
+	assert(
+		Array.isArray(capturedRequest.tools) && capturedRequest.tools.length === 1,
+		'PR22-1: injected MCP tools should not be overridden by parameters.tools'
+	)
+	assert(
+		capturedRequest.model === 'kimi-k2-thinking',
+		'PR22-1: request model should not be overridden by parameters.model'
+	)
+	assert(
+		capturedRequest.stream === true,
+		'PR22-1: stream mode should not be overridden by parameters.stream'
+	)
+}
+
 const main = async () => {
 	const pr = parseArgs()
 	if (pr >= 1) {
@@ -759,6 +1550,42 @@ const main = async () => {
 	}
 	if (pr >= 10) {
 		runPR10()
+	}
+	if (pr >= 11) {
+		await runPR11()
+	}
+	if (pr >= 12) {
+		runPR12()
+	}
+	if (pr >= 13) {
+		await runPR13()
+	}
+	if (pr >= 14) {
+		runPR14()
+	}
+	if (pr >= 15) {
+		runPR15()
+	}
+	if (pr >= 16) {
+		runPR16()
+	}
+	if (pr >= 17) {
+		await runPR17()
+	}
+	if (pr >= 18) {
+		runPR18()
+	}
+	if (pr >= 19) {
+		await runPR19()
+	}
+	if (pr >= 20) {
+		await runPR20()
+	}
+	if (pr >= 21) {
+		runPR21()
+	}
+	if (pr >= 22) {
+		await runPR22()
 	}
 
 	console.log(`provider-regression: PR-${pr} checks passed`)

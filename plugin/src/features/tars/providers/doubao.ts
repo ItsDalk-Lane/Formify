@@ -16,29 +16,30 @@ import {
 export type DoubaoThinkingType = 'enabled' | 'disabled' | 'auto'
 export type DoubaoReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
 
-interface DoubaoModelCapability {
-	thinkingTypes: DoubaoThinkingType[]
-	supportsReasoningEffort: boolean
-}
-
-const DOUBAO_MODEL_CAPABILITY_MAP: Record<string, DoubaoModelCapability> = {
-	'doubao-seed-1-6-vision-250815': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: false },
-	'doubao-seed-1-6-lite-251015': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: true },
-	'doubao-seed-1-6-250615': { thinkingTypes: ['enabled', 'disabled', 'auto'], supportsReasoningEffort: false },
-	'doubao-seed-1-6-251015': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: true },
-	'doubao-seed-1-6-flash-250828': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: false },
-	'doubao-seed-1-6-flash-250715': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: false },
-	'doubao-seed-1-6-flash-250615': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: false },
-	'doubao-1-5-thinking-vision-pro-250428': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: false },
-	'doubao-1-5-ui-tars-250428': { thinkingTypes: ['enabled', 'disabled'], supportsReasoningEffort: false },
-	'doubao-1-5-thinking-pro-m-250428': { thinkingTypes: ['enabled', 'disabled', 'auto'], supportsReasoningEffort: false }
-}
+const DOUBAO_KNOWN_CHAT_MODELS = [
+	'doubao-seed-2-0-pro-260215',
+	'doubao-seed-1-6-vision-250815',
+	'doubao-seed-1-6-lite-251015',
+	'doubao-seed-1-6-250615',
+	'doubao-seed-1-6-251015',
+	'doubao-seed-1-6-flash-250828',
+	'doubao-seed-1-6-flash-250715',
+	'doubao-seed-1-6-flash-250615',
+	'doubao-1-5-thinking-vision-pro-250428',
+	'doubao-1-5-ui-tars-250428',
+	'doubao-1-5-thinking-pro-m-250428'
+]
 
 export const DOUBAO_REASONING_EFFORT_OPTIONS: DoubaoReasoningEffort[] = ['minimal', 'low', 'medium', 'high']
 export const DEFAULT_DOUBAO_THINKING_TYPE: DoubaoThinkingType = 'enabled'
 
-export const getDoubaoModelCapability = (model: string): DoubaoModelCapability | undefined =>
-	DOUBAO_MODEL_CAPABILITY_MAP[model]
+/**
+ * 判断是否需要使用 Responses API
+ * 当前仅 Web Search 需要使用 Responses API。
+ * 推理模式在 chat.completions 下同样可用，并且 MCP 工具调用依赖该链路。
+ */
+export const doubaoUseResponsesAPI = (options: DoubaoOptions): boolean =>
+	options.enableWebSearch === true
 
 // Doubao图片理解配置选项
 export interface DoubaoOptions extends BaseOptions {
@@ -449,39 +450,20 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 			} = remains as any
 			Object.assign(data, generalParams)
 
-	const capability = getDoubaoModelCapability(model)
-	let effectiveThinkingType: DoubaoThinkingType | undefined
-	const isReasoningEnabled = enableReasoning === true
+			const isReasoningEnabled = enableReasoning === true
+			const requestedThinking = isReasoningEnabled ? thinkingType ?? DEFAULT_DOUBAO_THINKING_TYPE : 'disabled'
+			const effectiveThinkingType: DoubaoThinkingType =
+				requestedThinking === 'enabled' || requestedThinking === 'disabled' || requestedThinking === 'auto'
+					? requestedThinking
+					: DEFAULT_DOUBAO_THINKING_TYPE
 
-	
-	if (capability) {
-		const fallbackThinking = capability.thinkingTypes.includes(DEFAULT_DOUBAO_THINKING_TYPE)
-			? DEFAULT_DOUBAO_THINKING_TYPE
-			: capability.thinkingTypes[0]
-		const requestedThinking = isReasoningEnabled ? (thinkingType ?? fallbackThinking) : 'disabled'
-		effectiveThinkingType = capability.thinkingTypes.includes(requestedThinking)
-			? requestedThinking
-			: fallbackThinking
+			// 豆包 API 的推理能力按模型运行时能力决定，不再依赖本地硬编码门禁。
+			if (isReasoningEnabled && effectiveThinkingType !== 'disabled') {
+				data.thinking = { type: effectiveThinkingType }
+			}
 
-		
-		if (effectiveThinkingType && isReasoningEnabled && effectiveThinkingType !== 'disabled') {
-			data.thinking = { type: effectiveThinkingType }
-		}
-
-		// 豆包API不支持effort参数，根据官方文档
-		// 即使模型标记为supportsReasoningEffort，也不添加effort参数
-		// 注释掉以下代码：
-		// if (capability && capability.supportsReasoningEffort && effectiveThinkingType === 'enabled') {
-		// 	if (reasoningEffort && DOUBAO_REASONING_EFFORT_OPTIONS.includes(reasoningEffort)) {
-		// 		data.effort = reasoningEffort
-		// 	}
-		// }
-	} else {
-		console.warn('[Doubao] 当前模型不在能力映射表中:', model)
-	}
-
-	// 根据 API 类型设置消息字段
-	if (useResponsesAPI) {
+			// 根据 API 类型设置消息字段
+			if (useResponsesAPI) {
 			// Responses API 使用 input 字段
 			data.input = processedMessages
 
@@ -512,10 +494,10 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 					]
 				}
 			}
-		} else {
-			// Chat Completions API 使用 messages 字段
-			data.messages = processedMessages
-		}
+			} else {
+				// Chat Completions API 使用 messages 字段
+				data.messages = processedMessages
+			}
 
 		// 发送请求
 	
@@ -654,13 +636,40 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest =>
 		}
 	}
 
-const models = Array.from(new Set([...Object.keys(DOUBAO_MODEL_CAPABILITY_MAP), ...DOUBAO_IMAGE_MODELS]))
+const models = Array.from(new Set([...DOUBAO_KNOWN_CHAT_MODELS, ...DOUBAO_IMAGE_MODELS]))
 
 // 包装原始函数（用于 Responses API 模式）
 const sendRequestFuncBase = sendRequestFunc
 
 // MCP 支持的包装函数（用于普通模式）
-const sendRequestFuncWithMcp = withOpenAIMcpToolCallSupport(sendRequestFunc)
+const sendRequestFuncWithMcp = withOpenAIMcpToolCallSupport(sendRequestFunc, {
+	transformApiParams: (apiParams, allOptions) => {
+		const mapped: Record<string, unknown> = { ...apiParams }
+
+		// Doubao 需要使用 thinking 对象，不接受 thinkingType 直传。
+		delete mapped.thinkingType
+		delete mapped.reasoningEffort
+		delete mapped.effort
+
+		const enableReasoning = allOptions.enableReasoning === true
+		const requestedThinking =
+			typeof allOptions.thinkingType === 'string'
+				? (allOptions.thinkingType as string)
+				: DEFAULT_DOUBAO_THINKING_TYPE
+		const normalizedThinking: DoubaoThinkingType =
+			requestedThinking === 'enabled' || requestedThinking === 'disabled' || requestedThinking === 'auto'
+				? requestedThinking
+				: DEFAULT_DOUBAO_THINKING_TYPE
+
+		if (enableReasoning && normalizedThinking !== 'disabled') {
+			mapped.thinking = { type: normalizedThinking }
+		} else {
+			delete mapped.thinking
+		}
+
+		return mapped
+	}
+})
 
 export const doubaoVendor: Vendor = {
 	name: 'Doubao',

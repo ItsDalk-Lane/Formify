@@ -12,8 +12,7 @@ import {
 	DoubaoThinkingType,
 	DoubaoReasoningEffort,
 	DOUBAO_REASONING_EFFORT_OPTIONS,
-	DEFAULT_DOUBAO_THINKING_TYPE,
-	getDoubaoModelCapability
+	DEFAULT_DOUBAO_THINKING_TYPE
 } from './providers/doubao'
 import {
 	DoubaoImageOptions,
@@ -33,8 +32,19 @@ import { AzureOptions, azureVendor } from './providers/azure'
 import { QianFanOptions, qianFanNormalizeBaseURL, qianFanVendor } from './providers/qianFan'
 import { qwenVendor, QwenOptions } from './providers/qwen'
 import { siliconFlowVendor } from './providers/siliconflow'
-import { zhipuVendor, ZhipuOptions, ZHIPU_THINKING_TYPE_OPTIONS, DEFAULT_ZHIPU_THINKING_TYPE, isReasoningModel } from './providers/zhipu'
+import { zhipuVendor, ZhipuOptions, ZHIPU_THINKING_TYPE_OPTIONS, DEFAULT_ZHIPU_THINKING_TYPE } from './providers/zhipu'
 import { getCapabilityEmoji, getCapabilityDisplayText } from './providers/utils'
+import {
+	type ModelCapabilityCache,
+	type ReasoningCapabilityRecord,
+	REASONING_CAPABILITY_CACHE_TTL_MS,
+	buildReasoningCapabilityCacheKey,
+	classifyReasoningProbeError,
+	createProbeCapabilityRecord,
+	inferReasoningCapabilityFromMetadata,
+	resolveReasoningCapability,
+	writeReasoningCapabilityCache
+} from './providers/modelCapability'
 import { SystemPromptManagerModal } from './system-prompts/SystemPromptManagerModal'
 import { availableVendors, DEFAULT_TARS_SETTINGS } from './settings'
 import type { TarsSettings } from './settings'
@@ -103,6 +113,131 @@ export class TarsSettingTab {
 
 	private async updateChatSettings(partial: Partial<ChatSettings>) {
 		await this.settingsContext.updateChatSettings(partial)
+	}
+
+	private ensureModelCapabilityCache(): ModelCapabilityCache {
+		if (!this.settings.modelCapabilityCache) {
+			this.settings.modelCapabilityCache = {}
+		}
+		return this.settings.modelCapabilityCache
+	}
+
+	private resolveModelReasoningCapability(
+		vendorName: string,
+		options: BaseOptions,
+		rawModel?: unknown
+	): ReasoningCapabilityRecord {
+		return resolveReasoningCapability({
+			vendorName,
+			baseURL: options.baseURL,
+			model: options.model,
+			rawModel,
+			cache: this.settings.modelCapabilityCache
+		})
+	}
+
+	private writeReasoningCapabilityRecord(
+		vendorName: string,
+		options: BaseOptions,
+		record: ReasoningCapabilityRecord
+	): void {
+		const key = buildReasoningCapabilityCacheKey(vendorName, options.baseURL, options.model)
+		this.settings.modelCapabilityCache = writeReasoningCapabilityCache(
+			this.ensureModelCapabilityCache(),
+			key,
+			record,
+			Date.now(),
+			REASONING_CAPABILITY_CACHE_TTL_MS
+		)
+	}
+
+	private cacheReasoningCapabilityFromMetadata(
+		vendorName: string,
+		options: BaseOptions,
+		rawModel?: unknown
+	): ReasoningCapabilityRecord | undefined {
+		const metadataRecord = inferReasoningCapabilityFromMetadata(vendorName, rawModel)
+		if (!metadataRecord || !options.model) return undefined
+		this.writeReasoningCapabilityRecord(vendorName, options, metadataRecord)
+		return metadataRecord
+	}
+
+	private getReasoningCapabilityHintText(record: ReasoningCapabilityRecord): string {
+		if (record.state === 'supported') {
+			if (record.source === 'metadata') return '当前模型已由官方模型元数据确认支持推理。'
+			if (record.source === 'probe') return '当前模型已通过手动探测确认支持推理。'
+			return '当前模型支持推理。'
+		}
+
+		if (record.state === 'unsupported') {
+			if (record.source === 'metadata') return '当前模型在官方模型元数据中标记为不支持推理。'
+			if (record.source === 'probe') return '当前模型经手动探测判定为不支持推理。'
+			return '当前模型不支持推理。'
+		}
+
+		return '当前模型推理能力未验证（默认允许使用）。可点击“探测推理能力”获取更准确结论。'
+	}
+
+	private createReasoningProbeOptions(vendorName: string, options: BaseOptions): BaseOptions {
+		const cloned = JSON.parse(JSON.stringify(options || {})) as BaseOptions & Record<string, unknown>
+		const normalizedVendor = vendorName.toLowerCase()
+
+		if (normalizedVendor === 'qwen' || normalizedVendor === 'claude' || normalizedVendor === 'qianfan') {
+			cloned.enableThinking = true
+		} else {
+			cloned.enableReasoning = true
+		}
+
+		if (normalizedVendor === 'doubao') {
+			cloned.enableReasoning = true
+			cloned.thinkingType = 'enabled'
+		}
+
+		if (normalizedVendor === 'zhipu') {
+			cloned.enableReasoning = true
+			cloned.thinkingType = 'enabled'
+		}
+
+		return cloned as BaseOptions
+	}
+
+	private async probeReasoningCapability(provider: ProviderSettings, vendor: Vendor): Promise<ReasoningCapabilityRecord> {
+		const probeOptions = this.createReasoningProbeOptions(vendor.name, provider.options)
+		const sendRequest = vendor.sendRequestFunc(probeOptions)
+		const controller = new AbortController()
+		const timeoutId = globalThis.setTimeout(() => controller.abort(), 12_000)
+		const probeMessages: Message[] = [
+			{ role: 'system', content: 'Capability probe mode. Keep response short.' },
+			{ role: 'user', content: 'Reply with one short sentence.' }
+		]
+
+		const resolveEmbedAsBinary: ResolveEmbedAsBinary = async () => new ArrayBuffer(0)
+		const saveAttachment = async (_fileName: string, _data: ArrayBuffer) => {}
+
+		try {
+			let hasVisibleOutput = false
+			for await (const chunk of sendRequest(probeMessages, controller, resolveEmbedAsBinary, saveAttachment)) {
+				if (typeof chunk === 'string' && chunk.trim().length > 0) {
+					hasVisibleOutput = true
+					break
+				}
+			}
+			controller.abort()
+			if (hasVisibleOutput) {
+				return createProbeCapabilityRecord({
+					state: 'supported',
+					reason: 'Reasoning probe returned streamed output.'
+				})
+			}
+			return createProbeCapabilityRecord({
+				state: 'unknown',
+				reason: 'Reasoning probe completed without decisive output.'
+			})
+		} catch (error) {
+			return createProbeCapabilityRecord(classifyReasoningProbeError(error))
+		} finally {
+			globalThis.clearTimeout(timeoutId)
+		}
 	}
 
 	private normalizeProviderVendor(vendor: string): string {
@@ -4184,6 +4319,7 @@ export class TarsSettingTab {
 				this.addModelTextSection(container, settings.options, capabilities)
 			}
 		}
+		const modelReasoningCapability = this.resolveModelReasoningCapability(vendor.name, settings.options)
 
 		// API Secret 输入框已弃用：现有供应商模型拉取与请求流程均不依赖该字段。
 		// 历史配置里可能残留 apiSecret 字段（如跨版本数据），这里统一不再展示，避免误导。
@@ -4219,9 +4355,22 @@ export class TarsSettingTab {
 
 			// Reasoning 推理功能配置（仅非图像生成模型支持）
 			if (!supportsImageGeneration && vendor.capabilities.includes('Reasoning')) {
+				if (modelReasoningCapability.state === 'unsupported') {
+					new Setting(container)
+						.setName('启用推理功能')
+						.setDesc(this.getReasoningCapabilityHintText(modelReasoningCapability))
+						.addToggle((toggle) => {
+							toggle.setValue(false)
+							toggle.setDisabled(true)
+						})
+				} else {
 				new Setting(container)
 					.setName('启用推理功能')
-					.setDesc('启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示')
+					.setDesc(
+						'启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示。' +
+						' ' +
+						this.getReasoningCapabilityHintText(modelReasoningCapability)
+					)
 					.addToggle((toggle) =>
 						toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
 							options.enableReasoning = value
@@ -4234,6 +4383,7 @@ export class TarsSettingTab {
 				// 仅在启用 Reasoning 时显示详细配置
 				if (options.enableReasoning) {
 					this.addOpenRouterReasoningSections(container, options)
+				}
 				}
 			}
 		} else {
@@ -4271,7 +4421,7 @@ export class TarsSettingTab {
 		}
 
 		if (vendor.name === zhipuVendor.name) {
-			this.addZhipuSections(container, settings.options as ZhipuOptions)
+			this.addZhipuSections(container, settings.options as ZhipuOptions, modelReasoningCapability)
 		}
 
 		if (vendor.name === qwenVendor.name) {
@@ -4279,7 +4429,7 @@ export class TarsSettingTab {
 		}
 
 		if (vendor.name === qianFanVendor.name) {
-			this.addQianFanSections(container, settings.options as QianFanOptions, index, settings)
+			this.addQianFanSections(container, settings.options as QianFanOptions, index, settings, modelReasoningCapability)
 		}
 
 		if (vendor.name === gptImageVendor.name) {
@@ -4288,32 +4438,32 @@ export class TarsSettingTab {
 
 		// 添加Kimi、DeepSeek和Grok的推理功能开关
 		if (vendor.name === kimiVendor.name) {
-			this.addKimiSections(container, settings.options as KimiOptions, index, settings)
+			this.addKimiSections(container, settings.options as KimiOptions, index, settings, modelReasoningCapability)
 		}
 
 		if (vendor.name === deepSeekVendor.name) {
-			this.addDeepSeekSections(container, settings.options as DeepSeekOptions, index, settings)
+			this.addDeepSeekSections(container, settings.options as DeepSeekOptions, index, settings, modelReasoningCapability)
 		}
 
 		if (vendor.name === grokVendor.name) {
-			this.addGrokSections(container, settings.options as GrokOptions, index, settings)
+			this.addGrokSections(container, settings.options as GrokOptions, index, settings, modelReasoningCapability)
 		}
 
 		if (vendor.name === openAIVendor.name) {
-			this.addOpenAISections(container, settings.options as OpenAIOptions, index, settings)
+			this.addOpenAISections(container, settings.options as OpenAIOptions, index, settings, modelReasoningCapability)
 		}
 
 		if (vendor.name === poeVendor.name) {
-			this.addPoeSections(container, settings.options as PoeOptions, index, settings)
+			this.addPoeSections(container, settings.options as PoeOptions, index, settings, modelReasoningCapability)
 		}
 
 		if (vendor.name === azureVendor.name) {
-			this.addAzureSections(container, settings.options as AzureOptions, index, settings)
+			this.addAzureSections(container, settings.options as AzureOptions, index, settings, modelReasoningCapability)
 		}
 
 		// Ollama 推理功能开关
 		if (vendor.name === ollamaVendor.name) {
-			this.addOllamaSections(container, settings.options, index, settings)
+			this.addOllamaSections(container, settings.options, index, settings, modelReasoningCapability)
 		}
 
 		this.addBaseURLSection(container, settings.options, vendor.defaultOptions.baseURL)
@@ -4350,6 +4500,38 @@ export class TarsSettingTab {
 						}, 2500)
 					})
 			})
+
+		if (vendor.capabilities.includes('Reasoning')) {
+			new Setting(container)
+				.setName('推理能力探测')
+				.setDesc('手动探测当前模型是否支持推理。探测结果将缓存 7 天。')
+				.addButton((btn) => {
+					btn.setButtonText('探测推理能力')
+						.onClick(async () => {
+							btn.setDisabled(true)
+							btn.setButtonText('探测中...')
+							try {
+								const record = await this.probeReasoningCapability(settings, vendor)
+								this.writeReasoningCapabilityRecord(vendor.name, settings.options, record)
+								await this.settingsContext.saveSettings()
+								new Notice(this.getReasoningCapabilityHintText(record))
+
+								if (modal) {
+									modal.configContainer.empty()
+									this.renderProviderConfig(modal.configContainer, index, settings, vendor, modal)
+								}
+							} catch (error) {
+								const message = error instanceof Error ? error.message : String(error)
+								new Notice(`推理能力探测失败: ${message}`)
+							} finally {
+								setTimeout(() => {
+									btn.setDisabled(false)
+									btn.setButtonText('探测推理能力')
+								}, 1200)
+							}
+						})
+				})
+		}
 
 		// 保存按钮
 		new Setting(container).addButton((btn) => {
@@ -4571,7 +4753,7 @@ export class TarsSettingTab {
 						return
 					}
 					try {
-						const { models, usedFallback, fallbackReason } = await fetchModels(modelConfig, modelOptions)
+						const { models, usedFallback, fallbackReason, rawModelById } = await fetchModels(modelConfig, modelOptions)
 						if (models.length === 0) {
 							throw new Error('No models available from remote endpoint or fallback list')
 						}
@@ -4584,6 +4766,11 @@ export class TarsSettingTab {
 						}
 						const onChoose = async (selectedModel: string) => {
 							options.model = selectedModel
+							const selectedRawModel = rawModelById?.[selectedModel]
+							const resolvedVendorName = vendor?.name || vendorName || ''
+							if (resolvedVendorName && selectedRawModel) {
+								this.cacheReasoningCapabilityFromMetadata(resolvedVendorName, options, selectedRawModel)
+							}
 							await this.saveSettings()
 							btn.setButtonText(selectedModel)
 							// 模型改变时更新功能显示和配置界面（适用于所有提供商）
@@ -5252,7 +5439,7 @@ export class TarsSettingTab {
 
 	private renderDoubaoThinkingControls = (container: HTMLElement, options: DoubaoOptions) => {
 		const model = options.model
-		const capability = getDoubaoModelCapability(model)
+		const capability = this.resolveModelReasoningCapability(doubaoVendor.name, options)
 		const thinkingSetting = new Setting(container).setName(t('Doubao thinking mode'))
 
 		if (!model) {
@@ -5266,9 +5453,9 @@ export class TarsSettingTab {
 			return
 		}
 
-		if (!capability) {
+		if (capability.state === 'unsupported') {
 			thinkingSetting
-				.setDesc(t('Current model does not support configuring deep thinking.'))
+				.setDesc(this.getReasoningCapabilityHintText(capability))
 				.addDropdown((dropdown) => {
 					dropdown.addOption('', t('Not supported'))
 					dropdown.setValue('')
@@ -5277,7 +5464,13 @@ export class TarsSettingTab {
 			return
 		}
 
-		const supportedTypes = capability.thinkingTypes
+		const inferredSupportedTypes: DoubaoThinkingType[] =
+			capability.state === 'supported' && Array.isArray(capability.thinkingModes)
+				? (capability.thinkingModes
+						.map((mode) => mode.toLowerCase())
+						.filter((mode): mode is DoubaoThinkingType => mode === 'enabled' || mode === 'disabled' || mode === 'auto'))
+				: ['enabled', 'disabled']
+		const supportedTypes = inferredSupportedTypes.length > 0 ? inferredSupportedTypes : ['enabled', 'disabled']
 		const fallbackType = supportedTypes.includes(DEFAULT_DOUBAO_THINKING_TYPE)
 			? DEFAULT_DOUBAO_THINKING_TYPE
 			: supportedTypes[0]
@@ -5294,7 +5487,11 @@ export class TarsSettingTab {
 		}
 
 		thinkingSetting
-			.setDesc(t('Control whether the Doubao model performs deep thinking before answering.'))
+			.setDesc(
+				t('Control whether the Doubao model performs deep thinking before answering.') +
+				' ' +
+				this.getReasoningCapabilityHintText(capability)
+			)
 			.addDropdown((dropdown) => {
 				for (const type of supportedTypes) {
 					dropdown.addOption(type, thinkingLabels[type])
@@ -5303,7 +5500,7 @@ export class TarsSettingTab {
 				dropdown.onChange(async (value) => {
 					const newValue = value as DoubaoThinkingType
 					options.thinkingType = newValue
-					if (capability.supportsReasoningEffort && reasoningDropdown) {
+					if (capability.supportsReasoningEffort === true && reasoningDropdown) {
 						if (newValue === 'enabled') {
 							const validEffort =
 								options.reasoningEffort && DOUBAO_REASONING_EFFORT_OPTIONS.includes(options.reasoningEffort)
@@ -5322,7 +5519,7 @@ export class TarsSettingTab {
 				})
 			})
 
-		if (!capability.supportsReasoningEffort) {
+		if (capability.supportsReasoningEffort !== true) {
 			return
 		}
 
@@ -5725,12 +5922,28 @@ export class TarsSettingTab {
 		}
 	}
 
-	private addZhipuSections = (details: HTMLElement, options: ZhipuOptions) => {
+	private addZhipuSections = (details: HTMLElement, options: ZhipuOptions, capability: ReasoningCapabilityRecord) => {
 		// 直接显示推理类型配置（通过选择推理类型来控制是否启用推理）
-		this.addZhipuReasoningSections(details, options)
+		this.addZhipuReasoningSections(details, options, capability)
 	}
 
-	private addZhipuReasoningSections = (details: HTMLElement, options: ZhipuOptions) => {
+	private addZhipuReasoningSections = (
+		details: HTMLElement,
+		options: ZhipuOptions,
+		capability: ReasoningCapabilityRecord
+	) => {
+		if (capability.state === 'unsupported') {
+			new Setting(details)
+				.setName('推理类型')
+				.setDesc(this.getReasoningCapabilityHintText(capability))
+				.addDropdown((dropdown) => {
+					dropdown.addOption('disabled', '禁用')
+					dropdown.setValue('disabled')
+					dropdown.setDisabled(true)
+				})
+			return
+		}
+
 		// 推理类型选择
 		const supportedTypes = ZHIPU_THINKING_TYPE_OPTIONS.map(opt => opt.value)
 		const initialType: import('./providers/zhipu').ZhipuThinkingType = options.thinkingType && supportedTypes.includes(options.thinkingType)
@@ -5739,7 +5952,7 @@ export class TarsSettingTab {
 
 		new Setting(details)
 			.setName('推理类型')
-			.setDesc('控制 Zhipu AI 模型的推理行为')
+			.setDesc(`控制 Zhipu AI 模型的推理行为。${this.getReasoningCapabilityHintText(capability)}`)
 			.addDropdown((dropdown) => {
 				for (const option of ZHIPU_THINKING_TYPE_OPTIONS) {
 					dropdown.addOption(option.value, option.label)
@@ -5755,10 +5968,10 @@ export class TarsSettingTab {
 			})
 
 		// 模型兼容性提示
-		if (!isReasoningModel(options.model)) {
+		if (capability.state === 'unknown') {
 			new Setting(details)
 				.setName('模型兼容性提示')
-				.setDesc('注意：当前模型可能不支持推理功能。支持的模型：GLM-4.6, GLM-4.5, GLM-4.5v')
+				.setDesc(this.getReasoningCapabilityHintText(capability))
 				.setDisabled(true)
 		}
 	}
@@ -5793,17 +6006,27 @@ export class TarsSettingTab {
 		details: HTMLElement,
 		options: QianFanOptions,
 		index: number,
-		settings: ProviderSettings
+		settings: ProviderSettings,
+		capability: ReasoningCapabilityRecord
 	) => {
+		const unsupported = capability.state === 'unsupported'
 		new Setting(details)
 			.setName('启用深度思考')
-			.setDesc('启用后会向 QianFan 传递 enable_thinking=true，并在流式输出中展示 reasoning_content。')
+			.setDesc(
+				'启用后会向 QianFan 传递 enable_thinking=true，并在流式输出中展示 reasoning_content。' +
+				' ' +
+				this.getReasoningCapabilityHintText(capability)
+			)
 			.addToggle((toggle) =>
-				toggle.setValue(options.enableThinking ?? false).onChange(async (value) => {
-					options.enableThinking = value
-					await this.saveSettings()
-					this.updateProviderCapabilities(index, settings)
-				})
+				toggle
+					.setValue(unsupported ? false : options.enableThinking ?? false)
+					.setDisabled(unsupported)
+					.onChange(async (value) => {
+						if (unsupported) return
+						options.enableThinking = value
+						await this.saveSettings()
+						this.updateProviderCapabilities(index, settings)
+					})
 			)
 
 		new Setting(details)
@@ -5851,98 +6074,199 @@ export class TarsSettingTab {
 			)
 	}
 
-	addKimiSections = (details: HTMLElement, options: KimiOptions, index: number, settings: ProviderSettings) => {
+	addKimiSections = (
+		details: HTMLElement,
+		options: KimiOptions,
+		index: number,
+		settings: ProviderSettings,
+		capability: ReasoningCapabilityRecord
+	) => {
+		const unsupported = capability.state === 'unsupported'
 		new Setting(details)
 			.setName('启用推理功能')
-			.setDesc('启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示')
+			.setDesc(
+				'启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示。' +
+				' ' +
+				this.getReasoningCapabilityHintText(capability)
+			)
 			.addToggle((toggle) =>
-				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
-					options.enableReasoning = value
-					await this.saveSettings()
-					// 更新功能显示
-					this.updateProviderCapabilities(index, settings)
-				})
+				toggle
+					.setValue(unsupported ? false : options.enableReasoning ?? false)
+					.setDisabled(unsupported)
+					.onChange(async (value) => {
+						if (unsupported) return
+						options.enableReasoning = value
+						await this.saveSettings()
+						// 更新功能显示
+						this.updateProviderCapabilities(index, settings)
+					})
 			)
 	}
 
-	addDeepSeekSections = (details: HTMLElement, options: DeepSeekOptions, index: number, settings: ProviderSettings) => {
+	addDeepSeekSections = (
+		details: HTMLElement,
+		options: DeepSeekOptions,
+		index: number,
+		settings: ProviderSettings,
+		capability: ReasoningCapabilityRecord
+	) => {
+		const unsupported = capability.state === 'unsupported'
 		new Setting(details)
 			.setName('启用推理功能')
-			.setDesc('启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示')
+			.setDesc(
+				'启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示。' +
+				' ' +
+				this.getReasoningCapabilityHintText(capability)
+			)
 			.addToggle((toggle) =>
-				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
-					options.enableReasoning = value
-					await this.saveSettings()
-					// 更新功能显示
-					this.updateProviderCapabilities(index, settings)
-				})
+				toggle
+					.setValue(unsupported ? false : options.enableReasoning ?? false)
+					.setDisabled(unsupported)
+					.onChange(async (value) => {
+						if (unsupported) return
+						options.enableReasoning = value
+						await this.saveSettings()
+						// 更新功能显示
+						this.updateProviderCapabilities(index, settings)
+					})
 			)
 	}
 
-	addOllamaSections = (details: HTMLElement, options: any, index: number, settings: ProviderSettings) => {
+	addOllamaSections = (
+		details: HTMLElement,
+		options: any,
+		index: number,
+		settings: ProviderSettings,
+		capability: ReasoningCapabilityRecord
+	) => {
+		const unsupported = capability.state === 'unsupported'
 		new Setting(details)
 			.setName('启用推理功能')
-			.setDesc('启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示')
+			.setDesc(
+				'启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示。' +
+				' ' +
+				this.getReasoningCapabilityHintText(capability)
+			)
 			.addToggle((toggle) =>
-				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
-					options.enableReasoning = value
-					await this.saveSettings()
-					// 更新功能显示
-					this.updateProviderCapabilities(index, settings)
-				})
+				toggle
+					.setValue(unsupported ? false : options.enableReasoning ?? false)
+					.setDisabled(unsupported)
+					.onChange(async (value) => {
+						if (unsupported) return
+						options.enableReasoning = value
+						await this.saveSettings()
+						// 更新功能显示
+						this.updateProviderCapabilities(index, settings)
+					})
 			)
 	}
 
-	addGrokSections = (details: HTMLElement, options: GrokOptions, index: number, settings: ProviderSettings) => {
+	addGrokSections = (
+		details: HTMLElement,
+		options: GrokOptions,
+		index: number,
+		settings: ProviderSettings,
+		capability: ReasoningCapabilityRecord
+	) => {
+		const unsupported = capability.state === 'unsupported'
 		new Setting(details)
 			.setName('启用推理功能')
-			.setDesc('启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示')
+			.setDesc(
+				'启用后模型将显示其推理过程。推理内容将使用 [!quote] 标记包裹显示。' +
+				' ' +
+				this.getReasoningCapabilityHintText(capability)
+			)
 			.addToggle((toggle) =>
-				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
-					options.enableReasoning = value
-					await this.saveSettings()
-					// 更新功能显示
-					this.updateProviderCapabilities(index, settings)
-				})
+				toggle
+					.setValue(unsupported ? false : options.enableReasoning ?? false)
+					.setDisabled(unsupported)
+					.onChange(async (value) => {
+						if (unsupported) return
+						options.enableReasoning = value
+						await this.saveSettings()
+						// 更新功能显示
+						this.updateProviderCapabilities(index, settings)
+					})
 			)
 	}
 
-	addOpenAISections = (details: HTMLElement, options: OpenAIOptions, index: number, settings: ProviderSettings) => {
+	addOpenAISections = (
+		details: HTMLElement,
+		options: OpenAIOptions,
+		index: number,
+		settings: ProviderSettings,
+		capability: ReasoningCapabilityRecord
+	) => {
+		const unsupported = capability.state === 'unsupported'
 		new Setting(details)
 			.setName('启用推理功能')
-			.setDesc('启用后 OpenAI 将优先使用 Responses API，并显示推理过程。关闭时走 chat.completions 兼容路径。')
+			.setDesc(
+				'启用后 OpenAI 将优先使用 Responses API，并显示推理过程。关闭时走 chat.completions 兼容路径。' +
+				' ' +
+				this.getReasoningCapabilityHintText(capability)
+			)
 			.addToggle((toggle) =>
-				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
-					options.enableReasoning = value
-					await this.saveSettings()
-					this.updateProviderCapabilities(index, settings)
-				})
+				toggle
+					.setValue(unsupported ? false : options.enableReasoning ?? false)
+					.setDisabled(unsupported)
+					.onChange(async (value) => {
+						if (unsupported) return
+						options.enableReasoning = value
+						await this.saveSettings()
+						this.updateProviderCapabilities(index, settings)
+					})
 			)
 	}
 
-	addPoeSections = (details: HTMLElement, options: PoeOptions, index: number, settings: ProviderSettings) => {
+	addPoeSections = (
+		details: HTMLElement,
+		options: PoeOptions,
+		index: number,
+		settings: ProviderSettings,
+		capability: ReasoningCapabilityRecord
+	) => {
+		const unsupported = capability.state === 'unsupported'
 		new Setting(details)
 			.setName('启用推理功能')
-			.setDesc('启用后 Poe 会在 Responses API 中请求 reasoning 并显示推理过程。')
+			.setDesc(`启用后 Poe 会在 Responses API 中请求 reasoning 并显示推理过程。${this.getReasoningCapabilityHintText(capability)}`)
 			.addToggle((toggle) =>
-				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
-					options.enableReasoning = value
-					await this.saveSettings()
-					this.updateProviderCapabilities(index, settings)
-				})
+				toggle
+					.setValue(unsupported ? false : options.enableReasoning ?? false)
+					.setDisabled(unsupported)
+					.onChange(async (value) => {
+						if (unsupported) return
+						options.enableReasoning = value
+						await this.saveSettings()
+						this.updateProviderCapabilities(index, settings)
+					})
 			)
 	}
 
-	addAzureSections = (details: HTMLElement, options: AzureOptions, index: number, settings: ProviderSettings) => {
+	addAzureSections = (
+		details: HTMLElement,
+		options: AzureOptions,
+		index: number,
+		settings: ProviderSettings,
+		capability: ReasoningCapabilityRecord
+	) => {
+		const unsupported = capability.state === 'unsupported'
 		new Setting(details)
 			.setName('启用推理功能')
-			.setDesc('启用后 Azure 将优先使用 Responses API 的官方推理事件解析；关闭时走 chat.completions 兼容路径。')
+			.setDesc(
+				'启用后 Azure 将优先使用 Responses API 的官方推理事件解析；关闭时走 chat.completions 兼容路径。' +
+				' ' +
+				this.getReasoningCapabilityHintText(capability)
+			)
 			.addToggle((toggle) =>
-				toggle.setValue(options.enableReasoning ?? false).onChange(async (value) => {
-					options.enableReasoning = value
-					await this.saveSettings()
-					this.updateProviderCapabilities(index, settings)
-				})
+				toggle
+					.setValue(unsupported ? false : options.enableReasoning ?? false)
+					.setDisabled(unsupported)
+					.onChange(async (value) => {
+						if (unsupported) return
+						options.enableReasoning = value
+						await this.saveSettings()
+						this.updateProviderCapabilities(index, settings)
+					})
 			)
 	}
 }
@@ -5978,18 +6302,23 @@ type ModelFetchRequest = {
 	headers?: Record<string, string>
 	body?: string
 }
+type ParsedModelList = {
+	models: string[]
+	rawModelById?: Record<string, unknown>
+}
 type ModelFetchConfig = {
 	requiresApiKey: boolean
 	requiresApiSecret?: boolean
 	fallbackModels: string[]
 	buildRequest: (options: ModelFetchOptions) => Promise<ModelFetchRequest> | ModelFetchRequest
-	parseResponse?: (result: any) => string[]
+	parseResponse?: (result: any) => string[] | ParsedModelList
 	sortModels?: (models: string[]) => string[]
 }
 type FetchModelsResult = {
 	models: string[]
 	usedFallback: boolean
 	fallbackReason?: string
+	rawModelById?: Record<string, unknown>
 }
 
 const sanitizeModelList = (models: unknown[]): string[] => {
@@ -6033,23 +6362,50 @@ const sortModelsByDateDesc = (models: string[]): string[] => {
 		.map((item) => item.model)
 }
 
-const parseOpenAICompatibleModels = (result: any): string[] => {
-	const data = Array.isArray(result?.data) ? result.data : []
-	return sanitizeModelList(data.map((model: any) => model?.id ?? model?.name))
+const toParsedModelList = (models: unknown[]): ParsedModelList => {
+	const pairs = models
+		.map((rawModel) => {
+			if (typeof rawModel === 'string') {
+				const id = rawModel.trim()
+				if (!id) return undefined
+				return { id, rawModel: { id } }
+			}
+			if (!rawModel || typeof rawModel !== 'object') return undefined
+			const record = rawModel as Record<string, unknown>
+			const id = typeof record.id === 'string' ? record.id.trim() : typeof record.name === 'string' ? record.name.trim() : ''
+			if (!id) return undefined
+			return { id, rawModel }
+		})
+		.filter((item): item is { id: string; rawModel: unknown } => Boolean(item))
+
+	const rawModelById: Record<string, unknown> = {}
+	for (const pair of pairs) {
+		rawModelById[pair.id] = pair.rawModel
+	}
+
+	return {
+		models: sanitizeModelList(pairs.map((pair) => pair.id)),
+		rawModelById
+	}
 }
 
-const parseGenericModels = (result: any): string[] => {
+const parseOpenAICompatibleModels = (result: any): ParsedModelList => {
+	const data = Array.isArray(result?.data) ? result.data : []
+	return toParsedModelList(data)
+}
+
+const parseGenericModels = (result: any): ParsedModelList => {
 	const openAICompatible = parseOpenAICompatibleModels(result)
-	if (openAICompatible.length > 0) {
+	if (openAICompatible.models.length > 0) {
 		return openAICompatible
 	}
 	const models = Array.isArray(result?.models) ? result.models : []
-	return sanitizeModelList(models.map((model: any) => model?.id ?? model?.name ?? model))
+	return toParsedModelList(models)
 }
 
-const parseAnthropicModels = (result: any): string[] => {
+const parseAnthropicModels = (result: any): ParsedModelList => {
 	const data = Array.isArray(result?.data) ? result.data : []
-	return sanitizeModelList(data.map((model: any) => model?.id ?? model?.name))
+	return toParsedModelList(data)
 }
 
 const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '')
@@ -6099,10 +6455,12 @@ const fetchModels = async (config: ModelFetchConfig, options: ModelFetchOptions)
 			throw new Error(`Model request failed (${response.status})`)
 		}
 		const parser = config.parseResponse ?? parseGenericModels
-		const parsedModels = sanitizeModelList(parser(response.json))
+		const parsed = parser(response.json)
+		const parsedModels = Array.isArray(parsed) ? sanitizeModelList(parsed) : sanitizeModelList(parsed.models)
+		const rawModelById = Array.isArray(parsed) ? undefined : parsed.rawModelById
 		const models = config.sortModels ? config.sortModels(parsedModels) : parsedModels
 		if (models.length > 0) {
-			return { models, usedFallback: false }
+			return { models, usedFallback: false, rawModelById }
 		}
 		throw new Error('Model response did not include valid model IDs')
 	} catch (error) {
@@ -6165,8 +6523,11 @@ const MODEL_FETCH_CONFIGS: Record<string, ModelFetchConfig> = {
 	[kimiVendor.name]: {
 		requiresApiKey: true,
 		fallbackModels: [...kimiVendor.models],
-		buildRequest: () => ({
-			url: 'https://api.moonshot.cn/v1/models'
+		buildRequest: (options) => ({
+			url: `${resolveOrigin(options.baseURL, 'https://api.moonshot.cn')}/v1/models`,
+			headers: {
+				Authorization: `Bearer ${options.apiKey}`
+			}
 		}),
 		parseResponse: parseOpenAICompatibleModels
 	},

@@ -15,12 +15,6 @@ export const ZHIPU_THINKING_TYPE_OPTIONS: { value: ZhipuThinkingType; label: str
 
 export const DEFAULT_ZHIPU_THINKING_TYPE: ZhipuThinkingType = 'auto'
 
-export const ZHIPU_REASONING_MODELS = ['glm-4.6', 'glm-4.5', 'glm-4.5v']
-
-export const isReasoningModel = (model: string): boolean => {
-	return ZHIPU_REASONING_MODELS.includes(model)
-}
-
 export interface ZhipuOptions extends BaseOptions {
 	enableWebSearch: boolean
 	enableReasoning: boolean
@@ -50,7 +44,7 @@ const sendRequestFunc = (settings: ZhipuOptions): SendRequest =>
 		}
 
 		// 添加推理配置
-		if (enableReasoning && isReasoningModel(model) && thinkingType !== 'disabled') {
+		if (enableReasoning && thinkingType !== 'disabled') {
 			requestParams.thinking = {
 				type: thinkingType
 			}

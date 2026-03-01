@@ -15,6 +15,7 @@ import { qianFanVendor } from './providers/qianFan'
 import { qwenVendor } from './providers/qwen'
 import { siliconFlowVendor } from './providers/siliconflow'
 import { zhipuVendor } from './providers/zhipu'
+import type { ModelCapabilityCache } from './providers/modelCapability'
 import type { ToolDefinition } from 'src/features/chat/types/tools'
 import type { SystemPromptsDataFile } from './system-prompts/types'
 import { type McpSettings, DEFAULT_MCP_SETTINGS } from './mcp/types'
@@ -80,6 +81,8 @@ export interface TarsSettings {
 	}
 	/** MCP 服务器配置 */
 	mcp?: McpSettings
+	/** 模型能力探测缓存（用于推理能力判断） */
+	modelCapabilityCache?: ModelCapabilityCache
 }
 
 export const DEFAULT_TARS_SETTINGS: TarsSettings = {
@@ -118,6 +121,7 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 		enabled: false
 	},
 	mcp: DEFAULT_MCP_SETTINGS,
+	modelCapabilityCache: {},
 }
 
 export const availableVendors: Vendor[] = [

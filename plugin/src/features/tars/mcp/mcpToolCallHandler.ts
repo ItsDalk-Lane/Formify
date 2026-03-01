@@ -59,6 +59,10 @@ export interface ToolLoopMessage {
 	name?: string
 	/** DeepSeek 推理模型的思维链内容（工具调用循环中需回传给 API） */
 	reasoning_content?: string
+	/** OpenRouter/OpenAI 兼容字段：部分模型使用 reasoning 返回推理文本 */
+	reasoning?: string
+	/** OpenRouter/OpenAI 兼容字段：结构化推理详情（可用于后续轮次上下文） */
+	reasoning_details?: unknown
 }
 
 /**
@@ -622,16 +626,96 @@ function accumulateToolCall(
 }
 
 /**
+ * 兼容旧式 function_call 增量字段（部分 OpenAI 兼容 Provider 仍返回该格式）
+ */
+function accumulateLegacyFunctionCall(
+	toolCallsMap: Map<number, { id: string; name: string; args: string }>,
+	deltaFunctionCall: { name?: string; arguments?: string } | undefined,
+): void {
+	if (!deltaFunctionCall) return
+
+	const existing = toolCallsMap.get(0) ?? { id: 'call_legacy_0', name: '', args: '' }
+	if (deltaFunctionCall.name) existing.name += deltaFunctionCall.name
+	if (deltaFunctionCall.arguments) existing.args += deltaFunctionCall.arguments
+	toolCallsMap.set(0, existing)
+}
+
+/**
  * 将累积的工具调用映射转换为 OpenAIToolCall 数组
  */
 function finalizeToolCalls(
 	toolCallsMap: Map<number, { id: string; name: string; args: string }>,
 ): OpenAIToolCall[] {
-	return Array.from(toolCallsMap.values()).map((tc) => ({
-		id: tc.id,
+	return Array.from(toolCallsMap.values())
+		.filter((tc) => typeof tc.name === 'string' && tc.name.trim().length > 0)
+		.map((tc, index) => ({
+		id: tc.id || `call_fallback_${index}`,
 		type: 'function' as const,
 		function: { name: tc.name, arguments: tc.args },
-	}))
+		}))
+}
+
+function extractTextFromMessageContent(content: unknown): string {
+	if (typeof content === 'string') return content
+	if (!Array.isArray(content)) return ''
+
+	const parts: string[] = []
+	for (const item of content) {
+		if (!item || typeof item !== 'object') continue
+		const record = item as Record<string, unknown>
+		const directText = typeof record.text === 'string' ? record.text : ''
+		if (directText) {
+			parts.push(directText)
+			continue
+		}
+		const nestedText = record.type === 'text' && typeof record.content === 'string'
+			? record.content
+			: ''
+		if (nestedText) {
+			parts.push(nestedText)
+		}
+	}
+
+	return parts.join('')
+}
+
+function toOpenAIToolCallsFromMessage(
+	messageToolCalls: unknown,
+): OpenAIToolCall[] {
+	if (!Array.isArray(messageToolCalls)) return []
+	const result: OpenAIToolCall[] = []
+	for (const [index, raw] of messageToolCalls.entries()) {
+		if (!raw || typeof raw !== 'object') continue
+		const tc = raw as {
+			id?: unknown
+			type?: unknown
+			function?: { name?: unknown; arguments?: unknown }
+		}
+		const name =
+			tc.function && typeof tc.function === 'object' && typeof tc.function.name === 'string'
+				? tc.function.name
+				: ''
+		if (!name.trim()) continue
+		const rawArgs =
+			tc.function && typeof tc.function === 'object'
+				? tc.function.arguments
+				: undefined
+		const args =
+			typeof rawArgs === 'string'
+				? rawArgs
+				: rawArgs === undefined
+					? '{}'
+					: JSON.stringify(rawArgs)
+		result.push({
+			id: typeof tc.id === 'string' && tc.id ? tc.id : `call_nonstream_${index}`,
+			type: 'function',
+			function: {
+				name,
+				arguments: args,
+			},
+		})
+	}
+	return result
 }
 
 /**
@@ -702,6 +786,9 @@ function shouldFallbackToPlainRequest(err: unknown): boolean {
 	const mergedText = texts.join(' | ').toLowerCase()
 	const hasServerError = statuses.some((s) => s >= 500 && s <= 599)
 	if (hasServerError) return true
+	const hasConnectionLikeError = /(\bapi ?connection ?error\b|\bconnection error\b|\bnetwork error\b|failed to fetch|\bfetch failed\b|socket hang up|econnreset|econnrefused|etimedout|\btimeout\b)/i
+		.test(mergedText)
+	if (hasConnectionLikeError) return true
 
 	return (
 		/(internal server error|server error|response status code 5\d\d|http.*5\d\d)/i.test(mergedText) ||
@@ -750,6 +837,31 @@ function extractApiParams(allOptions: Record<string, unknown>): Record<string, u
 		apiParams[key] = value
 	}
 	return apiParams
+}
+
+function sanitizeApiParamsForToolLoop(apiParams: Record<string, unknown>): Record<string, unknown> {
+	const sanitized: Record<string, unknown> = { ...apiParams }
+
+	// MCP 工具调用由包装器统一注入，避免被用户自定义 parameters 覆盖或污染
+	delete sanitized.model
+	delete sanitized.messages
+	delete sanitized.stream
+	delete sanitized.tools
+	delete sanitized.functions
+	delete sanitized.function_call
+	delete sanitized.tool_calls
+
+	return sanitized
+}
+
+function sanitizeApiParamsForFinalRequest(apiParams: Record<string, unknown>): Record<string, unknown> {
+	const sanitized = sanitizeApiParamsForToolLoop(apiParams)
+
+	// 最终兜底请求不携带工具，避免 tool_choice 等参数导致 4xx/兼容性错误
+	delete sanitized.tool_choice
+	delete sanitized.parallel_tool_calls
+
+	return sanitized
 }
 
 /**
@@ -822,6 +934,11 @@ export interface OpenAIMcpSupportOptions {
 	transformBaseURL?: (url: string) => string
 	createClient?: (allOptions: Record<string, unknown>) => OpenAI
 	/**
+	 * 对部分 Provider（如 Kimi）使用非流式 tools 循环更稳定：
+	 * chat.completions.create(stream=false) -> message.tool_calls
+	 */
+	preferNonStreamingToolLoop?: boolean
+	/**
 	 * 在发送 API 请求前转换参数
 	 * 用于 Provider 特定的参数格式转换
 	 * 例如 OpenRouter 需要将 enableReasoning+reasoningEffort 转换为 reasoning: { effort: ... }
@@ -836,6 +953,98 @@ interface ReasoningAccumulator {
 	startMs: number
 	content: string
 	isActive: boolean
+}
+
+interface ExtractedReasoningDelta {
+	displayText: string
+	reasoningContent?: string
+	reasoning?: string
+	reasoningDetails?: unknown
+}
+
+const REASONING_TEXT_PREFERRED_KEYS = [
+	'text',
+	'summary',
+	'content',
+	'reasoning',
+	'reasoning_text',
+	'summary_text',
+	'value',
+]
+
+function appendReasoningText(
+	value: unknown,
+	parts: string[],
+	visited: Set<unknown>,
+): void {
+	if (typeof value === 'string') {
+		const text = value.trim()
+		if (text) parts.push(text)
+		return
+	}
+	if (!value || typeof value !== 'object') return
+	if (visited.has(value)) return
+	visited.add(value)
+
+	if (Array.isArray(value)) {
+		for (const item of value) {
+			appendReasoningText(item, parts, visited)
+		}
+		return
+	}
+
+	const obj = value as Record<string, unknown>
+	for (const key of REASONING_TEXT_PREFERRED_KEYS) {
+		if (key in obj) {
+			appendReasoningText(obj[key], parts, visited)
+		}
+	}
+
+	for (const [key, child] of Object.entries(obj)) {
+		if (REASONING_TEXT_PREFERRED_KEYS.includes(key)) continue
+		appendReasoningText(child, parts, visited)
+	}
+}
+
+function extractReasoningTextFromDetails(reasoningDetails: unknown): string {
+	if (reasoningDetails === undefined || reasoningDetails === null) return ''
+	const parts: string[] = []
+	appendReasoningText(reasoningDetails, parts, new Set())
+	if (parts.length === 0) return ''
+	const uniqueParts: string[] = []
+	const seen = new Set<string>()
+	for (const part of parts) {
+		if (seen.has(part)) continue
+		seen.add(part)
+		uniqueParts.push(part)
+	}
+	return uniqueParts.join('\n')
+}
+
+function extractReasoningFromDelta(
+	delta: Record<string, unknown>,
+): ExtractedReasoningDelta | null {
+	const reasoningContent =
+		typeof delta.reasoning_content === 'string' ? delta.reasoning_content : undefined
+	const reasoning = typeof delta.reasoning === 'string' ? delta.reasoning : undefined
+	const hasReasoningDetails = Object.prototype.hasOwnProperty.call(delta, 'reasoning_details')
+	const reasoningDetails = hasReasoningDetails ? delta.reasoning_details : undefined
+
+	const hasAnyReasoningField =
+		reasoningContent !== undefined || reasoning !== undefined || hasReasoningDetails
+	if (!hasAnyReasoningField) return null
+
+	const preferredReasoningText =
+		(typeof reasoningContent === 'string' && reasoningContent.trim())
+			|| (typeof reasoning === 'string' && reasoning.trim())
+			|| extractReasoningTextFromDetails(reasoningDetails)
+
+	return {
+		displayText: preferredReasoningText || '',
+		reasoningContent,
+		reasoning,
+		reasoningDetails,
+	}
 }
 
 /**
@@ -906,10 +1115,25 @@ export function withOpenAIMcpToolCallSupport(
 		}
 
 		return async function* (messages, controller, resolveEmbedAsBinary, saveAttachment) {
+			let requestBaseURL = ''
 			try {
 				const { parameters, ...optionsExcludingParams } = settings
 				const allOptions = { ...optionsExcludingParams, ...parameters }
-				const { apiKey, baseURL, model } = allOptions
+				const apiKey =
+					typeof optionsExcludingParams.apiKey === 'string'
+						? optionsExcludingParams.apiKey
+						: (allOptions.apiKey as string)
+				const baseURL =
+					typeof optionsExcludingParams.baseURL === 'string'
+						? optionsExcludingParams.baseURL
+						: (allOptions.baseURL as string)
+				const model =
+					typeof optionsExcludingParams.model === 'string'
+						? optionsExcludingParams.model
+						: (allOptions.model as string)
+				if (typeof baseURL === 'string') {
+					requestBaseURL = baseURL
+				}
 				const maxToolCallLoops =
 					typeof settings.mcpMaxToolCallLoops === 'number' && settings.mcpMaxToolCallLoops > 0
 						? settings.mcpMaxToolCallLoops
@@ -922,6 +1146,8 @@ export function withOpenAIMcpToolCallSupport(
 				if (mcpOptions?.transformApiParams) {
 					apiParams = mcpOptions.transformApiParams(apiParams, allOptions)
 				}
+				const apiParamsForToolLoop = sanitizeApiParamsForToolLoop(apiParams)
+				const apiParamsForFinalRequest = sanitizeApiParamsForFinalRequest(apiParams)
 
 				// 创建 OpenAI 兼容客户端
 				// - 优先使用自定义工厂（Azure 等）
@@ -948,11 +1174,19 @@ export function withOpenAIMcpToolCallSupport(
 				}
 
 				const tools = toOpenAITools(mcpTools)
-				const enableReasoning = (settings as { enableReasoning?: boolean }).enableReasoning ?? false
+				const rawThinkingType = (settings as { thinkingType?: unknown }).thinkingType
+				const hasThinkingTypeEnabled =
+					typeof rawThinkingType === 'string' && rawThinkingType.toLowerCase() !== 'disabled'
+				const enableReasoning =
+					(settings as { enableReasoning?: boolean }).enableReasoning === true ||
+					(settings as { enableThinking?: boolean }).enableThinking === true ||
+					hasThinkingTypeEnabled
+				const preferNonStreamingToolLoop = mcpOptions?.preferNonStreamingToolLoop === true
 
 				DebugLogger.debug(
 					`[MCP] 工具调用循环启动: ${mcpTools.length} 个工具可用, model=${model}, ` +
 					`maxLoops=${maxToolCallLoops}, enableReasoning=${enableReasoning}, ` +
+					`preferNonStreamingToolLoop=${preferNonStreamingToolLoop}, ` +
 					`apiParams=${JSON.stringify(Object.keys(apiParams))}`,
 				)
 
@@ -962,26 +1196,98 @@ export function withOpenAIMcpToolCallSupport(
 					resolveEmbedAsBinary,
 				)
 
-				for (let loop = 0; loop < maxToolCallLoops; loop++) {
-					if (controller.signal.aborted) return
+					for (let loop = 0; loop < maxToolCallLoops; loop++) {
+						if (controller.signal.aborted) return
 
-					DebugLogger.debug(`[MCP] 工具调用循环 #${loop + 1}`)
+						DebugLogger.debug(`[MCP] 工具调用循环 #${loop + 1}`)
 
-					// 流式请求（含工具定义和 Provider 参数）
-					const stream = await client.chat.completions.create(
-						{
-							model: model as string,
-							messages: loopMessages as OpenAI.ChatCompletionMessageParam[],
-							tools,
-							stream: true,
-							...apiParams,
-						},
-						{ signal: controller.signal },
-					)
+						if (preferNonStreamingToolLoop) {
+							const completion = await client.chat.completions.create(
+								{
+									model: model as string,
+									messages: loopMessages as OpenAI.ChatCompletionMessageParam[],
+									tools,
+									...apiParamsForToolLoop,
+								},
+								{ signal: controller.signal },
+							)
+							const message = completion.choices[0]?.message as Record<string, unknown> | undefined
+							if (!message) return
+
+							const messageReasoning = extractReasoningFromDelta(message)
+							if (messageReasoning?.displayText && enableReasoning) {
+								const startMs = Date.now()
+								yield `${REASONING_BLOCK_START_MARKER}:${startMs}:`
+								yield messageReasoning.displayText
+								const durationMs = Date.now() - startMs
+								yield `:${REASONING_BLOCK_END_MARKER}:${durationMs}:`
+							}
+
+							const contentBuffer = extractTextFromMessageContent(message.content)
+							const toolCalls = toOpenAIToolCallsFromMessage(message.tool_calls)
+
+							if (toolCalls.length === 0) {
+								if (contentBuffer) {
+									yield contentBuffer
+								}
+								return
+							}
+
+							const assistantMsg: ToolLoopMessage = {
+								role: 'assistant',
+								content: contentBuffer || null,
+								tool_calls: toolCalls,
+							}
+							if (messageReasoning?.reasoningContent) {
+								assistantMsg.reasoning_content = messageReasoning.reasoningContent
+							} else if (messageReasoning?.displayText) {
+								assistantMsg.reasoning_content = messageReasoning.displayText
+							}
+							if (messageReasoning?.reasoning) {
+								assistantMsg.reasoning = messageReasoning.reasoning
+							}
+							if (messageReasoning?.reasoningDetails !== undefined) {
+								assistantMsg.reasoning_details = messageReasoning.reasoningDetails
+							}
+							loopMessages.push(assistantMsg)
+
+							const toolResults: ToolLoopMessage[] = []
+							for (const call of toolCalls) {
+								const singleResults = await executeMcpToolCalls([call], mcpTools, mcpCallTool)
+								toolResults.push(...singleResults)
+
+								const resultContent = typeof singleResults[0]?.content === 'string'
+									? singleResults[0].content
+									: ''
+								yield `{{FF_MCP_TOOL_START}}:${call.function.name}:${resultContent}{{FF_MCP_TOOL_END}}:`
+							}
+
+							loopMessages.push(...toolResults)
+
+							DebugLogger.debug(
+								`[MCP] 已执行 ${toolCalls.length} 个工具调用（非流式），继续循环`,
+							)
+							continue
+						}
+
+						// 流式请求（含工具定义和 Provider 参数）
+						const stream = await client.chat.completions.create(
+							{
+								model: model as string,
+								messages: loopMessages as OpenAI.ChatCompletionMessageParam[],
+								tools,
+								stream: true,
+								...apiParamsForToolLoop,
+							},
+							{ signal: controller.signal },
+						)
 
 					let contentBuffer = ''
 					let reasoningBuffer = ''
-					let reasoningForMessage = ''  // 保留推理内容用于回传 API（DeepSeek 思考模式要求）
+					let reasoningForMessage = '' // 回传给 reasoning_content（保持 DeepSeek 兼容）
+					let reasoningContentForMessage = ''
+					let reasoningTextForMessage = ''
+					const reasoningDetailsForMessage: unknown[] = []
 					let reasoningStartMs = 0
 					let reasoningActive = false
 					const toolCallsMap = new Map<number, { id: string; name: string; args: string }>()
@@ -991,16 +1297,28 @@ export function withOpenAIMcpToolCallSupport(
 						const delta = part.choices[0]?.delta as Record<string, unknown> | undefined
 						if (!delta) continue
 
-						// 处理推理内容（reasoning_content 字段）
-						const reasoningContent = delta.reasoning_content as string | undefined
-						if (reasoningContent && enableReasoning) {
-							if (!reasoningActive) {
-								reasoningActive = true
-								reasoningStartMs = Date.now()
-								yield `${REASONING_BLOCK_START_MARKER}:${reasoningStartMs}:`
+						// 处理推理内容（兼容 reasoning_content / reasoning / reasoning_details）
+						const reasoningDelta = extractReasoningFromDelta(delta)
+						if (reasoningDelta) {
+							if (reasoningDelta.reasoningContent) {
+								reasoningContentForMessage += reasoningDelta.reasoningContent
 							}
-							reasoningBuffer += reasoningContent
-							yield reasoningContent
+							if (reasoningDelta.reasoning) {
+								reasoningTextForMessage += reasoningDelta.reasoning
+							}
+							if (reasoningDelta.reasoningDetails !== undefined) {
+								reasoningDetailsForMessage.push(reasoningDelta.reasoningDetails)
+							}
+
+							if (reasoningDelta.displayText && enableReasoning) {
+								if (!reasoningActive) {
+									reasoningActive = true
+									reasoningStartMs = Date.now()
+									yield `${REASONING_BLOCK_START_MARKER}:${reasoningStartMs}:`
+								}
+								reasoningBuffer += reasoningDelta.displayText
+								yield reasoningDelta.displayText
+							}
 						}
 
 						// 累积文本内容
@@ -1013,7 +1331,7 @@ export function withOpenAIMcpToolCallSupport(
 								const reasoningDurationMs = Date.now() - reasoningStartMs
 								yield `:${REASONING_BLOCK_END_MARKER}:${reasoningDurationMs}:`
 								reasoningActive = false
-								reasoningForMessage = reasoningBuffer  // 保留推理内容用于 assistant 消息
+								reasoningForMessage += reasoningBuffer
 								reasoningBuffer = ''
 							}
 
@@ -1036,12 +1354,29 @@ export function withOpenAIMcpToolCallSupport(
 								const reasoningDurationMs = Date.now() - reasoningStartMs
 								yield `:${REASONING_BLOCK_END_MARKER}:${reasoningDurationMs}:`
 								reasoningActive = false
-								reasoningForMessage = reasoningBuffer  // 保留推理内容用于 assistant 消息
+								reasoningForMessage += reasoningBuffer
 								reasoningBuffer = ''
 							}
 
 							hasToolCalls = true
 							accumulateToolCall(toolCallsMap, deltaToolCalls)
+						}
+
+						const deltaFunctionCall = delta.function_call as
+							| { name?: string; arguments?: string }
+							| undefined
+						if (deltaFunctionCall) {
+							// 兼容旧式 function_call：推理后可直接进入工具调用
+							if (reasoningActive && reasoningBuffer.length > 0) {
+								const reasoningDurationMs = Date.now() - reasoningStartMs
+								yield `:${REASONING_BLOCK_END_MARKER}:${reasoningDurationMs}:`
+								reasoningActive = false
+								reasoningForMessage += reasoningBuffer
+								reasoningBuffer = ''
+							}
+
+							hasToolCalls = true
+							accumulateLegacyFunctionCall(toolCallsMap, deltaFunctionCall)
 						}
 					}
 
@@ -1050,7 +1385,7 @@ export function withOpenAIMcpToolCallSupport(
 						const reasoningDurationMs = Date.now() - reasoningStartMs
 						yield `:${REASONING_BLOCK_END_MARKER}:${reasoningDurationMs}:`
 						reasoningActive = false
-						reasoningForMessage = reasoningBuffer  // 保留推理内容用于 assistant 消息
+						reasoningForMessage += reasoningBuffer
 					}
 
 					if (!hasToolCalls) {
@@ -1068,8 +1403,18 @@ export function withOpenAIMcpToolCallSupport(
 						content: contentBuffer || null,
 						tool_calls: toolCalls,
 					}
-					if (reasoningForMessage) {
-						assistantMsg.reasoning_content = reasoningForMessage
+					const normalizedReasoningContent = reasoningContentForMessage || reasoningForMessage
+					if (normalizedReasoningContent) {
+						assistantMsg.reasoning_content = normalizedReasoningContent
+					}
+					if (reasoningTextForMessage) {
+						assistantMsg.reasoning = reasoningTextForMessage
+					}
+					if (reasoningDetailsForMessage.length > 0) {
+						assistantMsg.reasoning_details =
+							reasoningDetailsForMessage.length === 1
+								? reasoningDetailsForMessage[0]
+								: reasoningDetailsForMessage
 					}
 					loopMessages.push(assistantMsg)
 
@@ -1092,53 +1437,80 @@ export function withOpenAIMcpToolCallSupport(
 					)
 				}
 
-				// 达到最大循环次数，做最后一次流式请求（不带工具）
-				DebugLogger.warn(`[MCP] 达到最大工具调用循环次数 (${maxToolCallLoops})`)
+					// 达到最大循环次数，做最后一次流式请求（不带工具）
+					DebugLogger.warn(`[MCP] 达到最大工具调用循环次数 (${maxToolCallLoops})`)
 
-				const finalStream = await client.chat.completions.create(
-					{
-						model: model as string,
-						messages: loopMessages as OpenAI.ChatCompletionMessageParam[],
-						stream: true,
-						...apiParams,
-					},
-					{ signal: controller.signal },
-				)
+					if (preferNonStreamingToolLoop) {
+						const finalCompletion = await client.chat.completions.create(
+							{
+								model: model as string,
+								messages: loopMessages as OpenAI.ChatCompletionMessageParam[],
+								...apiParamsForFinalRequest,
+							},
+							{ signal: controller.signal },
+						)
+						const finalMessage = finalCompletion.choices[0]?.message as Record<string, unknown> | undefined
+						if (!finalMessage) return
 
-				let finalReasoningBuffer = ''
-				let finalReasoningStartMs = 0
-				let finalReasoningActive = false
-
-				for await (const part of finalStream) {
-					const delta = part.choices[0]?.delta as Record<string, unknown> | undefined
-					if (!delta) continue
-
-					// 处理推理内容
-					const reasoningContent = delta.reasoning_content as string | undefined
-					if (reasoningContent && enableReasoning) {
-						if (!finalReasoningActive) {
-							finalReasoningActive = true
-							finalReasoningStartMs = Date.now()
-							yield `${REASONING_BLOCK_START_MARKER}:${finalReasoningStartMs}:`
+						const finalReasoning = extractReasoningFromDelta(finalMessage)
+						if (finalReasoning?.displayText && enableReasoning) {
+							const startMs = Date.now()
+							yield `${REASONING_BLOCK_START_MARKER}:${startMs}:`
+							yield finalReasoning.displayText
+							const durationMs = Date.now() - startMs
+							yield `:${REASONING_BLOCK_END_MARKER}:${durationMs}:`
 						}
-						finalReasoningBuffer += reasoningContent
-						yield reasoningContent
-						continue
+						const finalText = extractTextFromMessageContent(finalMessage.content)
+						if (finalText) {
+							yield finalText
+						}
+						return
 					}
 
-					// 处理普通文本内容
-					const text = delta.content as string | undefined
-					if (text) {
-						// 如果之前有推理内容，现在推理结束
-						if (finalReasoningActive && finalReasoningBuffer.length > 0) {
-							const reasoningDurationMs = Date.now() - finalReasoningStartMs
-							yield `:${REASONING_BLOCK_END_MARKER}:${reasoningDurationMs}:`
-							finalReasoningActive = false
-							finalReasoningBuffer = ''
+						const finalStream = await client.chat.completions.create(
+							{
+								model: model as string,
+								messages: loopMessages as OpenAI.ChatCompletionMessageParam[],
+								stream: true,
+								...apiParamsForFinalRequest,
+							},
+							{ signal: controller.signal },
+						)
+
+					let finalReasoningBuffer = ''
+					let finalReasoningStartMs = 0
+					let finalReasoningActive = false
+
+					for await (const part of finalStream) {
+						const delta = part.choices[0]?.delta as Record<string, unknown> | undefined
+						if (!delta) continue
+
+						// 处理推理内容（兼容 reasoning_content / reasoning / reasoning_details）
+						const reasoningDelta = extractReasoningFromDelta(delta)
+						if (reasoningDelta?.displayText && enableReasoning) {
+							if (!finalReasoningActive) {
+								finalReasoningActive = true
+								finalReasoningStartMs = Date.now()
+								yield `${REASONING_BLOCK_START_MARKER}:${finalReasoningStartMs}:`
+							}
+							finalReasoningBuffer += reasoningDelta.displayText
+							yield reasoningDelta.displayText
+							continue
 						}
-						yield text
+
+						// 处理普通文本内容
+						const text = delta.content as string | undefined
+						if (text) {
+							// 如果之前有推理内容，现在推理结束
+							if (finalReasoningActive && finalReasoningBuffer.length > 0) {
+								const reasoningDurationMs = Date.now() - finalReasoningStartMs
+								yield `:${REASONING_BLOCK_END_MARKER}:${reasoningDurationMs}:`
+								finalReasoningActive = false
+								finalReasoningBuffer = ''
+							}
+							yield text
+						}
 					}
-				}
 
 				// 如果推理块还未结束，现在结束它
 				if (finalReasoningActive && finalReasoningBuffer.length > 0) {

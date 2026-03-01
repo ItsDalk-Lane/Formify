@@ -414,7 +414,16 @@ export const qianFanVendor: Vendor = {
 		imageDisplayWidth: 400,
 		parameters: {}
 	} as QianFanOptions,
-	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
+	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc, {
+		transformApiParams: (apiParams, allOptions) => {
+			const mapped: Record<string, unknown> = { ...apiParams }
+			if (allOptions.enableThinking === true && mapped.enable_thinking === undefined) {
+				mapped.enable_thinking = true
+			}
+			delete mapped.enableThinking
+			return mapped
+		}
+	}),
 	models: QIANFAN_MODELS,
 	websiteToObtainKey: 'https://qianfan.cloud.baidu.com',
 	capabilities: ['Text Generation', 'Image Vision', 'Reasoning', 'Image Generation']
