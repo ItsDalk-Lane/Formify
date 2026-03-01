@@ -300,21 +300,24 @@ export default class UpdateFrontmatterActionService implements IActionService {
                 // Process array values
                 const processedArray = [];
                 for (const [index, item] of propertyValue.entries()) {
-                    // 检测纯变量引用（如 {{@MOC}}），直接使用原始值以保持数组格式
-                    const pureVariableMatch = typeof item === 'string' && item.match(/^\{\{@([^}]+)\}\}$/);
-                    let processedItem;
+                    let processedItem = item;
 
-                    if (pureVariableMatch) {
-                        const rawName = pureVariableMatch[1]?.trim();
-                        const originalValue = context.state.values[rawName];
-                        // 如果原始值是数组，直接使用；否则正常处理
-                        if (Array.isArray(originalValue)) {
-                            processedItem = originalValue;
+                    if (typeof item === 'string') {
+                        // 检测纯变量引用（如 {{@MOC}}），直接使用原始值以保持数组格式
+                        const pureVariableMatch = item.match(/^\{\{@([^}]+)\}\}$/);
+
+                        if (pureVariableMatch) {
+                            const rawName = pureVariableMatch[1]?.trim();
+                            const originalValue = context.state.values[rawName];
+                            // 如果原始值是数组，直接使用；否则正常处理
+                            if (Array.isArray(originalValue)) {
+                                processedItem = originalValue;
+                            } else {
+                                processedItem = await engine.process(item, context.state, context.app);
+                            }
                         } else {
                             processedItem = await engine.process(item, context.state, context.app);
                         }
-                    } else {
-                        processedItem = await engine.process(item, context.state, context.app);
                     }
 
                     if (Array.isArray(processedItem)) {
@@ -340,7 +343,9 @@ export default class UpdateFrontmatterActionService implements IActionService {
                 return processedArray;
             } else {
                 // Process single value
-                const processedValue = await engine.process(propertyValue, context.state, context.app);
+                const processedValue = typeof propertyValue === 'string'
+                    ? await engine.process(propertyValue, context.state, context.app)
+                    : propertyValue;
 
                 // Validate the processed value for YAML compatibility
                 if (!this.isValidYamlValue(processedValue)) {

@@ -33,13 +33,13 @@ export class FormTemplateProcessEngine {
             // 支持 {{@output:variableName}}
             if (rawName.startsWith("output:")) {
                 const outputName = rawName.slice("output:".length).trim();
-                const outputValue = state.values[outputName];
+                const outputValue = this.getStateValue(outputName, state);
                 return outputValue !== undefined && outputValue !== null
                     ? convertVariableToString(outputValue)
                     : "";
             }
 
-            const value = state.values[rawName];
+            const value = this.resolvePureVariableValue(rawName, state);
             if (value !== undefined && value !== null) {
                 const stringValue = convertVariableToString(value);
                 logTypeConversion(
@@ -141,5 +141,72 @@ export class FormTemplateProcessEngine {
         // 最后处理 Obsidian 格式模板
         res = processObTemplate(res);
         return res;
+    }
+
+    private resolvePureVariableValue(variableName: string, state: FormState): any {
+        const loopValue = this.getLoopScopedValue(variableName);
+        if (loopValue !== undefined) {
+            return loopValue;
+        }
+        return this.getStateValue(variableName, state);
+    }
+
+    private getLoopScopedValue(path: string): any {
+        const directValue = LoopVariableScope.getValue(path);
+        if (directValue !== undefined) {
+            return directValue;
+        }
+
+        if (!path.includes(".")) {
+            return undefined;
+        }
+
+        const segments = path.split(".").filter((segment) => segment.length > 0);
+        if (segments.length === 0) {
+            return undefined;
+        }
+
+        const rootValue = LoopVariableScope.getValue(segments[0]);
+        if (rootValue === undefined || rootValue === null) {
+            return undefined;
+        }
+
+        return this.getValueByPath(rootValue, segments.slice(1));
+    }
+
+    private getStateValue(path: string, state: FormState): any {
+        if (!path) {
+            return undefined;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(state.values, path)) {
+            return state.values[path];
+        }
+
+        if (!path.includes(".")) {
+            return undefined;
+        }
+
+        const segments = path.split(".").filter((segment) => segment.length > 0);
+        if (segments.length === 0) {
+            return undefined;
+        }
+
+        return this.getValueByPath(state.values, segments);
+    }
+
+    private getValueByPath(target: any, segments: string[]): any {
+        if (!target) {
+            return undefined;
+        }
+
+        let current = target;
+        for (const segment of segments) {
+            if (current === undefined || current === null) {
+                return undefined;
+            }
+            current = current[segment];
+        }
+        return current;
     }
 }

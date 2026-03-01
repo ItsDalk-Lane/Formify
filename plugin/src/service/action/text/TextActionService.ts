@@ -27,6 +27,7 @@ import { ActionChain, ActionContext, IActionService } from "../IActionService";
 import { localInstance } from "src/i18n/locals";
 import { TextConverter } from "src/utils/TextConverter";
 import * as fs from "fs/promises";
+import * as path from "path";
 import { FileOperationService, FolderDeleteMode } from "src/service/FileOperationService";
 import { expandTargetPaths } from "src/utils/expandTargetPaths";
 
@@ -124,12 +125,27 @@ export class TextActionService implements IActionService {
 
         const htmlContent = await this.convertToHtml(content, activeFile, app);
 
-        await navigator.clipboard.write([
-            new ClipboardItem({
-                'text/html': new Blob([htmlContent], { type: 'text/html' }),
-                'text/plain': new Blob([content], { type: 'text/plain' })
-            })
-        ]);
+        try {
+            await navigator.clipboard.write([
+                new ClipboardItem({
+                    'text/html': new Blob([htmlContent], { type: 'text/html' }),
+                    'text/plain': new Blob([content], { type: 'text/plain' })
+                })
+            ]);
+        } catch (primaryError) {
+            if (!this.isClipboardFocusError(primaryError)) {
+                throw primaryError;
+            }
+
+            try {
+                await navigator.clipboard.writeText(content);
+            } catch (fallbackError) {
+                const wroteByElectron = this.writeRichTextByElectronClipboard(htmlContent, content);
+                if (!wroteByElectron) {
+                    throw fallbackError;
+                }
+            }
+        }
 
         new Notice(localInstance.text_operation_copy_success);
     }
@@ -203,12 +219,9 @@ export class TextActionService implements IActionService {
             return;
         }
 
-        let exportFolderPath = result.filePaths[0];
-        if (exportFolderPath && !exportFolderPath.endsWith('/') && exportFolderPath !== '/') {
-            exportFolderPath += '/';
-        }
+        const exportFolderPath = result.filePaths[0];
 
-        const nodeFsPath = exportFolderPath.replace(/\//g, '\\') + fileName;
+        const nodeFsPath = path.join(exportFolderPath, fileName);
         await fs.mkdir(exportFolderPath, { recursive: true });
         await fs.writeFile(nodeFsPath, htmlContent);
 
@@ -270,21 +283,65 @@ export class TextActionService implements IActionService {
             const selection = editor.getSelection();
             if (selection) {
                 const processed = TextConverter.addSpacesBetweenCJKAndEnglish(selection);
-                editor.replaceSelection(processed);
+                if (processed !== selection) {
+                    editor.replaceSelection(processed);
+                }
+                await this.persistEditorContent(activeFile, app, editor.getValue());
                 new Notice(localInstance.text_operation_add_spaces_success);
             } else {
                 // 如果没有选中文本，处理整个文档
                 const content = editor.getValue();
                 const processed = TextConverter.addSpacesBetweenCJKAndEnglish(content);
-                editor.setValue(processed);
+                if (processed !== content) {
+                    editor.setValue(processed);
+                }
+                await this.persistEditorContent(activeFile, app, processed);
                 new Notice(localInstance.text_operation_add_spaces_success);
             }
         } else {
             // 处理整个文档
             const content = await app.vault.read(activeFile);
             const processed = TextConverter.addSpacesBetweenCJKAndEnglish(content);
-            await app.vault.modify(activeFile, processed);
+            if (processed !== content) {
+                await app.vault.modify(activeFile, processed);
+            }
             new Notice(localInstance.text_operation_add_spaces_success);
+        }
+    }
+
+    private isClipboardFocusError(error: unknown): boolean {
+        const name = (error as { name?: string } | undefined)?.name ?? "";
+        const message = error instanceof Error ? error.message : String(error ?? "");
+        return name === "NotAllowedError" || /not focused|focus/i.test(message);
+    }
+
+    private writeRichTextByElectronClipboard(htmlContent: string, plainText: string): boolean {
+        try {
+            let remote: any = null;
+            if (typeof require === "function") {
+                remote = require("@electron/remote");
+            } else if ((window as any)?.require) {
+                remote = (window as any).require("@electron/remote");
+            }
+
+            if (!remote?.clipboard?.write) {
+                return false;
+            }
+
+            remote.clipboard.write({
+                html: htmlContent,
+                text: plainText,
+            });
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    private async persistEditorContent(activeFile: TFile, app: App, content: string): Promise<void> {
+        const currentVaultContent = await app.vault.read(activeFile);
+        if (currentVaultContent !== content) {
+            await app.vault.modify(activeFile, content);
         }
     }
 
