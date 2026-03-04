@@ -90,20 +90,18 @@ export function GeneralSettingTabItem(props: { plugin: FormPlugin }) {
 				});
 			});
 
-		// prompt template folder setting
+		// AI data folder setting
 		new Setting(el)
-			.setName(localInstance.prompt_template_folder)
-			.setDesc(localInstance.prompt_template_folder_desc)
+			.setName(localInstance.ai_data_folder)
+			.setDesc(localInstance.ai_data_folder_desc)
 			.addText((cb) => {
-				cb.setValue(settingsValue.promptTemplateFolder);
-				cb.setPlaceholder(
-					localInstance.prompt_template_folder_placeholder
-				);
+				cb.setValue(settingsValue.aiDataFolder);
+				cb.setPlaceholder("System/AI Data");
 				cb.onChange((v) => {
 					setSettingsValue((prev) => {
 						return {
 							...prev,
-							promptTemplateFolder: v,
+							aiDataFolder: v,
 						};
 					});
 				});
@@ -113,7 +111,7 @@ export function GeneralSettingTabItem(props: { plugin: FormPlugin }) {
 					setSettingsValue((prev) => {
 						return {
 							...prev,
-							promptTemplateFolder: folder.path,
+							aiDataFolder: folder.path,
 						};
 					});
 					suggest.close();

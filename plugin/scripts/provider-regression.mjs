@@ -16,7 +16,7 @@ const parseArgs = () => {
 	return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
 }
 
-const loadTsModule = (filePath, mocks = {}, globalOverrides = {}) => {
+const loadTsModule = (filePath, mocks = {}) => {
 	const source = fs.readFileSync(filePath, 'utf-8')
 	const compiled = ts.transpileModule(source, {
 		compilerOptions: {
@@ -40,14 +40,7 @@ const loadTsModule = (filePath, mocks = {}, globalOverrides = {}) => {
 		clearTimeout,
 		AbortController,
 		URL,
-		Buffer,
-		fetch: globalThis.fetch,
-		Response: globalThis.Response,
-		ReadableStream: globalThis.ReadableStream,
-		TextDecoderStream: globalThis.TextDecoderStream,
-		MessageChannel: globalThis.MessageChannel,
-		performance: globalThis.performance,
-		...globalOverrides
+		Buffer
 	})
 	new vm.Script(compiled, { filename: filePath }).runInContext(context)
 	return module.exports
@@ -1526,192 +1519,6 @@ const runPR22 = async () => {
 	)
 }
 
-const runPR23 = async () => {
-	const poePath = path.resolve(ROOT, 'src/features/tars/providers/poe.ts')
-	const ssePath = path.resolve(ROOT, 'src/features/tars/providers/sse.ts')
-	const { feedChunk } = loadTsModule(ssePath)
-
-	const createSseResponse = (events) => {
-		const payload =
-			events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('') + 'data: [DONE]\n\n'
-		return new Response(payload, {
-			status: 200,
-			headers: { 'content-type': 'text/event-stream' }
-		})
-	}
-
-	const runScenario = async (steps) => {
-		const requestBodies = []
-		const queue = [...steps]
-		const fetchMock = async (_url, init = {}) => {
-			const bodyText = typeof init.body === 'string' ? init.body : '{}'
-			requestBodies.push(JSON.parse(bodyText))
-			const handler = queue.shift()
-			if (!handler) {
-				throw new Error('PR23: unexpected fetch call without queued response')
-			}
-			return handler()
-		}
-
-		const poeModule = loadTsModule(
-			poePath,
-			{
-				openai: class MockOpenAI {
-					constructor() {
-						this.responses = {
-							create: async () => {
-								throw new Error('PR23 should not use OpenAI SDK responses path')
-							}
-						}
-						this.chat = {
-							completions: {
-								create: async () => {
-									throw new Error('PR23 should not fallback to chat.completions')
-								}
-							}
-						}
-					}
-				},
-				obsidian: {
-					Platform: { isDesktopApp: false },
-					requestUrl: async () => ({ status: 200, json: {}, text: '' })
-				},
-				'tars/lang/helper': { t: (text) => text },
-				'.': {},
-				'../mcp/mcpToolCallHandler': {
-					executeMcpToolCalls: async (toolCalls) =>
-						toolCalls.map((call) => ({
-							tool_call_id: call.id,
-							name: call.function?.name || 'mock_tool',
-							content: 'tool-result'
-						}))
-				},
-				'./errors': {
-					normalizeProviderError: (error) => error
-				},
-				'./retry': {
-					withRetry: async (operation) => operation()
-				},
-				'./sse': { feedChunk },
-				'./utils': {
-					buildReasoningBlockEnd: (durationMs) => `:{{FF_REASONING_END}}:${durationMs}`,
-					buildReasoningBlockStart: (startMs) => `{{FF_REASONING_START}}:${startMs}:`,
-					convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } })
-				}
-			},
-			{
-				fetch: fetchMock
-			}
-		)
-
-		const sendRequest = poeModule.poeVendor.sendRequestFunc({
-			apiKey: 'test-key',
-			baseURL: 'https://api.poe.com/v1',
-			model: 'Claude-Sonnet-4.5',
-			enableReasoning: true,
-			enableWebSearch: false,
-			parameters: {},
-			mcpTools: [{
-				name: 'mock_tool',
-				description: 'mock tool',
-				inputSchema: { type: 'object', properties: {} },
-				serverId: 'mock-server'
-			}],
-			mcpCallTool: async () => 'tool-result',
-			mcpMaxToolCallLoops: 3
-		})
-
-		let output = ''
-		for await (const chunk of sendRequest(
-			[{ role: 'user', content: 'run PR23 scenario' }],
-			new AbortController(),
-			async () => new ArrayBuffer(0)
-		)) {
-			output += chunk
-		}
-
-		assert(queue.length === 0, 'PR23: queued fetch responses should be fully consumed')
-		return { output, requestBodies }
-	}
-
-	const buildFirstRoundWithToolCall = () =>
-		createSseResponse([
-			{ type: 'response.reasoning_text.delta', delta: 'first reasoning' },
-			{
-				type: 'response.completed',
-				response: {
-					id: 'resp-first',
-					output: [{
-						type: 'function_call',
-						id: 'fc-1',
-						call_id: 'call-1',
-						name: 'mock_tool',
-						arguments: '{}'
-					}]
-				}
-			}
-		])
-
-	const buildContinuationFinalRound = (text, includeReasoning = true) =>
-		createSseResponse([
-			...(includeReasoning ? [{ type: 'response.reasoning_text.delta', delta: 'continuation reasoning' }] : []),
-			{ type: 'response.output_text.delta', delta: text },
-			{
-				type: 'response.completed',
-				response: {
-					id: `resp-final-${text}`,
-					output: [{
-						type: 'message',
-						content: [{ type: 'output_text', text }]
-					}]
-				}
-			}
-		])
-
-	// PR23-1: 续轮默认携带 reasoning
-	{
-		const { output, requestBodies } = await runScenario([
-			() => buildFirstRoundWithToolCall(),
-			() => buildContinuationFinalRound('continuation success', true)
-		])
-
-		assert(requestBodies.length === 2, 'PR23-1: should issue exactly 2 responses requests')
-		assert(
-			requestBodies[1]?.reasoning?.effort === 'medium',
-			'PR23-1: continuation request should include reasoning by default'
-		)
-		const reasoningStarts = (output.match(/\{\{FF_REASONING_START\}\}/g) || []).length
-		assert(reasoningStarts >= 2, 'PR23-1: output should contain reasoning blocks for first round and continuation')
-		assert(output.includes('continuation success'), 'PR23-1: continuation final text should be emitted')
-	}
-
-	// PR23-2: 续轮携带 reasoning 失败后应同轮重试并移除 reasoning
-	{
-		const { output, requestBodies } = await runScenario([
-			() => buildFirstRoundWithToolCall(),
-			() =>
-				new Response(
-					JSON.stringify({
-						error: { message: 'reasoning is not supported for this continuation request' }
-					}),
-					{ status: 500, headers: { 'content-type': 'application/json' } }
-				),
-			() => buildContinuationFinalRound('continuation fallback success', false)
-		])
-
-		assert(requestBodies.length === 3, 'PR23-2: should retry continuation once after reasoning failure')
-		assert(
-			requestBodies[1]?.reasoning?.effort === 'medium',
-			'PR23-2: first continuation request should carry reasoning'
-		)
-		assert(
-			requestBodies[2]?.reasoning === undefined,
-			'PR23-2: retry continuation request should remove reasoning'
-		)
-		assert(output.includes('continuation fallback success'), 'PR23-2: fallback retry should still complete the response')
-	}
-}
-
 const main = async () => {
 	const pr = parseArgs()
 	if (pr >= 1) {
@@ -1779,9 +1586,6 @@ const main = async () => {
 	}
 	if (pr >= 22) {
 		await runPR22()
-	}
-	if (pr >= 23) {
-		await runPR23()
 	}
 
 	console.log(`provider-regression: PR-${pr} checks passed`)

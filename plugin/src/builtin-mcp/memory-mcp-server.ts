@@ -47,11 +47,60 @@ export interface MemoryBuiltinRuntime {
 	close: () => Promise<void>;
 }
 
+const toErrorMessage = (error: unknown): string => {
+	if (error instanceof Error) {
+		return error.message;
+	}
+	return String(error);
+};
+
 class KnowledgeGraphManager {
+	private mutationQueue: Promise<unknown> = Promise.resolve();
+
 	constructor(
 		private readonly app: App,
 		private readonly memoryFilePath: string
 	) {}
+
+	private parseGraphLine(
+		line: string,
+		lineNumber: number
+	): { type: 'entity'; value: Entity } | { type: 'relation'; value: Relation } | null {
+		let item: Record<string, unknown>;
+		try {
+			item = JSON.parse(line) as Record<string, unknown>;
+		} catch (error) {
+			throw new Error(
+				`Memory 数据损坏: 第 ${lineNumber} 行不是合法 JSON (${toErrorMessage(error)})`
+			);
+		}
+
+		if (item.type === 'entity') {
+			return {
+				type: 'entity',
+				value: {
+					name: String(item.name ?? ''),
+					entityType: String(item.entityType ?? ''),
+					observations: Array.isArray(item.observations)
+						? item.observations.map((entry) => String(entry))
+						: [],
+				},
+			};
+		}
+
+		if (item.type === 'relation') {
+			return {
+				type: 'relation',
+				value: {
+					from: String(item.from ?? ''),
+					to: String(item.to ?? ''),
+					relationType: String(item.relationType ?? ''),
+				},
+			};
+		}
+
+		return null;
+	}
 
 	private async loadGraph(): Promise<KnowledgeGraph> {
 		const data = await this.readGraphText();
@@ -62,29 +111,24 @@ class KnowledgeGraphManager {
 			.split('\n')
 			.map((line) => line.trim())
 			.filter((line) => line.length > 0);
-		return lines.reduce<KnowledgeGraph>(
-			(graph, line) => {
-				const item = JSON.parse(line) as Record<string, unknown>;
-				if (item.type === 'entity') {
-					graph.entities.push({
-						name: String(item.name ?? ''),
-						entityType: String(item.entityType ?? ''),
-						observations: Array.isArray(item.observations)
-							? item.observations.map((entry) => String(entry))
-							: [],
-					});
-				}
-				if (item.type === 'relation') {
-					graph.relations.push({
-						from: String(item.from ?? ''),
-						to: String(item.to ?? ''),
-						relationType: String(item.relationType ?? ''),
-					});
-				}
-				return graph;
-			},
-			{ entities: [], relations: [] }
-		);
+		const graph: KnowledgeGraph = {
+			entities: [],
+			relations: [],
+		};
+
+		for (const [index, line] of lines.entries()) {
+			const parsed = this.parseGraphLine(line, index + 1);
+			if (!parsed) {
+				continue;
+			}
+			if (parsed.type === 'entity') {
+				graph.entities.push(parsed.value);
+				continue;
+			}
+			graph.relations.push(parsed.value);
+		}
+
+		return graph;
 	}
 
 	private async readGraphText(): Promise<string> {
@@ -128,107 +172,128 @@ class KnowledgeGraphManager {
 		await this.app.vault.modify(target, content);
 	}
 
-	async createEntities(entities: Entity[]): Promise<Entity[]> {
-		const graph = await this.loadGraph();
-		const newEntities = entities.filter(
-			(entity) =>
-				!graph.entities.some(
-					(existingEntity) => existingEntity.name === entity.name
-				)
+	private async runMutation<T>(
+		mutate: (graph: KnowledgeGraph) => Promise<T> | T
+	): Promise<T> {
+		const run = this.mutationQueue.then(async () => {
+			const graph = await this.loadGraph();
+			const result = await mutate(graph);
+			await this.saveGraph(graph);
+			return result;
+		});
+		this.mutationQueue = run.then(
+			() => undefined,
+			() => undefined
 		);
-		graph.entities.push(...newEntities);
-		await this.saveGraph(graph);
-		return newEntities;
+		return run;
+	}
+
+	private async waitForMutations(): Promise<void> {
+		await this.mutationQueue;
+	}
+
+	async createEntities(entities: Entity[]): Promise<Entity[]> {
+		return await this.runMutation((graph) => {
+			const newEntities = entities.filter(
+				(entity) =>
+					!graph.entities.some(
+						(existingEntity) => existingEntity.name === entity.name
+					)
+			);
+			graph.entities.push(...newEntities);
+			return newEntities;
+		});
 	}
 
 	async createRelations(relations: Relation[]): Promise<Relation[]> {
-		const graph = await this.loadGraph();
-		const newRelations = relations.filter(
-			(relation) =>
-				!graph.relations.some(
-					(existingRelation) =>
-						existingRelation.from === relation.from &&
-						existingRelation.to === relation.to &&
-						existingRelation.relationType === relation.relationType
-				)
-		);
-		graph.relations.push(...newRelations);
-		await this.saveGraph(graph);
-		return newRelations;
+		return await this.runMutation((graph) => {
+			const newRelations = relations.filter(
+				(relation) =>
+					!graph.relations.some(
+						(existingRelation) =>
+							existingRelation.from === relation.from &&
+							existingRelation.to === relation.to &&
+							existingRelation.relationType === relation.relationType
+					)
+			);
+			graph.relations.push(...newRelations);
+			return newRelations;
+		});
 	}
 
 	async addObservations(
 		observations: Array<{ entityName: string; contents: string[] }>
 	): Promise<Array<{ entityName: string; addedObservations: string[] }>> {
-		const graph = await this.loadGraph();
-		const results = observations.map((entry) => {
-			const entity = graph.entities.find((item) => item.name === entry.entityName);
-			if (!entity) {
-				throw new Error(`Entity with name ${entry.entityName} not found`);
-			}
-			const newObservations = entry.contents.filter(
-				(content) => !entity.observations.includes(content)
-			);
-			entity.observations.push(...newObservations);
-			return {
-				entityName: entry.entityName,
-				addedObservations: newObservations,
-			};
+		return await this.runMutation((graph) => {
+			return observations.map((entry) => {
+				const entity = graph.entities.find((item) => item.name === entry.entityName);
+				if (!entity) {
+					throw new Error(`Entity with name ${entry.entityName} not found`);
+				}
+				const newObservations = entry.contents.filter(
+					(content) => !entity.observations.includes(content)
+				);
+				entity.observations.push(...newObservations);
+				return {
+					entityName: entry.entityName,
+					addedObservations: newObservations,
+				};
+			});
 		});
-		await this.saveGraph(graph);
-		return results;
 	}
 
 	async deleteEntities(entityNames: string[]): Promise<void> {
-		const graph = await this.loadGraph();
-		graph.entities = graph.entities.filter(
-			(entity) => !entityNames.includes(entity.name)
-		);
-		graph.relations = graph.relations.filter(
-			(relation) =>
-				!entityNames.includes(relation.from) &&
-				!entityNames.includes(relation.to)
-		);
-		await this.saveGraph(graph);
+		await this.runMutation((graph) => {
+			graph.entities = graph.entities.filter(
+				(entity) => !entityNames.includes(entity.name)
+			);
+			graph.relations = graph.relations.filter(
+				(relation) =>
+					!entityNames.includes(relation.from) &&
+					!entityNames.includes(relation.to)
+			);
+		});
 	}
 
 	async deleteObservations(
 		deletions: Array<{ entityName: string; observations: string[] }>
 	): Promise<void> {
-		const graph = await this.loadGraph();
-		for (const deletion of deletions) {
-			const entity = graph.entities.find(
-				(item) => item.name === deletion.entityName
-			);
-			if (!entity) {
-				continue;
+		await this.runMutation((graph) => {
+			for (const deletion of deletions) {
+				const entity = graph.entities.find(
+					(item) => item.name === deletion.entityName
+				);
+				if (!entity) {
+					continue;
+				}
+				entity.observations = entity.observations.filter(
+					(observation) => !deletion.observations.includes(observation)
+				);
 			}
-			entity.observations = entity.observations.filter(
-				(observation) => !deletion.observations.includes(observation)
-			);
-		}
-		await this.saveGraph(graph);
+		});
 	}
 
 	async deleteRelations(relations: Relation[]): Promise<void> {
-		const graph = await this.loadGraph();
-		graph.relations = graph.relations.filter(
-			(relation) =>
-				!relations.some(
-					(deletedRelation) =>
-						relation.from === deletedRelation.from &&
-						relation.to === deletedRelation.to &&
-						relation.relationType === deletedRelation.relationType
-				)
-		);
-		await this.saveGraph(graph);
+		await this.runMutation((graph) => {
+			graph.relations = graph.relations.filter(
+				(relation) =>
+					!relations.some(
+						(deletedRelation) =>
+							relation.from === deletedRelation.from &&
+							relation.to === deletedRelation.to &&
+							relation.relationType === deletedRelation.relationType
+					)
+			);
+		});
 	}
 
 	async readGraph(): Promise<KnowledgeGraph> {
+		await this.waitForMutations();
 		return await this.loadGraph();
 	}
 
 	async searchNodes(query: string): Promise<KnowledgeGraph> {
+		await this.waitForMutations();
 		const graph = await this.loadGraph();
 		const normalizedQuery = query.toLowerCase();
 		const filteredEntities = graph.entities.filter(
@@ -254,6 +319,7 @@ class KnowledgeGraphManager {
 	}
 
 	async openNodes(names: string[]): Promise<KnowledgeGraph> {
+		await this.waitForMutations();
 		const graph = await this.loadGraph();
 		const filteredEntities = graph.entities.filter((entity) =>
 			names.includes(entity.name)

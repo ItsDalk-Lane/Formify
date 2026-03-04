@@ -191,6 +191,8 @@ export interface Local {
 	script_folder_for_form_desc: string;
 	script_folder_for_form_placeholder: string;
 	script_folder_for_form: string;
+	ai_data_folder: string;
+	ai_data_folder_desc: string;
 	prompt_template_folder: string;
 	prompt_template_folder_desc: string;
 	prompt_template_folder_placeholder: string;

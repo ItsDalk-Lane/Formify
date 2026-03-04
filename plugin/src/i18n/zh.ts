@@ -197,6 +197,8 @@ export class Zh implements Local {
 	script_folder_for_form = "表单脚本加载目录";
 	script_folder_for_form_desc = "将会从该目录下去加载扩展的脚本";
 	script_folder_for_form_placeholder = "form/scripts";
+	ai_data_folder = "AI数据总文件夹";
+	ai_data_folder_desc = "统一存储AI相关数据的总文件夹，包括提示词模板和聊天历史";
 	prompt_template_folder = "AI提示词模板目录";
 	prompt_template_folder_desc = "AI动作使用内置模板时，将从该目录加载模板文件";
 	prompt_template_folder_placeholder = "form/prompts";

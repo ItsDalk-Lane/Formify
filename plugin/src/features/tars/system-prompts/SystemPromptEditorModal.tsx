@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ObsidianAppContext } from 'src/context/obsidianAppContext';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
 import { localInstance } from 'src/i18n/locals';
+import { getPromptTemplatePath } from 'src/utils/AIPathManager';
 import type { AiFeatureId, SystemPromptItem, SystemPromptSourceType } from './types';
 import './SystemPromptModals.css';
 
@@ -119,7 +120,7 @@ function SystemPromptEditorForm(props: {
 
 	const templateFiles = useMemo(() => {
 		const plugin = (app as any).plugins?.plugins?.['formify'];
-		const folder = plugin?.settings?.promptTemplateFolder || 'System/ai prompts';
+		const folder = getPromptTemplatePath(plugin?.settings?.aiDataFolder || 'System/AI Data');
 		const files = app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(folder + '/'));
 		return files.map((f) => ({
 			path: f.path,

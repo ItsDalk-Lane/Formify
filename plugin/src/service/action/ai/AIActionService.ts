@@ -20,6 +20,7 @@ import { ParseOptions } from "src/service/InternalLinkParserService";
 import { PromptBuilder } from "src/service/PromptBuilder";
 import { SystemPromptAssembler } from "src/service/SystemPromptAssembler";
 import type { BaseOptions } from "src/features/tars/providers";
+import { getPromptTemplatePath } from "src/utils/AIPathManager";
 
 /**
  * AI动作服务
@@ -680,7 +681,7 @@ export default class AIActionService implements IActionService {
     private async selectTemplateAtRuntime(context: ActionContext): Promise<string | null> {
         return new Promise((resolve) => {
             const plugin = (context.app as any).plugins?.plugins?.["formify"];
-            const templateFolder = plugin?.settings?.promptTemplateFolder || "form/prompt-templates";
+            const templateFolder = getPromptTemplatePath(plugin?.settings?.aiDataFolder || 'System/AI Data');
             
             // 获取模板文件夹中的所有markdown文件
             const files = context.app.vault.getMarkdownFiles();

@@ -8,6 +8,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import { PluginSettings } from "src/settings/PluginSettings";
+import { getPromptTemplatePath } from "src/utils/AIPathManager";
 
 export const PluginSettingsContext = createContext<PluginSettings | undefined>(
 	undefined
@@ -19,7 +20,7 @@ export const PluginSettingsStoreContext = createContext<
 
 export const FormFolderContext = createContext<string | undefined>(undefined);
 export const ScriptFolderContext = createContext<string | undefined>(undefined);
-export const PromptTemplateFolderContext = createContext<string | undefined>(
+export const AIDataFolderContext = createContext<string | undefined>(
 	undefined
 );
 export const TarsSettingsContext = createContext<
@@ -81,15 +82,15 @@ export function PluginSettingsProvider({
 			<PluginSettingsStoreContext.Provider value={storeRef.current}>
 				<FormFolderContext.Provider value={settings.formFolder}>
 					<ScriptFolderContext.Provider value={settings.scriptFolder}>
-						<PromptTemplateFolderContext.Provider
-							value={settings.promptTemplateFolder}
+						<AIDataFolderContext.Provider
+							value={settings.aiDataFolder}
 						>
 							<TarsSettingsContext.Provider value={settings.tars}>
 								<ChatSettingsContext.Provider value={settings.chat}>
 									{children}
 								</ChatSettingsContext.Provider>
 							</TarsSettingsContext.Provider>
-						</PromptTemplateFolderContext.Provider>
+						</AIDataFolderContext.Provider>
 					</ScriptFolderContext.Provider>
 				</FormFolderContext.Provider>
 			</PluginSettingsStoreContext.Provider>
@@ -159,11 +160,11 @@ export const useScriptFolder = (): string => {
 };
 
 export const usePromptTemplateFolder = (): string => {
-	const promptTemplateFolder = useContext(PromptTemplateFolderContext);
-	if (promptTemplateFolder !== undefined) {
-		return promptTemplateFolder;
+	const aiDataFolder = useContext(AIDataFolderContext);
+	if (aiDataFolder !== undefined) {
+		return getPromptTemplatePath(aiDataFolder);
 	}
-	return usePluginSettings().promptTemplateFolder;
+	return getPromptTemplatePath(usePluginSettings().aiDataFolder);
 };
 
 export const useTarsSettings = (): PluginSettings["tars"] => {

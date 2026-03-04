@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type FormPlugin from "src/main";
 import { TarsSettingTab } from "src/features/tars/settingTab";
+import { getPromptTemplatePath } from "src/utils/AIPathManager";
 
 interface Props {
 	plugin: FormPlugin;
@@ -15,7 +16,7 @@ export const TarsSettingTabItem = ({ plugin }: Props) => {
 		const panel = new TarsSettingTab(plugin.app, {
 			getSettings: () => plugin.settings.tars.settings,
 			getChatSettings: () => plugin.settings.chat,
-			getPromptTemplateFolder: () => plugin.settings.promptTemplateFolder || 'System/ai prompts',
+			getPromptTemplateFolder: () => getPromptTemplatePath(plugin.settings.aiDataFolder),
 			saveSettings: async () => {
 				await plugin.saveSettings();
 			},

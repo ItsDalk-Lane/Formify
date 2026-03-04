@@ -196,6 +196,8 @@ export class En implements Local {
 	script_folder_for_form = "Form script loading directory";
 	script_folder_for_form_desc = "Form will load scripts from this directory";
 	script_folder_for_form_placeholder = "form/scripts";
+	ai_data_folder = "AI Data Folder";
+	ai_data_folder_desc = "The root folder for AI-related data, including prompt templates and chat history";
 	prompt_template_folder = "AI Prompt Template Directory";
 	prompt_template_folder_desc = "AI actions will load template files from this directory when using built-in templates";
 	prompt_template_folder_placeholder = "form/prompts";

@@ -54,7 +54,10 @@ const writePlanSchema = z.object({
 });
 
 const delegateToAgentSchema = z.object({
-	id: z.string().min(1).describe('代理 ID'),
+	id: z
+		.string()
+		.min(1)
+		.describe('代理 ID（内置默认代理: builtin.echo）'),
 	task: z.string().min(1).describe('任务描述'),
 });
 
@@ -138,7 +141,7 @@ export function registerUtilTools(
 		server,
 		registry,
 		'delegate_to_agent',
-		'将任务委托给已注册代理执行。',
+		'将任务委托给已注册代理执行。内置默认代理: builtin.echo。',
 		delegateToAgentSchema,
 		async ({ id, task }) => {
 			const result = await agentRegistry.delegate(id, task);

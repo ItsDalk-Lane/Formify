@@ -18,6 +18,8 @@ import { registerQueryTools } from './tools/query-tools';
 import { registerScriptTools } from './tools/script-tools';
 import { registerUtilTools } from './tools/util-tools';
 
+const DEFAULT_DELEGATE_AGENT_ID = 'builtin.echo';
+
 export interface BuiltinToolInfo {
 	name: string;
 	description: string;
@@ -60,6 +62,13 @@ export async function createVaultBuiltinRuntime(
 	const registry = new BuiltinToolRegistry();
 	const planState = new PlanState();
 	const agentRegistry = new AgentRegistry();
+	agentRegistry.register(DEFAULT_DELEGATE_AGENT_ID, async (task, context) => {
+		return {
+			id: context.id,
+			task,
+			status: 'ok',
+		};
+	});
 	const scriptRuntime = new ScriptRuntime({
 		callTool: async (toolName: string, args: Record<string, unknown>) => {
 			return await registry.call(toolName, args);

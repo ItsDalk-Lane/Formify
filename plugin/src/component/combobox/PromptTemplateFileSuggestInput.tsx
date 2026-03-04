@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useObsidianApp } from "src/context/obsidianAppContext";
 import { localInstance } from "src/i18n/locals";
+import { getPromptTemplatePath } from "src/utils/AIPathManager";
 import ComboboxSuggestion from "./ComboboxSuggestion";
 
 export default function PromptTemplateFileSuggestInput(props: {
@@ -15,7 +16,7 @@ export default function PromptTemplateFileSuggestInput(props: {
 	const items = useMemo(() => {
 		// 获取插件设置中的提示词模板目录
 		const plugin = (app as any).plugins?.plugins?.["formify"];
-		const promptTemplateFolder = plugin?.settings?.promptTemplateFolder || "form/prompt-templates";
+		const promptTemplateFolder = getPromptTemplatePath(plugin?.settings?.aiDataFolder || 'System/AI Data');
 		
 		// 添加"请选择"选项
 		const selectOnSubmitOption = {

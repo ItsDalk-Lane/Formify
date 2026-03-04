@@ -2,6 +2,7 @@ import { useMemo, useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
 import { Notice } from 'obsidian';
+import { getPromptTemplatePath } from 'src/utils/AIPathManager';
 import './TemplateSelector.css';
 
 interface TemplateSelectorProps {
@@ -26,7 +27,7 @@ export const TemplateSelector = ({ visible, onSelect, onClose, inputValue }: Tem
 			try {
 				// 获取插件设置中的提示词模板目录
 				const plugin = (app as any).plugins?.plugins?.["formify"];
-				const promptTemplateFolder = plugin?.settings?.promptTemplateFolder || "System/ai prompts";
+				const promptTemplateFolder = getPromptTemplatePath(plugin?.settings?.aiDataFolder || 'System/AI Data');
 				
 				// 获取所有Markdown文件
 				const files = app.vault.getMarkdownFiles();

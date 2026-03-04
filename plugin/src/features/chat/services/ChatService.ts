@@ -17,6 +17,7 @@ import { arrayBufferToBase64, getMimeTypeFromFilename } from 'src/features/tars/
 import type { ToolCall, ToolDefinition, ToolExecution } from '../types/tools';
 import { ToolRegistryService } from './ToolRegistryService';
 import { ToolExecutionManager } from './ToolExecutionManager';
+import { getChatHistoryPath } from 'src/utils/AIPathManager';
 
 type ChatSubscriber = (state: ChatState) => void;
 
@@ -59,7 +60,7 @@ export class ChatService {
 	constructor(private readonly plugin: FormPlugin) {
 		this.fileContentService = new FileContentService(plugin.app);
 		this.messageService = new MessageService(plugin.app, this.fileContentService);
-		this.historyService = new HistoryService(plugin.app, DEFAULT_CHAT_SETTINGS.chatFolder);
+		this.historyService = new HistoryService(plugin.app, getChatHistoryPath(plugin.settings.aiDataFolder));
 		this.toolRegistry = new ToolRegistryService();
 		this.toolExecutionManager = new ToolExecutionManager(this.toolRegistry, (executions) => {
 			this.state.pendingToolExecutions = executions.filter((e) => e.status === 'pending');
@@ -952,7 +953,7 @@ export class ChatService {
 
 	updateSettings(settings: Partial<ChatSettings>) {
 		this.settings = { ...this.settings, ...settings };
-		this.historyService.setFolder(this.settings.chatFolder);
+		this.historyService.setFolder(getChatHistoryPath(this.plugin.settings.aiDataFolder));
 		if ('autosaveChat' in settings) {
 			this.state.shouldSaveHistory = Boolean(this.settings.autosaveChat);
 		}

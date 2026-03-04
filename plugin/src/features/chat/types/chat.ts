@@ -149,7 +149,6 @@ export interface Skill {
 }
 
 export interface ChatSettings {
-	chatFolder: string;
 	defaultModel: string;
 	autosaveChat: boolean;
 	showSidebarByDefault: boolean;
@@ -224,7 +223,6 @@ export interface ChatState {
 }
 
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
-	chatFolder: 'AI Chats',
 	defaultModel: '',
 	autosaveChat: true,
 	showSidebarByDefault: true,

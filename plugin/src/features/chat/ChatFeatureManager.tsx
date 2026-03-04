@@ -28,6 +28,7 @@ import type { ChatMessage } from './types/chat';
 import { PromptBuilder } from 'src/service/PromptBuilder';
 import { SystemPromptAssembler } from 'src/service/SystemPromptAssembler';
 import { DebugLogger } from 'src/utils/DebugLogger';
+import { getPromptTemplatePath } from 'src/utils/AIPathManager';
 import { ModifyTextModal } from './selection-toolbar/ModifyTextModal';
 import { createModifyGhostTextExtension, setModifyGhostEffect } from './selection-toolbar/ModifyGhostTextExtension';
 import { availableVendors } from '../tars/settings';
@@ -368,7 +369,7 @@ export class ChatFeatureManager {
 		this.skillExecutionService = new SkillExecutionService(
 			this.plugin.app,
 			() => this.plugin.settings.tars.settings,
-			() => this.plugin.settings.promptTemplateFolder || 'System/ai prompts'
+			() => getPromptTemplatePath(this.plugin.settings.aiDataFolder)
 		);
 	}
 

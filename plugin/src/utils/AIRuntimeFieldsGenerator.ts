@@ -9,6 +9,7 @@ import { AI_MODEL_SELECT_ON_SUBMIT } from "src/model/action/AIFormActionConstant
 import { localInstance } from "src/i18n/locals";
 import { App } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
+import { getPromptTemplatePath } from "./AIPathManager";
 
 /**
  * AI运行时字段生成器
@@ -93,7 +94,7 @@ export class AIRuntimeFieldsGenerator {
      */
     private static generateTemplateField(aiAction: AIFormAction, app: App): ISelectField | null {
         const plugin = (app as any).plugins?.plugins?.["formify"];
-        const promptTemplateFolder = plugin?.settings?.promptTemplateFolder || "form/prompt-templates";
+        const promptTemplateFolder = getPromptTemplatePath(plugin?.settings?.aiDataFolder || 'System/AI Data');
         
         // 获取模板文件夹中的所有markdown文件
         const files = app.vault.getMarkdownFiles();

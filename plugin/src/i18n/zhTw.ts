@@ -195,6 +195,8 @@ export class ZhTw implements Local {
 	script_folder_for_form = "表單腳本加載目錄";
 	script_folder_for_form_desc = "將會從該目錄下去加載擴展的腳本";
 	script_folder_for_form_placeholder = "form/scripts";
+	ai_data_folder = "AI資料總資料夾";
+	ai_data_folder_desc = "統一儲存AI相關資料的總資料夾，包括提示詞模板與聊天歷史";
 	prompt_template_folder = "AI提示詞模板目錄";
 	prompt_template_folder_desc = "AI動作使用內置模板時，將從該目錄加載模板文件";
 	prompt_template_folder_placeholder = "form/prompts";

@@ -60,7 +60,6 @@ import {
 	BUILTIN_VAULT_SERVER_NAME
 } from './mcp'
 import type { McpServerConfig, McpSettings, McpServerState, McpToolInfo } from './mcp'
-import FolderSuggest from '../../component/combobox/FolderSuggest'
 import type { ChatSettings, SkillType } from '../chat/types/chat'
 import { localInstance } from '../../i18n/locals'
 
@@ -566,22 +565,6 @@ export class TarsSettingTab {
 			e.stopPropagation()
 			toggleChatSection()
 		})
-
-		new Setting(chatSection)
-			.setName("聊天历史保存目录")
-			.setDesc("AI聊天记录将以Markdown格式保存在此目录中")
-			.addText((text) => {
-				text.setValue(this.chatSettings.chatFolder);
-				text.setPlaceholder("AI Chats");
-				text.onChange(async (value) => {
-					await this.updateChatSettings({ chatFolder: value });
-				});
-				const suggest = new FolderSuggest(this.app, text.inputEl);
-				suggest.onSelect(async (folder) => {
-					text.setValue(folder.path);
-					await this.updateChatSettings({ chatFolder: folder.path });
-				});
-			});
 
 		new Setting(chatSection)
 			.setName("默认AI模型")

@@ -163,18 +163,31 @@ export const kimiVendor: Vendor = {
 			}
 			const cleanFetch: typeof globalThis.fetch = (input, init) => {
 				if (init?.headers) {
-					const headers = new Headers(init.headers as HeadersInit)
+					const headersInit = init.headers as HeadersInit
+					const cleanedHeaders: Record<string, string> = {}
+					// 将 HeadersInit 转换为普通对象以便处理
+					if (headersInit instanceof Headers) {
+						headersInit.forEach((value, key) => {
+							cleanedHeaders[key] = value
+						})
+					} else if (Array.isArray(headersInit)) {
+						for (const [key, value] of headersInit) {
+							cleanedHeaders[key] = String(value)
+						}
+					} else {
+						Object.assign(cleanedHeaders, headersInit)
+					}
 					// 剥离 SDK 自动附加的非标准头部
-					for (const key of [...headers.keys()]) {
+					for (const key of Object.keys(cleanedHeaders)) {
 						if (key.startsWith('x-stainless-')) {
-							headers.delete(key)
+							delete cleanedHeaders[key]
 						}
 					}
 					// 替换 SDK 默认的 User-Agent
-					if (headers.has('user-agent')) {
-						headers.set('user-agent', 'Formify/1.0')
+					if ('user-agent' in cleanedHeaders) {
+						cleanedHeaders['user-agent'] = 'Formify/1.0'
 					}
-					return globalThis.fetch(input, { ...init, headers })
+					return globalThis.fetch(input, { ...init, headers: cleanedHeaders })
 				}
 				return globalThis.fetch(input, init)
 			}

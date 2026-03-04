@@ -7,6 +7,13 @@ import { DEFAULT_CHAT_SETTINGS, type ChatSettings } from 'src/features/chat';
 import { DebugLogger } from 'src/utils/DebugLogger';
 import { SystemPromptDataService } from 'src/features/tars/system-prompts/SystemPromptDataService';
 import { generateDeviceFingerprint } from 'src/features/tars/utils/cryptoUtils';
+import {
+    canDeriveAIDataFolderFromLegacy,
+    ensureAIDataFolders,
+    getChatHistoryPath,
+    getPromptTemplatePath,
+    moveFolderFilesWithRenameOnConflict,
+} from 'src/utils/AIPathManager';
 
 interface BaseOptions {
     apiKey: string;
@@ -93,6 +100,7 @@ export class SettingsManager {
         const rawChatSettings = persisted?.chat ?? {};
         const mergedChat = { ...DEFAULT_CHAT_SETTINGS, ...rawChatSettings };
         const tarsSettings = this.decryptTarsSettings(persisted?.tars?.settings);
+        const aiDataFolder = this.resolveAiDataFolder(persisted, rawChatSettings);
 
         // 迁移内链解析配置到新结构
         const migratedSettings = this.migrateInternalLinkSettings(tarsSettings, mergedChat);
@@ -115,14 +123,99 @@ export class SettingsManager {
         delete (migratedSettings as any).enableDefaultSystemMsg;
         delete (migratedSettings as any).defaultSystemMsg;
 
+        const { promptTemplateFolder: _legacyPromptTemplateFolder, ...persistedWithoutLegacyTop } = persisted;
+        const { chatFolder: _legacyChatFolder, ...chatWithoutLegacy } = mergedChat as ChatSettings & {
+            chatFolder?: string;
+        };
+
         return {
             ...DEFAULT_SETTINGS,
-            ...persisted,
+            ...persistedWithoutLegacyTop,
+            aiDataFolder,
             tars: {
                 settings: migratedSettings,
             },
-            chat: mergedChat,
+            chat: chatWithoutLegacy,
         };
+    }
+
+    async migrateAIDataStorage(settings: PluginSettings): Promise<void> {
+        const persisted = (await this.plugin.loadData()) ?? {};
+        const rawChatSettings = persisted?.chat ?? {};
+        const legacyPromptTemplateFolder = this.normalizeLegacyFolderPath(persisted?.promptTemplateFolder);
+        const legacyChatFolder = this.normalizeLegacyFolderPath(rawChatSettings?.chatFolder);
+        const aiDataFolder = this.normalizeLegacyFolderPath(settings.aiDataFolder) || DEFAULT_SETTINGS.aiDataFolder;
+
+        await ensureAIDataFolders(this.plugin.app, aiDataFolder);
+
+        const promptTargetFolder = getPromptTemplatePath(aiDataFolder);
+        const chatTargetFolder = getChatHistoryPath(aiDataFolder);
+
+        let movedCount = 0;
+        if (legacyPromptTemplateFolder && legacyPromptTemplateFolder !== promptTargetFolder) {
+            movedCount += await moveFolderFilesWithRenameOnConflict(
+                this.plugin.app,
+                legacyPromptTemplateFolder,
+                promptTargetFolder
+            );
+        }
+
+        if (legacyChatFolder && legacyChatFolder !== chatTargetFolder) {
+            movedCount += await moveFolderFilesWithRenameOnConflict(
+                this.plugin.app,
+                legacyChatFolder,
+                chatTargetFolder
+            );
+        }
+
+        const {
+            promptTemplateFolder: _legacyPromptTemplateFolder,
+            ...persistedWithoutLegacyTop
+        } = persisted;
+        const {
+            chatFolder: _legacyChatFolder,
+            ...persistedChatWithoutLegacy
+        } = (persistedWithoutLegacyTop?.chat ?? {}) as Record<string, unknown>;
+
+        const nextData = {
+            ...persistedWithoutLegacyTop,
+            aiDataFolder,
+            chat: persistedChatWithoutLegacy,
+        };
+
+        await this.plugin.saveData(nextData);
+
+        if (movedCount > 0) {
+            DebugLogger.info(`[SettingsManager] AI数据目录迁移完成，迁移文件数量: ${movedCount}`);
+        }
+    }
+
+    private resolveAiDataFolder(
+        persisted: Record<string, any>,
+        rawChatSettings: Record<string, any>
+    ): string {
+        const persistedAiDataFolder = this.normalizeLegacyFolderPath(persisted?.aiDataFolder);
+        const legacyPromptTemplateFolder = this.normalizeLegacyFolderPath(persisted?.promptTemplateFolder);
+        const legacyChatFolder = this.normalizeLegacyFolderPath(rawChatSettings?.chatFolder);
+
+        if (persistedAiDataFolder && persistedAiDataFolder !== DEFAULT_SETTINGS.aiDataFolder) {
+            return persistedAiDataFolder;
+        }
+
+        const derived = canDeriveAIDataFolderFromLegacy(legacyPromptTemplateFolder, legacyChatFolder);
+        if (derived) {
+            return derived;
+        }
+
+        return persistedAiDataFolder || DEFAULT_SETTINGS.aiDataFolder;
+    }
+
+    private normalizeLegacyFolderPath(value: unknown): string | undefined {
+        if (typeof value !== 'string') {
+            return undefined;
+        }
+        const normalized = value.trim().replace(/[\\/]+$/g, '');
+        return normalized.length > 0 ? normalized : undefined;
     }
 
     /**
@@ -187,6 +280,7 @@ export class SettingsManager {
             ...persistedChat,
             ...settings.chat,
         };
+        delete (mergedChat as any).chatFolder;
         const mergedTarsSettings = {
             ...persistedTarsSettings,
             ...encryptedTars,
@@ -204,6 +298,7 @@ export class SettingsManager {
                 settings: mergedTarsSettings,
             },
         };
+        delete (settingsToPersist as any).promptTemplateFolder;
 
         await this.plugin.saveData(settingsToPersist);
     }

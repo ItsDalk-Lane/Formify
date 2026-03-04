@@ -1,4 +1,4 @@
-import { Plugin } from 'obsidian';
+import { Notice, Plugin } from 'obsidian';
 import { PluginSettings, DEFAULT_SETTINGS } from './settings/PluginSettings';
 import { SettingsManager } from './settings/SettingsManager';
 import { FeatureCoordinator } from './features/FeatureCoordinator';
@@ -14,6 +14,7 @@ import { ConflictMonitor } from './service/conflict/ConflictMonitor';
 import { MonitorContextMenu } from './features/file-expiry-monitor/service/MonitorContextMenu';
 import { ExpiryNoticeManager } from './features/file-expiry-monitor/service/ExpiryNoticeManager';
 import { localInstance } from './i18n/locals';
+import { ensureAIDataFolders } from './utils/AIPathManager';
 
 export default class FormPlugin extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
@@ -30,6 +31,13 @@ export default class FormPlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+		await ensureAIDataFolders(this.app, this.settings.aiDataFolder);
+		try {
+			await this.settingsManager.migrateAIDataStorage(this.settings);
+		} catch (error) {
+			DebugLogger.error('[FormPlugin] AI数据目录迁移失败', error);
+			new Notice('AI 数据目录迁移失败，请在设置中检查“AI数据总文件夹”并手动调整。');
+		}
 
 		// 初始化需要 App 实例的服务
 		this.services.initializeWithApp(this.app);
@@ -164,6 +172,7 @@ export default class FormPlugin extends Plugin {
 
 	private async applyRuntimeUpdates() {
 		this.applyDebugSettings();
+		await ensureAIDataFolders(this.app, this.settings.aiDataFolder);
 		await this.services.formScriptService.refresh(this.settings.scriptFolder);
 		await this.services.formIntegrationService.initialize(this, true);
 		this.services.contextMenuService.refreshContextMenuItems();

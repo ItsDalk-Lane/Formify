@@ -13,7 +13,7 @@ export interface PluginSettings {
 
     scriptFolder: string;
 
-    promptTemplateFolder: string;
+    aiDataFolder: string;
 
     tars: TarsFeatureConfig;
 
@@ -23,7 +23,7 @@ export interface PluginSettings {
 export const DEFAULT_SETTINGS: PluginSettings = {
     formFolder: "System/formify",
     scriptFolder: "System/scripts",
-    promptTemplateFolder: "System/ai prompts",
+    aiDataFolder: "System/AI Data",
     tars: {
         settings: cloneTarsSettings(),
     },
