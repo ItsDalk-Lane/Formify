@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-formify",
-	"version": "0.2.9.260301",
+	"version": "0.2.9.260.04",
 	"description": "Create simple, one-action workflows — with ease.",
 	"main": "main.js",
 	"scripts": {

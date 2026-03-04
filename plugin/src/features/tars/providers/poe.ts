@@ -48,6 +48,19 @@ const POE_RETRY_OPTIONS = {
 const THINK_OPEN_TAG = '<think>'
 const THINK_CLOSE_TAG = '</think>'
 
+/**
+ * 判断 Poe Responses API SSE 事件类型是否为推理内容 delta。
+ * 不同模型和 Poe 后端版本可能使用不同的事件名称：
+ * - response.reasoning_text.delta
+ * - response.reasoning_summary_text.delta
+ * - response.reasoning.delta
+ * - response.reasoning_content.delta
+ * 统一通过关键字匹配来兼容各种变体。
+ */
+const isReasoningDeltaEvent = (eventType: string): boolean => {
+	return eventType.includes('reasoning') && eventType.includes('delta')
+}
+
 const resolveErrorStatus = (error: unknown): number | undefined => {
 	if (!error || typeof error !== 'object') return undefined
 	const err = error as {
@@ -81,6 +94,35 @@ const shouldFallbackToChatCompletions = (error: unknown): boolean => {
 		/(responses?).*(unsupported|not support|not found|invalid)/i.test(message)
 		|| /(unsupported|not support|unknown).*(responses?)/i.test(message)
 	)
+}
+
+const shouldRetryContinuationWithoutReasoning = (error: unknown): boolean => {
+	const status = resolveErrorStatus(error)
+	const message = (error instanceof Error ? error.message : String(error)).toLowerCase()
+
+	// 限流错误不应触发额外重试，避免放大 429
+	if (status === 429) return false
+
+	// 常见的参数/协议不兼容（含 5xx）可以尝试去掉 reasoning 再试一次
+	if (
+		status === 400
+		|| status === 404
+		|| status === 405
+		|| status === 422
+		|| (typeof status === 'number' && status >= 500)
+	) {
+		return true
+	}
+
+	// 无明确状态码时，按错误文案兜底判断
+	if (
+		/(reasoning|thinking)/i.test(message)
+		&& /(unsupported|not support|invalid|not allowed|unknown|unrecognized|bad request)/i.test(message)
+	) {
+		return true
+	}
+
+	return /connection\s*error|err_connection_closed|socket|stream|network/i.test(message)
 }
 
 const normalizeErrorText = (prefix: string, error: unknown): Error => {
@@ -127,6 +169,16 @@ const mapResponsesParamsToChatParams = (params: Record<string, unknown>): Record
 	}
 
 	delete mapped.max_output_tokens
+
+	// 将 Responses API 的 reasoning 参数转换为 Chat Completions 的自定义参数格式
+	// 根据 Poe 文档，Chat Completions 的 reasoning_effort 标准字段被忽略，
+	// 需要通过 extra_body（自定义字段）传递推理参数
+	if (mapped.reasoning && typeof mapped.reasoning === 'object') {
+		const effort = (mapped.reasoning as Record<string, unknown>).effort
+		if (typeof effort === 'string' && effort) {
+			mapped.reasoning_effort = effort
+		}
+	}
 	delete mapped.reasoning
 	delete mapped.tools
 	delete mapped.tool_choice
@@ -925,16 +977,18 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 				dangerouslyAllowBrowser: true
 			})
 
-				const runResponsesWithOpenAISdk = async function* () {
+			const runResponsesWithOpenAISdk = async function* () {
 				let currentInput: unknown = responseInput
 				let previousResponseId: string | undefined
+				let continuationReasoningEnabled = enableReasoning
 				// 同时维护累积式输入，用于 previous_response_id 链过深遇到 5xx 时回退
 				const accumulatedInput: unknown[] = [...(responseInput as unknown[])]
 
 				const buildResponsesRequestData = (
 					input: unknown,
 					previousId: string | undefined,
-					mode: 'default' | 'compat'
+					mode: 'default' | 'compat',
+					allowContinuationReasoning = true
 				): Record<string, unknown> => {
 					const isToolContinuation = isFunctionCallOutputInput(input)
 					const data: Record<string, unknown> = {
@@ -954,7 +1008,11 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 					if (shouldAttachTools) {
 						data.tools = toolCandidates
 					}
-					if (enableReasoning && data.reasoning === undefined && !isToolContinuation) {
+					const shouldAttachReasoning =
+						enableReasoning
+						&& data.reasoning === undefined
+						&& (!isToolContinuation || (continuationReasoningEnabled && allowContinuationReasoning))
+					if (shouldAttachReasoning) {
 						data.reasoning = { effort: 'medium' }
 					}
 					return data
@@ -971,13 +1029,21 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 					if (toolCandidates.length > 0) {
 						data.tools = toolCandidates
 					}
+					if (enableReasoning && continuationReasoningEnabled && data.reasoning === undefined) {
+						data.reasoning = { effort: 'medium' }
+					}
+					if (!continuationReasoningEnabled) {
+						delete data.reasoning
+					}
 					return data
 				}
 
 				for (let loop = 0; loop <= maxToolCallLoops; loop++) {
 					if (controller.signal.aborted) return
 
-					let stream: Awaited<ReturnType<typeof client.responses.create>>
+					const isToolContinuationTurn = isFunctionCallOutputInput(currentInput)
+					let stream: Awaited<ReturnType<typeof client.responses.create>> | undefined
+
 					try {
 						stream = await client.responses.create(
 							buildResponsesRequestData(currentInput, previousResponseId, 'default') as any,
@@ -986,40 +1052,60 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 							}
 						)
 					} catch (error) {
-						// 链式续轮遇到 5xx 时，降级为累积式输入重试（避免 previous_response_id 链过深）
-						const errorStatus = resolveErrorStatus(error)
-						if (errorStatus !== undefined && errorStatus >= 500 && loop > 0) {
-							stream = await client.responses.create(
-								buildAccumulatedRequestData() as any,
-								{ signal: controller.signal }
-							)
-						} else if (shouldRetryFunctionOutputTurn400(error, currentInput)) {
-							// 兼容部分实现：function_call_output 续轮在默认参数下会返回 400，
-							// 先改用最小请求体并补发 tools 重试；若仍失败，再降级为 message 续轮。
+						let requestError: unknown = error
+
+						if (
+							isToolContinuationTurn
+							&& continuationReasoningEnabled
+							&& shouldRetryContinuationWithoutReasoning(requestError)
+						) {
+							continuationReasoningEnabled = false
 							try {
 								stream = await client.responses.create(
-									buildResponsesRequestData(currentInput, previousResponseId, 'compat') as any,
-									{
-										signal: controller.signal
-									}
+									buildResponsesRequestData(currentInput, previousResponseId, 'default', false) as any,
+									{ signal: controller.signal }
 								)
-							} catch (compatError) {
-								if (!shouldRetryFunctionOutputTurn400(compatError, currentInput)) {
-									throw compatError
-								}
-								stream = await client.responses.create(
-									buildResponsesRequestData(
-										toToolResultContinuationInput(currentInput),
-										previousResponseId,
-										'default'
-									) as any,
-									{
-										signal: controller.signal
-									}
-								)
+							} catch (retryWithoutReasoningError) {
+								requestError = retryWithoutReasoningError
 							}
-						} else {
-							throw error
+						}
+
+						if (!stream) {
+							// 链式续轮遇到 5xx 时，降级为累积式输入重试（避免 previous_response_id 链过深）
+							const errorStatus = resolveErrorStatus(requestError)
+							if (errorStatus !== undefined && errorStatus >= 500 && loop > 0) {
+								stream = await client.responses.create(
+									buildAccumulatedRequestData() as any,
+									{ signal: controller.signal }
+								)
+							} else if (shouldRetryFunctionOutputTurn400(requestError, currentInput)) {
+								// 兼容部分实现：function_call_output 续轮在默认参数下会返回 400，
+								// 先改用最小请求体并补发 tools 重试；若仍失败，再降级为 message 续轮。
+								try {
+									stream = await client.responses.create(
+										buildResponsesRequestData(currentInput, previousResponseId, 'compat') as any,
+										{
+											signal: controller.signal
+										}
+									)
+								} catch (compatError) {
+									if (!shouldRetryFunctionOutputTurn400(compatError, currentInput)) {
+										throw compatError
+									}
+									stream = await client.responses.create(
+										buildResponsesRequestData(
+											toToolResultContinuationInput(currentInput),
+											previousResponseId,
+											'default'
+										) as any,
+										{
+											signal: controller.signal
+										}
+									)
+								}
+							} else {
+								throw requestError
+							}
 						}
 					}
 
@@ -1028,7 +1114,7 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 					let reasoningStartMs: number | null = null
 
 					for await (const event of stream as any) {
-						if (event.type === 'response.reasoning_text.delta' || event.type === 'response.reasoning_summary_text.delta') {
+						if (isReasoningDeltaEvent(String(event.type ?? ''))) {
 							if (!enableReasoning) continue
 							const text = String(event.delta ?? '')
 							if (!text) continue
@@ -1094,83 +1180,115 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 					currentInput = executed.nextInputItems
 					// 同时更新累积式输入，用于 5xx 回退
 					accumulatedInput.push(...extractResponseOutputItems(completedResponse))
-						accumulatedInput.push(...executed.nextInputItems)
+					accumulatedInput.push(...executed.nextInputItems)
+				}
+			}
+
+			const runResponsesWithDesktopFetchSse = async function* () {
+				let currentInput: unknown = responseInput
+				let previousResponseId: string | undefined
+				let continuationReasoningEnabled = enableReasoning
+				// 同时维护累积式输入，用于 previous_response_id 链过深遇到 5xx 时回退
+				const accumulatedInput: unknown[] = [...(responseInput as unknown[])]
+				const requestResponsesStreamWithRetry = (body: Record<string, unknown>) =>
+					withRetry(
+						() =>
+							requestResponsesStreamByFetch(
+								ensureResponseEndpoint(String(baseURL ?? '')),
+								String(apiKey),
+								body,
+								controller.signal
+							),
+						{
+							...POE_RETRY_OPTIONS,
+							signal: controller.signal
+						}
+					)
+
+				const buildResponsesRequestData = (
+					input: unknown,
+					previousId: string | undefined,
+					mode: 'default' | 'compat',
+					allowContinuationReasoning = true
+				): Record<string, unknown> => {
+					const isToolContinuation = isFunctionCallOutputInput(input)
+					const data: Record<string, unknown> = {
+						model,
+						input
 					}
+					if (mode === 'default') {
+						Object.assign(data, responseBaseParams)
+					}
+					if (previousId) {
+						data.previous_response_id = previousId
+					}
+					const shouldAttachTools =
+						toolCandidates.length > 0
+						&& (mode === 'compat' ? isToolContinuation : !isToolContinuation)
+					if (shouldAttachTools) {
+						data.tools = toolCandidates
+					}
+					const shouldAttachReasoning =
+						enableReasoning
+						&& data.reasoning === undefined
+						&& (!isToolContinuation || (continuationReasoningEnabled && allowContinuationReasoning))
+					if (shouldAttachReasoning) {
+						data.reasoning = { effort: 'medium' }
+					}
+					return data
 				}
 
-				const runResponsesWithDesktopFetchSse = async function* () {
-					let currentInput: unknown = responseInput
-					let previousResponseId: string | undefined
-					// 同时维护累积式输入，用于 previous_response_id 链过深遇到 5xx 时回退
-					const accumulatedInput: unknown[] = [...(responseInput as unknown[])]
-					const requestResponsesStreamWithRetry = (body: Record<string, unknown>) =>
-						withRetry(
-							() =>
-								requestResponsesStreamByFetch(
-									ensureResponseEndpoint(String(baseURL ?? '')),
-									String(apiKey),
-									body,
-									controller.signal
-								),
-							{
-								...POE_RETRY_OPTIONS,
-								signal: controller.signal
-							}
+				const buildAccumulatedRequestData = (): Record<string, unknown> => {
+					const data: Record<string, unknown> = {
+						model,
+						...responseBaseParams,
+						input: accumulatedInput
+					}
+					if (toolCandidates.length > 0) {
+						data.tools = toolCandidates
+					}
+					if (enableReasoning && continuationReasoningEnabled && data.reasoning === undefined) {
+						data.reasoning = { effort: 'medium' }
+					}
+					if (!continuationReasoningEnabled) {
+						delete data.reasoning
+					}
+					return data
+				}
+
+				for (let loop = 0; loop <= maxToolCallLoops; loop++) {
+					if (controller.signal.aborted) return
+
+					const isToolContinuationTurn = isFunctionCallOutputInput(currentInput)
+					let reader: ReadableStreamDefaultReader<string> | undefined
+
+					try {
+						reader = await requestResponsesStreamWithRetry(
+							buildResponsesRequestData(currentInput, previousResponseId, 'default')
 						)
+					} catch (error) {
+						let requestError: unknown = error
 
-					const buildResponsesRequestData = (
-						input: unknown,
-						previousId: string | undefined,
-						mode: 'default' | 'compat'
-					): Record<string, unknown> => {
-						const isToolContinuation = isFunctionCallOutputInput(input)
-						const data: Record<string, unknown> = {
-							model,
-							input
+						if (
+							isToolContinuationTurn
+							&& continuationReasoningEnabled
+							&& shouldRetryContinuationWithoutReasoning(requestError)
+						) {
+							continuationReasoningEnabled = false
+							try {
+								reader = await requestResponsesStreamWithRetry(
+									buildResponsesRequestData(currentInput, previousResponseId, 'default', false)
+								)
+							} catch (retryWithoutReasoningError) {
+								requestError = retryWithoutReasoningError
+							}
 						}
-						if (mode === 'default') {
-							Object.assign(data, responseBaseParams)
-						}
-						if (previousId) {
-							data.previous_response_id = previousId
-						}
-						const shouldAttachTools =
-							toolCandidates.length > 0
-							&& (mode === 'compat' ? isToolContinuation : !isToolContinuation)
-						if (shouldAttachTools) {
-							data.tools = toolCandidates
-						}
-						if (enableReasoning && data.reasoning === undefined && !isToolContinuation) {
-							data.reasoning = { effort: 'medium' }
-						}
-						return data
-					}
 
-					const buildAccumulatedRequestData = (): Record<string, unknown> => {
-						const data: Record<string, unknown> = {
-							model,
-							...responseBaseParams,
-							input: accumulatedInput
-						}
-						if (toolCandidates.length > 0) {
-							data.tools = toolCandidates
-						}
-						return data
-					}
-
-					for (let loop = 0; loop <= maxToolCallLoops; loop++) {
-						if (controller.signal.aborted) return
-
-						let reader: ReadableStreamDefaultReader<string>
-						try {
-							reader = await requestResponsesStreamWithRetry(
-								buildResponsesRequestData(currentInput, previousResponseId, 'default')
-							)
-						} catch (error) {
-							const errorStatus = resolveErrorStatus(error)
+						if (!reader) {
+							const errorStatus = resolveErrorStatus(requestError)
 							if (errorStatus !== undefined && errorStatus >= 500 && loop > 0) {
 								reader = await requestResponsesStreamWithRetry(buildAccumulatedRequestData())
-							} else if (shouldRetryFunctionOutputTurn400(error, currentInput)) {
+							} else if (shouldRetryFunctionOutputTurn400(requestError, currentInput)) {
 								try {
 									reader = await requestResponsesStreamWithRetry(
 										buildResponsesRequestData(currentInput, previousResponseId, 'compat')
@@ -1188,191 +1306,222 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 									)
 								}
 							} else {
-								throw error
+								throw requestError
 							}
 						}
+					}
 
-						let completedResponse: any = null
-						let reasoningActive = false
-						let reasoningStartMs: number | null = null
-						let reading = true
-						let sseRest = ''
+					let completedResponse: any = null
+					let reasoningActive = false
+					let reasoningStartMs: number | null = null
+					let reading = true
+					let sseRest = ''
 
-						const processEvents = async function* (events: Array<{ isDone: boolean; parseError?: string; json?: unknown }>) {
-							for (const event of events) {
-								if (event.isDone) {
-									reading = false
-									break
-								}
-								const payload = event.json as Record<string, unknown> | undefined
-								if (!payload) continue
-								const eventType = String(payload.type ?? '')
-
-								if (eventType === 'response.reasoning_text.delta' || eventType === 'response.reasoning_summary_text.delta') {
-									if (!enableReasoning) continue
-									const text = String(payload.delta ?? '')
-									if (!text) continue
-									if (!reasoningActive) {
-										reasoningActive = true
-										reasoningStartMs = Date.now()
-										yield buildReasoningBlockStart(reasoningStartMs)
-									}
-									yield text
-									continue
-								}
-
-								if (eventType === 'response.output_text.delta') {
-									const text = String(payload.delta ?? '')
-									if (!text) continue
-									if (reasoningActive) {
-										reasoningActive = false
-										const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
-										reasoningStartMs = null
-										yield buildReasoningBlockEnd(durationMs)
-									}
-									yield text
-									continue
-								}
-
-								if (eventType === 'response.completed') {
-									completedResponse = payload.response
-									if (reasoningActive) {
-										reasoningActive = false
-										const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
-										reasoningStartMs = null
-										yield buildReasoningBlockEnd(durationMs)
-									}
-								}
-							}
-						}
-
-						while (reading) {
-							const { done, value } = await reader.read()
-							if (done) {
-								const flushed = feedChunk(sseRest, '\n\n')
-								sseRest = flushed.rest
-								for await (const text of processEvents(flushed.events)) {
-									yield text
-								}
+					const processEvents = async function* (events: Array<{ isDone: boolean; parseError?: string; json?: unknown }>) {
+						for (const event of events) {
+							if (event.isDone) {
 								reading = false
 								break
 							}
-							const parsed = feedChunk(sseRest, value ?? '')
-							sseRest = parsed.rest
-							for await (const text of processEvents(parsed.events)) {
+							const payload = event.json as Record<string, unknown> | undefined
+							if (!payload) continue
+							const eventType = String(payload.type ?? '')
+
+							if (isReasoningDeltaEvent(eventType)) {
+								if (!enableReasoning) continue
+								const text = String(payload.delta ?? '')
+								if (!text) continue
+								if (!reasoningActive) {
+									reasoningActive = true
+									reasoningStartMs = Date.now()
+									yield buildReasoningBlockStart(reasoningStartMs)
+								}
+								yield text
+								continue
+							}
+
+							if (eventType === 'response.output_text.delta') {
+								const text = String(payload.delta ?? '')
+								if (!text) continue
+								if (reasoningActive) {
+									reasoningActive = false
+									const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+									reasoningStartMs = null
+									yield buildReasoningBlockEnd(durationMs)
+								}
+								yield text
+								continue
+							}
+
+							if (eventType === 'response.completed') {
+								completedResponse = payload.response
+								if (reasoningActive) {
+									reasoningActive = false
+									const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+									reasoningStartMs = null
+									yield buildReasoningBlockEnd(durationMs)
+								}
+							}
+						}
+					}
+
+					while (reading) {
+						const { done, value } = await reader.read()
+						if (done) {
+							const flushed = feedChunk(sseRest, '\n\n')
+							sseRest = flushed.rest
+							for await (const text of processEvents(flushed.events)) {
 								yield text
 							}
+							reading = false
+							break
 						}
-
-						if (reasoningActive) {
-							const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
-							yield buildReasoningBlockEnd(durationMs)
+						const parsed = feedChunk(sseRest, value ?? '')
+						sseRest = parsed.rest
+						for await (const text of processEvents(parsed.events)) {
+							yield text
 						}
-
-						if (!completedResponse) {
-							throw new Error('Poe Responses stream ended without response.completed payload')
-						}
-
-						const functionCalls = extractResponseFunctionCalls(completedResponse)
-						if (functionCalls.length === 0) {
-							return
-						}
-
-						if (!hasMcpToolRuntime || !Array.isArray(mcpTools) || typeof mcpCallTool !== 'function') {
-							throw new Error('Poe Responses 返回了 function_call，但未配置 MCP 工具执行器。')
-						}
-						if (loop >= maxToolCallLoops) {
-							throw new Error(`Poe MCP tool loop exceeded maximum iterations (${maxToolCallLoops})`)
-						}
-						if (!completedResponse?.id) {
-							throw new Error('Poe Responses 缺少 response.id，无法继续工具循环。')
-						}
-
-						const executed = await executePoeMcpToolCalls(functionCalls, mcpTools, mcpCallTool)
-						for (const marker of executed.markers) {
-							yield `{{FF_MCP_TOOL_START}}:${marker.toolName}:${marker.content}{{FF_MCP_TOOL_END}}:`
-						}
-						previousResponseId = String(completedResponse.id)
-						currentInput = executed.nextInputItems
-						accumulatedInput.push(...extractResponseOutputItems(completedResponse))
-						accumulatedInput.push(...executed.nextInputItems)
 					}
+
+					if (reasoningActive) {
+						const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+						yield buildReasoningBlockEnd(durationMs)
+					}
+
+					if (!completedResponse) {
+						throw new Error('Poe Responses stream ended without response.completed payload')
+					}
+
+					const functionCalls = extractResponseFunctionCalls(completedResponse)
+					if (functionCalls.length === 0) {
+						return
+					}
+
+					if (!hasMcpToolRuntime || !Array.isArray(mcpTools) || typeof mcpCallTool !== 'function') {
+						throw new Error('Poe Responses 返回了 function_call，但未配置 MCP 工具执行器。')
+					}
+					if (loop >= maxToolCallLoops) {
+						throw new Error(`Poe MCP tool loop exceeded maximum iterations (${maxToolCallLoops})`)
+					}
+					if (!completedResponse?.id) {
+						throw new Error('Poe Responses 缺少 response.id，无法继续工具循环。')
+					}
+
+					const executed = await executePoeMcpToolCalls(functionCalls, mcpTools, mcpCallTool)
+					for (const marker of executed.markers) {
+						yield `{{FF_MCP_TOOL_START}}:${marker.toolName}:${marker.content}{{FF_MCP_TOOL_END}}:`
+					}
+					previousResponseId = String(completedResponse.id)
+					currentInput = executed.nextInputItems
+					accumulatedInput.push(...extractResponseOutputItems(completedResponse))
+					accumulatedInput.push(...executed.nextInputItems)
+				}
+			}
+
+			const runResponsesWithDesktopRequestUrl = async function* () {
+				let currentInput: unknown = responseInput
+				let previousResponseId: string | undefined
+				let continuationReasoningEnabled = enableReasoning
+				// 同时维护累积式输入，用于 previous_response_id 链过深遇到 5xx 时回退
+				const accumulatedInput: unknown[] = [...(responseInput as unknown[])]
+				const requestResponsesWithRetry = (body: Record<string, unknown>) =>
+					withRetry(
+						() =>
+							requestResponsesByRequestUrl(
+								ensureResponseEndpoint(String(baseURL ?? '')),
+								String(apiKey),
+								body
+							),
+						{
+							...POE_RETRY_OPTIONS,
+							signal: controller.signal
+						}
+					)
+
+				const buildResponsesRequestData = (
+					input: unknown,
+					previousId: string | undefined,
+					mode: 'default' | 'compat',
+					allowContinuationReasoning = true
+				): Record<string, unknown> => {
+					const isToolContinuation = isFunctionCallOutputInput(input)
+					const data: Record<string, unknown> = {
+						model,
+						input
+					}
+					if (mode === 'default') {
+						Object.assign(data, responseBaseParams)
+					}
+					if (previousId) {
+						data.previous_response_id = previousId
+					}
+					const shouldAttachTools =
+						toolCandidates.length > 0
+						&& (mode === 'compat' ? isToolContinuation : !isToolContinuation)
+					if (shouldAttachTools) {
+						data.tools = toolCandidates
+					}
+					const shouldAttachReasoning =
+						enableReasoning
+						&& data.reasoning === undefined
+						&& (!isToolContinuation || (continuationReasoningEnabled && allowContinuationReasoning))
+					if (shouldAttachReasoning) {
+						data.reasoning = { effort: 'medium' }
+					}
+					return data
 				}
 
-				const runResponsesWithDesktopRequestUrl = async function* () {
-					let currentInput: unknown = responseInput
-					let previousResponseId: string | undefined
-					// 同时维护累积式输入，用于 previous_response_id 链过深遇到 5xx 时回退
-					const accumulatedInput: unknown[] = [...(responseInput as unknown[])]
-					const requestResponsesWithRetry = (body: Record<string, unknown>) =>
-						withRetry(
-							() =>
-								requestResponsesByRequestUrl(
-									ensureResponseEndpoint(String(baseURL ?? '')),
-									String(apiKey),
-									body
-								),
-							{
-								...POE_RETRY_OPTIONS,
-								signal: controller.signal
-							}
+				const buildAccumulatedRequestData = (): Record<string, unknown> => {
+					const data: Record<string, unknown> = {
+						model,
+						...responseBaseParams,
+						input: accumulatedInput
+					}
+					if (toolCandidates.length > 0) {
+						data.tools = toolCandidates
+					}
+					if (enableReasoning && continuationReasoningEnabled && data.reasoning === undefined) {
+						data.reasoning = { effort: 'medium' }
+					}
+					if (!continuationReasoningEnabled) {
+						delete data.reasoning
+					}
+					return data
+				}
+
+				for (let loop = 0; loop <= maxToolCallLoops; loop++) {
+					if (controller.signal.aborted) return
+
+					const isToolContinuationTurn = isFunctionCallOutputInput(currentInput)
+					let response: any
+					try {
+						response = await requestResponsesWithRetry(
+							buildResponsesRequestData(currentInput, previousResponseId, 'default')
 						)
+					} catch (error) {
+						let requestError: unknown = error
 
-					const buildResponsesRequestData = (
-						input: unknown,
-						previousId: string | undefined,
-						mode: 'default' | 'compat'
-					): Record<string, unknown> => {
-						const isToolContinuation = isFunctionCallOutputInput(input)
-						const data: Record<string, unknown> = {
-							model,
-							input
+						if (
+							isToolContinuationTurn
+							&& continuationReasoningEnabled
+							&& shouldRetryContinuationWithoutReasoning(requestError)
+						) {
+							continuationReasoningEnabled = false
+							try {
+								response = await requestResponsesWithRetry(
+									buildResponsesRequestData(currentInput, previousResponseId, 'default', false)
+								)
+							} catch (retryWithoutReasoningError) {
+								requestError = retryWithoutReasoningError
+							}
 						}
-						if (mode === 'default') {
-							Object.assign(data, responseBaseParams)
-						}
-						if (previousId) {
-							data.previous_response_id = previousId
-						}
-						const shouldAttachTools =
-							toolCandidates.length > 0
-							&& (mode === 'compat' ? isToolContinuation : !isToolContinuation)
-						if (shouldAttachTools) {
-							data.tools = toolCandidates
-						}
-						if (enableReasoning && data.reasoning === undefined && !isToolContinuation) {
-							data.reasoning = { effort: 'medium' }
-						}
-						return data
-					}
 
-					// 构建累积式回退请求数据（不使用 previous_response_id）
-					const buildAccumulatedRequestData = (): Record<string, unknown> => {
-						const data: Record<string, unknown> = {
-							model,
-							...responseBaseParams,
-							input: accumulatedInput
-						}
-						if (toolCandidates.length > 0) {
-							data.tools = toolCandidates
-						}
-						return data
-					}
-
-					for (let loop = 0; loop <= maxToolCallLoops; loop++) {
-						if (controller.signal.aborted) return
-
-						let response: any
-						try {
-							response = await requestResponsesWithRetry(
-								buildResponsesRequestData(currentInput, previousResponseId, 'default')
-							)
-						} catch (error) {
+						if (!response) {
 							// 链式续轮遇到 5xx 时，降级为累积式输入重试（避免 previous_response_id 链过深）
-							const errorStatus = resolveErrorStatus(error)
+							const errorStatus = resolveErrorStatus(requestError)
 							if (errorStatus !== undefined && errorStatus >= 500 && loop > 0) {
 								response = await requestResponsesWithRetry(buildAccumulatedRequestData())
-							} else if (shouldRetryFunctionOutputTurn400(error, currentInput)) {
+							} else if (shouldRetryFunctionOutputTurn400(requestError, currentInput)) {
 								try {
 									response = await requestResponsesWithRetry(
 										buildResponsesRequestData(currentInput, previousResponseId, 'compat')
@@ -1390,50 +1539,51 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 									)
 								}
 							} else {
-								throw error
+								throw requestError
 							}
 						}
-
-						if (enableReasoning) {
-							const reasoningText = extractReasoningTextFromResponse(response)
-							if (reasoningText) {
-								const startMs = Date.now()
-								yield buildReasoningBlockStart(startMs)
-								yield reasoningText
-								const durationMs = Math.max(10, Date.now() - startMs)
-								yield buildReasoningBlockEnd(durationMs)
-							}
-						}
-
-						const functionCalls = extractResponseFunctionCalls(response)
-						if (functionCalls.length === 0) {
-							const text = extractOutputTextFromResponse(response)
-							if (text) yield text
-							return
-						}
-
-						if (!hasMcpToolRuntime || !Array.isArray(mcpTools) || typeof mcpCallTool !== 'function') {
-							throw new Error('Poe Responses 返回了 function_call，但未配置 MCP 工具执行器。')
-						}
-						if (loop >= maxToolCallLoops) {
-							throw new Error(`Poe MCP tool loop exceeded maximum iterations (${maxToolCallLoops})`)
-						}
-						if (!response?.id) {
-							throw new Error('Poe Responses 缺少 response.id，无法继续工具循环。')
-						}
-
-						const executed = await executePoeMcpToolCalls(functionCalls, mcpTools, mcpCallTool)
-						for (const marker of executed.markers) {
-							yield `{{FF_MCP_TOOL_START}}:${marker.toolName}:${marker.content}{{FF_MCP_TOOL_END}}:`
-						}
-						// 更新链式状态
-						previousResponseId = String(response.id)
-						currentInput = executed.nextInputItems
-						// 同时更新累积式输入，用于 5xx 回退
-						accumulatedInput.push(...extractResponseOutputItems(response))
-						accumulatedInput.push(...executed.nextInputItems)
 					}
+
+					if (enableReasoning) {
+						const reasoningText = extractReasoningTextFromResponse(response)
+						if (reasoningText) {
+							const startMs = Date.now()
+							yield buildReasoningBlockStart(startMs)
+							yield reasoningText
+							const durationMs = Math.max(10, Date.now() - startMs)
+							yield buildReasoningBlockEnd(durationMs)
+						}
+					}
+
+					const functionCalls = extractResponseFunctionCalls(response)
+					if (functionCalls.length === 0) {
+						const text = extractOutputTextFromResponse(response)
+						if (text) yield text
+						return
+					}
+
+					if (!hasMcpToolRuntime || !Array.isArray(mcpTools) || typeof mcpCallTool !== 'function') {
+						throw new Error('Poe Responses 返回了 function_call，但未配置 MCP 工具执行器。')
+					}
+					if (loop >= maxToolCallLoops) {
+						throw new Error(`Poe MCP tool loop exceeded maximum iterations (${maxToolCallLoops})`)
+					}
+					if (!response?.id) {
+						throw new Error('Poe Responses 缺少 response.id，无法继续工具循环。')
+					}
+
+					const executed = await executePoeMcpToolCalls(functionCalls, mcpTools, mcpCallTool)
+					for (const marker of executed.markers) {
+						yield `{{FF_MCP_TOOL_START}}:${marker.toolName}:${marker.content}{{FF_MCP_TOOL_END}}:`
+					}
+					// 更新链式状态
+					previousResponseId = String(response.id)
+					currentInput = executed.nextInputItems
+					// 同时更新累积式输入，用于 5xx 回退
+					accumulatedInput.push(...extractResponseOutputItems(response))
+					accumulatedInput.push(...executed.nextInputItems)
 				}
+			}
 
 			const chatFallbackParams = mapResponsesParamsToChatParams(responseBaseParams)
 
@@ -1468,6 +1618,12 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 					}
 					if (tools && tools.length > 0) {
 						body.tools = tools
+					}
+					// 当启用推理时，通过请求体直接传递推理参数
+					// 根据 Poe 文档，Chat Completions 标准 reasoning_effort 被忽略，
+					// 需要通过 extra_body 方式（即请求体自定义字段）传递
+					if (enableReasoning) {
+						body.reasoning_effort = 'medium'
 					}
 
 					const reader = await requestChatCompletionStreamByFetch(
@@ -1681,7 +1837,7 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 				}
 			}
 
-			// 混合 MCP 工具循环：第一轮 Responses API（推理 + 联网搜索），后续轮次 Chat Completions
+			// 混合 MCP 工具循环：第一轮 Responses API（推理 + 联网搜索），后续轮次 Responses API 累积输入
 			const runMcpHybridToolLoop = async function* () {
 				// ── Phase 1: 第一轮使用 Responses API 原生 fetch SSE（绕过 SDK 缓冲） ──
 				const firstRoundData: Record<string, unknown> = {
@@ -1717,7 +1873,7 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 						if (!payload) return
 						const eventType = String(payload.type ?? '')
 
-						if (eventType === 'response.reasoning_text.delta' || eventType === 'response.reasoning_summary_text.delta') {
+						if (isReasoningDeltaEvent(eventType)) {
 							if (!enableReasoning) return
 							const text = String(payload.delta ?? '')
 							if (!text) return
@@ -1805,37 +1961,202 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 				const firstFunctionCalls = extractResponseFunctionCalls(firstCompletedResponse)
 				if (firstFunctionCalls.length === 0) return
 
-				// ── Phase 2: 执行工具 → 切换到 Chat Completions 循环 ──
+				// ── Phase 2: 执行工具 → 后续轮次使用 Responses API 累积式输入 ──
+				// 使用纯累积式输入：将完整对话历史（原始 input + 所有 function_call + function_call_output）
+				// 作为 input 发送，让服务端重新构建上下文。
+				// 续轮优先携带 reasoning；若遇到兼容性错误，自动降级到无 reasoning 后重试当前轮次。
 				const executed = await executePoeMcpToolCalls(firstFunctionCalls, mcpTools!, mcpCallTool!)
 				for (const marker of executed.markers) {
 					yield `{{FF_MCP_TOOL_START}}:${marker.toolName}:${marker.content}{{FF_MCP_TOOL_END}}:`
 				}
 
-				// 构建 Chat Completions 消息历史（包含第一轮的 assistant 响应 + 工具结果）
-				const chatHistoryMessages = await Promise.all(
-					messages.map((msg) => formatMsg(msg, resolveEmbedAsBinary))
-				)
-				const continuationMessages: any[] = [
-					...chatHistoryMessages,
-					{
-						role: 'assistant',
-						content: firstRoundText || null,
-						tool_calls: firstFunctionCalls.map((call) => ({
-							id: call.id,
-							type: 'function',
-							function: { name: call.name, arguments: call.arguments }
-						}))
-					},
-					...firstFunctionCalls.map((call, i) => ({
-						role: 'tool',
-						tool_call_id: call.id,
-						content: executed.nextInputItems[i]?.output ?? ''
-					}))
+				const hybridAccumulatedInput: unknown[] = [
+					...(responseInput as unknown[]),
+					...extractResponseOutputItems(firstCompletedResponse),
+					...executed.nextInputItems
 				]
+				let continuationReasoningEnabled = enableReasoning
 
-				// 后续工具轮次使用 Chat Completions（避免 previous_response_id 链导致 5xx）
-				for await (const chunk of runPureChatCompletionsMcpLoop(continuationMessages)) {
-					yield chunk
+				const buildHybridAccumulatedData = (): Record<string, unknown> => {
+					const data: Record<string, unknown> = {
+						model,
+						...responseBaseParams,
+						input: hybridAccumulatedInput
+					}
+					if (toolCandidates.length > 0) {
+						data.tools = toolCandidates
+					}
+					if (enableReasoning && continuationReasoningEnabled && data.reasoning === undefined) {
+						data.reasoning = { effort: 'medium' }
+					}
+					if (!continuationReasoningEnabled) {
+						delete data.reasoning
+					}
+					return data
+				}
+
+				let responsesApiFailed = false
+				for (let loop = 1; loop <= maxToolCallLoops; loop++) {
+					if (controller.signal.aborted) return
+
+					let reader: ReadableStreamDefaultReader<string> | undefined
+
+					try {
+						reader = await requestResponsesStreamByFetch(
+							ensureResponseEndpoint(String(baseURL ?? '')),
+							String(apiKey),
+							buildHybridAccumulatedData(),
+							controller.signal
+						)
+					} catch (error) {
+						let requestError: unknown = error
+						if (
+							continuationReasoningEnabled
+							&& shouldRetryContinuationWithoutReasoning(requestError)
+						) {
+							continuationReasoningEnabled = false
+							try {
+								reader = await requestResponsesStreamByFetch(
+									ensureResponseEndpoint(String(baseURL ?? '')),
+									String(apiKey),
+									buildHybridAccumulatedData(),
+									controller.signal
+								)
+							} catch (retryWithoutReasoningError) {
+								requestError = retryWithoutReasoningError
+							}
+						}
+						if (!reader) {
+							// 任何错误（5xx、连接中断、不支持等）均降级到 Chat Completions
+							responsesApiFailed = true
+							break
+						}
+					}
+
+					// 读取 SSE 流并处理推理 + 文本 + 工具调用事件
+					let completedResponse: any = null
+					let roundText = ''
+					let reasoningActive = false
+					let reasoningStartMs: number | null = null
+					let reading = true
+					let sseRest = ''
+
+					const processHybridSseEvent = function* (payload: Record<string, unknown> | undefined) {
+						if (!payload) return
+						const eventType = String(payload.type ?? '')
+
+						if (isReasoningDeltaEvent(eventType)) {
+							if (!enableReasoning) return
+							const text = String(payload.delta ?? '')
+							if (!text) return
+							if (!reasoningActive) {
+								reasoningActive = true
+								reasoningStartMs = Date.now()
+								yield buildReasoningBlockStart(reasoningStartMs)
+							}
+							yield text
+							return
+						}
+
+						if (eventType === 'response.output_text.delta') {
+							const text = String(payload.delta ?? '')
+							if (!text) return
+							if (reasoningActive) {
+								reasoningActive = false
+								yield buildReasoningBlockEnd(Date.now() - (reasoningStartMs ?? Date.now()))
+								reasoningStartMs = null
+							}
+							roundText += text
+							yield text
+							return
+						}
+
+						if (eventType === 'response.completed') {
+							completedResponse = payload.response
+							if (reasoningActive) {
+								reasoningActive = false
+								yield buildReasoningBlockEnd(Date.now() - (reasoningStartMs ?? Date.now()))
+								reasoningStartMs = null
+							}
+						}
+					}
+
+					try {
+						while (reading) {
+							const { done, value } = await reader.read()
+							if (done) {
+								const flushed = feedChunk(sseRest, '\n\n')
+								for (const event of flushed.events) {
+									if (event.isDone) break
+									yield* processHybridSseEvent(event.json as Record<string, unknown> | undefined)
+								}
+								reading = false
+								break
+							}
+
+							const parsed = feedChunk(sseRest, value ?? '')
+							sseRest = parsed.rest
+
+							for (const event of parsed.events) {
+								if (event.isDone) {
+									reading = false
+									break
+								}
+								yield* processHybridSseEvent(event.json as Record<string, unknown> | undefined)
+							}
+						}
+					} catch {
+						// SSE 流读取中断（ERR_CONNECTION_CLOSED 等）→ 降级到 Chat Completions
+						if (reasoningActive) {
+							yield buildReasoningBlockEnd(Date.now() - (reasoningStartMs ?? Date.now()))
+						}
+						responsesApiFailed = true
+						break
+					}
+
+					if (reasoningActive) {
+						yield buildReasoningBlockEnd(Date.now() - (reasoningStartMs ?? Date.now()))
+					}
+
+					if (!completedResponse) break
+
+					const continuationCalls = extractResponseFunctionCalls(completedResponse)
+					if (continuationCalls.length === 0) return
+
+					const continuationExecuted = await executePoeMcpToolCalls(continuationCalls, mcpTools!, mcpCallTool!)
+					for (const marker of continuationExecuted.markers) {
+						yield `{{FF_MCP_TOOL_START}}:${marker.toolName}:${marker.content}{{FF_MCP_TOOL_END}}:`
+					}
+
+					hybridAccumulatedInput.push(...extractResponseOutputItems(completedResponse))
+					hybridAccumulatedInput.push(...continuationExecuted.nextInputItems)
+				}
+
+				// Responses API 续轮失败 → 最终降级到 Chat Completions 循环（无推理但保证可用）
+				if (responsesApiFailed) {
+					const chatHistoryMessages = await Promise.all(
+						messages.map((msg) => formatMsg(msg, resolveEmbedAsBinary))
+					)
+					const continuationMessages: any[] = [
+						...chatHistoryMessages,
+						{
+							role: 'assistant',
+							content: firstRoundText || null,
+							tool_calls: firstFunctionCalls.map((call) => ({
+								id: call.id,
+								type: 'function',
+								function: { name: call.name, arguments: call.arguments }
+							}))
+						},
+						...firstFunctionCalls.map((call, i) => ({
+							role: 'tool',
+							tool_call_id: call.id,
+							content: executed.nextInputItems[i]?.output ?? ''
+						}))
+					]
+					for await (const chunk of runPureChatCompletionsMcpLoop(continuationMessages)) {
+						yield chunk
+					}
 				}
 			}
 
@@ -1853,12 +2174,40 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 						{ signal: controller.signal }
 					)
 
+					let reasoningActive = false
+					let reasoningStartMs: number | null = null
+
 					for await (const part of stream) {
 						const delta: any = part.choices[0]?.delta
+
+						// 处理推理内容（delta.reasoning_content）
+						const reasoningText = delta?.reasoning_content
+						if (reasoningText && enableReasoning) {
+							if (!reasoningActive) {
+								reasoningActive = true
+								reasoningStartMs = Date.now()
+								yield buildReasoningBlockStart(reasoningStartMs)
+							}
+							yield reasoningText
+						}
+
 						const text = delta?.content
 						if (text) {
+							// 推理结束，转入正文输出
+							if (reasoningActive) {
+								const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+								yield buildReasoningBlockEnd(durationMs)
+								reasoningActive = false
+								reasoningStartMs = null
+							}
 							yield text
 						}
+					}
+
+					// 流结束时关闭推理块
+					if (reasoningActive) {
+						const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+						yield buildReasoningBlockEnd(durationMs)
 					}
 					return
 				} catch (sdkStreamError) {
@@ -1885,6 +2234,19 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 				)
 				const firstChoice = response?.choices?.[0]
 				const message = firstChoice?.message ?? {}
+
+				// 处理非流式响应中的推理内容
+				if (enableReasoning) {
+					const reasoningContent = (message as any).reasoning_content
+					if (typeof reasoningContent === 'string' && reasoningContent.trim()) {
+						const startMs = Date.now()
+						yield buildReasoningBlockStart(startMs)
+						yield reasoningContent
+						const durationMs = Math.max(10, Date.now() - startMs)
+						yield buildReasoningBlockEnd(durationMs)
+					}
+				}
+
 				const text = extractMessageText(message.content)
 				if (text) yield text
 			}
@@ -1902,12 +2264,40 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 					{ signal: controller.signal }
 				)
 
+				let reasoningActive = false
+				let reasoningStartMs: number | null = null
+
 				for await (const part of stream) {
 					const delta: any = part.choices[0]?.delta
+
+					// 处理推理内容（delta.reasoning_content）
+					const reasoningText = delta?.reasoning_content
+					if (reasoningText && enableReasoning) {
+						if (!reasoningActive) {
+							reasoningActive = true
+							reasoningStartMs = Date.now()
+							yield buildReasoningBlockStart(reasoningStartMs)
+						}
+						yield reasoningText
+					}
+
 					const text = delta?.content
 					if (text) {
+						// 推理结束，转入正文输出
+						if (reasoningActive) {
+							const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+							yield buildReasoningBlockEnd(durationMs)
+							reasoningActive = false
+							reasoningStartMs = null
+						}
 						yield text
 					}
+				}
+
+				// 流结束时关闭推理块
+				if (reasoningActive) {
+					const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+					yield buildReasoningBlockEnd(durationMs)
 				}
 			}
 
@@ -1927,6 +2317,39 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 
 				let sseRest = ''
 				let reading = true
+				let reasoningActive = false
+				let reasoningStartMs: number | null = null
+
+				/**
+				 * 处理 Chat Completions SSE delta（提取推理内容和正文）
+				 */
+				const processChatDelta = function* (delta: any) {
+					if (!delta) return
+
+					// 处理推理内容（delta.reasoning_content）
+					const reasoningText = delta.reasoning_content
+					if (reasoningText && enableReasoning) {
+						if (!reasoningActive) {
+							reasoningActive = true
+							reasoningStartMs = Date.now()
+							yield buildReasoningBlockStart(reasoningStartMs)
+						}
+						yield String(reasoningText)
+					}
+
+					// 处理正文内容
+					const text = delta.content
+					if (typeof text === 'string' && text) {
+						// 推理结束，转入正文输出
+						if (reasoningActive) {
+							const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+							yield buildReasoningBlockEnd(durationMs)
+							reasoningActive = false
+							reasoningStartMs = null
+						}
+						yield text
+					}
+				}
 
 				while (reading) {
 					const { done, value } = await reader.read()
@@ -1937,8 +2360,8 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 							if (event.isDone) break
 							const payload = event.json as Record<string, unknown> | undefined
 							if (!payload) continue
-							const text = (payload as any).choices?.[0]?.delta?.content
-							if (typeof text === 'string' && text) yield text
+							const delta = (payload as any).choices?.[0]?.delta
+							yield* processChatDelta(delta)
 						}
 						reading = false
 						break
@@ -1954,11 +2377,15 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 						}
 						const payload = event.json as Record<string, unknown> | undefined
 						if (!payload) continue
-						const text = (payload as any).choices?.[0]?.delta?.content
-						if (typeof text === 'string' && text) {
-							yield text
-						}
+						const delta = (payload as any).choices?.[0]?.delta
+						yield* processChatDelta(delta)
 					}
+				}
+
+				// 流结束时关闭推理块
+				if (reasoningActive) {
+					const durationMs = Date.now() - (reasoningStartMs ?? Date.now())
+					yield buildReasoningBlockEnd(durationMs)
 				}
 			}
 
@@ -1999,7 +2426,7 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 							if (!payload) continue
 							const eventType = String(payload.type ?? '')
 
-							if (eventType === 'response.reasoning_text.delta' || eventType === 'response.reasoning_summary_text.delta') {
+							if (isReasoningDeltaEvent(eventType)) {
 								if (!enableReasoning) continue
 								const text = String(payload.delta ?? '')
 								if (!text) continue
@@ -2048,7 +2475,7 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 						if (!payload) continue
 						const eventType = String(payload.type ?? '')
 
-						if (eventType === 'response.reasoning_text.delta' || eventType === 'response.reasoning_summary_text.delta') {
+						if (isReasoningDeltaEvent(eventType)) {
 							if (!enableReasoning) continue
 							const text = String(payload.delta ?? '')
 							if (!text) continue
@@ -2181,7 +2608,7 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 								}
 								const desktopCanFallbackToChat = shouldFallbackToChatCompletions(desktopError)
 								if (desktopCanFallbackToChat) {
-									yield* smoothStream(runChatCompletionFallback())
+									yield* smoothStream(wrapWithThinkTagDetection(runChatCompletionFallback(), enableReasoning))
 									return
 								}
 								throw desktopError
@@ -2191,7 +2618,7 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 
 				const canFallbackToChat = shouldFallbackToChatCompletions(error)
 				if (canFallbackToChat) {
-					yield* smoothStream(runChatCompletionFallback())
+					yield* smoothStream(wrapWithThinkTagDetection(runChatCompletionFallback(), enableReasoning))
 					return
 				}
 
