@@ -1564,6 +1564,11 @@ export class ChatService {
 				enableWebSearch
 			};
 
+			// 推理开关关闭时，同步禁用 thinkingType 防止 MCP 包装器误判推理状态
+			if (!enableReasoning && typeof providerOptionsRaw.thinkingType === 'string') {
+				providerOptions.thinkingType = 'disabled';
+			}
+
 			// 注入 MCP 工具（根据会话 MCP 模式进行过滤）
 			const mcpManager = this.plugin.featureCoordinator.getMcpClientManager();
 			const mcpMode = this.state.mcpToolMode;

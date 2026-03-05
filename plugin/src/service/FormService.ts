@@ -5,6 +5,7 @@ import { showPromiseToast } from "../component/toast/PromiseToast";
 import { ToastManager } from "../component/toast/ToastManager";
 import { getStartupConditionService, ConditionEvaluationResult } from "../service/startup-condition/StartupConditionService";
 import { FormConfig } from "../model/FormConfig";
+import { ActionTrigger } from "../model/ActionTrigger";
 import { getActionsCompatible } from "../utils/getActionsCompatible";
 import { resolveDefaultFormIdValues } from "../utils/resolveDefaultFormIdValues";
 import { ActionChain, ActionContext } from "./action/IActionService";
@@ -17,6 +18,7 @@ import { IFileListField } from "src/model/field/IFileListField";
 import { FormFieldValueProcessor } from "./engine/FormFieldValueProcessor";
 import { FormExecutionManager } from "./FormExecutionManager";
 import { FormDisplayRules } from "../utils/FormDisplayRules";
+import { ActionDependencyAnalyzer } from "../utils/ActionDependencyAnalyzer";
 
 export interface FormSubmitOptions {
     app: App;
@@ -38,6 +40,11 @@ export class FormService {
 
     async submit(idValues: FormIdValues, config: FormConfig, options: FormSubmitOptions) {
         const actions = getActionsCompatible(config);
+
+        const depResult = ActionDependencyAnalyzer.validateOutputDependencies(actions);
+        if (!depResult.valid) {
+            throw new Error(`未满足的输出依赖：${depResult.missingOutputs.join(", ")}`);
+        }
         
         FormValidator.validate(config, idValues);
         
@@ -209,6 +216,137 @@ export class FormService {
             await formService.submitDirectly(formConfig, app);
             return { submitted: true };
         }
+    }
+
+    // ========== 触发器相关方法 ==========
+
+    /**
+     * 通过触发器打开表单（TFile 版本）
+     * 
+     * 读取文件配置 → 验证依赖 → 创建过滤配置 → 判断是否需要 UI → 提交
+     */
+    async openByTrigger(trigger: ActionTrigger, file: TFile, app: App): Promise<void> {
+        const data = await app.vault.readJson(file.path);
+        const config = FormConfig.fromJSON(data);
+
+        // 验证触发器引用的动作是否存在
+        const triggerActions = config.getActionsForTrigger(trigger);
+        if (triggerActions.length === 0) {
+            ToastManager.error(
+                localInstance.trigger_no_actions || `触发器 ${trigger.name} 没有有效的动作引用`,
+                5000
+            );
+            return;
+        }
+
+        // 验证输出变量依赖完整性
+        const depResult = ActionDependencyAnalyzer.validateOutputDependencies(triggerActions);
+        if (!depResult.valid) {
+            ToastManager.error(
+                (localInstance.trigger_missing_deps || `触发器 ${trigger.name} 的动作存在未满足的输出依赖：${depResult.missingOutputs.join(", ")}`),
+                5000
+            );
+            return;
+        }
+
+        const filtered = this.createFilteredConfigForTrigger(trigger, config);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (filtered as any).filePath = file.path;
+
+        if (FormDisplayRules.shouldShowForm(filtered)) {
+            const m = new FormViewModal2(app, {
+                formConfig: filtered,
+                options: { showOnlyFieldsNeedingInput: true }
+            });
+            m.open();
+        } else {
+            await this.submitDirectlyByTrigger(trigger, config, app);
+        }
+    }
+
+    /**
+     * 通过触发器打开表单（FormConfig 版本）
+     * 
+     * 返回 FormModalResult 以支持嵌套调用
+     */
+    async openFormByTrigger(
+        trigger: ActionTrigger,
+        formConfig: FormConfig,
+        app: App
+    ): Promise<FormModalResult> {
+        const triggerActions = formConfig.getActionsForTrigger(trigger);
+        if (triggerActions.length === 0) {
+            ToastManager.error(
+                localInstance.trigger_no_actions || `触发器 ${trigger.name} 没有有效的动作引用`,
+                5000
+            );
+            return { submitted: false };
+        }
+
+        const depResult = ActionDependencyAnalyzer.validateOutputDependencies(triggerActions);
+        if (!depResult.valid) {
+            ToastManager.error(
+                (localInstance.trigger_missing_deps || `触发器 ${trigger.name} 的动作存在未满足的输出依赖：${depResult.missingOutputs.join(", ")}`),
+                5000
+            );
+            return { submitted: false };
+        }
+
+        const filtered = this.createFilteredConfigForTrigger(trigger, formConfig);
+
+        if (FormDisplayRules.shouldShowForm(filtered)) {
+            const m = new FormViewModal2(app, {
+                formConfig: filtered,
+                options: { showOnlyFieldsNeedingInput: true }
+            });
+            return await m.open();
+        } else {
+            await this.submitDirectlyByTrigger(trigger, formConfig, app);
+            return { submitted: true };
+        }
+    }
+
+    /**
+     * 通过触发器直接提交表单（无界面）
+     * 
+     * 不检查启动条件（由调用方 AutoTriggerService / StartupFormService 负责）
+     */
+    async submitDirectlyByTrigger(
+        trigger: ActionTrigger,
+        formConfig: FormConfig,
+        app: App
+    ): Promise<void> {
+        const filtered = this.createFilteredConfigForTrigger(trigger, formConfig);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (filtered as any).filePath = (formConfig as any).filePath;
+
+        // 清除条件配置，避免 submitDirectly 中重复检查
+        filtered.startupConditions = undefined;
+        filtered.runOnStartup = false;
+
+        await this.submitDirectly(filtered, app);
+    }
+
+    /**
+     * 为触发器创建过滤后的 FormConfig 副本
+     * 仅包含触发器引用的动作和相关字段
+     */
+    private createFilteredConfigForTrigger(
+        trigger: ActionTrigger,
+        config: FormConfig
+    ): FormConfig {
+        const filteredActions = config.getActionsForTrigger(trigger);
+        const referencedFields = ActionDependencyAnalyzer.getReferencedFieldsWithConditionClosure(
+            filteredActions,
+            config.fields
+        );
+
+        // 深拷贝 → 替换动作和字段
+        const filtered = FormConfig.fromJSON(JSON.parse(JSON.stringify(config)));
+        filtered.actions = filteredActions;
+        filtered.fields = referencedFields;
+
+        return filtered;
     }
 
     /**

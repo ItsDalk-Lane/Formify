@@ -828,4 +828,30 @@ export interface Local {
 	expired_days_ago: string;
 	check_now: string;
 	no_expired_files: string;
+	// 触发器相关
+	action_trigger: string;
+	trigger_name: string;
+	trigger_name_placeholder: string;
+	trigger_command_enabled: string;
+	trigger_context_menu_enabled: string;
+	trigger_run_on_startup: string;
+	trigger_auto_trigger_enabled: string;
+	trigger_select_actions: string;
+	trigger_no_actions: string;
+	trigger_missing_deps: string;
+	trigger_add: string;
+	trigger_delete: string;
+	trigger_delete_confirm: string;
+	trigger_no_actions_selected: string;
+	trigger_actions_label: string;
+	trigger_unnamed: string;
+	trigger_command: string;
+	trigger_context_menu: string;
+	trigger_auto_trigger: string;
+	trigger_actions: string;
+	trigger_select_all: string;
+	trigger_invocation: string;
+	trigger_default_name: string;
+	trigger_startup_conditions: string;
+	trigger_section_title: string;
 }

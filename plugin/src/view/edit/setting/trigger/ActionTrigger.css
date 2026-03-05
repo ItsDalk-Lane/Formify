@@ -1,0 +1,179 @@
+/* 触发器列表容器 */
+.form--ActionTriggerList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+  width: 100%;
+}
+
+/* 单个触发器项 */
+.form--ActionTriggerItem {
+  border-radius: var(--radius-m);
+  width: 100%;
+  position: relative;
+  background-color: var(--form--setting-control-background-color);
+  box-shadow: var(--form--setting-control-box-shadow);
+  border: var(--form--setting-control-border);
+}
+
+@media (any-hover: hover) {
+  .form--ActionTriggerItem:hover {
+    box-shadow: rgba(0, 0, 0, 0.1) 0px 4px 6px -1px,
+      rgba(0, 0, 0, 0.06) 0px 2px 4px -1px;
+  }
+}
+
+/* 触发器头部 */
+.form--ActionTriggerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: var(--size-4-2) var(--size-4-3);
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  gap: 4px;
+}
+
+.form--ActionTriggerHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.form--ActionTriggerName {
+  font-weight: 500;
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.form--ActionTriggerCount {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  flex-shrink: 0;
+}
+
+.form--ActionTriggerHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.form--ActionTriggerIconBtn {
+  padding: 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-radius: var(--radius-s);
+}
+
+.form--ActionTriggerIconBtn:hover {
+  color: var(--text-normal);
+  background-color: var(--interactive-hover);
+}
+
+/* 触发器展开内容 */
+.form--ActionTriggerContent {
+  padding: var(--size-4-2) var(--size-4-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+}
+
+/* 触发器名称输入框 */
+.form--TriggerNameInput {
+  width: 100%;
+}
+
+/* 动作选择列表 */
+.form--TriggerActionList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-1);
+  max-height: 240px;
+  overflow-y: auto;
+  padding: var(--size-4-1);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+}
+
+/* 动作复选框 */
+.form--TriggerActionCheckbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  font-size: var(--font-ui-small);
+}
+
+.form--TriggerActionCheckbox:hover {
+  background-color: var(--interactive-hover);
+}
+
+.form--TriggerSelectAll {
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+  font-weight: 500;
+}
+
+/* 动作类型标记 */
+.form--TriggerActionTypeBadge {
+  padding: 1px 6px;
+  border-radius: var(--radius-s);
+  font-size: var(--font-ui-smaller);
+  background-color: var(--select-button-background-color, rgba(var(--color-blue-rgb), 0.1));
+  color: var(--select-button-text-color, rgba(var(--color-blue-rgb), 1));
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.form--TriggerActionTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.form--TriggerEmptyHint {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  padding: var(--size-4-2);
+  text-align: center;
+}
+
+/* 调用方式开关组 */
+.form--TriggerToggleGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-1);
+}
+
+.form--TriggerToggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  border-radius: var(--radius-s);
+}
+
+.form--TriggerToggleRow:hover {
+  background-color: var(--interactive-hover);
+}
+
+.form--TriggerToggleInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+}

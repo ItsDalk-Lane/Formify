@@ -43,10 +43,15 @@ const sendRequestFunc = (settings: ZhipuOptions): SendRequest =>
 			...remains
 		}
 
-		// 添加推理配置
+		// 添加推理配置：启用时按用户配置发送，禁用时显式告知 API 关闭推理
+		// 不发送 thinking 参数时，GLM-4.6 等推理模型会默认输出推理内容
 		if (enableReasoning && thinkingType !== 'disabled') {
 			requestParams.thinking = {
 				type: thinkingType
+			}
+		} else {
+			requestParams.thinking = {
+				type: 'disabled'
 			}
 		}
 

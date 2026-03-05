@@ -6,6 +6,7 @@ import {
 	Copy,
 	Trash2,
 	Network,
+	Zap,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useActionTitle } from "src/hooks/useActionTitle";
@@ -33,6 +34,7 @@ export default function CpsFormAction(props: {
 	onChange: (action: IFormAction) => void;
 	onDelete: (action: IFormAction) => void;
 	onDuplicate: (action: IFormAction) => void;
+	onIndependentTriggerClick?: (action: IFormAction) => void;
 	defaultOpen?: boolean;
 	formConfig: FormConfig;
 }) {
@@ -107,6 +109,7 @@ export default function CpsFormAction(props: {
 				onChange={saveAction}
 				onDelete={onDelete}
 				onDuplicate={onDuplicate}
+				onIndependentTriggerClick={props.onIndependentTriggerClick}
 				setDragHandleRef={setDragHandleRef}
 			/>
 			<div className="form--CpsFormActionBottomSection">
@@ -174,6 +177,7 @@ function CpsFormActionHeader(props: {
 	onOpenChange: (open: boolean) => void;
 	onDelete: (action: IFormAction) => void;
 	onDuplicate: (action: IFormAction) => void;
+	onIndependentTriggerClick?: (action: IFormAction) => void;
 	setDragHandleRef: (ref: HTMLDivElement | null) => void;
 }) {
 	const { value, open, setDragHandleRef, title } = props;
@@ -228,6 +232,17 @@ function CpsFormActionHeader(props: {
 					) : (
 						<ChevronRight size={14} />
 					)}
+				</button>
+				<button
+					className="clickable-icon"
+					aria-label={localInstance.trigger_add}
+					title={localInstance.trigger_add}
+					onClick={(e) => {
+						e.stopPropagation();
+						props.onIndependentTriggerClick?.(value);
+					}}
+				>
+					<Zap size={14} />
 				</button>
 				<button
 					className="clickable-icon"

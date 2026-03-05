@@ -102,20 +102,23 @@ export class McpServerDataService {
 	async loadServers(aiDataFolder: string): Promise<McpServerConfig[]> {
 		try {
 			const folderPath = await this.getStorageFolderPath(aiDataFolder);
-			const files = this.listMarkdownFiles(folderPath);
+			// 使用 adapter API 直接从文件系统读取，避免在插件启动早期
+			// Vault 缓存尚未就绪时 getAbstractFileByPath 返回 null 导致丢失数据
+			const filePaths = await this.listMarkdownFilePathsViaAdapter(folderPath);
 			const loaded: McpServerConfig[] = [];
 			const now = Date.now();
-			for (const [index, file] of files.entries()) {
+			for (const [index, filePath] of filePaths.entries()) {
 				try {
-					const content = await this.app.vault.read(file);
+					const content = await this.app.vault.adapter.read(filePath);
+					const basename = filePath.split('/').pop()?.replace(/\.md$/, '') ?? '';
 					const { frontmatter } = this.parseMarkdownRecord(content);
 					const server = sanitizeServerConfig(frontmatter, {
-						id: file.basename || `mcp_server_${now}_${index}`,
-						name: file.basename || `MCP Server ${index + 1}`,
+						id: basename || `mcp_server_${now}_${index}`,
+						name: basename || `MCP Server ${index + 1}`,
 					});
 					loaded.push(server);
 				} catch (error) {
-					DebugLogger.warn('[McpServerDataService] 读取 MCP 服务器配置失败，已跳过', { path: file.path, error });
+					DebugLogger.warn('[McpServerDataService] 读取 MCP 服务器配置失败，已跳过', { path: filePath, error });
 				}
 			}
 			return loaded;
@@ -165,6 +168,23 @@ export class McpServerDataService {
 	private async getStorageFolderPath(aiDataFolder: string): Promise<string> {
 		await ensureAIDataFolders(this.app, aiDataFolder);
 		return getMcpServersPath(aiDataFolder);
+	}
+
+	/**
+	 * 通过 adapter API 直接从文件系统列出 Markdown 文件路径
+	 * 不依赖 Vault 缓存，确保在插件启动早期（onLayoutReady 之前）也能正确读取
+	 */
+	private async listMarkdownFilePathsViaAdapter(folderPath: string): Promise<string[]> {
+		try {
+			const exists = await this.app.vault.adapter.exists(folderPath);
+			if (!exists) {
+				return [];
+			}
+			const listing = await this.app.vault.adapter.list(folderPath);
+			return listing.files.filter((f) => f.endsWith('.md'));
+		} catch {
+			return [];
+		}
 	}
 
 	private listMarkdownFiles(folderPath: string): TFile[] {

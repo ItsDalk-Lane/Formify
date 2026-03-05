@@ -902,4 +902,30 @@ export class Zh implements Local {
 	expired_days_ago = "{0} 天前";
 	check_now = "立即检查";
 	no_expired_files = "未发现过期文件";
+	// 触发器相关
+	action_trigger = "动作触发器";
+	trigger_name = "触发器名称";
+	trigger_name_placeholder = "请输入触发器名称";
+	trigger_command_enabled = "注册为命令";
+	trigger_context_menu_enabled = "显示在右键菜单";
+	trigger_run_on_startup = "启动时执行";
+	trigger_auto_trigger_enabled = "定时自动触发";
+	trigger_select_actions = "选择动作";
+	trigger_no_actions = "触发器\"{0}\"没有有效的动作引用";
+	trigger_missing_deps = "触发器\"{0}\"的动作存在未满足的输出依赖：{1}";
+	trigger_add = "添加触发器";
+	trigger_delete = "删除触发器";
+	trigger_delete_confirm = "确定删除触发器\"{0}\"吗？";
+	trigger_no_actions_selected = "请至少选择一个动作";
+	trigger_actions_label = "关联动作";
+	trigger_unnamed = "未命名触发器";
+	trigger_command = "命令面板";
+	trigger_context_menu = "右键菜单";
+	trigger_auto_trigger = "定时自动触发";
+	trigger_actions = "关联动作";
+	trigger_select_all = "全选";
+	trigger_invocation = "调用方式";
+	trigger_default_name = "触发器";
+	trigger_startup_conditions = "启动/触发条件";
+	trigger_section_title = "动作触发器";
 }

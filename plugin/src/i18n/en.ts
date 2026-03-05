@@ -893,4 +893,30 @@ export class En implements Local {
 	expired_days_ago = "{0} days ago";
 	check_now = "Check Now";
 	no_expired_files = "No expired files found";
+	// Action Trigger
+	action_trigger = "Action Trigger";
+	trigger_name = "Trigger Name";
+	trigger_name_placeholder = "Enter trigger name";
+	trigger_command_enabled = "Register as Command";
+	trigger_context_menu_enabled = "Show in Context Menu";
+	trigger_run_on_startup = "Run on Startup";
+	trigger_auto_trigger_enabled = "Auto Trigger";
+	trigger_select_actions = "Select Actions";
+	trigger_no_actions = "Trigger \"{0}\" has no valid action references";
+	trigger_missing_deps = "Trigger \"{0}\" has unmet output dependencies: {1}";
+	trigger_add = "Add Trigger";
+	trigger_delete = "Delete Trigger";
+	trigger_delete_confirm = "Delete trigger \"{0}\"?";
+	trigger_no_actions_selected = "Please select at least one action";
+	trigger_actions_label = "Linked Actions";
+	trigger_unnamed = "Unnamed Trigger";
+	trigger_command = "Command Palette";
+	trigger_context_menu = "Context Menu";
+	trigger_auto_trigger = "Auto Trigger";
+	trigger_actions = "Linked Actions";
+	trigger_select_all = "Select All";
+	trigger_invocation = "Invocation Methods";
+	trigger_default_name = "Trigger";
+	trigger_startup_conditions = "Startup/Trigger Conditions";
+	trigger_section_title = "Action Triggers";
 }

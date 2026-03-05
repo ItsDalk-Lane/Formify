@@ -1,6 +1,7 @@
 import { v4 } from "uuid";
 import { IFormAction } from "./action/IFormAction";
 import { ActionGroup } from "./ActionGroup";
+import { ActionTrigger } from "./ActionTrigger";
 import { FormActionType } from "./enums/FormActionType";
 import { FormDisplayMode } from "./enums/FormDisplayMode";
 import { FormExecutionMode } from "./enums/FormExecutionMode";
@@ -16,6 +17,8 @@ export class FormConfig {
     action?: IFormAction;
     actions: IFormAction[];
     actionGroups: ActionGroup[];
+    /** 动作触发器列表，允许为动作子集配置独立的调用入口 */
+    actionTriggers: ActionTrigger[];
     showSubmitSuccessToast?: boolean;  // 是否显示提交成功提示，默认为true
     enableExecutionTimeout?: boolean;  // 是否启用表单执行超时控制，默认为false
     executionTimeoutThreshold?: number; // 超时阈值（秒），默认为30秒，最小值为5秒
@@ -44,6 +47,7 @@ export class FormConfig {
         this.fields = [];
         this.actions = [];
         this.actionGroups = [];
+        this.actionTriggers = [];
         this.showSubmitSuccessToast = true;  // 默认显示提交成功提示
         this.enableExecutionTimeout = false; // 默认不启用超时控制
         this.executionTimeoutThreshold = 30; // 默认30秒
@@ -179,6 +183,52 @@ export class FormConfig {
 
         const config = new FormConfig(data.id || '');
         Object.assign(config, data);
+
+        // 反序列化 actionTriggers（兼容旧版文件无此字段）
+        if (Array.isArray(data.actionTriggers)) {
+            config.actionTriggers = data.actionTriggers.map(
+                (t: any) => ActionTrigger.fromJSON(t)
+            );
+        } else {
+            config.actionTriggers = [];
+        }
+
+        config.cleanupTriggerActionRefs();
+
         return config;
+    }
+
+    /**
+     * 根据触发器 ID 获取触发器
+     */
+    getActionTrigger(triggerId: string): ActionTrigger | undefined {
+        return this.actionTriggers.find(t => t.id === triggerId);
+    }
+
+    /**
+     * 根据触发器名称获取触发器
+     */
+    getActionTriggerByName(name: string): ActionTrigger | undefined {
+        return this.actionTriggers.find(t => t.name === name);
+    }
+
+    /**
+     * 获取触发器引用的动作列表（保持 actionIds 顺序）
+     */
+    getActionsForTrigger(trigger: ActionTrigger): IFormAction[] {
+        const actionMap = new Map(this.actions.map(a => [a.id, a]));
+        return trigger.actionIds
+            .map(id => actionMap.get(id))
+            .filter((a): a is IFormAction => a !== undefined);
+    }
+
+    /**
+     * 清理所有触发器中无效的动作引用
+     */
+    cleanupTriggerActionRefs(): void {
+        const validIds = new Set(this.actions.map(a => a.id));
+        for (const trigger of this.actionTriggers) {
+            trigger.removeInvalidActionIds(validIds);
+        }
     }
 }

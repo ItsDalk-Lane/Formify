@@ -14,6 +14,8 @@ export class FormIntegrationService {
     private fileEventRefs: EventRef[] = [];
     private isInitialized: boolean = false;
     private onMenuRefresh: MenuRefreshCallback | null = null;
+    private readonly formCommandIdsByPath: Map<string, string> = new Map();
+    private readonly triggerCommandIdsByPath: Map<string, Set<string>> = new Map();
 
     constructor() {
     }
@@ -35,6 +37,74 @@ export class FormIntegrationService {
         }
     }
 
+    private getFormFile(filePath: string): TFile | null {
+        const file = this.plugin.app.vault.getAbstractFileByPath(filePath);
+        if (!file || !(file instanceof TFile)) {
+            return null;
+        }
+        return file;
+    }
+
+    private unregisterCommandsByPath(filePath: string): void {
+        const formCommandId = this.formCommandIdsByPath.get(filePath);
+        if (formCommandId) {
+            this.plugin.removeCommand(`form:${formCommandId}`);
+            this.formCommandIdsByPath.delete(filePath);
+        }
+
+        const triggerCommandIds = this.triggerCommandIdsByPath.get(filePath);
+        if (triggerCommandIds) {
+            for (const triggerCommandId of triggerCommandIds) {
+                this.plugin.removeCommand(`form-trigger:${triggerCommandId}`);
+            }
+            this.triggerCommandIdsByPath.delete(filePath);
+        }
+    }
+
+    private unregisterAllKnownCommands(): void {
+        for (const commandId of this.formCommandIdsByPath.values()) {
+            this.plugin.removeCommand(`form:${commandId}`);
+        }
+        for (const triggerIds of this.triggerCommandIdsByPath.values()) {
+            for (const triggerId of triggerIds) {
+                this.plugin.removeCommand(`form-trigger:${triggerId}`);
+            }
+        }
+        this.formCommandIdsByPath.clear();
+        this.triggerCommandIdsByPath.clear();
+    }
+
+    private async executeFormCommand(filePath: string): Promise<void> {
+        const file = this.getFormFile(filePath);
+        if (!file) {
+            console.warn(`Form file not found for command execution: ${filePath}`);
+            return;
+        }
+        await new FormService().open(file, this.plugin.app);
+    }
+
+    private async executeTriggerCommand(filePath: string, triggerId: string): Promise<void> {
+        const file = this.getFormFile(filePath);
+        if (!file) {
+            console.warn(`Form file not found for trigger execution: ${filePath}`);
+            return;
+        }
+
+        const config = await this.readFormConfig(filePath);
+        if (!config) {
+            console.warn(`Failed to read form config for trigger command: ${filePath}`);
+            return;
+        }
+
+        const trigger = config.getActionTrigger(triggerId);
+        if (!trigger) {
+            console.warn(`Trigger not found: ${triggerId} in ${filePath}`);
+            return;
+        }
+
+        await new FormService().openByTrigger(trigger, file, this.plugin.app);
+    }
+
     /**
      * 获取命令ID - 从表单配置中读取
      * @param filePath 文件路径
@@ -54,10 +124,11 @@ export class FormIntegrationService {
             const formConfig = FormConfig.fromJSON(config);
 
             // 获取或生成命令ID
+            const isNewCommandId = !formConfig.commandId;
             const commandId = formConfig.getOrCreateCommandId(filePath);
 
             // 如果是新生成的ID，需要立即保存回文件
-            if (!formConfig.commandId) {
+            if (isNewCommandId) {
                 await this.plugin.app.vault.modify(file, JSON.stringify(formConfig, null, 2));
             }
 
@@ -195,15 +266,6 @@ export class FormIntegrationService {
     }
 
     /**
-     * 检查命令是否已存在
-     * @param commandId 命令ID
-     */
-    private isCommandRegistered(commandId: string): boolean {
-        const fullCommandId = `form:${commandId}`;
-        return !!this.plugin.app.commands.findCommand(fullCommandId);
-    }
-
-    /**
      * 为表单文件注册命令（安全版本，避免重复注册）
      * @param file 表单文件
      */
@@ -226,26 +288,76 @@ export class FormIntegrationService {
             }
 
             // 检查是否应该启用命令
+            this.formCommandIdsByPath.set(file.path, commandId);
             if (config.isCommandEnabled()) {
-                // 检查命令是否已存在，避免重复注册
-                if (this.isCommandRegistered(commandId)) {
-                    return;
-                }
+                this.plugin.removeCommand(fullCommandId);
 
                 this.plugin.addCommand({
                     id: fullCommandId,
                     name: `@${file.basename}`,
                     icon: "file-spreadsheet",
                     callback: () => {
-                        new FormService().open(file, this.plugin.app);
+                        void this.executeFormCommand(file.path);
                     }
                 });
             } else {
                 // 确保禁用的命令被移除
                 this.plugin.removeCommand(fullCommandId);
             }
+
+            // 注册触发器命令
+            await this.registerTriggerCommands(file, config);
         } catch (error) {
             console.warn(`Failed to register command for ${file.path}:`, error);
+        }
+    }
+
+    /**
+     * 为表单的所有触发器注册独立命令
+     */
+    private async registerTriggerCommands(file: TFile, config: FormConfig): Promise<void> {
+        const existingTriggerIds = this.triggerCommandIdsByPath.get(file.path) ?? new Set<string>();
+        const nextTriggerIds = new Set<string>();
+        let needsSave = false;
+
+        for (const trigger of config.actionTriggers) {
+            if (!trigger.isCommandEnabled()) {
+                continue;
+            }
+
+            // 确保触发器有命令 ID
+            const isNew = !trigger.commandId;
+            const triggerCommandId = trigger.getOrCreateCommandId(file.path);
+            const fullTriggerCommandId = `form-trigger:${triggerCommandId}`;
+            nextTriggerIds.add(triggerCommandId);
+
+            if (isNew) {
+                needsSave = true;
+            }
+
+            // 先移除再注册，确保命令名称和回调始终与最新配置一致
+            this.plugin.removeCommand(fullTriggerCommandId);
+            this.plugin.addCommand({
+                id: fullTriggerCommandId,
+                name: `@${file.basename} > ${trigger.name}`,
+                icon: "zap",
+                callback: () => {
+                    void this.executeTriggerCommand(file.path, trigger.id);
+                }
+            });
+        }
+
+        // 清理已删除或已禁用的旧触发器命令
+        for (const oldTriggerId of existingTriggerIds) {
+            if (!nextTriggerIds.has(oldTriggerId)) {
+                this.plugin.removeCommand(`form-trigger:${oldTriggerId}`);
+            }
+        }
+
+        this.triggerCommandIdsByPath.set(file.path, nextTriggerIds);
+
+        if (needsSave) {
+            await this.saveFormConfig(file.path, config);
         }
     }
 
@@ -265,18 +377,20 @@ export class FormIntegrationService {
         });
         this.fileEventRefs.push(createEventRef);
 
-        // 文件删除事件
-        const deleteEventRef = vault.on('delete', async (file) => {
+        // 文件修改事件
+        const modifyEventRef = vault.on('modify', async (file) => {
             if (this.isValidFormFile(file)) {
-                try {
-                    const config = await this.readFormConfig(file.path);
-                    if (config && config.commandId) {
-                        const commandId = `form:${config.commandId}`;
-                        this.plugin.removeCommand(commandId);
-                    }
-                } catch (error) {
-                    console.warn(`Failed to clean up command for deleted file ${file.path}:`, error);
-                }
+                await this.registerFormCommand(file);
+                // 刷新右键菜单
+                this.triggerMenuRefresh();
+            }
+        });
+        this.fileEventRefs.push(modifyEventRef);
+
+        // 文件删除事件
+        const deleteEventRef = vault.on('delete', (file) => {
+            if (this.isValidFormFile(file)) {
+                this.unregisterCommandsByPath(file.path);
                 // 刷新右键菜单
                 this.triggerMenuRefresh();
             }
@@ -288,6 +402,9 @@ export class FormIntegrationService {
             if (this.isValidFormFile(file)) {
                 await this.handleFileRenameOrCopy(file, oldPath);
                 // 刷新右键菜单
+                this.triggerMenuRefresh();
+            } else if (oldPath.endsWith('.cform')) {
+                this.unregisterCommandsByPath(oldPath);
                 this.triggerMenuRefresh();
             }
         });
@@ -306,29 +423,10 @@ export class FormIntegrationService {
             // 文件复制：为新文件生成独立的命令ID并注册命令
             await this.registerFormCommand(file);
         } else {
-            // 文件重命名/移动：命令ID保持不变，只需要更新命令名称
+            // 文件重命名/移动：先移除旧路径注册，再按新路径重建命令
             try {
-                const config = await this.readFormConfig(file.path);
-                if (config && config.commandId) {
-                    const fullCommandId = `form:${config.commandId}`;
-
-                    // 移除旧命令并重新注册（更新命令名称）
-                    this.plugin.removeCommand(fullCommandId);
-
-                    if (config.isCommandEnabled()) {
-                        this.plugin.addCommand({
-                            id: fullCommandId,
-                            name: `@${file.basename}`, // 使用新的文件名
-                            icon: "file-spreadsheet",
-                            callback: () => {
-                                new FormService().open(file, this.plugin.app);
-                            }
-                        });
-                    }
-                } else {
-                    // 如果没有命令ID，创建一个新的
-                    await this.registerFormCommand(file);
-                }
+                this.unregisterCommandsByPath(oldPath);
+                await this.registerFormCommand(file);
             } catch (error) {
                 console.warn(`Failed to handle file rename for ${file.path}:`, error);
             }
@@ -353,6 +451,7 @@ export class FormIntegrationService {
             this.plugin.app.vault.offref(eventRef);
         }
         this.fileEventRefs = [];
+        this.unregisterAllKnownCommands();
         this.isInitialized = false;
     }
 
@@ -377,23 +476,11 @@ export class FormIntegrationService {
             config.setCommandEnabled(true);
 
             // 确保有命令ID（不重新生成已有的ID）
-            const commandId = config.getOrCreateCommandId(filePath);
-            const fullCommandId = `form:${commandId}`;
-
-            // 检查命令是否已存在，避免重复注册
-            if (!this.isCommandRegistered(commandId)) {
-                this.plugin.addCommand({
-                    id: fullCommandId,
-                    name: `@${file.basename}`,
-                    icon: "file-spreadsheet",
-                    callback: () => {
-                        new FormService().open(file, this.plugin.app);
-                    }
-                });
-            }
+            config.getOrCreateCommandId(filePath);
 
             // 保存配置（包括可能的commandId）
             await this.saveFormConfig(filePath, config);
+            await this.registerFormCommand(file);
             // 刷新右键菜单
             this.triggerMenuRefresh();
         } catch (error) {
@@ -416,14 +503,14 @@ export class FormIntegrationService {
             // 更新表单配置中的启用状态
             config.setCommandEnabled(false);
 
-            // 移除命令
-            if (config.commandId) {
-                const fullCommandId = `form:${config.commandId}`;
-                this.plugin.removeCommand(fullCommandId);
-            }
-
             // 保存配置
             await this.saveFormConfig(filePath, config);
+            const file = this.getFormFile(filePath);
+            if (file) {
+                await this.registerFormCommand(file);
+            } else {
+                this.unregisterCommandsByPath(filePath);
+            }
             // 刷新右键菜单
             this.triggerMenuRefresh();
         } catch (error) {

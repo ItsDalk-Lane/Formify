@@ -918,4 +918,30 @@ export class ZhTw implements Local {
 	expired_days_ago = "{0} 天前";
 	check_now = "立即檢查";
 	no_expired_files = "未發現過期檔案";
+	// 觸發器相關
+	action_trigger = "動作觸發器";
+	trigger_name = "觸發器名稱";
+	trigger_name_placeholder = "請輸入觸發器名稱";
+	trigger_command_enabled = "註冊為命令";
+	trigger_context_menu_enabled = "顯示在右鍵選單";
+	trigger_run_on_startup = "啟動時執行";
+	trigger_auto_trigger_enabled = "定時自動觸發";
+	trigger_select_actions = "選擇動作";
+	trigger_no_actions = "觸發器\"{0}\"沒有有效的動作引用";
+	trigger_missing_deps = "觸發器\"{0}\"的動作存在未滿足的輸出依賴：{1}";
+	trigger_add = "新增觸發器";
+	trigger_delete = "刪除觸發器";
+	trigger_delete_confirm = "確定刪除觸發器\"{0}\"嗎？";
+	trigger_no_actions_selected = "請至少選擇一個動作";
+	trigger_actions_label = "關聯動作";
+	trigger_unnamed = "未命名觸發器";
+	trigger_command = "命令面板";
+	trigger_context_menu = "右鍵選單";
+	trigger_auto_trigger = "定時自動觸發";
+	trigger_actions = "關聯動作";
+	trigger_select_all = "全選";
+	trigger_invocation = "調用方式";
+	trigger_default_name = "觸發器";
+	trigger_startup_conditions = "啟動/觸發條件";
+	trigger_section_title = "動作觸發器";
 }

@@ -55,7 +55,6 @@
 		"jose": "^5.2.4",
 		"lucide-react": "^0.424.0",
 		"luxon": "^3.4.4",
-		"micromatch": "^4.0.8",
 		"ollama": "^0.5.16",
 		"openai": "^5.0.1",
 		"openai-agents-js": "^0.1.9",

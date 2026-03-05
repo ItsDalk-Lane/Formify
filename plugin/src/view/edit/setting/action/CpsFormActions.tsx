@@ -16,6 +16,7 @@ import { useLoopContext } from "src/context/LoopContext";
 export function CpsFormActions(props: {
     config: FormConfig;
     onChange: (actions: IFormAction[]) => void;
+    onCreateTriggerForAction?: (action: IFormAction) => void;
     selectMode?: boolean;
     onToggleSelectMode?: () => void;
     onSelectAll?: () => void;
@@ -114,6 +115,9 @@ export function CpsFormActions(props: {
                                     ...actions.slice(originIndex + 1),
                                 ];
                                 saveAction(newActions);
+                            }}
+                            onIndependentTriggerClick={(v) => {
+                                props.onCreateTriggerForAction?.(v);
                             }}
                             formConfig={config}
                         />

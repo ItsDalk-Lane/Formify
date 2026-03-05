@@ -1,9 +1,11 @@
-import { ClipboardIcon, Wrench, Zap, Download, Search, Filter, Settings } from "lucide-react";
+import { ClipboardIcon, Wrench, Zap, Download, Search, Filter, Settings, Play } from "lucide-react";
 import { Tab } from "src/component/tab/Tab";
 import { useObsidianApp } from "src/context/obsidianAppContext";
 import { localInstance } from "src/i18n/locals";
 import { IFormField } from "src/model/field/IFormField";
+import { IFormAction } from "src/model/action/IFormAction";
 import { FormConfig } from "src/model/FormConfig";
+import { ActionTrigger } from "src/model/ActionTrigger";
 import { getServiceContainer } from "src/service/ServiceContainer";
 import ToggleControl from "src/view/shared/control/ToggleControl";
 import CpsForm from "src/view/shared/CpsForm";
@@ -17,7 +19,7 @@ import { useState, useEffect } from "react";
 import { FormConfigContext } from "src/hooks/useFormConfig";
 import { FormImportDialog } from "./import/FormImportDialog";
 import { StartupConditionEditor } from "./startup-condition/StartupConditionEditor";
-import ToggleControl from "src/view/shared/control/ToggleControl";
+import { ActionTriggerList } from "./trigger/ActionTriggerList";
 import { StartupConditionsConfig } from "src/model/startup-condition/StartupCondition";
 import { FormExecutionMode } from "src/model/enums/FormExecutionMode";
 import { FormDisplayMode } from "src/model/enums/FormDisplayMode";
@@ -42,6 +44,7 @@ export default function CpsFormSetting(props: {
 
 	// 导入功能状态
 	const [showImportDialog, setShowImportDialog] = useState(false);
+	const [focusedTriggerId, setFocusedTriggerId] = useState<string | undefined>(undefined);
 
 	// 异步获取快捷键
 	useEffect(() => {
@@ -193,7 +196,9 @@ export default function CpsFormSetting(props: {
 			action: undefined,
 			actions: newActions,
 		});
+		newConfig.cleanupTriggerActionRefs();
 		onChange(newConfig);
+		setFocusedTriggerId(undefined);
 		setActionSelectedIds([]);
 		setActionSelectMode(false);
 	};
@@ -253,6 +258,29 @@ export default function CpsFormSetting(props: {
 		setShowImportDialog(false);
 	};
 
+	const handleCreateTriggerForAction = (action: IFormAction) => {
+		const existingTrigger = (formConfig.actionTriggers || []).find(
+			(trigger) => trigger.actionIds.includes(action.id)
+		);
+		if (existingTrigger) {
+			setFocusedTriggerId(existingTrigger.id);
+			return;
+		}
+
+		const newTrigger = new ActionTrigger({
+			name: `${localInstance.trigger_default_name} ${(formConfig.actionTriggers || []).length + 1}`,
+			actionIds: [action.id],
+		});
+
+		const newConfig = new FormConfig(formConfig.id);
+		Object.assign(newConfig, {
+			...formConfig,
+			actionTriggers: [...(formConfig.actionTriggers || []), newTrigger],
+		});
+		onChange(newConfig);
+		setFocusedTriggerId(newTrigger.id);
+	};
+
 	return (
 		<FormConfigContext.Provider value={formConfig}>
 			{/* 导入对话框 */}
@@ -301,23 +329,46 @@ export default function CpsFormSetting(props: {
 								onToggleSelectMode={handleActionToggleSelectMode}
 								onDeleteSelected={handleActionDeleteSelected}
 							>
-								<CpsFormActions
-									config={formConfig}
-									hideVariablePanel={true}
-									onChange={(action) => {
-										const newConfig = new FormConfig(formConfig.id);
-										Object.assign(newConfig, {
-											...formConfig,
-											action: undefined,
-											actions: action,
-										});
-										onChange(newConfig);
-									}}
-									selectMode={actionSelectMode}
-									selectedIds={actionSelectedIds}
-									onToggleSelection={handleActionToggleSelection}
-								/>
+									<CpsFormActions
+										config={formConfig}
+										hideVariablePanel={true}
+										onChange={(action) => {
+											const newConfig = new FormConfig(formConfig.id);
+											Object.assign(newConfig, {
+												...formConfig,
+												action: undefined,
+												actions: action,
+											});
+											newConfig.cleanupTriggerActionRefs();
+											onChange(newConfig);
+											setFocusedTriggerId(undefined);
+										}}
+										onCreateTriggerForAction={handleCreateTriggerForAction}
+										selectMode={actionSelectMode}
+										selectedIds={actionSelectedIds}
+										onToggleSelection={handleActionToggleSelection}
+									/>
 							</CpsFormSettingGroup>
+
+							<CpsFormSettingGroup
+								icon={<Play />}
+								title={localInstance.trigger_section_title}
+							>
+									<ActionTriggerList
+										formConfig={formConfig}
+										filePath={props.filePath}
+										focusTriggerId={focusedTriggerId}
+										onChange={(triggers: ActionTrigger[]) => {
+											const newConfig = new FormConfig(formConfig.id);
+											Object.assign(newConfig, {
+												...formConfig,
+												actionTriggers: triggers,
+											});
+											onChange(newConfig);
+											setFocusedTriggerId(undefined);
+										}}
+									/>
+								</CpsFormSettingGroup>
 
 							<CpsFormSettingGroup
 								icon={<Settings />}

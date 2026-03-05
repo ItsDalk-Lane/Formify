@@ -1,5 +1,6 @@
 import { App, Notice, TFile, TAbstractFile, Menu, MenuItem } from "obsidian";
 import { FormConfig } from "src/model/FormConfig";
+import { ActionTrigger } from "src/model/ActionTrigger";
 import FormPlugin from "src/main";
 import { ServiceContainer } from "../ServiceContainer";
 
@@ -8,6 +9,8 @@ export interface ContextMenuItem {
     title: string;
     icon: string;
     callback: () => void;
+    /** 触发器子项（从属于同一表单） */
+    triggerItems?: ContextMenuItem[];
 }
 
 export class ContextMenuService {
@@ -143,7 +146,58 @@ export class ContextMenuService {
 
                 // 添加每个表单到子菜单
                 enabledForms.forEach((formItem) => {
-                    this.addFormMenuItem(submenu, formItem.id, formItem.title, formItem.icon, formItem.callback);
+                    // 如果有触发器子项，显示为三级子菜单
+                    if (formItem.triggerItems && formItem.triggerItems.length > 0) {
+                        this.addFormMenuItemWithTriggers(submenu, formItem);
+                    } else {
+                        this.addFormMenuItem(submenu, formItem.id, formItem.title, formItem.icon, formItem.callback);
+                    }
+                });
+            }
+        });
+    }
+
+    /**
+     * 添加带触发器子项的表单菜单项
+     * 表单本身可点击，同时展开子菜单显示触发器
+     */
+    private addFormMenuItemWithTriggers(
+        submenu: Menu,
+        formItem: ContextMenuItem
+    ): void {
+        submenu.addItem((subItem) => {
+            subItem.setTitle(formItem.title)
+                .setIcon(formItem.icon)
+                .onClick(() => {
+                    formItem.callback();
+                });
+
+            this.markCompactMenuItem(subItem);
+
+            // 创建三级子菜单显示触发器
+            const triggerSubmenu = subItem.setSubmenu();
+
+            // 第一项：执行完整表单
+            triggerSubmenu.addItem((fullItem) => {
+                fullItem.setTitle(formItem.title)
+                    .setIcon("file-spreadsheet")
+                    .onClick(() => {
+                        formItem.callback();
+                    });
+                this.markCompactMenuItem(fullItem);
+            });
+
+            triggerSubmenu.addSeparator();
+
+            // 触发器子项
+            for (const triggerItem of formItem.triggerItems!) {
+                triggerSubmenu.addItem((tItem) => {
+                    tItem.setTitle(triggerItem.title)
+                        .setIcon(triggerItem.icon)
+                        .onClick(() => {
+                            triggerItem.callback();
+                        });
+                    this.markCompactMenuItem(tItem);
                 });
             }
         });
@@ -379,8 +433,33 @@ export class ContextMenuService {
                 return;
             }
 
-            // 检查是否启用了右键菜单
-            if (!config.isContextMenuEnabled()) {
+            // 检查是否启用了右键菜单（表单级别）
+            const formContextMenuEnabled = config.isContextMenuEnabled();
+
+            // 收集启用右键菜单的触发器
+            const triggerItems: ContextMenuItem[] = [];
+            for (const trigger of config.actionTriggers) {
+                if (trigger.isContextMenuEnabled()) {
+                    triggerItems.push({
+                        id: `${file.path}:trigger:${trigger.id}`,
+                        title: trigger.name,
+                        icon: "zap",
+                        callback: async () => {
+                            const latestConfig = await this.readFormConfig(file.path);
+                            const latestTrigger = latestConfig?.getActionTrigger(trigger.id);
+                            if (!latestConfig || !latestTrigger) {
+                                return;
+                            }
+                            this.services?.formService.openByTrigger(
+                                latestTrigger, file, this.plugin.app
+                            );
+                        }
+                    });
+                }
+            }
+
+            // 如果表单本身和触发器都未启用右键菜单，跳过
+            if (!formContextMenuEnabled && triggerItems.length === 0) {
                 return;
             }
 
@@ -391,7 +470,8 @@ export class ContextMenuService {
                 icon: "file-spreadsheet",
                 callback: () => {
                     this.services?.formService.open(file, this.plugin.app);
-                }
+                },
+                triggerItems: triggerItems.length > 0 ? triggerItems : undefined,
             };
 
             // 添加到菜单项映射

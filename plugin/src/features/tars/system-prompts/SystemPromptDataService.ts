@@ -197,21 +197,24 @@ export class SystemPromptDataService {
 				return;
 			}
 
-			const files = this.listMarkdownFiles(folderPath);
+			// 使用 adapter API 直接从文件系统读取，避免在插件启动早期
+			// Vault 缓存尚未就绪时 getAbstractFileByPath 返回 null 导致丢失数据
+			const filePaths = await this.listMarkdownFilePathsViaAdapter(folderPath);
 			const loaded: RawSystemPrompt[] = [];
-			for (const [index, file] of files.entries()) {
+			for (const [index, filePath] of filePaths.entries()) {
 				try {
-					const content = await this.app.vault.read(file);
+					const content = await this.app.vault.adapter.read(filePath);
+					const basename = filePath.split('/').pop()?.replace(/\.md$/, '') ?? '';
 					const { frontmatter, body } = this.parseMarkdownRecord(content);
 					const item: RawSystemPrompt = {
 						...frontmatter,
-						id: isNonEmptyString(frontmatter.id) ? frontmatter.id : file.basename,
+						id: isNonEmptyString(frontmatter.id) ? frontmatter.id : basename,
 						order: typeof frontmatter.order === 'number' ? frontmatter.order : index,
 						content: body,
 					};
 					loaded.push(item);
 				} catch (error) {
-					DebugLogger.warn('[SystemPromptDataService] 读取系统提示词文件失败，已跳过', { path: file.path, error });
+					DebugLogger.warn('[SystemPromptDataService] 读取系统提示词文件失败，已跳过', { path: filePath, error });
 				}
 			}
 
@@ -329,6 +332,23 @@ export class SystemPromptDataService {
 		}
 		await ensureAIDataFolders(this.app, aiDataFolder);
 		return getSystemPromptsPath(aiDataFolder);
+	}
+
+	/**
+	 * 通过 adapter API 直接从文件系统列出 Markdown 文件路径
+	 * 不依赖 Vault 缓存，确保在插件启动早期（onLayoutReady 之前）也能正确读取
+	 */
+	private async listMarkdownFilePathsViaAdapter(folderPath: string): Promise<string[]> {
+		try {
+			const exists = await this.app.vault.adapter.exists(folderPath);
+			if (!exists) {
+				return [];
+			}
+			const listing = await this.app.vault.adapter.list(folderPath);
+			return listing.files.filter((f) => f.endsWith('.md'));
+		} catch {
+			return [];
+		}
 	}
 
 	private listMarkdownFiles(folderPath: string): TFile[] {

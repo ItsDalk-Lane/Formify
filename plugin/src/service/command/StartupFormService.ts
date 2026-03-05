@@ -70,44 +70,104 @@ export class StartupFormService {
                 }
             }
 
-            if (startupForms.length === 0) {
-                DebugLogger.debug('[StartupFormService] 没有需要启动时运行的表单');
-                return;
-            }
-
-            DebugLogger.info(`[StartupFormService] 开始执行 ${startupForms.length} 个启动时运行表单`);
-
-            // 依次执行启动时运行的表单
             const formService = new FormService();
             const conditionService = getStartupConditionService();
 
-            for (const { file, config } of startupForms) {
-                try {
-                    // 评估启动条件
-                    const conditionResult = await this.evaluateStartupConditions(file, config, conditionService);
-                    
-                    if (!conditionResult.satisfied) {
-                        DebugLogger.debug(
-                            `[StartupFormService] 表单 ${file.path} 的启动条件不满足，跳过执行。原因: ${conditionResult.details}`
-                        );
-                        continue;
-                    }
+            if (startupForms.length === 0) {
+                DebugLogger.debug('[StartupFormService] 没有需要启动时运行的表单');
+            } else {
+                DebugLogger.info(`[StartupFormService] 开始执行 ${startupForms.length} 个启动时运行表单`);
 
-                    DebugLogger.debug(`[StartupFormService] 执行表单: ${file.path}`);
-                    // 使用与命令提交相同的逻辑
-                    await formService.open(file, this.app);
-                    
-                    // 更新执行时间
-                    await this.updateLastExecutionTime(file, config);
-                } catch (error) {
-                    DebugLogger.error(`[StartupFormService] 执行表单失败: ${file.path}`, error);
-                    // 单个表单执行失败不影响其他表单
+                // 依次执行启动时运行的表单
+                for (const { file, config } of startupForms) {
+                    try {
+                        // 评估启动条件
+                        const conditionResult = await this.evaluateStartupConditions(file, config, conditionService);
+                        
+                        if (!conditionResult.satisfied) {
+                            DebugLogger.debug(
+                                `[StartupFormService] 表单 ${file.path} 的启动条件不满足，跳过执行。原因: ${conditionResult.details}`
+                            );
+                            continue;
+                        }
+
+                        DebugLogger.debug(`[StartupFormService] 执行表单: ${file.path}`);
+                        // 使用与命令提交相同的逻辑
+                        await formService.open(file, this.app);
+                        
+                        // 更新执行时间
+                        await this.updateLastExecutionTime(file, config);
+                    } catch (error) {
+                        DebugLogger.error(`[StartupFormService] 执行表单失败: ${file.path}`, error);
+                        // 单个表单执行失败不影响其他表单
+                    }
                 }
             }
+
+            // 执行标记为启动时运行的触发器
+            await this.executeStartupTriggers(formService, conditionService);
 
             DebugLogger.info('[StartupFormService] 启动时运行表单执行完成');
         } catch (error) {
             DebugLogger.error('[StartupFormService] 执行启动表单时发生错误', error);
+        }
+    }
+
+    /**
+     * 执行所有标记为启动时运行的触发器
+     */
+    private async executeStartupTriggers(
+        formService: FormService,
+        conditionService: ReturnType<typeof getStartupConditionService>
+    ): Promise<void> {
+        const formFiles = this.app.vault.getFiles()
+            .filter(file => file.extension === 'cform');
+
+        for (const file of formFiles) {
+            try {
+                const config = await this.readFormConfig(file);
+                if (!config) continue;
+
+                for (const trigger of config.actionTriggers) {
+                    if (!trigger.isRunOnStartup()) continue;
+
+                    // 评估触发器级别的启动条件
+                    if (trigger.startupConditions?.enabled && trigger.startupConditions.conditions.length > 0) {
+                        const context: ConditionEvaluationContext = {
+                            app: this.app,
+                            currentFile: this.app.workspace.getActiveFile(),
+                            formFilePath: file.path,
+                            lastExecutionTime: trigger.getLastExecutionTime(),
+                            pluginVersion: this.pluginVersion,
+                        };
+                        const result = await conditionService.evaluateConditions(
+                            trigger.startupConditions,
+                            context
+                        );
+                        if (!result.satisfied) {
+                            DebugLogger.debug(
+                                `[StartupFormService] 触发器 ${trigger.name} (${file.path}) 的启动条件不满足，跳过`
+                            );
+                            continue;
+                        }
+                    }
+
+                    DebugLogger.debug(`[StartupFormService] 执行触发器: ${trigger.name} (${file.path})`);
+                    try {
+                        await formService.openByTrigger(trigger, file, this.app);
+                        // 更新触发器执行时间
+                        trigger.updateLastExecutionTime();
+                        await this.updateLastExecutionTime(file, config);
+                    } catch (error) {
+                        DebugLogger.error(
+                            `[StartupFormService] 执行触发器失败: ${trigger.name} (${file.path})`,
+                            error
+                        );
+                    }
+                }
+            } catch (error) {
+                DebugLogger.warn(`[StartupFormService] 读取表单触发器失败: ${file.path}`, error);
+            }
         }
     }
 
