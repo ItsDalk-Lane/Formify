@@ -32,6 +32,11 @@ export default class FormPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 		try {
+			await this.settingsManager.cleanupLegacyAIStorage();
+		} catch (error) {
+			DebugLogger.error('[FormPlugin] 旧版快捷操作/系统提示词清理失败（忽略）', error);
+		}
+		try {
 			await ensureAIDataFolders(this.app, this.settings.aiDataFolder);
 		} catch (error) {
 			DebugLogger.error('[FormPlugin] AI数据文件夹初始化失败，将在下次保存设置时重试', error);

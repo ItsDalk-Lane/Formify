@@ -1,31 +1,19 @@
-import { App } from 'obsidian';
+import { App, TFile, TFolder, normalizePath, parseYaml, stringifyYaml } from 'obsidian';
 import type { QuickAction, QuickActionType } from '../types/chat';
 import { DebugLogger } from 'src/utils/DebugLogger';
+import { ensureAIDataFolders, getQuickActionsPath } from 'src/utils/AIPathManager';
 
-/**
- * 旧版快捷操作独立文件（仅用于迁移）
- */
-const LEGACY_QUICK_ACTIONS_DATA_FILE = '.obsidian/plugins/formify/skills.json';
+const FRONTMATTER_DELIMITER = '---';
 
 interface RawQuickAction extends Partial<QuickAction> {
 	skillType?: QuickActionType;
 	isSkillGroup?: boolean;
 }
 
-/**
- * 旧版快捷操作数据结构（skills.json）
- */
-interface LegacyQuickActionsData {
-	version?: number;
-	quickActions?: RawQuickAction[];
-	skills?: RawQuickAction[];
-	lastModified?: number;
-}
-
 interface FormifyPluginLike {
-	loadData: () => Promise<any>;
-	saveData: (data: any) => Promise<void>;
+	loadData?: () => Promise<any>;
 	settings?: {
+		aiDataFolder?: string;
 		chat?: {
 			quickActions?: QuickAction[];
 			skills?: RawQuickAction[];
@@ -33,11 +21,22 @@ interface FormifyPluginLike {
 	};
 }
 
+const isNonEmptyString = (value: unknown): value is string => {
+	return typeof value === 'string' && value.trim().length > 0;
+};
+
+const toStringArray = (value: unknown): string[] => {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+	return value.filter((item): item is string => typeof item === 'string');
+};
+
 function resolveQuickActionType(raw: RawQuickAction): QuickActionType {
-	if (raw.actionType) {
+	if (raw.actionType === 'normal' || raw.actionType === 'group' || raw.actionType === 'form') {
 		return raw.actionType;
 	}
-	if (raw.skillType) {
+	if (raw.skillType === 'normal' || raw.skillType === 'group' || raw.skillType === 'form') {
 		return raw.skillType;
 	}
 	if ((raw.formCommandIds?.length ?? 0) > 0) {
@@ -49,7 +48,11 @@ function resolveQuickActionType(raw: RawQuickAction): QuickActionType {
 	return 'normal';
 }
 
-function normalizeQuickAction(raw: RawQuickAction): QuickAction {
+function normalizeQuickAction(
+	raw: RawQuickAction,
+	fallback: { id: string; order: number; prompt?: string }
+): QuickAction {
+	const now = Date.now();
 	const actionType = resolveQuickActionType(raw);
 	const isActionGroup = raw.isActionGroup ?? raw.isSkillGroup ?? actionType === 'group';
 	const {
@@ -57,35 +60,55 @@ function normalizeQuickAction(raw: RawQuickAction): QuickAction {
 		isSkillGroup: _legacyIsSkillGroup,
 		...rawWithoutLegacyFields
 	} = raw;
+	const promptSource = raw.promptSource === 'template' ? 'template' : 'custom';
+	const defaultPrompt = isNonEmptyString(fallback.prompt) ? fallback.prompt : '';
+	const rawPrompt = typeof raw.prompt === 'string' ? raw.prompt : defaultPrompt;
+	const normalizedPrompt = promptSource === 'template' ? '' : rawPrompt;
+	const rawName = typeof raw.name === 'string' ? raw.name.trim() : '';
+	const normalizedName = rawName || '未命名操作';
 
 	return {
 		...rawWithoutLegacyFields,
+		id: isNonEmptyString(raw.id) ? raw.id : fallback.id,
+		name: normalizedName,
+		prompt: normalizedPrompt,
 		actionType,
 		isActionGroup,
-		children: Array.isArray(raw.children) ? raw.children : [],
-		promptSource: raw.promptSource ?? 'custom',
+		children: toStringArray(raw.children),
+		promptSource,
 		showInToolbar: raw.showInToolbar ?? true,
 		useDefaultSystemPrompt: raw.useDefaultSystemPrompt ?? true,
-		customPromptRole: raw.customPromptRole ?? 'system',
-		formCommandIds: Array.isArray(raw.formCommandIds) ? raw.formCommandIds : [],
+		customPromptRole: raw.customPromptRole === 'user' ? 'user' : 'system',
+		formCommandIds: toStringArray(raw.formCommandIds),
+		templateFile: typeof raw.templateFile === 'string' ? raw.templateFile : undefined,
+		modelTag: typeof raw.modelTag === 'string' ? raw.modelTag : undefined,
+		order: typeof raw.order === 'number' ? raw.order : fallback.order,
+		createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : now,
+		updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : now,
 	} as QuickAction;
 }
 
-function normalizeQuickActions(rawList: unknown[]): QuickAction[] {
+function normalizeQuickActions(rawList: unknown[], promptResolver?: (item: RawQuickAction, index: number) => string): QuickAction[] {
+	const now = Date.now();
 	return rawList
 		.filter((item): item is RawQuickAction => !!item && typeof item === 'object')
-		.map((item) => normalizeQuickAction(item));
+		.map((item, index) =>
+			normalizeQuickAction(item, {
+				id: isNonEmptyString(item.id) ? item.id : `quick_action_${now}_${index}`,
+				order: index,
+				prompt: promptResolver?.(item, index) ?? '',
+			})
+		);
 }
 
 /**
  * 快捷操作数据服务
- * 负责管理快捷操作的 data.json 持久化
+ * 负责管理快捷操作的 Markdown 文件持久化
  */
 export class QuickActionDataService {
 	private static instance: QuickActionDataService | null = null;
 	private quickActionsCache: QuickAction[] | null = null;
 	private initializePromise: Promise<void> | null = null;
-	private hasCanonicalQuickActionsField = false;
 
 	private constructor(private readonly app: App) {}
 
@@ -488,71 +511,44 @@ export class QuickActionDataService {
 	}
 
 	/**
-	 * 从旧设置迁移快捷操作数据
-	 * 用于将旧版 settings 中的数据迁移到 data.json.chat.quickActions
+	 * 历史迁移入口已停用（保留签名用于兼容外部调用）
 	 */
-	async migrateFromSettings(legacyQuickActions: QuickAction[]): Promise<void> {
-		DebugLogger.debug('[QuickActionDataService] 开始检查数据迁移，旧操作数量:', legacyQuickActions?.length || 0);
-
-		if (this.hasCanonicalQuickActionsField) {
-			DebugLogger.debug('[QuickActionDataService] data.json.chat.quickActions 已存在，跳过迁移');
-			return;
-		}
-
-		if (!legacyQuickActions || legacyQuickActions.length === 0) {
-			DebugLogger.debug('[QuickActionDataService] 没有旧数据需要迁移');
-			return;
-		}
-
-		const existingQuickActions = await this.getQuickActions();
-		if (existingQuickActions.length > 0) {
-			DebugLogger.debug('[QuickActionDataService] 已存在操作数据，跳过迁移');
-			return;
-		}
-
-		const migratedQuickActions = legacyQuickActions.map((quickAction) => normalizeQuickAction(quickAction));
-		this.quickActionsCache = migratedQuickActions;
-		await this.persistQuickActions();
-		DebugLogger.debug('[QuickActionDataService] 迁移完成，共迁移', migratedQuickActions.length, '个操作');
+	async migrateFromSettings(_legacyQuickActions: QuickAction[]): Promise<void> {
+		DebugLogger.debug('[QuickActionDataService] migrateFromSettings 已停用，忽略调用');
 	}
 
 	/**
-	 * 从 data.json 加载快捷操作数据；若不存在则尝试迁移
+	 * 从 quick-actions/*.md 加载快捷操作
 	 */
 	private async loadQuickActions(): Promise<void> {
 		try {
-			const plugin = this.getPluginInstance();
-			if (!plugin) {
-				DebugLogger.error('[QuickActionDataService] 无法获取 formify 插件实例，回退为空');
+			const folderPath = await this.getStorageFolderPath();
+			if (!folderPath) {
 				this.quickActionsCache = [];
 				return;
 			}
 
-			const persisted = (await plugin.loadData()) ?? {};
-			const chatData = persisted?.chat;
-
-			if (chatData && Object.prototype.hasOwnProperty.call(chatData, 'quickActions')) {
-				this.hasCanonicalQuickActionsField = true;
-				const rawQuickActions = Array.isArray(chatData.quickActions) ? chatData.quickActions : [];
-				this.quickActionsCache = normalizeQuickActions(rawQuickActions);
-				this.syncRuntimeSettings(this.quickActionsCache);
-				DebugLogger.debug('[QuickActionDataService] 从 data.json.chat.quickActions 加载成功，共', this.quickActionsCache.length, '个操作');
-				return;
+			const files = this.listMarkdownFiles(folderPath);
+			const loaded: RawQuickAction[] = [];
+			for (const [index, file] of files.entries()) {
+				try {
+					const content = await this.app.vault.read(file);
+					const { frontmatter, body } = this.parseMarkdownRecord(content);
+					const item: RawQuickAction = {
+						...frontmatter,
+						id: isNonEmptyString(frontmatter.id) ? frontmatter.id : file.basename,
+						order: typeof frontmatter.order === 'number' ? frontmatter.order : index,
+						prompt: body,
+					};
+					loaded.push(item);
+				} catch (error) {
+					DebugLogger.warn('[QuickActionDataService] 读取快捷操作文件失败，已跳过', { path: file.path, error });
+				}
 			}
 
-			const migratedFromChatSkills = await this.migrateFromDataJsonSkills(plugin, persisted);
-			if (migratedFromChatSkills) {
-				return;
-			}
-
-			this.hasCanonicalQuickActionsField = false;
-			const migratedFromLegacyFile = await this.migrateFromLegacyFile();
-			if (migratedFromLegacyFile) {
-				return;
-			}
-
-			this.quickActionsCache = [];
-			DebugLogger.debug('[QuickActionDataService] data.json 中未找到操作数据，初始化空列表');
+			this.quickActionsCache = normalizeQuickActions(loaded).sort((a, b) => a.order - b.order);
+			this.syncRuntimeSettings(this.quickActionsCache);
+			DebugLogger.debug('[QuickActionDataService] 已从 Markdown 加载快捷操作，共', this.quickActionsCache.length, '个操作');
 		} catch (error) {
 			DebugLogger.error('[QuickActionDataService] 加载操作数据失败', error);
 			this.quickActionsCache = [];
@@ -560,121 +556,111 @@ export class QuickActionDataService {
 	}
 
 	/**
-	 * 新增迁移路径：从 data.json.chat.skills 迁移到 data.json.chat.quickActions
-	 */
-	private async migrateFromDataJsonSkills(plugin: FormifyPluginLike, persisted: any): Promise<boolean> {
-		const chatData = persisted?.chat;
-		if (!chatData) {
-			return false;
-		}
-		if (Object.prototype.hasOwnProperty.call(chatData, 'quickActions')) {
-			return false;
-		}
-		if (!Object.prototype.hasOwnProperty.call(chatData, 'skills')) {
-			return false;
-		}
-
-		const rawLegacyQuickActions = Array.isArray(chatData.skills) ? chatData.skills : [];
-		const migratedQuickActions = normalizeQuickActions(
-			rawLegacyQuickActions.map((item: any) => ({
-				...item,
-				actionType: item?.actionType ?? item?.skillType,
-				isActionGroup: item?.isActionGroup ?? item?.isSkillGroup,
-			}))
-		);
-
-		const nextChat: Record<string, unknown> = {
-			...chatData,
-			quickActions: migratedQuickActions,
-		};
-		delete nextChat.skills;
-
-		await plugin.saveData({
-			...persisted,
-			chat: nextChat,
-		});
-
-		this.quickActionsCache = migratedQuickActions;
-		this.hasCanonicalQuickActionsField = true;
-		this.syncRuntimeSettings(migratedQuickActions);
-		DebugLogger.info('[QuickActionDataService] 已将 data.json.chat.skills 迁移到 data.json.chat.quickActions，共', migratedQuickActions.length, '个操作');
-		return true;
-	}
-
-	/**
-	 * 将快捷操作数据持久化到 data.json.chat.quickActions
+	 * 将缓存全量同步到 quick-actions/*.md，并清理无效旧文件
 	 */
 	private async persistQuickActions(): Promise<void> {
-		const plugin = this.getPluginInstance();
-		if (!plugin) {
-			throw new Error('无法获取 formify 插件实例，无法保存快捷操作数据');
+		const folderPath = await this.getStorageFolderPath();
+		if (!folderPath) {
+			throw new Error('无法解析 AI 数据目录，无法保存快捷操作');
 		}
 
-		const persisted = (await plugin.loadData()) ?? {};
-		const nextChat: Record<string, unknown> = {
-			...(persisted?.chat ?? {}),
-			quickActions: this.quickActionsCache || [],
-		};
-		delete nextChat.skills;
-
-		await plugin.saveData({
-			...persisted,
-			chat: nextChat,
-		});
-
-		this.hasCanonicalQuickActionsField = true;
-		this.syncRuntimeSettings(this.quickActionsCache || []);
-		DebugLogger.debug('[QuickActionDataService] 保存操作数据到 data.json.chat.quickActions 成功');
-	}
-
-	/**
-	 * 从旧版 skills.json 迁移到 data.json.chat.quickActions
-	 */
-	private async migrateFromLegacyFile(): Promise<boolean> {
-		try {
-			const fileExists = await this.app.vault.adapter.exists(LEGACY_QUICK_ACTIONS_DATA_FILE);
-			if (!fileExists) {
-				return false;
+		const normalizedCache = normalizeQuickActions(this.quickActionsCache || []);
+		const expectedPaths = new Set<string>();
+		for (const quickAction of normalizedCache) {
+			if (!isNonEmptyString(quickAction.id)) {
+				DebugLogger.warn('[QuickActionDataService] 快捷操作缺少 id，已跳过写入', quickAction);
+				continue;
 			}
 
-			const content = await this.app.vault.adapter.read(LEGACY_QUICK_ACTIONS_DATA_FILE);
-			const parsed = JSON.parse(content) as LegacyQuickActionsData | RawQuickAction[];
-			const rawQuickActions = Array.isArray(parsed)
-				? parsed
-				: Array.isArray(parsed?.quickActions)
-					? parsed.quickActions
-					: Array.isArray(parsed?.skills)
-						? parsed.skills
-						: [];
+			const filePath = normalizePath(`${folderPath}/${quickAction.id}.md`);
+			expectedPaths.add(filePath);
 
-			this.quickActionsCache = normalizeQuickActions(rawQuickActions);
-			await this.persistQuickActions();
-			await this.removeLegacyQuickActionsFile();
-			this.syncRuntimeSettings(this.quickActionsCache);
-			DebugLogger.info('[QuickActionDataService] 已将旧 skills.json 迁移到 data.json.chat.quickActions，共', this.quickActionsCache.length, '个操作');
-			return true;
-		} catch (error) {
-			DebugLogger.error('[QuickActionDataService] 迁移旧版 skills.json 失败', error);
-			this.quickActionsCache = [];
-			return false;
-		}
-	}
+			const { prompt: _prompt, ...frontmatter } = quickAction as RawQuickAction;
+			const body = quickAction.promptSource === 'template' ? '' : (quickAction.prompt ?? '');
+			const content = this.buildMarkdownRecord(frontmatter, body);
 
-	private async removeLegacyQuickActionsFile(): Promise<void> {
-		try {
-			const exists = await this.app.vault.adapter.exists(LEGACY_QUICK_ACTIONS_DATA_FILE);
-			if (!exists) {
-				return;
+			const existing = this.app.vault.getAbstractFileByPath(filePath);
+			if (existing instanceof TFile) {
+				const previous = await this.app.vault.read(existing);
+				if (previous !== content) {
+					await this.app.vault.modify(existing, content);
+				}
+				continue;
 			}
-			await this.app.vault.adapter.remove(LEGACY_QUICK_ACTIONS_DATA_FILE);
-			DebugLogger.info('[QuickActionDataService] 已删除旧操作文件', LEGACY_QUICK_ACTIONS_DATA_FILE);
-		} catch (error) {
-			DebugLogger.warn('[QuickActionDataService] 删除旧操作文件失败（忽略）', error);
+
+			await this.app.vault.create(filePath, content);
 		}
+
+		for (const file of this.listMarkdownFiles(folderPath)) {
+			if (!expectedPaths.has(file.path)) {
+				await this.app.vault.delete(file, true);
+			}
+		}
+
+		this.quickActionsCache = normalizedCache;
+		this.syncRuntimeSettings(normalizedCache);
+		DebugLogger.debug('[QuickActionDataService] 快捷操作已同步到 Markdown 文件');
 	}
 
 	private getPluginInstance(): FormifyPluginLike | null {
 		return ((this.app as any).plugins?.plugins?.formify as FormifyPluginLike | undefined) ?? null;
+	}
+
+	private async getStorageFolderPath(): Promise<string | null> {
+		const plugin = this.getPluginInstance();
+		let aiDataFolder = plugin?.settings?.aiDataFolder;
+		if (plugin?.loadData) {
+			try {
+				const persisted = await plugin.loadData();
+				const persistedAiDataFolder = persisted?.aiDataFolder;
+				if (isNonEmptyString(persistedAiDataFolder)) {
+					aiDataFolder = persistedAiDataFolder;
+				}
+			} catch (error) {
+				DebugLogger.warn('[QuickActionDataService] 读取 aiDataFolder 失败，回退运行时配置', error);
+			}
+		}
+		if (!isNonEmptyString(aiDataFolder)) {
+			DebugLogger.warn('[QuickActionDataService] AI 数据目录未配置，回退为空');
+			return null;
+		}
+
+		await ensureAIDataFolders(this.app, aiDataFolder);
+		return getQuickActionsPath(aiDataFolder);
+	}
+
+	private listMarkdownFiles(folderPath: string): TFile[] {
+		const folder = this.app.vault.getAbstractFileByPath(folderPath);
+		if (!(folder instanceof TFolder)) {
+			return [];
+		}
+		return folder.children.filter((child): child is TFile => child instanceof TFile && child.extension === 'md');
+	}
+
+	private parseMarkdownRecord(content: string): { frontmatter: RawQuickAction; body: string } {
+		if (!content.startsWith(FRONTMATTER_DELIMITER)) {
+			return { frontmatter: {}, body: content };
+		}
+		const delimiterRegex = /^---\s*\r?\n([\s\S]*?)\r?\n---(?:\s*\r?\n)?/;
+		const matched = content.match(delimiterRegex);
+		if (!matched) {
+			return { frontmatter: {}, body: content };
+		}
+
+		try {
+			const parsed = parseYaml(matched[1]);
+			const frontmatter = (parsed && typeof parsed === 'object' ? parsed : {}) as RawQuickAction;
+			const body = content.slice(matched[0].length);
+			return { frontmatter, body };
+		} catch (error) {
+			DebugLogger.warn('[QuickActionDataService] 解析 frontmatter 失败，已使用默认值', error);
+			return { frontmatter: {}, body: '' };
+		}
+	}
+
+	private buildMarkdownRecord(frontmatter: RawQuickAction, body: string): string {
+		const yaml = stringifyYaml(frontmatter).trimEnd();
+		return `${FRONTMATTER_DELIMITER}\n${yaml}\n${FRONTMATTER_DELIMITER}\n${body}`;
 	}
 
 	private syncRuntimeSettings(quickActions: QuickAction[]): void {

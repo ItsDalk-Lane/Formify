@@ -176,7 +176,7 @@ export interface ChatSettings {
 	enableQuickActions: boolean; // 是否启用快捷操作
 	maxQuickActionButtons: number; // 工具栏最多显示的按钮数量
 	quickActionsStreamOutput: boolean; // 快捷操作是否使用流式输出
-	quickActions?: QuickAction[]; // 操作列表（持久化存储于 data.json.chat.quickActions）
+	quickActions?: QuickAction[]; // 操作列表运行时缓存（非 data.json 持久化源）
 }
 
 /**
@@ -228,11 +228,6 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	showSidebarByDefault: true,
 	openMode: 'sidebar',
 	enableSystemPrompt: true, // 默认启用系统提示词功能
-	// 内链解析默认配置
-	enableInternalLinkParsing: true, // 默认启用内链解析
-	parseLinksInTemplates: true, // 默认解析模板中的内链
-	maxLinkParseDepth: 5, // 默认最大深度5层
-	linkParseTimeout: 5000, // 默认超时5秒
 	// 自动添加活跃文件默认配置
 	autoAddActiveFile: true, // 默认启用自动添加活跃文件
 	// 功能区图标默认配置
@@ -246,5 +241,5 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	enableQuickActions: true, // 默认启用快捷操作
 	maxQuickActionButtons: 4, // 默认显示4个按钮
 	quickActionsStreamOutput: true, // 默认启用流式输出
-	quickActions: [], // 默认无操作（持久化存储于 data.json.chat.quickActions）
+	quickActions: [], // 默认无操作（运行时缓存，持久化由 quick-actions/*.md 提供）
 };

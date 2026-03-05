@@ -91,7 +91,7 @@ export class ChatFeatureManager {
 		this.registerSelectionToolbarExtension();
 		this.registerModifyGhostTextExtension();
 		this.initializeQuickActionExecutionService();
-		await this.initializeQuickActionDataService(initialSettings);
+		await this.initializeQuickActionDataService();
 
 		// 延迟自动打开聊天界面，确保工作区完全准备好
 		const shouldAutoOpen = initialSettings?.showSidebarByDefault ?? this.plugin.settings.chat.showSidebarByDefault;
@@ -374,18 +374,12 @@ export class ChatFeatureManager {
 	}
 
 	/**
-	 * 初始化快捷操作数据服务并执行数据迁移
+	 * 初始化快捷操作数据服务并加载缓存
 	 */
-	private async initializeQuickActionDataService(initialSettings?: Partial<ChatSettings>) {
+	private async initializeQuickActionDataService() {
 		try {
 			this.quickActionDataService = QuickActionDataService.getInstance(this.plugin.app);
 			await this.quickActionDataService.initialize();
-
-			// 执行数据迁移：从旧设置迁移快捷操作数据到 data.json.chat.quickActions
-			const legacyQuickActions =
-				initialSettings?.quickActions ??
-				((this.plugin.settings.chat as any)?.skills ?? []);
-			await this.quickActionDataService.migrateFromSettings(legacyQuickActions);
 
 			// 加载快捷操作到缓存
 			this.cachedQuickActions = await this.quickActionDataService.getSortedQuickActions();

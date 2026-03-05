@@ -1,20 +1,24 @@
 import type { App } from 'obsidian';
+import { TFile, TFolder, normalizePath, parseYaml, stringifyYaml } from 'obsidian';
 import { DebugLogger } from 'src/utils/DebugLogger';
+import { ensureAIDataFolders, getSystemPromptsPath } from 'src/utils/AIPathManager';
 import type { AiFeatureId, SystemPromptItem, SystemPromptsDataFile } from './types';
 import { SYSTEM_PROMPTS_DATA_VERSION } from './types';
 
-const LEGACY_SYSTEM_PROMPTS_DATA_FILE = '.obsidian/plugins/formify/system-prompts.json';
+const FRONTMATTER_DELIMITER = '---';
+const VALID_FEATURE_IDS: ReadonlySet<AiFeatureId> = new Set([
+	'ai_action',
+	'tars_chat',
+	'tab_completion',
+	'selection_toolbar',
+]);
 
-const DEFAULT_DATA: SystemPromptsDataFile = {
-	version: SYSTEM_PROMPTS_DATA_VERSION,
-	prompts: [],
-	lastModified: Date.now(),
-};
+interface RawSystemPrompt extends Partial<SystemPromptItem> {}
 
 interface FormifyPluginLike {
-	loadData: () => Promise<any>;
-	saveData: (data: any) => Promise<void>;
+	loadData?: () => Promise<any>;
 	settings?: {
+		aiDataFolder?: string;
 		tars?: {
 			settings?: {
 				systemPromptsData?: SystemPromptsDataFile;
@@ -22,6 +26,17 @@ interface FormifyPluginLike {
 		};
 	};
 }
+
+const isNonEmptyString = (value: unknown): value is string => {
+	return typeof value === 'string' && value.trim().length > 0;
+};
+
+const toFeatureIdArray = (value: unknown): AiFeatureId[] => {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+	return value.filter((item): item is AiFeatureId => typeof item === 'string' && VALID_FEATURE_IDS.has(item as AiFeatureId));
+};
 
 export class SystemPromptDataService {
 	private static instance: SystemPromptDataService | null = null;
@@ -163,7 +178,7 @@ export class SystemPromptDataService {
 		const bumped = prompts.map((p) => ({ ...p, order: p.order + 1 }));
 		this.promptsCache = this.normalizeOrders([migrated, ...bumped]);
 		await this.persist();
-		DebugLogger.info('[SystemPromptDataService] 已迁移旧默认系统消息到 data.json.tars.settings.systemPromptsData');
+		DebugLogger.info('[SystemPromptDataService] 已迁移旧默认系统消息到 Markdown 系统提示词目录');
 		return true;
 	}
 
@@ -176,152 +191,178 @@ export class SystemPromptDataService {
 
 	private async loadFromFile(): Promise<void> {
 		try {
-			const plugin = this.getPluginInstance();
-			if (!plugin) {
-				DebugLogger.error('[SystemPromptDataService] 无法获取 formify 插件实例，回退为空');
+			const folderPath = await this.getStorageFolderPath();
+			if (!folderPath) {
 				this.promptsCache = [];
 				return;
 			}
 
-			const persisted = (await plugin.loadData()) ?? {};
-			const tarsSettingsData = persisted?.tars?.settings;
-			if (tarsSettingsData && Object.prototype.hasOwnProperty.call(tarsSettingsData, 'systemPromptsData')) {
-				const parsed = tarsSettingsData.systemPromptsData as Partial<SystemPromptsDataFile> | undefined;
-				const data: SystemPromptsDataFile = {
-					...DEFAULT_DATA,
-					...(parsed ?? {}),
-					prompts: Array.isArray(parsed?.prompts) ? (parsed?.prompts as any) : [],
-					lastModified: typeof parsed?.lastModified === 'number' ? parsed.lastModified : Date.now(),
-				};
-				this.promptsCache = this.normalizeOrders(this.sanitizeItems(data.prompts));
-				this.syncRuntimeSettings({
-					version: SYSTEM_PROMPTS_DATA_VERSION,
-					prompts: this.promptsCache,
-					lastModified: data.lastModified,
-				});
-				DebugLogger.debug('[SystemPromptDataService] 从 data.json.tars.settings.systemPromptsData 加载成功，共', this.promptsCache.length, '条系统提示词');
-				return;
+			const files = this.listMarkdownFiles(folderPath);
+			const loaded: RawSystemPrompt[] = [];
+			for (const [index, file] of files.entries()) {
+				try {
+					const content = await this.app.vault.read(file);
+					const { frontmatter, body } = this.parseMarkdownRecord(content);
+					const item: RawSystemPrompt = {
+						...frontmatter,
+						id: isNonEmptyString(frontmatter.id) ? frontmatter.id : file.basename,
+						order: typeof frontmatter.order === 'number' ? frontmatter.order : index,
+						content: body,
+					};
+					loaded.push(item);
+				} catch (error) {
+					DebugLogger.warn('[SystemPromptDataService] 读取系统提示词文件失败，已跳过', { path: file.path, error });
+				}
 			}
 
-			const migrated = await this.migrateFromLegacyFile();
-			if (migrated) {
-				return;
-			}
-
-			this.promptsCache = [];
+			this.promptsCache = this.normalizeOrders(this.sanitizeItems(loaded));
+			this.syncRuntimeSettings({
+				version: SYSTEM_PROMPTS_DATA_VERSION,
+				prompts: this.promptsCache,
+				lastModified: Date.now(),
+			});
 		} catch (error) {
 			DebugLogger.error('[SystemPromptDataService] 加载系统提示词配置失败，回退为空', error);
 			this.promptsCache = [];
 		}
 	}
 
-	private sanitizeItems(items: any[]): SystemPromptItem[] {
+	private sanitizeItems(items: RawSystemPrompt[]): SystemPromptItem[] {
 		const now = Date.now();
 		return (items || [])
-			.filter(Boolean)
+			.filter((item): item is RawSystemPrompt => !!item && typeof item === 'object')
 			.map((item, index) => {
-				const id = typeof item.id === 'string' && item.id ? item.id : `sys_prompt_${now}_${index}`;
-				const name = typeof item.name === 'string' ? item.name : '';
+				const id = isNonEmptyString(item.id) ? item.id : `sys_prompt_${now}_${index}`;
 				const sourceType = item.sourceType === 'template' ? 'template' : 'custom';
-				const enabled = item.enabled !== false;
-				const content = typeof item.content === 'string' ? item.content : undefined;
-				const templatePath = typeof item.templatePath === 'string' ? item.templatePath : undefined;
-				const excludeFeatures = Array.isArray(item.excludeFeatures) ? item.excludeFeatures.filter((v: any) => typeof v === 'string') : [];
-				const createdAt = typeof item.createdAt === 'number' ? item.createdAt : now;
-				const updatedAt = typeof item.updatedAt === 'number' ? item.updatedAt : now;
-				const order = typeof item.order === 'number' ? item.order : index;
+				const bodyContent = typeof item.content === 'string' ? item.content : '';
 
 				return {
 					id,
-					name,
+					name: isNonEmptyString(item.name) ? item.name.trim() : '未命名系统提示词',
 					sourceType,
-					content,
-					templatePath,
-					enabled,
-					excludeFeatures,
-					order,
-					createdAt,
-					updatedAt,
-				} as SystemPromptItem;
+					content: sourceType === 'template' ? undefined : bodyContent,
+					templatePath: sourceType === 'template' && isNonEmptyString(item.templatePath) ? item.templatePath : undefined,
+					enabled: item.enabled !== false,
+					excludeFeatures: toFeatureIdArray(item.excludeFeatures),
+					order: typeof item.order === 'number' ? item.order : index,
+					createdAt: typeof item.createdAt === 'number' ? item.createdAt : now,
+					updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : now,
+				};
 			});
 	}
 
 	private async persist(): Promise<void> {
 		try {
-			const plugin = this.getPluginInstance();
-			if (!plugin) {
-				throw new Error('无法获取 formify 插件实例，无法保存系统提示词');
+			const folderPath = await this.getStorageFolderPath();
+			if (!folderPath) {
+				throw new Error('无法解析 AI 数据目录，无法保存系统提示词');
 			}
 
-			const data: SystemPromptsDataFile = {
+			const prompts = this.normalizeOrders(this.promptsCache || []);
+			const expectedPaths = new Set<string>();
+			for (const prompt of prompts) {
+				if (!isNonEmptyString(prompt.id)) {
+					DebugLogger.warn('[SystemPromptDataService] 系统提示词缺少 id，已跳过写入', prompt);
+					continue;
+				}
+
+				const filePath = normalizePath(`${folderPath}/${prompt.id}.md`);
+				expectedPaths.add(filePath);
+
+				const { content: _content, ...frontmatter } = prompt;
+				const body = prompt.sourceType === 'template' ? '' : (prompt.content ?? '');
+				const markdown = this.buildMarkdownRecord(frontmatter, body);
+
+				const existing = this.app.vault.getAbstractFileByPath(filePath);
+				if (existing instanceof TFile) {
+					const previous = await this.app.vault.read(existing);
+					if (previous !== markdown) {
+						await this.app.vault.modify(existing, markdown);
+					}
+					continue;
+				}
+
+				await this.app.vault.create(filePath, markdown);
+			}
+
+			for (const file of this.listMarkdownFiles(folderPath)) {
+				if (!expectedPaths.has(file.path)) {
+					await this.app.vault.delete(file, true);
+				}
+			}
+
+			const systemPromptsData: SystemPromptsDataFile = {
 				version: SYSTEM_PROMPTS_DATA_VERSION,
-				prompts: this.promptsCache || [],
+				prompts,
 				lastModified: Date.now(),
 			};
 
-			const persisted = (await plugin.loadData()) ?? {};
-			const next = {
-				...persisted,
-				tars: {
-					...(persisted?.tars ?? {}),
-					settings: {
-						...(persisted?.tars?.settings ?? {}),
-						systemPromptsData: data,
-					},
-				},
-			};
-
-			await plugin.saveData(next);
-			this.syncRuntimeSettings(data);
+			this.promptsCache = prompts;
+			this.syncRuntimeSettings(systemPromptsData);
 		} catch (error) {
 			DebugLogger.error('[SystemPromptDataService] 保存系统提示词配置失败', error);
 			throw error;
 		}
 	}
 
-	private async migrateFromLegacyFile(): Promise<boolean> {
-		try {
-			const exists = await this.app.vault.adapter.exists(LEGACY_SYSTEM_PROMPTS_DATA_FILE);
-			if (!exists) {
-				return false;
-			}
-
-			const raw = await this.app.vault.adapter.read(LEGACY_SYSTEM_PROMPTS_DATA_FILE);
-			const parsed = JSON.parse(raw) as Partial<SystemPromptsDataFile>;
-			const data: SystemPromptsDataFile = {
-				...DEFAULT_DATA,
-				...parsed,
-				prompts: Array.isArray(parsed?.prompts) ? (parsed.prompts as any) : [],
-				lastModified: typeof parsed?.lastModified === 'number' ? parsed.lastModified : Date.now(),
-			};
-
-			this.promptsCache = this.normalizeOrders(this.sanitizeItems(data.prompts));
-			await this.persist();
-			await this.removeLegacyFile();
-			DebugLogger.info('[SystemPromptDataService] 已将旧 system-prompts.json 迁移到 data.json.tars.settings.systemPromptsData，共', this.promptsCache.length, '条');
-			return true;
-		} catch (error) {
-			DebugLogger.error('[SystemPromptDataService] 迁移旧版 system-prompts.json 失败', error);
-			this.promptsCache = [];
-			return false;
-		}
-	}
-
-	private async removeLegacyFile(): Promise<void> {
-		try {
-			const exists = await this.app.vault.adapter.exists(LEGACY_SYSTEM_PROMPTS_DATA_FILE);
-			if (!exists) {
-				return;
-			}
-			await this.app.vault.adapter.remove(LEGACY_SYSTEM_PROMPTS_DATA_FILE);
-			DebugLogger.info('[SystemPromptDataService] 已删除旧系统提示词文件', LEGACY_SYSTEM_PROMPTS_DATA_FILE);
-		} catch (error) {
-			DebugLogger.warn('[SystemPromptDataService] 删除旧系统提示词文件失败（忽略）', error);
-		}
-	}
-
 	private getPluginInstance(): FormifyPluginLike | null {
 		return ((this.app as any).plugins?.plugins?.['formify'] as FormifyPluginLike | undefined) ?? null;
+	}
+
+	private async getStorageFolderPath(): Promise<string | null> {
+		const plugin = this.getPluginInstance();
+		let aiDataFolder = plugin?.settings?.aiDataFolder;
+		if (plugin?.loadData) {
+			try {
+				const persisted = await plugin.loadData();
+				const persistedAiDataFolder = persisted?.aiDataFolder;
+				if (isNonEmptyString(persistedAiDataFolder)) {
+					aiDataFolder = persistedAiDataFolder;
+				}
+			} catch (error) {
+				DebugLogger.warn('[SystemPromptDataService] 读取 aiDataFolder 失败，回退运行时配置', error);
+			}
+		}
+		if (!isNonEmptyString(aiDataFolder)) {
+			DebugLogger.warn('[SystemPromptDataService] AI 数据目录未配置，回退为空');
+			return null;
+		}
+		await ensureAIDataFolders(this.app, aiDataFolder);
+		return getSystemPromptsPath(aiDataFolder);
+	}
+
+	private listMarkdownFiles(folderPath: string): TFile[] {
+		const folder = this.app.vault.getAbstractFileByPath(folderPath);
+		if (!(folder instanceof TFolder)) {
+			return [];
+		}
+		return folder.children.filter((child): child is TFile => child instanceof TFile && child.extension === 'md');
+	}
+
+	private parseMarkdownRecord(content: string): { frontmatter: RawSystemPrompt; body: string } {
+		if (!content.startsWith(FRONTMATTER_DELIMITER)) {
+			return { frontmatter: {}, body: content };
+		}
+		const delimiterRegex = /^---\s*\r?\n([\s\S]*?)\r?\n---(?:\s*\r?\n)?/;
+		const matched = content.match(delimiterRegex);
+		if (!matched) {
+			return { frontmatter: {}, body: content };
+		}
+
+		try {
+			const parsed = parseYaml(matched[1]);
+			const frontmatter = (parsed && typeof parsed === 'object' ? parsed : {}) as RawSystemPrompt;
+			const body = content.slice(matched[0].length);
+			return { frontmatter, body };
+		} catch (error) {
+			DebugLogger.warn('[SystemPromptDataService] 解析 frontmatter 失败，已使用默认值', error);
+			return { frontmatter: {}, body: '' };
+		}
+	}
+
+	private buildMarkdownRecord(frontmatter: RawSystemPrompt, body: string): string {
+		const yaml = stringifyYaml(frontmatter).trimEnd();
+		return `${FRONTMATTER_DELIMITER}\n${yaml}\n${FRONTMATTER_DELIMITER}\n${body}`;
 	}
 
 	private syncRuntimeSettings(systemPromptsData: SystemPromptsDataFile): void {

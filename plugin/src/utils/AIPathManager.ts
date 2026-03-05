@@ -2,6 +2,9 @@ import { App, TFile, TFolder, normalizePath } from 'obsidian';
 
 export const AI_PROMPTS_SUBFOLDER = 'ai prompts';
 export const AI_CHAT_HISTORY_SUBFOLDER = 'chat-history';
+export const AI_QUICK_ACTIONS_SUBFOLDER = 'quick-actions';
+export const AI_SYSTEM_PROMPTS_SUBFOLDER = 'system-prompts';
+export const AI_MCP_SERVERS_SUBFOLDER = 'mcp-servers';
 
 const MIGRATION_SUFFIX = '-migrated';
 
@@ -81,11 +84,26 @@ export const getChatHistoryPath = (aiDataFolder: string): string => {
 	return normalizePath(`${trimTrailingSlash(aiDataFolder)}/${AI_CHAT_HISTORY_SUBFOLDER}`);
 };
 
+export const getQuickActionsPath = (aiDataFolder: string): string => {
+	return normalizePath(`${trimTrailingSlash(aiDataFolder)}/${AI_QUICK_ACTIONS_SUBFOLDER}`);
+};
+
+export const getSystemPromptsPath = (aiDataFolder: string): string => {
+	return normalizePath(`${trimTrailingSlash(aiDataFolder)}/${AI_SYSTEM_PROMPTS_SUBFOLDER}`);
+};
+
+export const getMcpServersPath = (aiDataFolder: string): string => {
+	return normalizePath(`${trimTrailingSlash(aiDataFolder)}/${AI_MCP_SERVERS_SUBFOLDER}`);
+};
+
 export const ensureAIDataFolders = async (app: App, aiDataFolder: string): Promise<void> => {
 	const root = normalizePath(trimTrailingSlash(aiDataFolder));
 	await ensureFolderPath(app, root);
 	await ensureFolderPath(app, getPromptTemplatePath(root));
 	await ensureFolderPath(app, getChatHistoryPath(root));
+	await ensureFolderPath(app, getQuickActionsPath(root));
+	await ensureFolderPath(app, getSystemPromptsPath(root));
+	await ensureFolderPath(app, getMcpServersPath(root));
 };
 
 export const canDeriveAIDataFolderFromLegacy = (

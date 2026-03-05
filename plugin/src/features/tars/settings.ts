@@ -56,7 +56,7 @@ export interface TarsSettings {
 	enableDefaultSystemMsg?: boolean
 	/** @deprecated 已废弃：旧版默认系统消息内容，仅用于向下兼容迁移 */
 	defaultSystemMsg?: string
-	/** 系统提示词持久化数据（存储于 data.json） */
+	/** @deprecated 运行时缓存字段（由 SystemPromptDataService 维护，非 data.json 持久化来源） */
 	systemPromptsData?: SystemPromptsDataFile
 	enableStreamLog: boolean
 	debugMode: boolean // 调试模式开关
@@ -79,7 +79,7 @@ export interface TarsSettings {
 		executionMode: 'manual' | 'auto'
 		enabled: boolean
 	}
-	/** MCP 服务器配置 */
+	/** MCP 配置（外部 servers 由 mcp-servers/*.md 持久化，内置开关仍在 settings） */
 	mcp?: McpSettings
 	/** 模型能力探测缓存（用于推理能力判断） */
 	modelCapabilityCache?: ModelCapabilityCache
@@ -98,10 +98,6 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 		timeout: 5000,
 		parseInTemplates: true,
 	},
-	// 保留旧字段的默认值以确保向下兼容
-	enableInternalLink: true,
-	maxLinkParseDepth: 5,
-	linkParseTimeout: 5000,
 	enableStreamLog: false,
 	debugMode: false, // 默认关闭调试模式
 	debugLevel: 'error', // 默认只输出错误日志

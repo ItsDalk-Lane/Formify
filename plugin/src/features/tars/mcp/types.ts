@@ -16,7 +16,7 @@ export type McpServerStatus =
 /** MCP 传输类型 */
 export type McpTransportType = 'stdio' | 'sse' | 'websocket' | 'http' | 'remote-sse'
 
-/** MCP 服务器配置（持久化存储在 settings 中） */
+/** MCP 服务器配置（由 mcp-servers/*.md 持久化） */
 export interface McpServerConfig {
 	/** 唯一标识符 */
 	readonly id: string
@@ -107,7 +107,7 @@ export const DEFAULT_BUILTIN_MEMORY_FILE_PATH = 'System/formify/mcp-memory.jsonl
 
 /** MCP 设置（嵌入 TarsSettings） */
 export interface McpSettings {
-	/** MCP 服务器配置列表 */
+	/** MCP 服务器配置列表（运行时缓存，非 data.json 持久化源） */
 	servers: McpServerConfig[]
 	/**
 	 * 是否启用内置 Vault MCP Server
