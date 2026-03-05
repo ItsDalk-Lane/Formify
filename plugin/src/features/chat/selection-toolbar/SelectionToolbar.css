@@ -66,7 +66,7 @@ button.selection-toolbar-btn-more {
 	padding: 6px 8px;
 }
 
-/* 技能组按钮样式（文字 + 箭头标识） */
+/* 操作组按钮样式（文字 + 箭头标识） */
 button.selection-toolbar-btn-group {
 	padding-right: 0;
 }
@@ -123,7 +123,7 @@ button.selection-toolbar-btn-group:hover .selection-toolbar-btn-group-triangle {
 	margin-bottom: 4px;
 }
 
-/* 技能组级联子菜单：独立浮层（不嵌在父菜单内容流里） */
+/* 操作组级联子菜单：独立浮层（不嵌在父菜单内容流里） */
 .selection-toolbar-dropdown-menu-submenu {
 	position: fixed;
 	top: 0;
@@ -149,7 +149,7 @@ button.selection-toolbar-btn-group:hover .selection-toolbar-btn-group-triangle {
 	background: var(--background-modifier-hover);
 }
 
-/* 技能组列表项：右侧折叠箭头 */
+/* 操作组列表项：右侧折叠箭头 */
 .selection-toolbar-dropdown-item-group {
 	display: flex;
 	align-items: center;

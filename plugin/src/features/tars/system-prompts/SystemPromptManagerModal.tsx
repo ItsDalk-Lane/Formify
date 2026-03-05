@@ -180,7 +180,7 @@ function SystemPromptManagerApp(props: { app: App; onRequestClose: () => void })
 													e.stopPropagation();
 													openEdit(item);
 												}}
-												title={localInstance.skill_edit || '编辑'}
+												title={localInstance.quick_action_edit || '编辑'}
 												type="button"
 											>
 												<Pencil size={20} />

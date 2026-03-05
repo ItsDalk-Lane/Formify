@@ -1,7 +1,7 @@
 import { Extension, StateField, StateEffect } from '@codemirror/state';
 import { EditorView, ViewPlugin, ViewUpdate, Decoration, DecorationSet } from '@codemirror/view';
 import { App, TFile, MarkdownView } from 'obsidian';
-import type { ChatSettings, Skill } from '../types/chat';
+import type { ChatSettings } from '../types/chat';
 
 /**
  * 获取文件内容（不包括 frontmatter）
@@ -107,7 +107,7 @@ export function updateSelectionToolbarSettings(settings: ChatSettings): void {
  * 检查选区工具栏是否启用
  */
 export function isSelectionToolbarEnabled(): boolean {
-	return globalSelectionToolbarSettings?.enableSelectionToolbar ?? true;
+	return globalSelectionToolbarSettings?.enableQuickActions ?? true;
 }
 
 /**

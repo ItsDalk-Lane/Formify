@@ -60,11 +60,11 @@ export class FeatureCoordinator {
     }
 
     /**
-     * 刷新技能缓存
+     * 刷新快捷操作缓存
      */
-    async refreshSkillsCache(): Promise<void> {
+    async refreshQuickActionsCache(): Promise<void> {
         if (this.chatFeatureManager) {
-            await this.chatFeatureManager.refreshSkillsCache();
+            await this.chatFeatureManager.refreshQuickActionsCache();
         }
     }
 

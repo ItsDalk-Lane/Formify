@@ -586,8 +586,8 @@ export class Zh implements Local {
 	system_prompt_feature_ai_action_desc = "表单工作流中调用 AI 模型进行处理，支持运行时选择模型和提示词模板，支持变量替换（{{@fieldName}}、{{output:variableName}}），支持内链解析功能，流式输出模态框显示 AI 生成过程";
 	system_prompt_feature_tab_completion = "Tab 自动补全";
 	system_prompt_feature_tab_completion_desc = "编辑器中按快捷键触发 AI 续写，可配置触发键和上下文长度，智能上下文构建和后处理优化";
-	system_prompt_feature_selection_toolbar = "选中文本技能";
-	system_prompt_feature_selection_toolbar_desc = "使用光标选中部分文本或者输出触发符号选中整个文本后显示技能工具栏，支持自定义 AI 技能（普通技能/技能组/表单技能），支持占位符替换和流式输出";
+	system_prompt_feature_selection_toolbar = "选中文本操作";
+	system_prompt_feature_selection_toolbar_desc = "使用光标选中部分文本或者输出触发符号选中整个文本后显示操作工具栏，支持自定义 AI 操作（普通操作/操作组/表单操作），支持占位符替换和流式输出";
 	system_prompt_error_name_required = "提示词名称不能为空";
 	system_prompt_error_name_duplicate = "提示词名称已存在";
 	system_prompt_error_content_required = "提示词内容不能为空";
@@ -749,11 +749,11 @@ export class Zh implements Local {
 	add_script_condition = "添加脚本条件";
 	filter_script_placeholder = "return true; // 返回 true 满足条件，返回 false 不满足条件";
 	filter_script_help = "可用变量: app, currentFile, formFilePath, formValues";
-	// AI Chat 触发配置（快捷技能）
+	// AI Chat 触发配置（快捷操作）
 	chat_trigger_enable = "启用编辑器触发";
-	chat_trigger_enable_desc = "开启后在编辑器中输入触发符号时会自动显示快捷技能工具栏";
+	chat_trigger_enable_desc = "开启后在编辑器中输入触发符号时会自动显示快捷操作工具栏";
 	chat_trigger_symbol = "触发符号";
-	chat_trigger_symbol_desc = "在编辑器中输入此符号时显示快捷技能工具栏（占位符代表全文内容，不包括 frontmatter）。多个符号用逗号分隔，如：@,/,#";
+	chat_trigger_symbol_desc = "在编辑器中输入此符号时显示快捷操作工具栏（占位符代表全文内容，不包括 frontmatter）。多个符号用逗号分隔，如：@,/,#";
 	chat_modal_width = "模态框宽度";
 	chat_modal_width_desc = "AI Chat 模态框的宽度（像素）";
 	chat_modal_height = "模态框高度";
@@ -763,84 +763,84 @@ export class Zh implements Local {
 	chat_trigger_settings_section = "编辑器触发设置";
 	chat_template_system_prompt_toggle = "模板系统提示词";
 	chat_template_system_prompt_toggle_desc = "启用后将当前提示词模板原样作为系统提示词；关闭或未选择模板时使用全局系统提示词。";
-	// 快捷技能
+	// 快捷操作
 	selection_toolbar_ai_chat = "AI Chat";
 	selection_toolbar_more = "更多";
-	selection_toolbar_no_more_skills = "暂无更多技能";
-	selection_toolbar_enable = "启用快捷技能";
+	selection_toolbar_no_more_actions = "暂无更多操作";
+	selection_toolbar_enable = "启用快捷操作";
 	selection_toolbar_enable_desc = "关闭后，编辑器选中文本或输入触发符号时不再显示悬浮工具栏";
 	selection_toolbar_max_buttons = "工具栏按钮数量";
-	selection_toolbar_max_buttons_desc = "工具栏最多显示的技能按钮数量（超过的技能显示在下拉菜单中）";
-	selection_toolbar_settings_section = "快捷技能";
-	// 技能管理
-	skill_management = "技能管理";
-	skill_management_hint = "前 {0} 个技能将显示在工具栏上，其他的将隐藏在下拉菜单中";
-	skill_add = "添加技能";
-	skill_edit = "编辑";
-	skill_delete = "删除";
-	skill_empty = "暂无技能，点击上方\"添加技能\"按钮创建";
-	skill_drag_hint = "拖拽排序";
-	// 技能编辑模态框
-	skill_edit_title_add = "添加技能";
-	skill_edit_title_edit = "编辑技能";
-	skill_edit_name_label = "技能名称和图标";
-	skill_edit_name_placeholder = "在这里命名你的技能...";
-	skill_edit_name_required = "技能名称不能为空";
-	skill_edit_name_too_long = "技能名称不能超过20个字符";
-	skill_edit_name_duplicate = "技能名称已存在";
-	skill_edit_prompt_label = "提示词内容";
-	skill_edit_prompt_placeholder = "在此输入或粘贴你的提示词。";
-	skill_edit_prompt_hint = "占位符说明：\n- 通过选中文本触发：{{}} 代表选中的文本\n- 通过触发符号触发：{{}} 代表整个文本内容（不包括 frontmatter）\n- {{@xxx}} 格式同样支持，会被替换为相应内容";
-	skill_edit_prompt_required = "提示词内容不能为空";
-	skill_edit_show_example = "示例";
-	skill_edit_select_icon = "选择图标";
-	skill_edit_created = "技能已创建";
-	skill_edit_updated = "技能已更新";
-	skill_edit_deleted = "技能已删除";
-	// 技能结果模态框
-	skill_result_regenerate = "重新生成";
-	skill_result_stop = "停止";
-	skill_result_replace = "替换";
-	skill_result_append = "追加";
-	skill_result_insert = "插入";
-	skill_result_replaced = "已替换选中文本";
-	skill_result_appended = "已追加到选中内容";
-	skill_result_inserted = "已插入到光标位置";
-	// 快捷技能增强功能
-	skill_edit_model_label = "AI 模型";
-	skill_edit_model_hint = "选择执行此技能时使用的 AI 模型，留空则使用默认模型";
-	skill_edit_model_default = "使用默认模型";
-	skill_edit_prompt_source_label = "提示词来源";
-	skill_edit_prompt_source_custom = "自定义";
-	skill_edit_prompt_source_template = "内置模板";
-	skill_edit_custom_prompt_hint = "使用 {{}} 作为占位符，系统执行时会自动替换为实际内容。";
-	skill_edit_template_hint = "从 AI 提示词模板目录中选择模板文件，模板中同样支持使用 {{}} 占位符。";
-	skill_edit_template_select_placeholder = "请选择模板文件...";
-	skill_edit_template_required = "请选择一个模板文件";
+	selection_toolbar_max_buttons_desc = "工具栏最多显示的操作按钮数量（超过的操作显示在下拉菜单中）";
+	selection_toolbar_settings_section = "快捷操作";
+	// 操作管理
+	quick_action_management = "操作管理";
+	quick_action_management_hint = "前 {0} 个操作将显示在工具栏上，其他的将隐藏在下拉菜单中";
+	quick_action_add = "添加操作";
+	quick_action_edit = "编辑";
+	quick_action_delete = "删除";
+	quick_action_empty = "暂无操作，点击上方\"添加操作\"按钮创建";
+	quick_action_drag_hint = "拖拽排序";
+	// 操作编辑模态框
+	quick_action_edit_title_add = "添加操作";
+	quick_action_edit_title_edit = "编辑操作";
+	quick_action_edit_name_label = "操作名称和图标";
+	quick_action_edit_name_placeholder = "在这里命名你的操作...";
+	quick_action_edit_name_required = "操作名称不能为空";
+	quick_action_edit_name_too_long = "操作名称不能超过20个字符";
+	quick_action_edit_name_duplicate = "操作名称已存在";
+	quick_action_edit_prompt_label = "提示词内容";
+	quick_action_edit_prompt_placeholder = "在此输入或粘贴你的提示词。";
+	quick_action_edit_prompt_hint = "占位符说明：\n- 通过选中文本触发：{{}} 代表选中的文本\n- 通过触发符号触发：{{}} 代表整个文本内容（不包括 frontmatter）\n- {{@xxx}} 格式同样支持，会被替换为相应内容";
+	quick_action_edit_prompt_required = "提示词内容不能为空";
+	quick_action_edit_show_example = "示例";
+	quick_action_edit_select_icon = "选择图标";
+	quick_action_edit_created = "操作已创建";
+	quick_action_edit_updated = "操作已更新";
+	quick_action_edit_deleted = "操作已删除";
+	// 操作结果模态框
+	quick_action_result_regenerate = "重新生成";
+	quick_action_result_stop = "停止";
+	quick_action_result_replace = "替换";
+	quick_action_result_append = "追加";
+	quick_action_result_insert = "插入";
+	quick_action_result_replaced = "已替换选中文本";
+	quick_action_result_appended = "已追加到选中内容";
+	quick_action_result_inserted = "已插入到光标位置";
+	// 快捷操作增强功能
+	quick_action_edit_model_label = "AI 模型";
+	quick_action_edit_model_hint = "选择执行此操作时使用的 AI 模型，留空则使用默认模型";
+	quick_action_edit_model_default = "使用默认模型";
+	quick_action_edit_prompt_source_label = "提示词来源";
+	quick_action_edit_prompt_source_custom = "自定义";
+	quick_action_edit_prompt_source_template = "内置模板";
+	quick_action_edit_custom_prompt_hint = "使用 {{}} 作为占位符，系统执行时会自动替换为实际内容。";
+	quick_action_edit_template_hint = "从 AI 提示词模板目录中选择模板文件，模板中同样支持使用 {{}} 占位符。";
+	quick_action_edit_template_select_placeholder = "请选择模板文件...";
+	quick_action_edit_template_required = "请选择一个模板文件";
 	selection_toolbar_stream_output = "流式输出";
 	selection_toolbar_stream_output_desc = "启用后 AI 将逐字输出结果，关闭则等待完整响应后一次性显示";
-	skill_show_in_toolbar = "显示在工具栏";
-	skill_not_show_in_toolbar = "未显示在工具栏";
-	skill_edit_use_default_system_prompt = "使用默认系统提示词";
-	skill_edit_use_default_system_prompt_hint = "启用后将使用全局系统提示词，禁用则仅使用自定义提示词内容";
-	skill_edit_model_exec_time = "执行时选择模型";
-	skill_result_waiting_model = "请选择模型以开始执行";
-	skill_result_select_model_hint = "在上方选择AI模型后，将自动开始处理";
-	// 表单技能相关
-	skill_type_label = "技能类型";
-	skill_type_normal = "普通技能";
-	skill_type_group = "技能组";
-	skill_type_form = "表单技能";
-	skill_form_execution_mode_label = "执行模式";
-	skill_form_execution_mode_serial = "串行执行";
-	skill_form_execution_mode_parallel = "并行执行";
-	skill_form_list_label = "表单列表";
-	skill_form_add_button = "+ 添加表单";
-	skill_form_list_empty = "暂无表单，点击下方按钮添加";
-	skill_form_already_added = "该表单已添加";
-	skill_form_not_found = "表单 {0} 不存在";
-	skill_form_no_forms_configured = "此表单技能未配置任何表单";
-	skill_form_select_placeholder = "选择要添加的表单...";
+	quick_action_show_in_toolbar = "显示在工具栏";
+	quick_action_not_show_in_toolbar = "未显示在工具栏";
+	quick_action_edit_use_default_system_prompt = "使用默认系统提示词";
+	quick_action_edit_use_default_system_prompt_hint = "启用后将使用全局系统提示词，禁用则仅使用自定义提示词内容";
+	quick_action_edit_model_exec_time = "执行时选择模型";
+	quick_action_result_waiting_model = "请选择模型以开始执行";
+	quick_action_result_select_model_hint = "在上方选择AI模型后，将自动开始处理";
+	// 表单操作相关
+	quick_action_type_label = "操作类型";
+	quick_action_type_normal = "普通操作";
+	quick_action_type_group = "操作组";
+	quick_action_type_form = "表单操作";
+	quick_action_form_execution_mode_label = "执行模式";
+	quick_action_form_execution_mode_serial = "串行执行";
+	quick_action_form_execution_mode_parallel = "并行执行";
+	quick_action_form_list_label = "表单列表";
+	quick_action_form_add_button = "+ 添加表单";
+	quick_action_form_list_empty = "暂无表单，点击下方按钮添加";
+	quick_action_form_already_added = "该表单已添加";
+	quick_action_form_not_found = "表单 {0} 不存在";
+	quick_action_form_no_forms_configured = "此表单操作未配置任何表单";
+	quick_action_form_select_placeholder = "选择要添加的表单...";
 	// 多表单执行设置
 	form_execution_mode = "执行模式";
 	form_execution_mode_sequential = "依次执行";

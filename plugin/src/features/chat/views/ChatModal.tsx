@@ -16,7 +16,7 @@ export interface ChatModalOptions {
 	width: number;
 	height: number;
 	activeFile?: TFile | null;
-	initialSelection?: string; // 初始选中文本，用于快捷技能
+	initialSelection?: string; // 初始选中文本，用于快捷操作
 }
 
 /**
@@ -78,7 +78,7 @@ export class ChatModal extends Modal {
 		}
 
 		// 自动添加当前活动文件到上下文
-		// 注意：通过快捷技能打开时（有 initialSelection）不自动添加文件
+		// 注意：通过快捷操作打开时（有 initialSelection）不自动添加文件
 		if (this.options.activeFile && !this.options.initialSelection) {
 			const file = this.options.activeFile;
 			// 使用 addActiveFile 方法，它会正确处理自动添加标记

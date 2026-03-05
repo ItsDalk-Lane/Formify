@@ -31,7 +31,11 @@ export default class FormPlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
-		await ensureAIDataFolders(this.app, this.settings.aiDataFolder);
+		try {
+			await ensureAIDataFolders(this.app, this.settings.aiDataFolder);
+		} catch (error) {
+			DebugLogger.error('[FormPlugin] AI数据文件夹初始化失败，将在下次保存设置时重试', error);
+		}
 		try {
 			await this.settingsManager.migrateAIDataStorage(this.settings);
 		} catch (error) {
@@ -170,9 +174,21 @@ export default class FormPlugin extends Plugin {
 		await this.applyRuntimeUpdates();
 	}
 
+	/**
+	 * 手动触发 AI 数据文件夹创建
+	 * 由设置页面在输入框失焦且值有变化时调用
+	 * @param folderPath - 可选，指定要创建的文件夹路径；为空时使用当前设置值
+	 */
+	async tryEnsureAIDataFolders(folderPath?: string): Promise<void> {
+		try {
+			await ensureAIDataFolders(this.app, folderPath ?? this.settings.aiDataFolder);
+		} catch (error) {
+			DebugLogger.error('[FormPlugin] AI数据文件夹创建失败', error);
+		}
+	}
+
 	private async applyRuntimeUpdates() {
 		this.applyDebugSettings();
-		await ensureAIDataFolders(this.app, this.settings.aiDataFolder);
 		await this.services.formScriptService.refresh(this.settings.scriptFolder);
 		await this.services.formIntegrationService.initialize(this, true);
 		this.services.contextMenuService.refreshContextMenuItems();

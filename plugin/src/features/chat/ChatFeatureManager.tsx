@@ -15,15 +15,15 @@ import {
 	setTriggerSource,
 	setToolbarVisible
 } from './selection-toolbar/SelectionToolbarExtension';
-import { SkillExecutionService } from './selection-toolbar/SkillExecutionService';
-import { SkillDataService } from './selection-toolbar/SkillDataService';
-import type { ChatSettings, ChatOpenMode, Skill } from './types/chat';
+import { QuickActionExecutionService } from './selection-toolbar/QuickActionExecutionService';
+import { QuickActionDataService } from './selection-toolbar/QuickActionDataService';
+import type { ChatSettings, ChatOpenMode, QuickAction } from './types/chat';
 import type { TarsSettings } from '../tars/settings';
 import { localInstance } from 'src/i18n/locals';
 import { createRoot, Root } from 'react-dom/client';
 import { StrictMode } from 'react';
 import { SelectionToolbar } from './selection-toolbar/SelectionToolbar';
-import { SkillResultModal } from './selection-toolbar/SkillResultModal';
+import { QuickActionResultModal } from './selection-toolbar/QuickActionResultModal';
 import type { ChatMessage } from './types/chat';
 import { PromptBuilder } from 'src/service/PromptBuilder';
 import { SystemPromptAssembler } from 'src/service/SystemPromptAssembler';
@@ -40,9 +40,9 @@ export class ChatFeatureManager {
 	private ribbonEl: HTMLElement | null = null;
 	private chatTriggerExtension: Extension | null = null;
 	private selectionToolbarExtension: Extension | null = null;
-	private skillExecutionService: SkillExecutionService | null = null;
-	private skillDataService: SkillDataService | null = null;
-	private cachedSkills: Skill[] = []; // 缓存的技能列表
+	private quickActionExecutionService: QuickActionExecutionService | null = null;
+	private quickActionDataService: QuickActionDataService | null = null;
+	private cachedQuickActions: QuickAction[] = []; // 缓存的快捷操作列表
 
 	// 选区工具栏 React 组件容器
 	private toolbarContainer: HTMLElement | null = null;
@@ -65,13 +65,13 @@ export class ChatFeatureManager {
 	} | null = null;
 	private modifyGhostExtensions: Extension[] = [];
 
-	// 技能结果模态框状态
+	// 操作结果模态框状态
 	private resultModalContainer: HTMLElement | null = null;
 	private resultModalRoot: Root | null = null;
 	private currentIsLoading: boolean = false;
 	private currentRenderModal: (() => void) | null = null;
 	private isResultModalVisible: boolean = false;
-	private selectedSkillModelTag: string = ''; // 当前技能执行的模型选择
+	private selectedQuickActionModelTag: string = ''; // 当前操作执行的模型选择
 	private currentResult: string = ''; // 当前执行结果
 	private currentError: string | undefined = undefined; // 当前错误信息
 
@@ -90,8 +90,8 @@ export class ChatFeatureManager {
 		this.registerChatTriggerExtension();
 		this.registerSelectionToolbarExtension();
 		this.registerModifyGhostTextExtension();
-		this.initializeSkillExecutionService();
-		await this.initializeSkillDataService(initialSettings);
+		this.initializeQuickActionExecutionService();
+		await this.initializeQuickActionDataService(initialSettings);
 
 		// 延迟自动打开聊天界面，确保工作区完全准备好
 		const shouldAutoOpen = initialSettings?.showSidebarByDefault ?? this.plugin.settings.chat.showSidebarByDefault;
@@ -123,7 +123,7 @@ export class ChatFeatureManager {
 		}
 
 		// 如果划词工具栏设置变化，更新选区工具栏扩展
-		if ('enableSelectionToolbar' in settings || 'maxToolbarButtons' in settings || 'skills' in settings) {
+		if ('enableQuickActions' in settings || 'maxQuickActionButtons' in settings || 'quickActions' in settings) {
 			this.updateSelectionToolbarExtension();
 		}
 	}
@@ -137,12 +137,12 @@ export class ChatFeatureManager {
 	}
 
 	/**
-	 * 刷新技能缓存
+	 * 刷新快捷操作缓存
 	 */
-	async refreshSkillsCache(): Promise<void> {
-		if (this.skillDataService) {
-			this.cachedSkills = await this.skillDataService.getSortedSkills();
-			DebugLogger.debug('[ChatFeatureManager] 技能缓存已刷新，共', this.cachedSkills.length, '个技能');
+	async refreshQuickActionsCache(): Promise<void> {
+		if (this.quickActionDataService) {
+			this.cachedQuickActions = await this.quickActionDataService.getSortedQuickActions();
+			DebugLogger.debug('[ChatFeatureManager] 快捷操作缓存已刷新，共', this.cachedQuickActions.length, '个操作');
 		}
 	}
 
@@ -363,10 +363,10 @@ export class ChatFeatureManager {
 	}
 
 	/**
-	 * 初始化技能执行服务
+	 * 初始化快捷操作执行服务
 	 */
-	private initializeSkillExecutionService() {
-		this.skillExecutionService = new SkillExecutionService(
+	private initializeQuickActionExecutionService() {
+		this.quickActionExecutionService = new QuickActionExecutionService(
 			this.plugin.app,
 			() => this.plugin.settings.tars.settings,
 			() => getPromptTemplatePath(this.plugin.settings.aiDataFolder)
@@ -374,23 +374,25 @@ export class ChatFeatureManager {
 	}
 
 	/**
-	 * 初始化技能数据服务并执行数据迁移
+	 * 初始化快捷操作数据服务并执行数据迁移
 	 */
-	private async initializeSkillDataService(initialSettings?: Partial<ChatSettings>) {
+	private async initializeQuickActionDataService(initialSettings?: Partial<ChatSettings>) {
 		try {
-			this.skillDataService = SkillDataService.getInstance(this.plugin.app);
-			await this.skillDataService.initialize();
+			this.quickActionDataService = QuickActionDataService.getInstance(this.plugin.app);
+			await this.quickActionDataService.initialize();
 
-			// 执行数据迁移：从旧设置迁移技能数据到 data.json.chat.skills
-			const legacySkills = initialSettings?.skills ?? this.plugin.settings.chat.skills ?? [];
-			await this.skillDataService.migrateFromSettings(legacySkills);
+			// 执行数据迁移：从旧设置迁移快捷操作数据到 data.json.chat.quickActions
+			const legacyQuickActions =
+				initialSettings?.quickActions ??
+				((this.plugin.settings.chat as any)?.skills ?? []);
+			await this.quickActionDataService.migrateFromSettings(legacyQuickActions);
 
-			// 加载技能到缓存
-			this.cachedSkills = await this.skillDataService.getSortedSkills();
+			// 加载快捷操作到缓存
+			this.cachedQuickActions = await this.quickActionDataService.getSortedQuickActions();
 
-			DebugLogger.debug('[ChatFeatureManager] 技能数据服务初始化完成，已加载', this.cachedSkills.length, '个技能');
+			DebugLogger.debug('[ChatFeatureManager] 快捷操作数据服务初始化完成，已加载', this.cachedQuickActions.length, '个操作');
 		} catch (error) {
-			DebugLogger.error('[ChatFeatureManager] 技能数据服务初始化失败', error);
+			DebugLogger.error('[ChatFeatureManager] 快捷操作数据服务初始化失败', error);
 		}
 	}
 
@@ -515,8 +517,8 @@ export class ChatFeatureManager {
 		}
 
 		const settings = this.plugin.settings.chat;
-		// 使用缓存的技能列表，不从 settings 中获取
-		const settingsWithCachedSkills = { ...settings, skills: this.cachedSkills };
+		// 使用缓存的快捷操作列表，不从 settings 中获取
+		const settingsWithCachedQuickActions = { ...settings, quickActions: this.cachedQuickActions };
 
 		const { triggerSource, fullText } = this.currentSelectionInfo;
 
@@ -525,12 +527,12 @@ export class ChatFeatureManager {
 				<SelectionToolbar
 					visible={this.isToolbarVisible}
 					selectionInfo={this.currentSelectionInfo}
-					settings={settingsWithCachedSkills}
+					settings={settingsWithCachedQuickActions}
 					onOpenChat={(selection) => this.openChatWithSelection(selection, triggerSource, fullText)}
 					onModify={() => this.openModifyModal(triggerSource, fullText)}
 					onCopy={() => this.copySelection()}
 					onCut={() => this.cutSelection()}
-					onExecuteSkill={(skill, selection) => this.executeSkill(skill, selection, triggerSource, fullText)}
+					onExecuteQuickAction={(quickAction, selection) => this.executeQuickAction(quickAction, selection, triggerSource, fullText)}
 					onClose={() => this.hideSelectionToolbar()}
 				/>
 			</StrictMode>
@@ -552,19 +554,19 @@ export class ChatFeatureManager {
 
 		if (this.toolbarRoot) {
 			const settings = this.plugin.settings.chat;
-			const settingsWithCachedSkills = { ...settings, skills: this.cachedSkills };
+			const settingsWithCachedQuickActions = { ...settings, quickActions: this.cachedQuickActions };
 
 			this.toolbarRoot.render(
 				<StrictMode>
 					<SelectionToolbar
 						visible={false}
 						selectionInfo={null}
-						settings={settingsWithCachedSkills}
+						settings={settingsWithCachedQuickActions}
 						onOpenChat={() => {}}
 						onModify={() => {}}
 						onCopy={() => {}}
 						onCut={() => {}}
-						onExecuteSkill={() => {}}
+						onExecuteQuickAction={() => {}}
 						onClose={() => {}}
 					/>
 				</StrictMode>
@@ -910,9 +912,9 @@ export class ChatFeatureManager {
 	}
 
 	/**
-	 * 执行技能
+	 * 执行快捷操作
 	 */
-	private async executeSkill(skill: Skill, selection: string, triggerSource?: 'selection' | 'symbol', fullText?: string) {
+	private async executeQuickAction(quickAction: QuickAction, selection: string, triggerSource?: 'selection' | 'symbol', fullText?: string) {
 		// 如果是符号触发，删除触发符号
 		if (triggerSource === 'symbol' && this.currentTriggerSymbolRange && this.currentEditorView) {
 			this.deleteTriggerSymbol();
@@ -920,21 +922,21 @@ export class ChatFeatureManager {
 
 		this.hideSelectionToolbar();
 
-		if (!this.skillExecutionService) {
-			new Notice('技能执行服务未初始化');
+		if (!this.quickActionExecutionService) {
+			new Notice('快捷操作执行服务未初始化');
 			return;
 		}
 
 		// 根据触发来源决定实际使用的文本
 		const actualSelection = triggerSource === 'symbol' ? (fullText || '') : selection;
 
-		// 表单技能：只执行表单，不显示输出模态框
-		const isFormSkill = (skill.skillType === 'form') || ((skill.formCommandIds?.length ?? 0) > 0)
-		if (isFormSkill) {
+		// 表单操作：只执行表单，不显示输出模态框
+		const isFormQuickAction = (quickAction.actionType === 'form') || ((quickAction.formCommandIds?.length ?? 0) > 0)
+		if (isFormQuickAction) {
 			try {
-				const result = await this.skillExecutionService.executeSkill(skill, actualSelection)
+				const result = await this.quickActionExecutionService.executeQuickAction(quickAction, actualSelection)
 				if (!result.success) {
-					new Notice(result.error || '执行表单技能失败')
+					new Notice(result.error || '执行表单操作失败')
 				}
 			} catch (e) {
 				new Notice(e instanceof Error ? e.message : String(e))
@@ -942,23 +944,23 @@ export class ChatFeatureManager {
 			return
 		}
 
-		// 普通技能/技能组：显示结果模态框
-		this.showResultModal(skill, selection, triggerSource, fullText);
+		// 普通操作/操作组：显示结果模态框
+		this.showQuickActionResultModal(quickAction, selection, triggerSource, fullText);
 	}
 
 	/**
-	 * 显示技能结果模态框
+	 * 显示快捷操作结果模态框
 	 */
-	private showResultModal(skill: Skill, selection: string, triggerSource?: 'selection' | 'symbol', fullText?: string) {
+	private showQuickActionResultModal(quickAction: QuickAction, selection: string, triggerSource?: 'selection' | 'symbol', fullText?: string) {
 		this.isResultModalVisible = true;
 
 		// 判断是否需要执行时选择模型
-		const requiresModelSelection = skill.modelTag === '__EXEC_TIME__';
+		const requiresModelSelection = quickAction.modelTag === '__EXEC_TIME__';
 
 		// 创建结果模态框容器
 		if (!this.resultModalContainer) {
 			this.resultModalContainer = document.createElement('div');
-			this.resultModalContainer.className = 'skill-result-modal-container';
+			this.resultModalContainer.className = 'quick-action-result-modal-container';
 			document.body.appendChild(this.resultModalContainer);
 			this.resultModalRoot = createRoot(this.resultModalContainer);
 		}
@@ -980,26 +982,26 @@ export class ChatFeatureManager {
 
 			this.resultModalRoot.render(
 				<StrictMode>
-					<SkillResultModal
+					<QuickActionResultModal
 						app={this.plugin.app}
 						visible={true}
-						skill={skill}
+						quickAction={quickAction}
 						selection={selection}
 						result={this.currentResult}
 						isLoading={this.currentIsLoading}
 						error={this.currentError}
 						providers={providers}
-						selectedModelTag={this.selectedSkillModelTag}
-						onModelChange={(tag) => this.handleSkillModelChange(tag, skill, actualSelection)}
+						selectedModelTag={this.selectedQuickActionModelTag}
+						onModelChange={(tag) => this.handleQuickActionModelChange(tag, quickAction, actualSelection)}
 						requiresModelSelection={requiresModelSelection}
 						onClose={() => this.hideResultModal()}
 						onStop={() => {
-							this.cancelCurrentSkillExecution();
+							this.cancelCurrentQuickActionExecution();
 							this.currentIsLoading = false;
 							renderModal();
 						}}
-						onRegenerate={() => this.regenerateSkillResult(skill, selection, triggerSource, fullText)}
-						onInsert={(mode) => this.insertSkillResult(this.currentResult, mode, triggerSource, fullText)}
+						onRegenerate={() => this.regenerateQuickActionResult(quickAction, selection, triggerSource, fullText)}
+						onInsert={(mode) => this.insertQuickActionResult(this.currentResult, mode, triggerSource, fullText)}
 						onCopy={() => {}}
 					/>
 				</StrictMode>
@@ -1015,11 +1017,11 @@ export class ChatFeatureManager {
 		// 如果不需要选择模型，立即执行（现有逻辑）
 		if (!requiresModelSelection) {
 			// 根据设置决定使用流式输出还是非流式输出
-			const useStreamOutput = this.plugin.settings.chat.selectionToolbarStreamOutput ?? true;
+			const useStreamOutput = this.plugin.settings.chat.quickActionsStreamOutput ?? true;
 
 			if (useStreamOutput) {
-				// 执行技能并流式更新结果
-				this.executeSkillAndStream(skill, actualSelection, {
+				// 执行操作并流式更新结果
+				this.executeQuickActionAndStream(quickAction, actualSelection, {
 					onChunk: (chunk) => {
 							if (!this.isResultModalVisible) return;
 							this.currentResult += chunk;
@@ -1039,7 +1041,7 @@ export class ChatFeatureManager {
 				});
 			} else {
 				// 非流式输出：等待完整响应
-				this.executeSkillNonStream(skill, actualSelection).then((response) => {
+				this.executeQuickActionNonStream(quickAction, actualSelection).then((response) => {
 					if (!this.isResultModalVisible) return;
 					this.currentResult = response;
 					this.currentIsLoading = false;
@@ -1052,14 +1054,14 @@ export class ChatFeatureManager {
 				});
 			}
 		}
-		// 如果需要选择模型，等待用户选择后再执行（在handleSkillModelChange中处理）
+		// 如果需要选择模型，等待用户选择后再执行（在handleQuickActionModelChange中处理）
 	}
 
 	/**
-	 * 处理技能模型切换
+	 * 处理操作模型切换
 	 */
-	private handleSkillModelChange(modelTag: string, skill: Skill, selection: string): void {
-		this.selectedSkillModelTag = modelTag;
+	private handleQuickActionModelChange(modelTag: string, quickAction: QuickAction, selection: string): void {
+		this.selectedQuickActionModelTag = modelTag;
 
 		// 如果未选择模型，仅更新UI
 		if (!modelTag) {
@@ -1073,10 +1075,10 @@ export class ChatFeatureManager {
 		this.currentError = undefined;
 		this.currentRenderModal?.();
 
-		const useStreamOutput = this.plugin.settings.chat.selectionToolbarStreamOutput ?? true;
+		const useStreamOutput = this.plugin.settings.chat.quickActionsStreamOutput ?? true;
 
 		if (useStreamOutput) {
-			this.executeSkillAndStream(skill, selection, {
+			this.executeQuickActionAndStream(quickAction, selection, {
 				onChunk: (chunk) => {
 					if (!this.isResultModalVisible) return;
 					this.currentResult += chunk;
@@ -1095,7 +1097,7 @@ export class ChatFeatureManager {
 				}
 			}, modelTag);
 		} else {
-			this.executeSkillNonStream(skill, selection, modelTag).then((response) => {
+			this.executeQuickActionNonStream(quickAction, selection, modelTag).then((response) => {
 				if (!this.isResultModalVisible) return;
 				this.currentResult = response;
 				this.currentIsLoading = false;
@@ -1110,14 +1112,14 @@ export class ChatFeatureManager {
 	}
 
 	/**
-	 * 非流式执行技能
+	 * 非流式执行快捷操作
 	 */
-	private async executeSkillNonStream(skill: Skill, selection: string, overrideModelTag?: string): Promise<string> {
-		if (!this.skillExecutionService) {
-			throw new Error('技能执行服务未初始化');
+	private async executeQuickActionNonStream(quickAction: QuickAction, selection: string, overrideModelTag?: string): Promise<string> {
+		if (!this.quickActionExecutionService) {
+			throw new Error('快捷操作执行服务未初始化');
 		}
 
-		const result = await this.skillExecutionService.executeSkill(skill, selection, overrideModelTag);
+		const result = await this.quickActionExecutionService.executeQuickAction(quickAction, selection, overrideModelTag);
 
 		if (!result.success) {
 			throw new Error(result.error || '执行失败');
@@ -1127,10 +1129,10 @@ export class ChatFeatureManager {
 	}
 
 	/**
-	 * 执行技能并流式返回结果
+	 * 执行快捷操作并流式返回结果
 	 */
-	private async executeSkillAndStream(
-		skill: Skill,
+	private async executeQuickActionAndStream(
+		quickAction: QuickAction,
 		selection: string,
 		callbacks: {
 			onChunk: (chunk: string) => void;
@@ -1139,13 +1141,13 @@ export class ChatFeatureManager {
 		},
 		overrideModelTag?: string
 	) {
-		if (!this.skillExecutionService) {
-			callbacks.onError('技能执行服务未初始化');
+		if (!this.quickActionExecutionService) {
+			callbacks.onError('快捷操作执行服务未初始化');
 			return;
 		}
 
 		try {
-			const generator = this.skillExecutionService.executeSkillStream(skill, selection, overrideModelTag);
+			const generator = this.quickActionExecutionService.executeQuickActionStream(quickAction, selection, overrideModelTag);
 			for await (const chunk of generator) {
 				callbacks.onChunk(chunk);
 			}
@@ -1156,17 +1158,17 @@ export class ChatFeatureManager {
 	}
 
 	/**
-	 * 重新生成技能结果
+	 * 重新生成快捷操作结果
 	 */
-	private regenerateSkillResult(skill: Skill, selection: string, triggerSource?: 'selection' | 'symbol', fullText?: string) {
+	private regenerateQuickActionResult(quickAction: QuickAction, selection: string, triggerSource?: 'selection' | 'symbol', fullText?: string) {
 		this.hideResultModal();
-		this.showResultModal(skill, selection, triggerSource, fullText);
+		this.showQuickActionResultModal(quickAction, selection, triggerSource, fullText);
 	}
 
 	/**
-	 * 插入技能结果到编辑器
+	 * 插入快捷操作结果到编辑器
 	 */
-	private insertSkillResult(result: string, mode: 'replace' | 'append' | 'insert', triggerSource?: 'selection' | 'symbol', fullText?: string) {
+	private insertQuickActionResult(result: string, mode: 'replace' | 'append' | 'insert', triggerSource?: 'selection' | 'symbol', fullText?: string) {
 		this.hideResultModal();
 
 		const activeView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
@@ -1218,11 +1220,11 @@ export class ChatFeatureManager {
 	}
 
 	/**
-	 * 取消当前正在执行的技能
+	 * 取消当前正在执行的快捷操作
 	 */
-	cancelCurrentSkillExecution(): void {
-		if (this.skillExecutionService) {
-			this.skillExecutionService.cancelCurrentExecution();
+	cancelCurrentQuickActionExecution(): void {
+		if (this.quickActionExecutionService) {
+			this.quickActionExecutionService.cancelCurrentExecution();
 		}
 	}
 
@@ -1232,23 +1234,23 @@ export class ChatFeatureManager {
 	private hideResultModal() {
 		this.isResultModalVisible = false;
 		this.currentIsLoading = false;
-		this.selectedSkillModelTag = ''; // 清空模型选择
+		this.selectedQuickActionModelTag = ''; // 清空模型选择
 		this.currentResult = ''; // 清空结果
 		this.currentError = undefined; // 清空错误
 
 		// 清理渲染函数引用
 		this.currentRenderModal = null;
 
-		// 取消正在执行的技能
-		this.cancelCurrentSkillExecution();
+		// 取消正在执行的快捷操作
+		this.cancelCurrentQuickActionExecution();
 
 		if (this.resultModalRoot) {
 			this.resultModalRoot.render(
 				<StrictMode>
-					<SkillResultModal
+					<QuickActionResultModal
 						app={this.plugin.app}
 						visible={false}
-						skill={{ id: '', name: '', prompt: '', promptSource: 'custom', showInToolbar: false, order: 0, createdAt: 0, updatedAt: 0 }}
+						quickAction={{ id: '', name: '', prompt: '', promptSource: 'custom', showInToolbar: false, order: 0, createdAt: 0, updatedAt: 0 }}
 						selection=""
 						result=""
 						isLoading={false}

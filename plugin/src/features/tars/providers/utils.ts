@@ -284,7 +284,7 @@ export const getCapabilityDisplayText = (vendor: Vendor, options: BaseOptions): 
 /**
  * 构建禁用推理的 provider options
  *
- * 该函数用于在非聊天场景（如 Tab 补全、技能执行、AI 动作等）中禁用推理功能，
+ * 该函数用于在非聊天场景（如 Tab 补全、快捷操作执行、AI 动作等）中禁用推理功能，
  * 避免推理内容意外输出到最终结果中。
  *
  * @param originalOptions - 原始的 provider options

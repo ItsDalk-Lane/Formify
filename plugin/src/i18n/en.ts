@@ -574,8 +574,8 @@ export class En implements Local {
 	system_prompt_feature_ai_action_desc = "Invoke AI models in form workflows, supports runtime model/template selection, variable substitution ({{@fieldName}}, {{output:variableName}}), internal link parsing, and streaming output modal";
 	system_prompt_feature_tab_completion = "Tab Auto Completion";
 	system_prompt_feature_tab_completion_desc = "Trigger AI continuation with a hotkey in the editor, configurable trigger key and context length, smart context building and post-processing";
-	system_prompt_feature_selection_toolbar = "Selected Text Skill";
-	system_prompt_feature_selection_toolbar_desc = "Show a skill toolbar for selected text (or whole text via trigger symbol), supports custom AI skills (skill/skill group/form skill), placeholder substitution and streaming output";
+	system_prompt_feature_selection_toolbar = "Selected Text Action";
+	system_prompt_feature_selection_toolbar_desc = "Show an action toolbar for selected text (or whole text via trigger symbol), supports custom AI actions (action/action group/form action), placeholder substitution and streaming output";
 	system_prompt_error_name_required = "Name is required";
 	system_prompt_error_name_duplicate = "Name already exists";
 	system_prompt_error_content_required = "Content is required";
@@ -740,11 +740,11 @@ export class En implements Local {
 	add_script_condition = "Add Script Condition";
 	filter_script_placeholder = "return true; // Return true to match, false to not match";
 	filter_script_help = "Available variables: app, currentFile, formFilePath, formValues";
-	// AI Chat trigger settings (Quick Skills)
+	// AI Chat trigger settings (Quick Actions)
 	chat_trigger_enable = "Enable Editor Trigger";
-	chat_trigger_enable_desc = "When enabled, typing the trigger symbol in the editor will show the Quick Skills toolbar";
+	chat_trigger_enable_desc = "When enabled, typing the trigger symbol in the editor will show the Quick Actions toolbar";
 	chat_trigger_symbol = "Trigger Symbol";
-	chat_trigger_symbol_desc = "Typing this symbol in the editor shows the Quick Skills toolbar (placeholder represents full content, excluding frontmatter). Separate multiple symbols with commas, e.g.: @,/,#";
+	chat_trigger_symbol_desc = "Typing this symbol in the editor shows the Quick Actions toolbar (placeholder represents full content, excluding frontmatter). Separate multiple symbols with commas, e.g.: @,/,#";
 	chat_modal_width = "Modal Width";
 	chat_modal_width_desc = "Width of the AI Chat modal (pixels)";
 	chat_modal_height = "Modal Height";
@@ -754,84 +754,84 @@ export class En implements Local {
 	chat_trigger_settings_section = "Editor Trigger Settings";
 	chat_template_system_prompt_toggle = "Template System Prompt";
 	chat_template_system_prompt_toggle_desc = "When enabled, use the selected prompt template as-is as the system prompt; otherwise use the global system prompt.";
-	// Quick Skills
+	// Quick Actions
 	selection_toolbar_ai_chat = "AI Chat";
 	selection_toolbar_more = "More";
-	selection_toolbar_no_more_skills = "No more skills";
-	selection_toolbar_enable = "Enable Quick Skills";
+	selection_toolbar_no_more_actions = "No more actions";
+	selection_toolbar_enable = "Enable Quick Actions";
 	selection_toolbar_enable_desc = "When disabled, floating toolbar will not appear when selecting text or typing trigger symbol";
 	selection_toolbar_max_buttons = "Toolbar Button Count";
-	selection_toolbar_max_buttons_desc = "Maximum number of skill buttons on toolbar (rest shown in dropdown)";
-	selection_toolbar_settings_section = "Quick Skills";
-	// Skill Management
-	skill_management = "Skill Management";
-	skill_management_hint = "First {0} skills will be shown on toolbar, others in dropdown";
-	skill_add = "Add Skill";
-	skill_edit = "Edit";
-	skill_delete = "Delete";
-	skill_empty = "No skills yet, click \"Add Skill\" button above to create";
-	skill_drag_hint = "Drag to reorder";
-	// Skill Edit Modal
-	skill_edit_title_add = "Add Skill";
-	skill_edit_title_edit = "Edit Skill";
-	skill_edit_name_label = "Skill Name and Icon";
-	skill_edit_name_placeholder = "Name your skill here...";
-	skill_edit_name_required = "Skill name is required";
-	skill_edit_name_too_long = "Skill name cannot exceed 20 characters";
-	skill_edit_name_duplicate = "Skill name already exists";
-	skill_edit_prompt_label = "Prompt Content";
-	skill_edit_prompt_placeholder = "Enter or paste your prompt here.";
-	skill_edit_prompt_hint = "Placeholder usage:\n- Triggered by text selection: {{}} represents selected text\n- Triggered by symbol: {{}} represents full content (excluding frontmatter)\n- {{@xxx}} format is also supported and will be replaced accordingly";
-	skill_edit_prompt_required = "Prompt content is required";
-	skill_edit_show_example = "Example";
-	skill_edit_select_icon = "Select Icon";
-	skill_edit_created = "Skill created";
-	skill_edit_updated = "Skill updated";
-	skill_edit_deleted = "Skill deleted";
-	// Skill Result Modal
-	skill_result_regenerate = "Regenerate";
-	skill_result_stop = "Stop";
-	skill_result_replace = "Replace";
-	skill_result_append = "Append";
-	skill_result_insert = "Insert";
-	skill_result_replaced = "Selected text replaced";
-	skill_result_appended = "Appended to selection";
-	skill_result_inserted = "Inserted at cursor";
-	// Quick Skills Enhancement
-	skill_edit_model_label = "AI Model";
-	skill_edit_model_hint = "Select the AI model to use when executing this skill, leave empty to use default model";
-	skill_edit_model_default = "Use Default Model";
-	skill_edit_prompt_source_label = "Prompt Source";
-	skill_edit_prompt_source_custom = "Custom";
-	skill_edit_prompt_source_template = "Built-in Template";
-	skill_edit_custom_prompt_hint = "Use {{}} as placeholder, which will be automatically replaced with actual content during execution.";
-	skill_edit_template_hint = "Select template file from AI prompt template directory, {{}} placeholder is also supported.";
-	skill_edit_template_select_placeholder = "Please select template file...";
-	skill_edit_template_required = "Please select a template file";
+	selection_toolbar_max_buttons_desc = "Maximum number of action buttons on toolbar (rest shown in dropdown)";
+	selection_toolbar_settings_section = "Quick Actions";
+	// Quick Action Management
+	quick_action_management = "Quick Action Management";
+	quick_action_management_hint = "First {0} actions will be shown on toolbar, others in dropdown";
+	quick_action_add = "Add Action";
+	quick_action_edit = "Edit";
+	quick_action_delete = "Delete";
+	quick_action_empty = "No actions yet, click \"Add Action\" button above to create";
+	quick_action_drag_hint = "Drag to reorder";
+	// Quick Action Edit Modal
+	quick_action_edit_title_add = "Add Action";
+	quick_action_edit_title_edit = "Edit Action";
+	quick_action_edit_name_label = "Action Name and Icon";
+	quick_action_edit_name_placeholder = "Name your action here...";
+	quick_action_edit_name_required = "Action name is required";
+	quick_action_edit_name_too_long = "Action name cannot exceed 20 characters";
+	quick_action_edit_name_duplicate = "Action name already exists";
+	quick_action_edit_prompt_label = "Prompt Content";
+	quick_action_edit_prompt_placeholder = "Enter or paste your prompt here.";
+	quick_action_edit_prompt_hint = "Placeholder usage:\n- Triggered by text selection: {{}} represents selected text\n- Triggered by symbol: {{}} represents full content (excluding frontmatter)\n- {{@xxx}} format is also supported and will be replaced accordingly";
+	quick_action_edit_prompt_required = "Prompt content is required";
+	quick_action_edit_show_example = "Example";
+	quick_action_edit_select_icon = "Select Icon";
+	quick_action_edit_created = "Action created";
+	quick_action_edit_updated = "Action updated";
+	quick_action_edit_deleted = "Action deleted";
+	// Quick Action Result Modal
+	quick_action_result_regenerate = "Regenerate";
+	quick_action_result_stop = "Stop";
+	quick_action_result_replace = "Replace";
+	quick_action_result_append = "Append";
+	quick_action_result_insert = "Insert";
+	quick_action_result_replaced = "Selected text replaced";
+	quick_action_result_appended = "Appended to selection";
+	quick_action_result_inserted = "Inserted at cursor";
+	// Quick Actions Enhancement
+	quick_action_edit_model_label = "AI Model";
+	quick_action_edit_model_hint = "Select the AI model to use when executing this action, leave empty to use default model";
+	quick_action_edit_model_default = "Use Default Model";
+	quick_action_edit_prompt_source_label = "Prompt Source";
+	quick_action_edit_prompt_source_custom = "Custom";
+	quick_action_edit_prompt_source_template = "Built-in Template";
+	quick_action_edit_custom_prompt_hint = "Use {{}} as placeholder, which will be automatically replaced with actual content during execution.";
+	quick_action_edit_template_hint = "Select template file from AI prompt template directory, {{}} placeholder is also supported.";
+	quick_action_edit_template_select_placeholder = "Please select template file...";
+	quick_action_edit_template_required = "Please select a template file";
 	selection_toolbar_stream_output = "Stream Output";
 	selection_toolbar_stream_output_desc = "When enabled, AI will output results word by word, otherwise waits for complete response";
-	skill_show_in_toolbar = "Shown in toolbar";
-	skill_not_show_in_toolbar = "Not shown in toolbar";
-	skill_edit_use_default_system_prompt = "Use default system prompt";
-	skill_edit_use_default_system_prompt_hint = "When enabled, global system prompts will be used; when disabled, only custom prompt content will be used";
-	skill_edit_model_exec_time = "Select Model at Execution";
-	skill_result_waiting_model = "Please select a model to start execution";
-	skill_result_select_model_hint = "After selecting an AI model above, processing will start automatically";
-	// Form Skill
-	skill_type_label = "Skill Type";
-	skill_type_normal = "Normal Skill";
-	skill_type_group = "Skill Group";
-	skill_type_form = "Form Skill";
-	skill_form_execution_mode_label = "Execution Mode";
-	skill_form_execution_mode_serial = "Serial Execution";
-	skill_form_execution_mode_parallel = "Parallel Execution";
-	skill_form_list_label = "Form List";
-	skill_form_add_button = "+ Add Form";
-	skill_form_list_empty = "No forms yet, click button below to add";
-	skill_form_already_added = "This form has already been added";
-	skill_form_not_found = "Form {0} not found";
-	skill_form_no_forms_configured = "No forms configured for this form skill";
-	skill_form_select_placeholder = "Select a form to add...";
+	quick_action_show_in_toolbar = "Shown in toolbar";
+	quick_action_not_show_in_toolbar = "Not shown in toolbar";
+	quick_action_edit_use_default_system_prompt = "Use default system prompt";
+	quick_action_edit_use_default_system_prompt_hint = "When enabled, global system prompts will be used; when disabled, only custom prompt content will be used";
+	quick_action_edit_model_exec_time = "Select Model at Execution";
+	quick_action_result_waiting_model = "Please select a model to start execution";
+	quick_action_result_select_model_hint = "After selecting an AI model above, processing will start automatically";
+	// Form Action
+	quick_action_type_label = "Action Type";
+	quick_action_type_normal = "Normal Action";
+	quick_action_type_group = "Action Group";
+	quick_action_type_form = "Form Action";
+	quick_action_form_execution_mode_label = "Execution Mode";
+	quick_action_form_execution_mode_serial = "Serial Execution";
+	quick_action_form_execution_mode_parallel = "Parallel Execution";
+	quick_action_form_list_label = "Form List";
+	quick_action_form_add_button = "+ Add Form";
+	quick_action_form_list_empty = "No forms yet, click button below to add";
+	quick_action_form_already_added = "This form has already been added";
+	quick_action_form_not_found = "Form {0} not found";
+	quick_action_form_no_forms_configured = "No forms configured for this form action";
+	quick_action_form_select_placeholder = "Select a form to add...";
 	// Multi-form execution settings
 	form_execution_mode = "Execution Mode";
 	form_execution_mode_sequential = "Sequential";

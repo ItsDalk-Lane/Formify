@@ -1,49 +1,49 @@
 import { App, TFile, Notice } from 'obsidian';
-import type { Skill } from '../types/chat';
+import type { QuickAction } from '../types/chat';
 import type { TarsSettings } from '../../tars/settings';
 import { availableVendors } from '../../tars/settings';
 import type { ProviderSettings, Message, Vendor } from '../../tars/providers';
-import { getFormSkillService } from './FormSkillService';
+import { getFormQuickActionService } from './FormQuickActionService';
 import { localInstance } from 'src/i18n/locals';
 import { DebugLogger } from 'src/utils/DebugLogger';
 import { SystemPromptAssembler } from 'src/service/SystemPromptAssembler';
 import { buildProviderOptionsWithReasoningDisabled } from '../../tars/providers/utils';
 
 /**
- * 技能执行结果接口
+ * 快捷操作执行结果接口
  */
-export interface SkillExecutionResult {
+export interface QuickActionExecutionResult {
 	success: boolean;
 	content: string;
 	error?: string;
 }
 
 /**
- * 判断技能的实际类型
+ * 判断快捷操作的实际类型
  * 用于兼容旧数据结构
  */
-function getSkillType(skill: Skill): 'normal' | 'group' | 'form' {
-	// 优先使用 skillType 字段
-	if (skill.skillType) {
-		return skill.skillType;
+function getQuickActionType(quickAction: QuickAction): 'normal' | 'group' | 'form' {
+	// 优先使用 actionType 字段
+	if (quickAction.actionType) {
+		return quickAction.actionType;
 	}
-	// 兼容旧数据：检查 isSkillGroup 字段
-	if (skill.isSkillGroup) {
+	// 兼容未设置 actionType 的数据：根据分组标记判断
+	if (quickAction.isActionGroup) {
 		return 'group';
 	}
 	// 兼容旧数据：检查 formCommandIds 字段
-	if (skill.formCommandIds && skill.formCommandIds.length > 0) {
+	if (quickAction.formCommandIds && quickAction.formCommandIds.length > 0) {
 		return 'form';
 	}
-	// 默认为普通技能
+	// 默认为普通操作
 	return 'normal';
 }
 
 /**
- * 技能执行服务
- * 负责处理技能的执行逻辑，包括提示词解析、模板引用和AI调用
+ * 快捷操作执行服务
+ * 负责处理快捷操作的执行逻辑，包括提示词解析、模板引用和 AI 调用
  */
-export class SkillExecutionService {
+export class QuickActionExecutionService {
 	// 用于管理当前执行的 AbortController
 	private currentAbortController: AbortController | null = null;
 
@@ -54,7 +54,7 @@ export class SkillExecutionService {
 	) {}
 
 	/**
-	 * 取消当前正在执行的技能
+	 * 取消当前正在执行的快捷操作
 	 */
 	cancelCurrentExecution(): void {
 		if (this.currentAbortController) {
@@ -64,39 +64,39 @@ export class SkillExecutionService {
 	}
 
 	/**
-	 * 执行技能
-	 * @param skill 要执行的技能
+	 * 执行快捷操作
+	 * @param quickAction 要执行的快捷操作
 	 * @param selection 选中的文本
-	 * @param modelTag 可选的模型标签，不提供则使用技能配置的模型或默认模型
+	 * @param modelTag 可选的模型标签，不提供则使用快捷操作配置的模型或默认模型
 	 * @returns 执行结果
 	 */
-	async executeSkill(
-		skill: Skill,
+	async executeQuickAction(
+		quickAction: QuickAction,
 		selection: string,
 		modelTag?: string
-	): Promise<SkillExecutionResult> {
+	): Promise<QuickActionExecutionResult> {
 		try {
-			// 判断技能类型
-			const skillType = getSkillType(skill);
+			// 判断操作类型
+			const actionType = getQuickActionType(quickAction);
 
-			// 表单技能：执行表单，忽略 selection 参数
-			if (skillType === 'form') {
-				return await this.executeFormSkill(skill);
+			// 表单操作：执行表单，忽略 selection 参数
+			if (actionType === 'form') {
+				return await this.executeFormQuickAction(quickAction);
 			}
 
-			// 技能组不应该直接执行
-			if (skillType === 'group') {
+			// 操作组不应该直接执行
+			if (actionType === 'group') {
 				return {
 					success: false,
 					content: '',
-					error: '技能组不能直接执行'
+					error: '操作组不能直接执行'
 				};
 			}
 
-			// 普通技能：执行 AI 调用
-			return await this.executeNormalSkill(skill, selection, modelTag);
+			// 普通操作：执行 AI 调用
+			return await this.executeNormalQuickAction(quickAction, selection, modelTag);
 		} catch (error) {
-			console.error('[SkillExecutionService] 执行技能失败:', error);
+			console.error('[QuickActionExecutionService] 执行操作失败:', error);
 			return {
 				success: false,
 				content: '',
@@ -106,16 +106,16 @@ export class SkillExecutionService {
 	}
 
 	/**
-	 * 执行表单技能
+	 * 执行表单操作
 	 */
-	private async executeFormSkill(skill: Skill): Promise<SkillExecutionResult> {
-		const formSkillService = getFormSkillService(this.app);
-		const result = await formSkillService.executeFormSkill(skill);
+	private async executeFormQuickAction(quickAction: QuickAction): Promise<QuickActionExecutionResult> {
+		const formQuickActionService = getFormQuickActionService(this.app);
+		const result = await formQuickActionService.executeFormQuickAction(quickAction);
 
 		if (result.success) {
 			return {
 				success: true,
-				content: ''  // 表单技能不返回文本内容
+				content: ''  // 表单操作不返回文本内容
 			};
 		} else {
 			return {
@@ -127,25 +127,25 @@ export class SkillExecutionService {
 	}
 
 	/**
-	 * 执行普通技能（AI 调用）
+	 * 执行普通操作（AI 调用）
 	 */
-	private async executeNormalSkill(
-		skill: Skill,
+	private async executeNormalQuickAction(
+		quickAction: QuickAction,
 		selection: string,
 		modelTag?: string
-	): Promise<SkillExecutionResult> {
+	): Promise<QuickActionExecutionResult> {
 		try {
 			// 1. 获取提示词内容（保持原逻辑）
 			let promptContent = '';
-			if (skill.promptSource === 'template' && skill.templateFile) {
-				promptContent = await this.loadTemplateFile(skill.templateFile);
+			if (quickAction.promptSource === 'template' && quickAction.templateFile) {
+				promptContent = await this.loadTemplateFile(quickAction.templateFile);
 			} else {
-				promptContent = skill.prompt;
+				promptContent = quickAction.prompt;
 			}
 
 			// 2. 获取AI模型配置
 			const tarsSettings = this.getTarsSettings();
-			const effectiveModelTag = modelTag || skill.modelTag;
+			const effectiveModelTag = modelTag || quickAction.modelTag;
 			const providerSettings = this.getProviderSettings(tarsSettings, effectiveModelTag);
 
 			if (!providerSettings) {
@@ -157,12 +157,12 @@ export class SkillExecutionService {
 			}
 
 			// 3. 构建消息（使用新的统一方法）
-			const useDefaultSystemPrompt = skill.useDefaultSystemPrompt ?? true;
+			const useDefaultSystemPrompt = quickAction.useDefaultSystemPrompt ?? true;
 			const messages = await this.buildMessages(
 				useDefaultSystemPrompt,
 				promptContent,
 				selection,
-				skill.customPromptRole
+				quickAction.customPromptRole
 			);
 
 			// 4. 调用AI模型
@@ -173,7 +173,7 @@ export class SkillExecutionService {
 				content: result
 			};
 		} catch (error) {
-			console.error('[SkillExecutionService] 执行技能失败:', error);
+			console.error('[QuickActionExecutionService] 执行操作失败:', error);
 			return {
 				success: false,
 				content: '',
@@ -191,7 +191,7 @@ export class SkillExecutionService {
 			try {
 				return await this.app.vault.read(file);
 			} catch (e) {
-				console.warn(`[SkillExecutionService] 读取模板文件失败: ${filePath}`, e);
+				console.warn(`[QuickActionExecutionService] 读取模板文件失败: ${filePath}`, e);
 				throw new Error(`无法读取模板文件: ${filePath}`);
 			}
 		}
@@ -270,12 +270,12 @@ export class SkillExecutionService {
 				try {
 					return await this.app.vault.read(file);
 				} catch (e) {
-					console.warn(`[SkillExecutionService] 读取模板文件失败: ${path}`, e);
+					console.warn(`[QuickActionExecutionService] 读取模板文件失败: ${path}`, e);
 				}
 			}
 		}
 
-		console.warn(`[SkillExecutionService] 未找到模板文件: ${templateName}`);
+		console.warn(`[QuickActionExecutionService] 未找到模板文件: ${templateName}`);
 		return `[模板未找到: ${templateName}]`;
 	}
 
@@ -387,7 +387,7 @@ export class SkillExecutionService {
 			providerSettings.vendor
 		);
 		const sendRequest = vendor.sendRequestFunc(providerOptions);
-		DebugLogger.logLlmMessages('SkillExecutionService.callAIWithMessages', messages, { level: 'debug' });
+		DebugLogger.logLlmMessages('QuickActionExecutionService.callAIWithMessages', messages, { level: 'debug' });
 
 		const resolveEmbed = async () => new ArrayBuffer(0);
 
@@ -400,7 +400,7 @@ export class SkillExecutionService {
 				}
 				result += chunk;
 			}
-			DebugLogger.logLlmResponsePreview('SkillExecutionService.callAIWithMessages', result, { level: 'debug', previewChars: 100 });
+			DebugLogger.logLlmResponsePreview('QuickActionExecutionService.callAIWithMessages', result, { level: 'debug', previewChars: 100 });
 			return result;
 		} finally {
 			// 执行完成后清理 AbortController
@@ -409,41 +409,41 @@ export class SkillExecutionService {
 	}
 
 	/**
-	 * 流式执行技能（用于显示实时进度）
+	 * 流式执行快捷操作（用于显示实时进度）
 	 */
-	async *executeSkillStream(
-		skill: Skill,
+	async *executeQuickActionStream(
+		quickAction: QuickAction,
 		selection: string,
 		modelTag?: string
 	): AsyncGenerator<string, void, unknown> {
-		// 判断技能类型
-		const skillType = getSkillType(skill);
+		// 判断操作类型
+		const actionType = getQuickActionType(quickAction);
 
-		// 表单技能不支持流式执行，直接执行并返回空
-		if (skillType === 'form') {
-			const formSkillService = getFormSkillService(this.app);
-			await formSkillService.executeFormSkill(skill);
+		// 表单操作不支持流式执行，直接执行并返回空
+		if (actionType === 'form') {
+			const formQuickActionService = getFormQuickActionService(this.app);
+			await formQuickActionService.executeFormQuickAction(quickAction);
 			return;
 		}
 
-		// 技能组不应该直接执行
-		if (skillType === 'group') {
-			throw new Error('技能组不能直接执行');
+		// 操作组不应该直接执行
+		if (actionType === 'group') {
+			throw new Error('操作组不能直接执行');
 		}
 
-		// 普通技能：流式执行 AI 调用
+		// 普通操作：流式执行 AI 调用
 		try {
 			// 1. 获取提示词内容
 			let promptContent = '';
-			if (skill.promptSource === 'template' && skill.templateFile) {
-				promptContent = await this.loadTemplateFile(skill.templateFile);
+			if (quickAction.promptSource === 'template' && quickAction.templateFile) {
+				promptContent = await this.loadTemplateFile(quickAction.templateFile);
 			} else {
-				promptContent = skill.prompt;
+				promptContent = quickAction.prompt;
 			}
 
 			// 2. 获取AI模型配置
 			const tarsSettings = this.getTarsSettings();
-			const effectiveModelTag = modelTag || skill.modelTag;
+			const effectiveModelTag = modelTag || quickAction.modelTag;
 			const providerSettings = this.getProviderSettings(tarsSettings, effectiveModelTag);
 
 			if (!providerSettings) {
@@ -451,12 +451,12 @@ export class SkillExecutionService {
 			}
 
 			// 3. 构建消息（复用 buildMessages 方法）
-			const useDefaultSystemPrompt = skill.useDefaultSystemPrompt ?? true;
+			const useDefaultSystemPrompt = quickAction.useDefaultSystemPrompt ?? true;
 			const messages = await this.buildMessages(
 				useDefaultSystemPrompt,
 				promptContent,
 				selection,
-				skill.customPromptRole
+				quickAction.customPromptRole
 			);
 
 			// 4. 流式调用AI
@@ -474,7 +474,7 @@ export class SkillExecutionService {
 				providerSettings.vendor
 			);
 			const sendRequest = vendor.sendRequestFunc(providerOptions);
-			DebugLogger.logLlmMessages('SkillExecutionService.executeSkillStream', messages, { level: 'debug' });
+			DebugLogger.logLlmMessages('QuickActionExecutionService.executeQuickActionStream', messages, { level: 'debug' });
 
 			const resolveEmbed = async () => new ArrayBuffer(0);
 
@@ -484,7 +484,7 @@ export class SkillExecutionService {
 				for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
 					// 检查是否已取消
 					if (controller.signal.aborted) {
-						DebugLogger.debug('[SkillExecutionService] 技能执行已被取消');
+						DebugLogger.debug('[QuickActionExecutionService] 操作执行已被取消');
 						break;
 					}
 
@@ -496,7 +496,7 @@ export class SkillExecutionService {
 					}
 					yield chunk;
 				}
-				DebugLogger.logLlmResponsePreview('SkillExecutionService.executeSkillStream', preview, { level: 'debug', previewChars: 100 });
+				DebugLogger.logLlmResponsePreview('QuickActionExecutionService.executeQuickActionStream', preview, { level: 'debug', previewChars: 100 });
 			} finally {
 				// 执行完成后清理 AbortController
 				this.currentAbortController = null;
@@ -504,11 +504,12 @@ export class SkillExecutionService {
 		} catch (error) {
 			// 如果是取消错误，不记录为错误
 			if (error instanceof Error && error.name === 'AbortError') {
-				DebugLogger.debug('[SkillExecutionService] 技能执行已取消');
+				DebugLogger.debug('[QuickActionExecutionService] 操作执行已取消');
 				return;
 			}
-			console.error('[SkillExecutionService] 流式执行技能失败:', error);
+			console.error('[QuickActionExecutionService] 流式执行操作失败:', error);
 			throw error;
 		}
 	}
+
 }

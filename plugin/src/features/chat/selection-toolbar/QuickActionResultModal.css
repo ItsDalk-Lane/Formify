@@ -1,5 +1,5 @@
 /* 模态框遮罩层 */
-.skill-result-modal-overlay {
+.quick-action-result-modal-overlay {
 	position: fixed;
 	top: 0;
 	left: 0;
@@ -14,7 +14,7 @@
 }
 
 /* 模态框容器 */
-.skill-result-modal {
+.quick-action-result-modal {
 	display: flex;
 	flex-direction: column;
 	width: 100%;
@@ -27,7 +27,7 @@
 }
 
 /* 头部 */
-.skill-result-modal-header {
+.quick-action-result-modal-header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -35,32 +35,32 @@
 	border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.skill-result-modal-title {
+.quick-action-result-modal-title {
 	display: flex;
 	align-items: center;
 	gap: 12px;
 }
 
-.skill-result-modal-skill-name {
+.quick-action-result-modal-action-name {
 	font-size: var(--font-ui-medium);
 	font-weight: 600;
 	color: var(--text-normal);
 }
 
-.skill-result-modal-loading {
+.quick-action-result-modal-loading {
 	font-size: var(--font-ui-small);
 	color: var(--text-muted);
 }
 
 /* 头部操作按钮区域 */
-.skill-result-modal-header-actions {
+.quick-action-result-modal-header-actions {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 }
 
 /* 停止按钮 */
-.skill-result-modal-stop {
+.quick-action-result-modal-stop {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -75,11 +75,11 @@
 	transition: background-color 0.15s ease, opacity 0.15s ease;
 }
 
-.skill-result-modal-stop:hover {
+.quick-action-result-modal-stop:hover {
 	background: var(--background-modifier-error-hover);
 }
 
-.skill-result-modal-close {
+.quick-action-result-modal-close {
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -93,26 +93,26 @@
 	transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.skill-result-modal-close:hover {
+.quick-action-result-modal-close:hover {
 	background: var(--background-modifier-hover);
 	color: var(--text-normal);
 }
 
 /* 内容区域 */
-.skill-result-modal-body {
+.quick-action-result-modal-body {
 	flex: 1;
 	overflow-y: auto;
 	padding: 20px;
 	min-height: 200px;
 }
 
-.skill-result-modal-content {
+.quick-action-result-modal-content {
 	color: var(--text-normal);
 	line-height: 1.6;
 }
 
 /* 错误状态 */
-.skill-result-modal-error {
+.quick-action-result-modal-error {
 	display: flex;
 	align-items: flex-start;
 	gap: 8px;
@@ -122,12 +122,12 @@
 	color: var(--text-error);
 }
 
-.skill-result-modal-error-icon {
+.quick-action-result-modal-error-icon {
 	flex-shrink: 0;
 }
 
 /* 加载状态 */
-.skill-result-modal-loading-content {
+.quick-action-result-modal-loading-content {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -137,23 +137,23 @@
 	color: var(--text-muted);
 }
 
-.skill-result-modal-spinner {
+.quick-action-result-modal-spinner {
 	width: 32px;
 	height: 32px;
 	border: 3px solid var(--background-modifier-border);
 	border-top-color: var(--interactive-accent);
 	border-radius: 50%;
-	animation: skill-result-spin 0.8s linear infinite;
+	animation: quick-action-result-spin 0.8s linear infinite;
 }
 
-@keyframes skill-result-spin {
+@keyframes quick-action-result-spin {
 	to {
 		transform: rotate(360deg);
 	}
 }
 
 /* 流式输出指示器 */
-.skill-result-modal-streaming-indicator {
+.quick-action-result-modal-streaming-indicator {
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -162,16 +162,16 @@
 	font-size: var(--font-ui-small);
 }
 
-.skill-result-modal-streaming-dot {
+.quick-action-result-modal-streaming-dot {
 	display: inline-block;
 	width: 8px;
 	height: 8px;
 	background: var(--interactive-accent);
 	border-radius: 50%;
-	animation: skill-result-streaming-pulse 1s ease-in-out infinite;
+	animation: quick-action-result-streaming-pulse 1s ease-in-out infinite;
 }
 
-@keyframes skill-result-streaming-pulse {
+@keyframes quick-action-result-streaming-pulse {
 	0%, 100% {
 		opacity: 0.4;
 		transform: scale(0.8);
@@ -183,7 +183,7 @@
 }
 
 /* 底部操作栏 */
-.skill-result-modal-footer {
+.quick-action-result-modal-footer {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -192,15 +192,15 @@
 	background: var(--background-secondary);
 }
 
-.skill-result-modal-actions-left,
-.skill-result-modal-actions-right {
+.quick-action-result-modal-actions-left,
+.quick-action-result-modal-actions-right {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 }
 
 /* 按钮样式 */
-.skill-result-modal-btn {
+.quick-action-result-modal-btn {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -214,51 +214,51 @@
 	transition: background-color 0.15s ease, opacity 0.15s ease;
 }
 
-.skill-result-modal-btn:hover:not(:disabled) {
+.quick-action-result-modal-btn:hover:not(:disabled) {
 	background: var(--background-modifier-active-hover);
 }
 
-.skill-result-modal-btn:disabled {
+.quick-action-result-modal-btn:disabled {
 	opacity: 0.5;
 	cursor: not-allowed;
 }
 
 /* 主要按钮样式 */
-.skill-result-modal-btn-primary {
+.quick-action-result-modal-btn-primary {
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
 }
 
-.skill-result-modal-btn-primary:hover:not(:disabled) {
+.quick-action-result-modal-btn-primary:hover:not(:disabled) {
 	background: var(--interactive-accent-hover);
 }
 
 /* 响应式调整 */
 @media (max-width: 600px) {
-	.skill-result-modal {
+	.quick-action-result-modal {
 		max-width: 100%;
 		max-height: 90vh;
 		border-radius: 8px;
 	}
 
-	.skill-result-modal-footer {
+	.quick-action-result-modal-footer {
 		flex-direction: column;
 		gap: 8px;
 	}
 
-	.skill-result-modal-actions-left,
-	.skill-result-modal-actions-right {
+	.quick-action-result-modal-actions-left,
+	.quick-action-result-modal-actions-right {
 		width: 100%;
 		justify-content: center;
 	}
 
-	.skill-result-modal-btn span {
+	.quick-action-result-modal-btn span {
 		display: none;
 	}
 }
 
 /* 标题区域布局调整 */
-.skill-result-modal-title-section {
+.quick-action-result-modal-title-section {
 	display: flex;
 	align-items: center;
 	gap: 12px;
@@ -267,13 +267,13 @@
 }
 
 /* 模型选择器容器 */
-.skill-result-model-selector {
+.quick-action-result-model-selector {
 	display: flex;
 	align-items: center;
 }
 
 /* 等待模型选择状态 */
-.skill-result-modal-waiting-model {
+.quick-action-result-modal-waiting-model {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -283,12 +283,12 @@
 	color: var(--text-muted);
 }
 
-.skill-result-modal-waiting-icon {
+.quick-action-result-modal-waiting-icon {
 	font-size: 48px;
 	opacity: 0.5;
 }
 
-.skill-result-modal-hint-text {
+.quick-action-result-modal-hint-text {
 	font-size: var(--font-ui-smaller);
 	opacity: 0.7;
 }

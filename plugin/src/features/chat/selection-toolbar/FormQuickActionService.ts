@@ -4,7 +4,7 @@ import { FormService } from 'src/service/FormService';
 import FormViewModal2 from 'src/component/modal/FormViewModal2';
 import { FormDisplayRules } from 'src/utils/FormDisplayRules';
 import { localInstance } from 'src/i18n/locals';
-import type { Skill } from '../types/chat';
+import type { QuickAction } from '../types/chat';
 
 /**
  * 表单信息接口
@@ -16,9 +16,9 @@ export interface FormInfo {
 }
 
 /**
- * 表单技能执行结果接口
+ * 表单操作执行结果接口
  */
-export interface FormSkillExecutionResult {
+export interface FormQuickActionExecutionResult {
 	success: boolean;
 	executedForms: string[];
 	skippedForms: string[];
@@ -26,10 +26,10 @@ export interface FormSkillExecutionResult {
 }
 
 /**
- * 表单技能服务
- * 负责管理表单技能的扫描、执行等逻辑
+ * 表单操作服务
+ * 负责管理表单操作的扫描、执行等逻辑
  */
-export class FormSkillService {
+export class FormQuickActionService {
 	private formInfoCache: FormInfo[] | null = null;
 
 	constructor(private readonly app: App) {}
@@ -70,7 +70,7 @@ export class FormSkillService {
 					});
 				}
 			} catch (error) {
-				console.warn(`[FormSkillService] 无法解析表单文件 ${file.path}:`, error);
+				console.warn(`[FormQuickActionService] 无法解析表单文件 ${file.path}:`, error);
 			}
 		}
 
@@ -121,35 +121,37 @@ export class FormSkillService {
 				return FormConfig.fromJSON(JSON.parse(content));
 			}
 		} catch (error) {
-			console.error(`[FormSkillService] 读取表单配置失败: ${formInfo.filePath}`, error);
+			console.error(`[FormQuickActionService] 读取表单配置失败: ${formInfo.filePath}`, error);
 		}
 
 		return null;
 	}
 
 	/**
-	 * 执行表单技能
-	 * @param skill 表单技能
+	 * 执行表单操作
+	 * @param quickAction 表单操作
 	 * @returns 执行结果
 	 */
-	async executeFormSkill(skill: Skill): Promise<FormSkillExecutionResult> {
-		const result: FormSkillExecutionResult = {
+	async executeFormQuickAction(quickAction: QuickAction): Promise<FormQuickActionExecutionResult> {
+		const result: FormQuickActionExecutionResult = {
 			success: true,
 			executedForms: [],
 			skippedForms: [],
 			errors: []
 		};
 
-		const formCommandIds = skill.formCommandIds || [];
+		const formCommandIds = quickAction.formCommandIds || [];
 
 		if (formCommandIds.length === 0) {
-			new Notice(localInstance.skill_form_no_forms_configured);
+			const errorMsg = localInstance.quick_action_form_no_forms_configured || '未配置可执行的表单操作';
+			new Notice(errorMsg);
+			result.errors.push(errorMsg);
 			result.success = false;
 			return result;
 		}
 
 		if (formCommandIds.length > 1) {
-			new Notice('表单技能仅支持配置一个表单，将只执行第一个表单')
+			new Notice('表单操作仅支持配置一个表单，将只执行第一个表单')
 		}
 
 		const formService = new FormService();
@@ -157,7 +159,7 @@ export class FormSkillService {
 		const runOneForm = async (commandId: string): Promise<void> => {
 			const formConfig = await this.getFormConfigByCommandId(commandId);
 			if (!formConfig) {
-				const errorMsg = localInstance.skill_form_not_found.replace('{0}', commandId);
+				const errorMsg = localInstance.quick_action_form_not_found.replace('{0}', commandId);
 				new Notice(errorMsg);
 				result.skippedForms.push(commandId);
 				result.errors.push(errorMsg);
@@ -196,7 +198,7 @@ export class FormSkillService {
 			await runOneForm(commandId);
 		} catch (error) {
 			const errorMsg = `执行表单 ${commandId} 失败: ${error instanceof Error ? error.message : String(error)}`;
-			console.error(`[FormSkillService] ${errorMsg}`);
+			console.error(`[FormQuickActionService] ${errorMsg}`);
 			result.errors.push(errorMsg);
 			result.skippedForms.push(commandId);
 		}
@@ -205,7 +207,7 @@ export class FormSkillService {
 		return result;
 	}
 
-	// 注意：表单技能目前只允许配置 1 个表单。
+	// 注意：表单操作目前只允许配置 1 个表单。
 
 	/**
 	 * 验证表单配置是否有效
@@ -220,13 +222,13 @@ export class FormSkillService {
 }
 
 /**
- * 获取表单技能服务单例
+ * 获取表单操作服务单例
  */
-let formSkillServiceInstance: FormSkillService | null = null;
+let formQuickActionServiceInstance: FormQuickActionService | null = null;
 
-export function getFormSkillService(app: App): FormSkillService {
-	if (!formSkillServiceInstance) {
-		formSkillServiceInstance = new FormSkillService(app);
+export function getFormQuickActionService(app: App): FormQuickActionService {
+	if (!formQuickActionServiceInstance) {
+		formQuickActionServiceInstance = new FormQuickActionService(app);
 	}
-	return formSkillServiceInstance;
+	return formQuickActionServiceInstance;
 }

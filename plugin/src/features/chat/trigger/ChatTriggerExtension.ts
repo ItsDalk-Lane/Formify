@@ -8,7 +8,7 @@ import { getTriggerSource, isToolbarVisibleGlobally } from '../selection-toolbar
  * Chat 触发扩展的回调接口
  */
 export interface ChatTriggerCallbacks {
-	/** 触发快捷技能工具栏显示 */
+	/** 触发快捷操作工具栏显示 */
 	onShowToolbar: (view: EditorView, activeFile: TFile | null, symbolRange?: { from: number; to: number }) => void;
 	/** 当符号触发后继续输入时隐藏工具栏 */
 	onHideToolbar?: () => void;
@@ -94,7 +94,7 @@ export function createChatTriggerExtension(
 					const symbolRange = { from: fromB, to: toB };
 
 					// 不删除触发符号，直接显示工具栏
-					// 符号会保留在编辑器中，直到用户执行技能或继续输入
+					// 符号会保留在编辑器中，直到用户执行操作或继续输入
 					callbacks.onShowToolbar(update.view, activeFile, symbolRange);
 				}
 			});

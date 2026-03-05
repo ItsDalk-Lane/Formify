@@ -97,6 +97,17 @@ export function GeneralSettingTabItem(props: { plugin: FormPlugin }) {
 			.addText((cb) => {
 				cb.setValue(settingsValue.aiDataFolder);
 				cb.setPlaceholder("System/AI Data");
+				// 记录进入输入框时的初始值，用于失焦时判断是否变化
+				let valueOnFocus = settingsValue.aiDataFolder;
+				cb.inputEl.addEventListener('focus', () => {
+					valueOnFocus = cb.getValue();
+				});
+				cb.inputEl.addEventListener('blur', () => {
+					const current = cb.getValue();
+					if (current !== valueOnFocus) {
+						plugin.tryEnsureAIDataFolders();
+					}
+				});
 				cb.onChange((v) => {
 					setSettingsValue((prev) => {
 						return {
@@ -115,6 +126,8 @@ export function GeneralSettingTabItem(props: { plugin: FormPlugin }) {
 						};
 					});
 					suggest.close();
+					// 通过下拉建议选择时直接传入路径触发文件夹创建
+					plugin.tryEnsureAIDataFolders(folder.path);
 				});
 			});
 

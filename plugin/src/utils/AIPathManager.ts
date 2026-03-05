@@ -39,7 +39,17 @@ const ensureFolderPath = async (app: App, folderPath: string): Promise<void> => 
 		if (currentEntry) {
 			throw new Error(`路径已存在且不是文件夹: ${currentPath}`);
 		}
-		await app.vault.createFolder(currentPath);
+		try {
+			await app.vault.createFolder(currentPath);
+		} catch (e) {
+			// 在插件启动时，vault 缓存可能尚未完全同步，导致
+			// getAbstractFileByPath 返回 null 但 createFolder 抛出
+			// "Folder already exists"。此处安全忽略该错误。
+			const msg = e instanceof Error ? e.message : String(e);
+			if (!msg.includes('Folder already exists')) {
+				throw e;
+			}
+		}
 	}
 };
 

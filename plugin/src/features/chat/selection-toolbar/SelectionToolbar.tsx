@@ -9,10 +9,8 @@ import {
 	useDismiss,
 	useInteractions
 } from '@floating-ui/react';
-import { EditorView } from '@codemirror/view';
-import { TFile, Notice } from 'obsidian';
 import { MessageSquare, ChevronDown, Edit, Copy, Scissors } from 'lucide-react';
-import type { Skill, ChatSettings } from '../types/chat';
+import type { QuickAction, ChatSettings } from '../types/chat';
 import type { SelectionInfo } from './SelectionToolbarExtension';
 import { localInstance } from 'src/i18n/locals';
 import './SelectionToolbar.css';
@@ -25,7 +23,7 @@ interface SelectionToolbarProps {
 	onModify: () => void;
 	onCopy: () => void;
 	onCut: () => void;
-	onExecuteSkill: (skill: Skill, selection: string) => void;
+	onExecuteQuickAction: (quickAction: QuickAction, selection: string) => void;
 	onClose: () => void;
 }
 
@@ -37,7 +35,7 @@ export const SelectionToolbar = ({
 	onModify,
 	onCopy,
 	onCut,
-	onExecuteSkill,
+	onExecuteQuickAction,
 	onClose
 }: SelectionToolbarProps) => {
 	const [openMenu, setOpenMenu] = useState<
@@ -78,54 +76,54 @@ export const SelectionToolbar = ({
 		}
 	}, [visible, selectionInfo]);
 
-	const { toolbarItems, dropdownItems, skillsById } = useMemo(() => {
-		const allSkills = (settings.skills || []).map(s => ({
+	const { toolbarItems, dropdownItems, quickActionsById } = useMemo(() => {
+		const allQuickActions = (settings.quickActions || []).map(s => ({
 			...s,
-			isSkillGroup: s.isSkillGroup ?? false,
+			isActionGroup: s.isActionGroup ?? false,
 			children: s.children ?? []
 		}));
-		const byId = new Map(allSkills.map(s => [s.id, s] as const));
+		const byId = new Map(allQuickActions.map(s => [s.id, s] as const));
 		const referenced = new Set<string>();
-		for (const s of allSkills) {
-			if (s.isSkillGroup) {
+		for (const s of allQuickActions) {
+			if (s.isActionGroup) {
 				for (const childId of (s.children ?? [])) {
 					referenced.add(childId);
 				}
 			}
 		}
-		const topLevel = allSkills
+		const topLevel = allQuickActions
 			.filter(s => !referenced.has(s.id))
 			.sort((a, b) => a.order - b.order);
 		const topLevelVisible = topLevel.filter(s => {
 			if (!(s.showInToolbar ?? true)) {
 				return false;
 			}
-			if (s.isSkillGroup) {
+			if (s.isActionGroup) {
 				// 空组不显示在工具栏/更多里（允许存在，但不展示入口）
 				return (s.children ?? []).length > 0;
 			}
 			return true;
 		});
 
-		const maxButtons = settings.maxToolbarButtons || 4;
+		const maxButtons = settings.maxQuickActionButtons || 4;
 		return {
-			skillsById: byId,
+			quickActionsById: byId,
 			toolbarItems: topLevelVisible.slice(0, maxButtons),
 			dropdownItems: topLevelVisible.slice(maxButtons)
 		};
-	}, [settings.skills, settings.maxToolbarButtons]);
+	}, [settings.quickActions, settings.maxQuickActionButtons]);
 
 	const isMoreDropdownOpen = openMenu?.type === 'more';
 	const openGroupId = openMenu?.type === 'group' ? openMenu.groupId : null;
 
-	const groupHasVisibleSkill = useMemo(() => {
+	const groupHasVisibleQuickAction = useMemo(() => {
 		const cache = new Map<string, boolean>();
 		const compute = (groupId: string): boolean => {
 			if (cache.has(groupId)) {
 				return cache.get(groupId)!;
 			}
-			const group = skillsById.get(groupId);
-			if (!group || !group.isSkillGroup) {
+			const group = quickActionsById.get(groupId);
+			if (!group || !group.isActionGroup) {
 				cache.set(groupId, false);
 				return false;
 			}
@@ -137,16 +135,16 @@ export const SelectionToolbar = ({
 					continue;
 				}
 				visited.add(id);
-				const g = skillsById.get(id);
-				if (!g || !g.isSkillGroup) {
+				const g = quickActionsById.get(id);
+				if (!g || !g.isActionGroup) {
 					continue;
 				}
 				for (const childId of (g.children ?? [])) {
-					const child = skillsById.get(childId);
+					const child = quickActionsById.get(childId);
 					if (!child) {
 						continue;
 					}
-					if (child.isSkillGroup) {
+					if (child.isActionGroup) {
 						stack.push(child.id);
 					} else if (child.showInToolbar) {
 						cache.set(groupId, true);
@@ -158,21 +156,21 @@ export const SelectionToolbar = ({
 			return false;
 		};
 		return compute;
-	}, [skillsById]);
+	}, [quickActionsById]);
 
 	const getMenuChildren = useCallback((groupId: string) => {
-		const group = skillsById.get(groupId);
-		if (!group || !group.isSkillGroup) {
-			return [] as Skill[];
+		const group = quickActionsById.get(groupId);
+		if (!group || !group.isActionGroup) {
+			return [] as QuickAction[];
 		}
-		const result: Skill[] = [];
+		const result: QuickAction[] = [];
 		for (const childId of (group.children ?? [])) {
-			const child = skillsById.get(childId);
+			const child = quickActionsById.get(childId);
 			if (!child) {
 				continue;
 			}
-			if (child.isSkillGroup) {
-				if (groupHasVisibleSkill(child.id)) {
+			if (child.isActionGroup) {
+				if (groupHasVisibleQuickAction(child.id)) {
 					result.push(child);
 				}
 				continue;
@@ -182,7 +180,7 @@ export const SelectionToolbar = ({
 			}
 		}
 		return result;
-	}, [skillsById, groupHasVisibleSkill]);
+	}, [quickActionsById, groupHasVisibleQuickAction]);
 
 	useEffect(() => {
 		setGroupSubmenuPath([]);
@@ -272,12 +270,12 @@ export const SelectionToolbar = ({
 		}
 	}, [selectionInfo, onOpenChat]);
 
-	// 处理点击技能按钮
-	const handleSkillClick = useCallback((skill: Skill) => {
+	// 处理点击操作按钮
+	const handleQuickActionClick = useCallback((quickAction: QuickAction) => {
 		if (selectionInfo) {
-			onExecuteSkill(skill, selectionInfo.text);
+			onExecuteQuickAction(quickAction, selectionInfo.text);
 		}
-	}, [selectionInfo, onExecuteSkill]);
+	}, [selectionInfo, onExecuteQuickAction]);
 
 	// 处理下拉菜单切换
 	const toggleDropdown = useCallback((e: React.MouseEvent) => {
@@ -286,13 +284,13 @@ export const SelectionToolbar = ({
 	}, []);
 
 	// 处理下拉菜单项点击
-	const handleDropdownSkillClick = useCallback((skill: Skill, e: React.MouseEvent) => {
+	const handleDropdownQuickActionClick = useCallback((quickAction: QuickAction, e: React.MouseEvent) => {
 		e.stopPropagation();
 		setOpenMenu(null);
 		if (selectionInfo) {
-			onExecuteSkill(skill, selectionInfo.text);
+			onExecuteQuickAction(quickAction, selectionInfo.text);
 		}
-	}, [selectionInfo, onExecuteSkill]);
+	}, [selectionInfo, onExecuteQuickAction]);
 
 	// 清除关闭定时器
 	const clearCloseTimer = useCallback(() => {
@@ -481,14 +479,14 @@ export const SelectionToolbar = ({
 				<Scissors size={14} />
 			</button>
 
-			{/* 技能按钮 */}
+			{/* 操作按钮 */}
 			{toolbarItems.map((item) => {
-				if (!item.isSkillGroup) {
+				if (!item.isActionGroup) {
 					return (
 						<button
 							key={item.id}
 							className="selection-toolbar-btn"
-							onClick={() => handleSkillClick(item)}
+							onClick={() => handleQuickActionClick(item)}
 							title={item.name}
 						>
 							<span>{truncateName(item.name)}</span>
@@ -504,7 +502,7 @@ export const SelectionToolbar = ({
 				return (
 					<div
 						key={group.id}
-						className="selection-toolbar-dropdown selection-toolbar-skill-group"
+					className="selection-toolbar-dropdown"
 					>
 						<button
 							ref={(el) => {
@@ -551,12 +549,12 @@ export const SelectionToolbar = ({
 									if (children.length === 0) {
 										return (
 											<div className="selection-toolbar-dropdown-empty">
-												{localInstance.selection_toolbar_no_more_skills || '暂无技能'}
+												{localInstance.selection_toolbar_no_more_actions || '暂无操作'}
 											</div>
 										);
 									}
 									return children.map((child) => {
-										if (child.isSkillGroup) {
+										if (child.isActionGroup) {
 											return (
 												<div
 													key={child.id}
@@ -585,7 +583,7 @@ export const SelectionToolbar = ({
 												key={child.id}
 												className="selection-toolbar-dropdown-item"
 												onMouseEnter={() => setGroupSubmenuPath([])}
-												onClick={(e) => handleDropdownSkillClick(child, e)}
+												onClick={(e) => handleDropdownQuickActionClick(child, e)}
 											>
 												{child.name}
 											</div>
@@ -598,7 +596,7 @@ export const SelectionToolbar = ({
 				);
 			})}
 
-			{/* 技能组子菜单（级联浮层，独立出现） */}
+			{/* 操作组子菜单（级联浮层，独立出现） */}
 			{openMenu && groupSubmenuPath.length > 0 && (
 				<>
 					{groupSubmenuPath.map((submenuGroupId, levelIndex) => {
@@ -642,7 +640,7 @@ export const SelectionToolbar = ({
 							>
 								{submenuChildren.length > 0 ? (
 									submenuChildren.map((child) => {
-										if (child.isSkillGroup) {
+										if (child.isActionGroup) {
 											return (
 												<div
 													key={child.id}
@@ -677,7 +675,7 @@ export const SelectionToolbar = ({
 												onMouseEnter={() => {
 													setGroupSubmenuPath((prev) => prev.slice(0, levelIndex + 1));
 												}}
-												onClick={(e) => handleDropdownSkillClick(child, e)}
+												onClick={(e) => handleDropdownQuickActionClick(child, e)}
 											>
 												{child.name}
 											</div>
@@ -685,7 +683,7 @@ export const SelectionToolbar = ({
 									})
 								) : (
 									<div className="selection-toolbar-dropdown-empty">
-										{localInstance.selection_toolbar_no_more_skills || '暂无技能'}
+										{localInstance.selection_toolbar_no_more_actions || '暂无操作'}
 									</div>
 								)}
 							</div>
@@ -721,7 +719,7 @@ export const SelectionToolbar = ({
 						>
 							{dropdownItems.length > 0 ? (
 								dropdownItems.map((item) => {
-									if (item.isSkillGroup) {
+									if (item.isActionGroup) {
 										return (
 											<div
 												key={item.id}
@@ -750,7 +748,7 @@ export const SelectionToolbar = ({
 											key={item.id}
 											className="selection-toolbar-dropdown-item"
 											onMouseEnter={() => setGroupSubmenuPath([])}
-											onClick={(e) => handleDropdownSkillClick(item, e)}
+											onClick={(e) => handleDropdownQuickActionClick(item, e)}
 									>
 										{item.name}
 									</div>
@@ -758,7 +756,7 @@ export const SelectionToolbar = ({
 								})
 							) : (
 								<div className="selection-toolbar-dropdown-empty">
-									{localInstance.selection_toolbar_no_more_skills || '暂无更多技能'}
+									{localInstance.selection_toolbar_no_more_actions || '暂无更多操作'}
 								</div>
 							)}
 						</div>

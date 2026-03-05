@@ -1,17 +1,17 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { App, Notice, MarkdownRenderer, Component, MarkdownView } from 'obsidian';
+import { App, Notice, MarkdownRenderer, Component } from 'obsidian';
 import { X, Copy, Replace, Plus, RefreshCw, Check, Square } from 'lucide-react';
-import type { Skill } from '../types/chat';
+import type { QuickAction } from '../types/chat';
 import type { ProviderSettings } from '../../tars/providers';
 import { localInstance } from 'src/i18n/locals';
 import { ModelSelector } from '../components/ModelSelector';
-import './SkillResultModal.css';
+import './QuickActionResultModal.css';
 
-interface SkillResultModalProps {
+interface QuickActionResultModalProps {
 	app: App;
 	visible: boolean;
-	skill: Skill;
+	quickAction: QuickAction;
 	selection: string;
 	result: string;
 	isLoading: boolean;
@@ -27,10 +27,10 @@ interface SkillResultModalProps {
 	onCopy: () => void;
 }
 
-export const SkillResultModal = ({
+export const QuickActionResultModal = ({
 	app,
 	visible,
-	skill,
+	quickAction,
 	selection,
 	result,
 	isLoading,
@@ -44,7 +44,7 @@ export const SkillResultModal = ({
 	onRegenerate,
 	onInsert,
 	onCopy
-}: SkillResultModalProps) => {
+}: QuickActionResultModalProps) => {
 	const [copySuccess, setCopySuccess] = useState(false);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const componentRef = useRef<Component | null>(null);
@@ -133,16 +133,16 @@ export const SkillResultModal = ({
 	}
 
 	const modalContent = (
-		<div className="skill-result-modal-overlay" onClick={onClose}>
-			<div className="skill-result-modal" onClick={(e) => e.stopPropagation()}>
+		<div className="quick-action-result-modal-overlay" onClick={onClose}>
+			<div className="quick-action-result-modal" onClick={(e) => e.stopPropagation()}>
 				{/* 头部 */}
-				<div className="skill-result-modal-header">
-					<div className="skill-result-modal-title-section">
-						<span className="skill-result-modal-skill-name">{skill.name}</span>
+				<div className="quick-action-result-modal-header">
+					<div className="quick-action-result-modal-title-section">
+						<span className="quick-action-result-modal-action-name">{quickAction.name}</span>
 
 						{/* 模型选择器 */}
 						{requiresModelSelection && (
-							<div className="skill-result-model-selector">
+							<div className="quick-action-result-model-selector">
 								<ModelSelector
 									providers={providers}
 									value={selectedModelTag || ''}
@@ -152,24 +152,24 @@ export const SkillResultModal = ({
 						)}
 
 						{isLoading && (
-							<span className="skill-result-modal-loading">
+							<span className="quick-action-result-modal-loading">
 								{localInstance.handling || '处理中...'}
 							</span>
 						)}
 					</div>
-					<div className="skill-result-modal-header-actions">
+					<div className="quick-action-result-modal-header-actions">
 						{isLoading && onStop && (
 							<button
-								className="skill-result-modal-stop"
+								className="quick-action-result-modal-stop"
 								onClick={onStop}
-								title={localInstance.skill_result_stop || '停止生成'}
+								title={localInstance.quick_action_result_stop || '停止生成'}
 							>
 								<Square size={14} />
-								<span>{localInstance.skill_result_stop || '停止'}</span>
+								<span>{localInstance.quick_action_result_stop || '停止'}</span>
 							</button>
 						)}
 						<button
-							className="skill-result-modal-close"
+							className="quick-action-result-modal-close"
 							onClick={onClose}
 							title={localInstance.close || '关闭'}
 						>
@@ -179,34 +179,34 @@ export const SkillResultModal = ({
 				</div>
 
 				{/* 内容区域 */}
-				<div className="skill-result-modal-body">
+				<div className="quick-action-result-modal-body">
 					{requiresModelSelection && !selectedModelTag ? (
-						<div className="skill-result-modal-waiting-model">
-							<div className="skill-result-modal-waiting-icon">🤖</div>
-							<span>{localInstance.skill_result_waiting_model || '请选择模型以开始执行'}</span>
-							<span className="skill-result-modal-hint-text">
-								{localInstance.skill_result_select_model_hint || '在上方选择AI模型后，将自动开始处理'}
+						<div className="quick-action-result-modal-waiting-model">
+							<div className="quick-action-result-modal-waiting-icon">🤖</div>
+							<span>{localInstance.quick_action_result_waiting_model || '请选择模型以开始执行'}</span>
+							<span className="quick-action-result-modal-hint-text">
+								{localInstance.quick_action_result_select_model_hint || '在上方选择AI模型后，将自动开始处理'}
 							</span>
 						</div>
 					) : error ? (
-						<div className="skill-result-modal-error">
-							<span className="skill-result-modal-error-icon">⚠️</span>
+						<div className="quick-action-result-modal-error">
+							<span className="quick-action-result-modal-error-icon">⚠️</span>
 							<span>{error}</span>
 						</div>
 					) : (isLoading && !result) ? (
-						<div className="skill-result-modal-loading-content">
-							<div className="skill-result-modal-spinner" />
+						<div className="quick-action-result-modal-loading-content">
+							<div className="quick-action-result-modal-spinner" />
 							<span>{localInstance.ai_executing || 'AI处理中...'}</span>
 						</div>
 					) : (
 						<>
 							<div
 								ref={contentRef}
-								className="skill-result-modal-content markdown-preview-view"
+								className="quick-action-result-modal-content markdown-preview-view"
 							/>
 							{isLoading && (
-								<div className="skill-result-modal-streaming-indicator">
-									<span className="skill-result-modal-streaming-dot" />
+								<div className="quick-action-result-modal-streaming-indicator">
+									<span className="quick-action-result-modal-streaming-dot" />
 									<span>{localInstance.ai_streaming_generating || '生成中...'}</span>
 								</div>
 							)}
@@ -215,22 +215,22 @@ export const SkillResultModal = ({
 				</div>
 
 				{/* 底部操作栏 */}
-				<div className="skill-result-modal-footer">
-					<div className="skill-result-modal-actions-left">
+				<div className="quick-action-result-modal-footer">
+					<div className="quick-action-result-modal-actions-left">
 						<button
-							className="skill-result-modal-btn"
+							className="quick-action-result-modal-btn"
 							onClick={onRegenerate}
 							disabled={isLoading}
-							title={localInstance.skill_result_regenerate || '重新生成'}
+							title={localInstance.quick_action_result_regenerate || '重新生成'}
 						>
 							<RefreshCw size={14} />
-							<span>{localInstance.skill_result_regenerate || '重新生成'}</span>
+							<span>{localInstance.quick_action_result_regenerate || '重新生成'}</span>
 						</button>
 					</div>
 					
-					<div className="skill-result-modal-actions-right">
+					<div className="quick-action-result-modal-actions-right">
 						<button
-							className="skill-result-modal-btn"
+							className="quick-action-result-modal-btn"
 							onClick={handleCopy}
 							disabled={isLoading || !result}
 							title={localInstance.copy || '复制'}
@@ -240,23 +240,23 @@ export const SkillResultModal = ({
 						</button>
 						
 						<button
-							className="skill-result-modal-btn"
+							className="quick-action-result-modal-btn"
 							onClick={handleAppend}
 							disabled={isLoading || !result}
-							title={localInstance.skill_result_append || '追加到选中内容'}
+							title={localInstance.quick_action_result_append || '追加到选中内容'}
 						>
 							<Plus size={14} />
-							<span>{localInstance.skill_result_append || '追加'}</span>
+							<span>{localInstance.quick_action_result_append || '追加'}</span>
 						</button>
 						
 						<button
-							className="skill-result-modal-btn skill-result-modal-btn-primary"
+							className="quick-action-result-modal-btn quick-action-result-modal-btn-primary"
 							onClick={handleReplace}
 							disabled={isLoading || !result}
-							title={localInstance.skill_result_replace || '替换选中文本'}
+							title={localInstance.quick_action_result_replace || '替换选中文本'}
 						>
 							<Replace size={14} />
-							<span>{localInstance.skill_result_replace || '替换'}</span>
+							<span>{localInstance.quick_action_result_replace || '替换'}</span>
 						</button>
 					</div>
 				</div>
@@ -267,4 +267,4 @@ export const SkillResultModal = ({
 	return createPortal(modalContent, document.body);
 };
 
-export default SkillResultModal;
+export default QuickActionResultModal;

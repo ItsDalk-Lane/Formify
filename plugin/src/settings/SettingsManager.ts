@@ -98,7 +98,27 @@ export class SettingsManager {
     async load(): Promise<PluginSettings> {
         const persisted = (await this.plugin.loadData()) ?? {};
         const rawChatSettings = persisted?.chat ?? {};
-        const mergedChat = { ...DEFAULT_CHAT_SETTINGS, ...rawChatSettings };
+        const legacyQuickActionSettings = rawChatSettings as {
+            enableSelectionToolbar?: boolean;
+            maxToolbarButtons?: number;
+            selectionToolbarStreamOutput?: boolean;
+        };
+        const mergedChat = {
+            ...DEFAULT_CHAT_SETTINGS,
+            ...rawChatSettings,
+            enableQuickActions:
+                rawChatSettings?.enableQuickActions
+                ?? legacyQuickActionSettings.enableSelectionToolbar
+                ?? DEFAULT_CHAT_SETTINGS.enableQuickActions,
+            maxQuickActionButtons:
+                rawChatSettings?.maxQuickActionButtons
+                ?? legacyQuickActionSettings.maxToolbarButtons
+                ?? DEFAULT_CHAT_SETTINGS.maxQuickActionButtons,
+            quickActionsStreamOutput:
+                rawChatSettings?.quickActionsStreamOutput
+                ?? legacyQuickActionSettings.selectionToolbarStreamOutput
+                ?? DEFAULT_CHAT_SETTINGS.quickActionsStreamOutput,
+        };
         const tarsSettings = this.decryptTarsSettings(persisted?.tars?.settings);
         const aiDataFolder = this.resolveAiDataFolder(persisted, rawChatSettings);
 
@@ -124,8 +144,17 @@ export class SettingsManager {
         delete (migratedSettings as any).defaultSystemMsg;
 
         const { promptTemplateFolder: _legacyPromptTemplateFolder, ...persistedWithoutLegacyTop } = persisted;
-        const { chatFolder: _legacyChatFolder, ...chatWithoutLegacy } = mergedChat as ChatSettings & {
+        const {
+            chatFolder: _legacyChatFolder,
+            enableSelectionToolbar: _legacyEnableSelectionToolbar,
+            maxToolbarButtons: _legacyMaxToolbarButtons,
+            selectionToolbarStreamOutput: _legacySelectionToolbarStreamOutput,
+            ...chatWithoutLegacy
+        } = mergedChat as ChatSettings & {
             chatFolder?: string;
+            enableSelectionToolbar?: boolean;
+            maxToolbarButtons?: number;
+            selectionToolbarStreamOutput?: boolean;
         };
 
         return {

@@ -1,9 +1,9 @@
 // 选区工具栏模块导出
 export { SelectionToolbar } from './SelectionToolbar';
-export { SkillResultModal } from './SkillResultModal';
-export { SkillEditModal } from './SkillEditModal';
-export { SkillExecutionService } from './SkillExecutionService';
-export type { SkillExecutionResult } from './SkillExecutionService';
+export { QuickActionResultModal } from './QuickActionResultModal';
+export { QuickActionEditModal } from './QuickActionEditModal';
+export { QuickActionExecutionService } from './QuickActionExecutionService';
+export type { QuickActionExecutionResult } from './QuickActionExecutionService';
 export {
 	createSelectionToolbarExtension,
 	updateSelectionToolbarSettings,

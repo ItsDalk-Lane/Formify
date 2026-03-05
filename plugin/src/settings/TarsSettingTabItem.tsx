@@ -27,9 +27,9 @@ export const TarsSettingTabItem = ({ plugin }: Props) => {
 				};
 				await plugin.saveSettings();
 			},
-			refreshSkillsCache: async () => {
-				// 通过插件实例访问 FeatureCoordinator 来刷新技能缓存
-				await plugin.featureCoordinator.refreshSkillsCache();
+			refreshQuickActionsCache: async () => {
+				// 通过插件实例访问 FeatureCoordinator 来刷新快捷操作缓存
+				await plugin.featureCoordinator.refreshQuickActionsCache();
 			},
 			getMcpClientManager: () => plugin.featureCoordinator.getMcpClientManager(),
 		});

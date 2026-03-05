@@ -112,8 +112,8 @@ function SystemPromptEditorForm(props: {
 			},
 			{
 				id: 'selection_toolbar' as const,
-				label: localInstance.system_prompt_feature_selection_toolbar || '选中文本技能',
-				desc: localInstance.system_prompt_feature_selection_toolbar_desc || '使用光标选中部分文本或者输出触发符号选中整个文本后显示技能工具栏，支持自定义 AI 技能（普通技能/技能组/表单技能），支持占位符替换和流式输出',
+				label: localInstance.system_prompt_feature_selection_toolbar || '选中文本操作',
+				desc: localInstance.system_prompt_feature_selection_toolbar_desc || '使用光标选中部分文本或者输出触发符号选中整个文本后显示操作工具栏，支持自定义 AI 操作（普通操作/操作组/表单操作），支持占位符替换和流式输出',
 			},
 		];
 	}, []);

@@ -81,51 +81,51 @@ export interface ChatSession {
 export type ChatOpenMode = 'sidebar' | 'left-sidebar' | 'tab' | 'window' | 'persistent-modal';
 
 /**
- * 技能提示词来源类型
+ * 快捷操作提示词来源类型
  */
-export type SkillPromptSource = 'custom' | 'template';
+export type QuickActionPromptSource = 'custom' | 'template';
 
 /**
- * 技能类型
- * - normal: 普通技能（调用 AI 大模型处理提示词）
- * - group: 技能组（用于组织其他技能）
- * - form: 表单技能（引用并执行 .cform 表单）
+ * 快捷操作类型
+ * - normal: 普通操作（调用 AI 大模型处理提示词）
+ * - group: 操作组（用于组织其他操作）
+ * - form: 表单操作（引用并执行 .cform 表单）
  */
-export type SkillType = 'normal' | 'group' | 'form';
+export type QuickActionType = 'normal' | 'group' | 'form';
 
 /**
- * AI 技能接口
- * 用于定义划词工具栏中的自定义技能
+ * AI 快捷操作接口
+ * 用于定义划词工具栏中的自定义操作
  */
-export interface Skill {
-	id: string;                // 技能唯一标识符
-	name: string;              // 技能名称
+export interface QuickAction {
+	id: string;                // 操作唯一标识符
+	name: string;              // 操作名称
 	prompt: string;            // 提示词内容（可能包含模板引用和占位符）
-	promptSource: SkillPromptSource; // 提示词来源类型：自定义或内置模板
+	promptSource: QuickActionPromptSource; // 提示词来源类型：自定义或内置模板
 	templateFile?: string;     // 当 promptSource 为 'template' 时，使用的模板文件路径
 	modelTag?: string;         // 指定使用的 AI 模型标签，留空则使用默认模型
 	/**
-	 * 技能类型标识
-	 * - 'normal': 普通技能
-	 * - 'group': 技能组
-	 * - 'form': 表单技能
-	 * @default 'normal'（未设置时默认为普通技能，保持向下兼容）
+	 * 操作类型标识
+	 * - 'normal': 普通操作
+	 * - 'group': 操作组
+	 * - 'form': 表单操作
+	 * @default 'normal'（未设置时默认为普通操作，保持向下兼容）
 	 */
-	skillType?: SkillType;
+	actionType?: QuickActionType;
 	/**
-	 * 是否为技能组（技能组本身不执行提示词，仅用于组织子技能）
-	 * @deprecated 请使用 skillType === 'group' 替代，此字段保留用于向下兼容
+	 * 是否为操作组（操作组本身不执行提示词，仅用于组织子操作）
+	 * @deprecated 请使用 actionType === 'group' 替代，此字段保留用于向下兼容
 	 * @default false
 	 */
-	isSkillGroup?: boolean;
+	isActionGroup?: boolean;
 	/**
-	 * 子技能 ID 列表（可包含普通技能或嵌套技能组）
+	 * 子操作 ID 列表（可包含普通操作或嵌套操作组）
 	 * @default []
 	 */
 	children?: string[];
 	/**
-	 * 表单技能引用的表单 commandId 数组
-	 * 仅当 skillType === 'form' 时有效
+	 * 表单操作引用的表单 commandId 数组
+	 * 仅当 actionType === 'form' 时有效
 	 */
 	formCommandIds?: string[];
 	showInToolbar: boolean;    // 是否在工具栏显示
@@ -172,11 +172,11 @@ export interface ChatSettings {
 	chatTriggerSymbol: string[]; // 触发符号数组，默认 ["@"]
 	chatModalWidth: number; // 模态框宽度
 	chatModalHeight: number; // 模态框高度
-	// 快捷技能配置
-	enableSelectionToolbar: boolean; // 是否启用快捷技能
-	maxToolbarButtons: number; // 工具栏最多显示的按钮数量
-	selectionToolbarStreamOutput: boolean; // 快捷技能是否使用流式输出
-	skills?: Skill[]; // 技能列表（持久化存储于 data.json.chat.skills）
+	// 快捷操作配置
+	enableQuickActions: boolean; // 是否启用快捷操作
+	maxQuickActionButtons: number; // 工具栏最多显示的按钮数量
+	quickActionsStreamOutput: boolean; // 快捷操作是否使用流式输出
+	quickActions?: QuickAction[]; // 操作列表（持久化存储于 data.json.chat.quickActions）
 }
 
 /**
@@ -242,9 +242,9 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	chatTriggerSymbol: ['@'], // 默认触发符号 ["@"]
 	chatModalWidth: 700, // 默认模态框宽度
 	chatModalHeight: 500, // 默认模态框高度
-	// 快捷技能默认配置
-	enableSelectionToolbar: true, // 默认启用快捷技能
-	maxToolbarButtons: 4, // 默认显示4个按钮
-	selectionToolbarStreamOutput: true, // 默认启用流式输出
-	skills: [], // 默认无技能（持久化存储于 data.json.chat.skills）
+	// 快捷操作默认配置
+	enableQuickActions: true, // 默认启用快捷操作
+	maxQuickActionButtons: 4, // 默认显示4个按钮
+	quickActionsStreamOutput: true, // 默认启用流式输出
+	quickActions: [], // 默认无操作（持久化存储于 data.json.chat.quickActions）
 };

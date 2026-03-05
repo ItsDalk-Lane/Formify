@@ -4,8 +4,8 @@ import { SelectModelModal, SelectVendorModal, ProviderSettingModal } from './mod
 import { BaseOptions, Message, Optional, ProviderSettings, ResolveEmbedAsBinary, Vendor } from './providers'
 import { ClaudeOptions, claudeVendor } from './providers/claude'
 import { DebugLogger } from '../../utils/DebugLogger'
-import { SkillDataService } from '../chat/selection-toolbar/SkillDataService'
-import { getFormSkillService, type FormInfo } from '../chat/selection-toolbar/FormSkillService'
+import { QuickActionDataService } from '../chat/selection-toolbar/QuickActionDataService'
+import { getFormQuickActionService, type FormInfo } from '../chat/selection-toolbar/FormQuickActionService'
 import {
 	DoubaoOptions,
 	doubaoVendor,
@@ -60,7 +60,7 @@ import {
 	BUILTIN_VAULT_SERVER_NAME
 } from './mcp'
 import type { McpServerConfig, McpSettings, McpServerState, McpToolInfo } from './mcp'
-import type { ChatSettings, SkillType } from '../chat/types/chat'
+import type { ChatSettings, QuickActionType } from '../chat/types/chat'
 import { localInstance } from '../../i18n/locals'
 
 export interface TarsSettingsContext {
@@ -69,7 +69,7 @@ export interface TarsSettingsContext {
 	getPromptTemplateFolder: () => string
 	saveSettings: () => Promise<void>
 	updateChatSettings: (partial: Partial<ChatSettings>) => Promise<void>
-	refreshSkillsCache?: () => Promise<void>
+	refreshQuickActionsCache?: () => Promise<void>
 	getMcpClientManager?: () => McpClientManager | null
 }
 
@@ -83,14 +83,14 @@ export class TarsSettingTab {
 	private isProvidersCollapsed = true // 默认折叠列表
 	private isChatCollapsed = true // 默认折叠AI Chat设置
 	private isSelectionToolbarCollapsed = true // 默认折叠AI划词设置
-	private isSkillManagementCollapsed = true // 默认折叠技能管理
 	private isTabCompletionCollapsed = true // 默认折叠Tab补全设置
 	private isSystemPromptSettingsCollapsed = true // 默认折叠系统提示词设置
 	private isMcpCollapsed = true // 默认折叠MCP设置
 	private isAdvancedCollapsed = true // 默认折叠高级设置
 	private isVendorApiKeysCollapsed = true // 默认折叠模型提供商密钥设置
 	private doubaoRenderers = new Map<any, () => void>()
-	private skillGroupExpandedState = new Map<string, boolean>()
+	private quickActionGroupExpandedState = new Map<string, boolean>()
+	private activeQuickActionsListContainer: HTMLElement | null = null
 	/** 各服务商分组的展开/折叠状态（vendorName → isExpanded） */
 	private vendorGroupExpandedState = new Map<string, boolean>()
 
@@ -702,11 +702,8 @@ export class TarsSettingTab {
 					});
 			});
 
-		// 快捷技能设置区域
-		this.renderSelectionToolbarSettings(containerEl);
-
-		// 技能管理设置区域（独立分组）
-		this.renderSkillManagementSettings(containerEl);
+		// 快捷操作设置区域
+		this.renderQuickActionsSettings(containerEl);
 
 		// AI Tab 补全设置区域（使用 Setting 组件，与上方保持一致）
 		const tabCompletionHeaderSetting = new Setting(containerEl)
@@ -1610,17 +1607,31 @@ export class TarsSettingTab {
 	}
 
 	/**
-	 * 渲染快捷技能设置区域
+	 * 渲染快捷操作设置区域
 	 */
-	private renderSelectionToolbarSettings(containerEl: HTMLElement): void {
-		// 快捷技能设置标题行
+	private renderQuickActionsSettings(containerEl: HTMLElement): void {
+		// 快捷操作设置标题行
 		const selectionToolbarHeaderSetting = new Setting(containerEl)
-			.setName('快捷技能')
-			.setDesc('选中文本时显示悬浮工具栏，快速执行AI技能')
+			.setName('快捷操作')
+			.setDesc('选中文本时显示悬浮工具栏，快速执行AI操作')
 
 		// 创建一个包装器来容纳按钮和图标
 		const selectionToolbarButtonWrapper = selectionToolbarHeaderSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
 		selectionToolbarButtonWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
+
+		const addQuickActionButton = selectionToolbarButtonWrapper.createEl('button', { cls: 'mod-cta' })
+		addQuickActionButton.textContent = localInstance.quick_action_add
+		addQuickActionButton.style.cssText = 'font-size: var(--font-ui-smaller); padding: 4px 10px;'
+		addQuickActionButton.onclick = async () => {
+			await this.openQuickActionEditModal()
+		}
+
+		const manageQuickActionButton = selectionToolbarButtonWrapper.createEl('button')
+		manageQuickActionButton.textContent = localInstance.quick_action_management
+		manageQuickActionButton.style.cssText = 'font-size: var(--font-ui-smaller); padding: 4px 10px;'
+		manageQuickActionButton.onclick = () => {
+			this.openQuickActionManagementModal()
+		}
 
 		// 添加Chevron图标
 		const selectionToolbarChevronIcon = selectionToolbarButtonWrapper.createEl('div', { cls: 'ai-provider-chevron' })
@@ -1681,14 +1692,14 @@ export class TarsSettingTab {
 			toggleSelectionToolbarSection()
 		})
 
-		// 启用快捷技能开关
+		// 启用快捷操作开关
 		new Setting(selectionToolbarSection)
-			.setName('启用快捷技能')
+			.setName('启用快捷操作')
 			.setDesc('关闭后，编辑器选中文本时不再显示悬浮工具栏')
 			.addToggle((toggle) => {
-				toggle.setValue(this.chatSettings.enableSelectionToolbar ?? true)
+				toggle.setValue(this.chatSettings.enableQuickActions ?? true)
 				toggle.onChange(async (value) => {
-					await this.updateChatSettings({ enableSelectionToolbar: value })
+					await this.updateChatSettings({ enableQuickActions: value })
 				})
 			})
 
@@ -1699,10 +1710,10 @@ export class TarsSettingTab {
 			.addSlider((slider) => {
 				slider
 					.setLimits(2, 12, 1)
-					.setValue(this.chatSettings.maxToolbarButtons ?? 4)
+					.setValue(this.chatSettings.maxQuickActionButtons ?? 4)
 					.setDynamicTooltip()
 					.onChange(async (value) => {
-						await this.updateChatSettings({ maxToolbarButtons: value })
+						await this.updateChatSettings({ maxQuickActionButtons: value })
 					})
 			})
 
@@ -1711,9 +1722,9 @@ export class TarsSettingTab {
 			.setName(localInstance.selection_toolbar_stream_output)
 			.setDesc(localInstance.selection_toolbar_stream_output_desc)
 			.addToggle((toggle) => {
-				toggle.setValue(this.chatSettings.selectionToolbarStreamOutput ?? true)
+				toggle.setValue(this.chatSettings.quickActionsStreamOutput ?? true)
 				toggle.onChange(async (value) => {
-					await this.updateChatSettings({ selectionToolbarStreamOutput: value })
+					await this.updateChatSettings({ quickActionsStreamOutput: value })
 				})
 			})
 
@@ -1773,98 +1784,56 @@ export class TarsSettingTab {
 				});
 			});
 
-		// 技能管理已拆分到独立设置组
+		// 操作管理已迁移到弹窗入口
 	}
 
 	/**
-	 * 渲染技能管理设置区域（独立于“快捷技能”）
+	 * 生成操作管理提示文案
 	 */
-	private renderSkillManagementSettings(containerEl: HTMLElement): void {
-		const headerSetting = new Setting(containerEl)
-			.setName('技能管理')
-			.setDesc('管理快捷技能与技能组（拖拽排序、拖拽入组）')
-
-		const buttonWrapper = headerSetting.controlEl.createDiv({ cls: 'ai-provider-button-wrapper' })
-		buttonWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 8px;'
-
-		const addSkillButton = buttonWrapper.createEl('button', { cls: 'mod-cta' })
-		addSkillButton.textContent = '+ 添加技能'
-		addSkillButton.style.cssText = 'font-size: var(--font-ui-smaller); padding: 4px 12px;'
-		addSkillButton.onclick = async () => {
-			await this.openSkillEditModal()
-		}
-
-		const chevronIcon = buttonWrapper.createEl('div', { cls: 'ai-provider-chevron' })
-		chevronIcon.innerHTML = `
-			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-				<polyline points="6 9 12 15 18 9"></polyline>
-			</svg>
-		`
-		chevronIcon.style.cssText = `
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			color: var(--text-muted);
-			cursor: pointer;
-			transition: transform 0.2s ease;
-			transform: ${this.isSkillManagementCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};
-			width: 16px;
-			height: 16px;
-		`
-
-		const headerEl = headerSetting.settingEl
-		headerEl.style.cursor = 'pointer'
-		headerEl.style.borderRadius = '0px'
-		headerEl.style.border = '1px solid var(--background-modifier-border)'
-		headerEl.style.marginBottom = '0px'
-		headerEl.style.padding = '12px 12px'
-
-		const section = containerEl.createDiv({ cls: 'skill-management-settings-container' })
-		section.style.padding = '0 8px 8px 8px'
-		section.style.backgroundColor = 'var(--background-secondary)'
-		section.style.borderRadius = '0px'
-		section.style.border = '1px solid var(--background-modifier-border)'
-		section.style.borderTop = 'none'
-		section.style.display = this.isSkillManagementCollapsed ? 'none' : 'block'
-
-		const hint = section.createEl('div')
-		hint.style.cssText = 'padding: 10px 4px 6px; color: var(--text-muted); font-size: var(--font-ui-smaller);'
-		hint.textContent = '前 ' + (this.chatSettings.maxToolbarButtons ?? 4) + ' 个技能将显示在工具栏上，其他的将隐藏在“更多”中'
-
-		const listContainer = section.createDiv({ cls: 'skills-list-content' })
-		void this.renderSkillsList(listContainer)
-
-		const toggle = () => {
-			this.isSkillManagementCollapsed = !this.isSkillManagementCollapsed
-			chevronIcon.style.transform = this.isSkillManagementCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'
-			section.style.display = this.isSkillManagementCollapsed ? 'none' : 'block'
-		}
-
-		headerEl.addEventListener('click', (e) => {
-			if ((e.target as HTMLElement).closest('button')) {
-				return
-			}
-			if ((e.target as HTMLElement).closest('.ai-provider-chevron')) {
-				return
-			}
-			toggle()
-		})
-		chevronIcon.addEventListener('click', (e) => {
-			e.stopPropagation()
-			toggle()
-		})
+	private getQuickActionManagementHintText(): string {
+		return localInstance.quick_action_management_hint.replace('{0}', String(this.chatSettings.maxQuickActionButtons ?? 4))
 	}
 
 	/**
-	 * 渲染技能列表
+	 * 打开操作管理弹窗
 	 */
-	private async renderSkillsList(container: HTMLElement): Promise<void> {
+	private openQuickActionManagementModal(): void {
+		const modal = new Modal(this.app)
+		modal.setTitle(localInstance.quick_action_management)
+
+		modal.onOpen = () => {
+			const { contentEl } = modal
+			contentEl.empty()
+			contentEl.style.paddingBottom = '12px'
+
+			const hint = contentEl.createEl('div')
+			hint.style.cssText = 'padding: 6px 4px 10px; color: var(--text-muted); font-size: var(--font-ui-smaller);'
+			hint.textContent = this.getQuickActionManagementHintText()
+
+			const listContainer = contentEl.createDiv({ cls: 'quick-actions-list-content' })
+			this.activeQuickActionsListContainer = listContainer
+			void this.renderQuickActionsList(listContainer)
+		}
+
+		modal.onClose = () => {
+			this.activeQuickActionsListContainer = null
+			const { contentEl } = modal
+			contentEl.empty()
+		}
+
+		modal.open()
+	}
+
+	/**
+	 * 渲染操作列表
+	 */
+	private async renderQuickActionsList(container: HTMLElement): Promise<void> {
 		container.empty()
 
-		const skills = await this.getSkillsFromService()
+		const quickActions = await this.getQuickActionsFromService()
 
-		if (skills.length === 0) {
-			const emptyTip = container.createEl('div', { cls: 'skills-list-empty' })
+		if (quickActions.length === 0) {
+			const emptyTip = container.createEl('div', { cls: 'quick-actions-list-empty' })
 			emptyTip.style.cssText = `
 				padding: 24px;
 				color: var(--text-muted);
@@ -1872,28 +1841,28 @@ export class TarsSettingTab {
 				text-align: center;
 				font-style: italic;
 			`
-			emptyTip.textContent = '暂无技能，点击上方"添加技能"按钮创建'
+			emptyTip.textContent = localInstance.quick_action_empty
 			return
 		}
 
-		const byId = new Map(skills.map(s => [s.id, s] as const))
+		const byId = new Map(quickActions.map(s => [s.id, s] as const))
 		const referenced = new Set<string>()
-		for (const s of skills) {
-			if (s.isSkillGroup) {
+		for (const s of quickActions) {
+			if (s.isActionGroup) {
 				for (const childId of (s.children ?? [])) {
 					referenced.add(childId)
 				}
 			}
 		}
 
-		const topLevel = skills
+		const topLevel = quickActions
 			.filter(s => !referenced.has(s.id))
 			.sort((a, b) => a.order - b.order)
 
 		const parentMap = new Map<string, string | null>()
 		const indexMap = new Map<string, number>()
-		for (const s of skills) {
-			if (!s.isSkillGroup) {
+		for (const s of quickActions) {
+			if (!s.isActionGroup) {
 				continue
 			}
 			for (let i = 0; i < (s.children ?? []).length; i += 1) {
@@ -1910,13 +1879,13 @@ export class TarsSettingTab {
 			indexMap.set(topLevel[i].id, i)
 		}
 
-		const skillDataService = SkillDataService.getInstance(this.app)
-		await skillDataService.initialize()
+		const quickActionDataService = QuickActionDataService.getInstance(this.app)
+		await quickActionDataService.initialize()
 
 		let draggingId: string | null = null
 		let activeIndicatorEl: HTMLElement | null = null
 		const clearIndicators = () => {
-			container.querySelectorAll('.skill-item').forEach(item => {
+			container.querySelectorAll('.quick-action-item').forEach(item => {
 				const el = item as HTMLElement
 				el.style.borderTop = ''
 				el.style.borderBottom = ''
@@ -1937,8 +1906,8 @@ export class TarsSettingTab {
 
 		const performMove = async (movedId: string, targetParentId: string | null, insertAt: number) => {
 			try {
-				await skillDataService.moveSkillToGroup(movedId, targetParentId, insertAt)
-				await this.settingsContext.refreshSkillsCache?.()
+				await quickActionDataService.moveQuickActionToGroup(movedId, targetParentId, insertAt)
+				await this.settingsContext.refreshQuickActionsCache?.()
 			} catch (error) {
 				new Notice(error instanceof Error ? error.message : String(error))
 			}
@@ -1947,15 +1916,15 @@ export class TarsSettingTab {
 		// 拖拽浮动预览元素
 		let dragPreviewEl: HTMLElement | null = null
 
-		const renderSkillNode = (skill: import('../chat/types/chat').Skill, level: number, parentId: string | null, siblingIndex: number, parentContainer: HTMLElement) => {
-			const skillItem = parentContainer.createDiv({ cls: 'skill-item' })
-			skillItem.dataset.skillId = skill.id
-			skillItem.dataset.parentId = parentId ?? ''
-			skillItem.dataset.level = String(level)
-			skillItem.dataset.siblingIndex = String(siblingIndex)
-			skillItem.dataset.isSkillGroup = String(!!skill.isSkillGroup)
-			skillItem.draggable = true
-			skillItem.style.cssText = `
+		const renderQuickActionNode = (quickAction: import('../chat/types/chat').QuickAction, level: number, parentId: string | null, siblingIndex: number, parentContainer: HTMLElement) => {
+			const quickActionItem = parentContainer.createDiv({ cls: 'quick-action-item' })
+			quickActionItem.dataset.quickActionId = quickAction.id
+			quickActionItem.dataset.parentId = parentId ?? ''
+			quickActionItem.dataset.level = String(level)
+			quickActionItem.dataset.siblingIndex = String(siblingIndex)
+			quickActionItem.dataset.isActionGroup = String(!!quickAction.isActionGroup)
+			quickActionItem.draggable = true
+			quickActionItem.style.cssText = `
 				display: flex;
 				align-items: center;
 				justify-content: space-between;
@@ -1970,18 +1939,18 @@ export class TarsSettingTab {
 			`
 
 			// hover
-			skillItem.addEventListener('mouseenter', () => {
-				skillItem.style.borderColor = 'var(--background-modifier-border)'
+			quickActionItem.addEventListener('mouseenter', () => {
+				quickActionItem.style.borderColor = 'var(--background-modifier-border)'
 			})
-			skillItem.addEventListener('mouseleave', () => {
-				skillItem.style.borderColor = 'transparent'
+			quickActionItem.addEventListener('mouseleave', () => {
+				quickActionItem.style.borderColor = 'transparent'
 			})
 
 			// drag events
-			skillItem.addEventListener('dragstart', (e) => {
-				draggingId = skill.id
-				skillItem.style.opacity = '0.5'
-				e.dataTransfer?.setData('text/plain', skill.id)
+			quickActionItem.addEventListener('dragstart', (e) => {
+				draggingId = quickAction.id
+				quickActionItem.style.opacity = '0.5'
+				e.dataTransfer?.setData('text/plain', quickAction.id)
 
 				// 创建拖拽浮动预览
 				if (dragPreviewEl) {
@@ -2009,7 +1978,7 @@ export class TarsSettingTab {
 						<circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/>
 						<circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>
 					</svg>
-					<span>${skill.name}</span>
+					<span>${quickAction.name}</span>
 				`
 				document.body.appendChild(dragPreviewEl)
 
@@ -2026,70 +1995,70 @@ export class TarsSettingTab {
 					}
 				}
 				document.addEventListener('drag', onDrag)
-				skillItem.addEventListener('dragend', () => {
+				quickActionItem.addEventListener('dragend', () => {
 					document.removeEventListener('drag', onDrag)
 				}, { once: true })
 			})
-			skillItem.addEventListener('dragend', () => {
+			quickActionItem.addEventListener('dragend', () => {
 				draggingId = null
-				skillItem.style.opacity = '1'
+				quickActionItem.style.opacity = '1'
 				clearIndicators()
 				if (dragPreviewEl) {
 					dragPreviewEl.remove()
 					dragPreviewEl = null
 				}
 			})
-			skillItem.addEventListener('dragover', (e) => {
+			quickActionItem.addEventListener('dragover', (e) => {
 				e.preventDefault()
-				if (!draggingId || draggingId === skill.id) {
+				if (!draggingId || draggingId === quickAction.id) {
 					return
 				}
 				clearIndicators()
-				activeIndicatorEl = skillItem
-				const zone = getDropZone(e as DragEvent, skillItem, !!skill.isSkillGroup)
+				activeIndicatorEl = quickActionItem
+				const zone = getDropZone(e as DragEvent, quickActionItem, !!quickAction.isActionGroup)
 				if (zone === 'before') {
-					skillItem.style.borderTop = '2px solid var(--interactive-accent)'
+					quickActionItem.style.borderTop = '2px solid var(--interactive-accent)'
 				} else if (zone === 'after') {
-					skillItem.style.borderBottom = '2px solid var(--interactive-accent)'
+					quickActionItem.style.borderBottom = '2px solid var(--interactive-accent)'
 				} else {
-					skillItem.style.outline = '2px solid var(--interactive-accent)'
-					// 拖入技能组时自动展开
-					if (skill.isSkillGroup) {
-						const expanded = this.skillGroupExpandedState.get(skill.id) ?? false
+					quickActionItem.style.outline = '2px solid var(--interactive-accent)'
+					// 拖入操作组时自动展开
+					if (quickAction.isActionGroup) {
+						const expanded = this.quickActionGroupExpandedState.get(quickAction.id) ?? false
 						if (!expanded) {
-							this.skillGroupExpandedState.set(skill.id, true)
-							const childrenEl = skillItem.nextElementSibling as HTMLElement | null
-							if (childrenEl && childrenEl.classList.contains('skill-children-container')) {
+							this.quickActionGroupExpandedState.set(quickAction.id, true)
+							const childrenEl = quickActionItem.nextElementSibling as HTMLElement | null
+							if (childrenEl && childrenEl.classList.contains('quick-action-children-container')) {
 								childrenEl.style.display = 'block'
 							}
 						}
 					}
 				}
 			})
-			skillItem.addEventListener('dragleave', () => {
-				if (activeIndicatorEl === skillItem) {
+			quickActionItem.addEventListener('dragleave', () => {
+				if (activeIndicatorEl === quickActionItem) {
 					clearIndicators()
 				}
 			})
-			skillItem.addEventListener('drop', async (e) => {
+			quickActionItem.addEventListener('drop', async (e) => {
 				e.preventDefault()
 					e.stopPropagation()
 				const draggedId = e.dataTransfer?.getData('text/plain')
 				clearIndicators()
-				if (!draggedId || draggedId === skill.id) {
+				if (!draggedId || draggedId === quickAction.id) {
 					return
 				}
 
-				const zone = getDropZone(e as DragEvent, skillItem, !!skill.isSkillGroup)
-				if (zone === 'into' && skill.isSkillGroup) {
-					const children = skill.children ?? []
-					await performMove(draggedId, skill.id, children.length)
-					await this.renderSkillsList(container)
+				const zone = getDropZone(e as DragEvent, quickActionItem, !!quickAction.isActionGroup)
+				if (zone === 'into' && quickAction.isActionGroup) {
+					const children = quickAction.children ?? []
+					await performMove(draggedId, quickAction.id, children.length)
+					await this.renderQuickActionsList(container)
 					return
 				}
 
-				const targetParentId = (skillItem.dataset.parentId || '') || null
-				const targetIndex = Number(skillItem.dataset.siblingIndex || '0')
+				const targetParentId = (quickActionItem.dataset.parentId || '') || null
+				const targetIndex = Number(quickActionItem.dataset.siblingIndex || '0')
 				let insertAt = zone === 'before' ? targetIndex : targetIndex + 1
 
 				const sourceParentId = parentMap.get(draggedId) ?? null
@@ -2099,18 +2068,18 @@ export class TarsSettingTab {
 				}
 
 				await performMove(draggedId, targetParentId, insertAt)
-				await this.renderSkillsList(container)
+				await this.renderQuickActionsList(container)
 			})
 
 			// 左侧：拖拽手柄固定对齐；层级缩进仅作用于内容区（更紧凑）
-			const leftSection = skillItem.createDiv()
+			const leftSection = quickActionItem.createDiv()
 			leftSection.style.cssText = `
 				display: flex;
 				align-items: center;
 				gap: 10px;
 			`
 
-			const dragHandle = leftSection.createEl('div', { cls: 'skill-drag-handle' })
+			const dragHandle = leftSection.createEl('div', { cls: 'quick-action-drag-handle' })
 			dragHandle.innerHTML = `
 				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 					<circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/>
@@ -2131,9 +2100,9 @@ export class TarsSettingTab {
 				gap: 12px;
 			`
 
-			if (skill.isSkillGroup) {
+			if (quickAction.isActionGroup) {
 				const toggle = contentSection.createEl('div')
-				const expanded = this.skillGroupExpandedState.get(skill.id) ?? false
+				const expanded = this.quickActionGroupExpandedState.get(quickAction.id) ?? false
 				toggle.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`
 				toggle.style.cssText = `
 					display: flex;
@@ -2148,10 +2117,10 @@ export class TarsSettingTab {
 				`
 				toggle.onclick = (e) => {
 					e.stopPropagation()
-					const next = !(this.skillGroupExpandedState.get(skill.id) ?? false)
-					this.skillGroupExpandedState.set(skill.id, next)
-					const childrenEl = skillItem.nextElementSibling as HTMLElement | null
-					if (childrenEl && childrenEl.classList.contains('skill-children-container')) {
+					const next = !(this.quickActionGroupExpandedState.get(quickAction.id) ?? false)
+					this.quickActionGroupExpandedState.set(quickAction.id, next)
+					const childrenEl = quickActionItem.nextElementSibling as HTMLElement | null
+					if (childrenEl && childrenEl.classList.contains('quick-action-children-container')) {
 						childrenEl.style.display = next ? 'block' : 'none'
 					}
 					toggle.style.transform = next ? 'rotate(0deg)' : 'rotate(-90deg)'
@@ -2163,21 +2132,21 @@ export class TarsSettingTab {
 			}
 
 			const showInToolbarCheckbox = contentSection.createEl('input', { type: 'checkbox' }) as HTMLInputElement
-			showInToolbarCheckbox.checked = skill.showInToolbar
+			showInToolbarCheckbox.checked = quickAction.showInToolbar
 			showInToolbarCheckbox.style.cssText = `
 				cursor: pointer;
 				accent-color: var(--interactive-accent);
 			`
-			showInToolbarCheckbox.title = skill.showInToolbar ? '已显示在工具栏' : '未显示在工具栏'
+			showInToolbarCheckbox.title = quickAction.showInToolbar ? '已显示在工具栏' : '未显示在工具栏'
 			showInToolbarCheckbox.onclick = (e) => e.stopPropagation()
 			showInToolbarCheckbox.onchange = async () => {
-				await this.updateSkillShowInToolbar(skill.id, showInToolbarCheckbox.checked)
-				await this.renderSkillsList(container)
+				await this.updateQuickActionShowInToolbar(quickAction.id, showInToolbarCheckbox.checked)
+				await this.renderQuickActionsList(container)
 			}
 
-			// 技能类型图标
-			const skillTypeIcon = contentSection.createEl('div')
-			skillTypeIcon.style.cssText = `
+			// 操作类型图标
+			const actionTypeIcon = contentSection.createEl('div')
+			actionTypeIcon.style.cssText = `
 				display: flex;
 				align-items: center;
 				justify-content: center;
@@ -2185,32 +2154,32 @@ export class TarsSettingTab {
 				height: 16px;
 				color: var(--text-muted);
 			`
-			// 根据技能类型显示不同图标
-			const skillType = skill.skillType || (skill.isSkillGroup ? 'group' : 'normal')
-			if (skillType === 'form') {
-				// FileText 图标 - 表单技能
-				skillTypeIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>`
-				skillTypeIcon.title = '表单技能'
-			} else if (skillType === 'group') {
-				// FolderOpen 图标 - 技能组
-				skillTypeIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></svg>`
-				skillTypeIcon.title = '技能组'
+			// 根据操作类型显示不同图标
+			const actionType = quickAction.actionType || (quickAction.isActionGroup ? 'group' : 'normal')
+			if (actionType === 'form') {
+				// FileText 图标 - 表单操作
+				actionTypeIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>`
+				actionTypeIcon.title = '表单操作'
+			} else if (actionType === 'group') {
+				// FolderOpen 图标 - 操作组
+				actionTypeIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></svg>`
+				actionTypeIcon.title = '操作组'
 			} else {
-				// Sparkles 图标 - 普通 AI 技能
-				skillTypeIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>`
-				skillTypeIcon.title = 'AI 技能'
+				// Sparkles 图标 - 普通 AI 操作
+				actionTypeIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>`
+				actionTypeIcon.title = 'AI 操作'
 			}
 
-			const skillName = contentSection.createEl('span')
-			skillName.style.cssText = `
+			const quickActionName = contentSection.createEl('span')
+			quickActionName.style.cssText = `
 				font-size: var(--font-ui-small);
-				color: ${skill.showInToolbar ? 'var(--interactive-accent)' : 'var(--text-normal)'};
-				font-weight: ${skill.showInToolbar ? '500' : 'normal'};
+				color: ${quickAction.showInToolbar ? 'var(--interactive-accent)' : 'var(--text-normal)'};
+				font-weight: ${quickAction.showInToolbar ? '500' : 'normal'};
 			`
-			skillName.textContent = skill.name
+			quickActionName.textContent = quickAction.name
 
 			// 右侧：操作按钮
-			const rightSection = skillItem.createDiv()
+			const rightSection = quickActionItem.createDiv()
 			rightSection.style.cssText = `
 				display: flex;
 				align-items: center;
@@ -2239,7 +2208,7 @@ export class TarsSettingTab {
 			})
 			editBtn.onclick = async (e) => {
 				e.stopPropagation()
-				await this.openSkillEditModal(skill)
+				await this.openQuickActionEditModal(quickAction)
 			}
 
 			const deleteBtn = rightSection.createEl('button')
@@ -2265,8 +2234,8 @@ export class TarsSettingTab {
 			})
 			deleteBtn.onclick = async (e) => {
 				e.stopPropagation()
-				if (skill.isSkillGroup) {
-					const descendants = await skillDataService.getAllDescendants(skill.id)
+				if (quickAction.isActionGroup) {
+					const descendants = await quickActionDataService.getAllDescendants(quickAction.id)
 					const count = descendants.length
 					const overlay = document.createElement('div')
 					overlay.style.cssText = `
@@ -2293,10 +2262,10 @@ export class TarsSettingTab {
 					`
 					const header = document.createElement('div')
 					header.style.cssText = 'padding: 18px 20px; border-bottom: 1px solid var(--background-modifier-border); font-weight: 600;'
-					header.textContent = '删除技能组确认'
+					header.textContent = '删除操作组确认'
 					const body = document.createElement('div')
 					body.style.cssText = 'padding: 16px 20px; color: var(--text-normal); font-size: var(--font-ui-small); line-height: 1.6;'
-					body.textContent = `该技能组包含 ${count} 个子技能（含嵌套）。请选择删除方式：`
+					body.textContent = `该操作组包含 ${count} 个子操作（含嵌套）。请选择删除方式：`
 					const footer = document.createElement('div')
 					footer.style.cssText = 'display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--background-modifier-border);'
 					const cancel = document.createElement('button')
@@ -2304,31 +2273,31 @@ export class TarsSettingTab {
 					cancel.style.cssText = 'padding: 8px 14px; border: none; border-radius: 8px; background: var(--background-modifier-hover); cursor: pointer;'
 					cancel.onclick = () => overlay.remove()
 					const keepChildren = document.createElement('button')
-					keepChildren.textContent = '保留子技能（释放到主列表）'
+					keepChildren.textContent = '保留子操作（释放到主列表）'
 					keepChildren.style.cssText = 'padding: 8px 14px; border: none; border-radius: 8px; background: var(--interactive-accent); color: var(--text-on-accent); cursor: pointer;'
 					keepChildren.onclick = async () => {
 						try {
 							for (const d of descendants) {
-								await skillDataService.moveSkillToGroup(d.id, null)
+								await quickActionDataService.moveQuickActionToGroup(d.id, null)
 							}
-							await this.deleteSkill(skill.id)
+							await this.deleteQuickAction(quickAction.id)
 							overlay.remove()
-							await this.renderSkillsList(container)
+							await this.renderQuickActionsList(container)
 						} catch (error) {
 							new Notice(error instanceof Error ? error.message : String(error))
 						}
 					}
 					const deleteChildren = document.createElement('button')
-					deleteChildren.textContent = '删除子技能'
+					deleteChildren.textContent = '删除子操作'
 					deleteChildren.style.cssText = 'padding: 8px 14px; border: none; border-radius: 8px; background: var(--background-modifier-error); color: var(--text-on-accent); cursor: pointer;'
 					deleteChildren.onclick = async () => {
 						try {
 							for (let i = descendants.length - 1; i >= 0; i -= 1) {
-								await this.deleteSkill(descendants[i].id)
+								await this.deleteQuickAction(descendants[i].id)
 							}
-							await this.deleteSkill(skill.id)
+							await this.deleteQuickAction(quickAction.id)
 							overlay.remove()
-							await this.renderSkillsList(container)
+							await this.renderQuickActionsList(container)
 						} catch (error) {
 							new Notice(error instanceof Error ? error.message : String(error))
 						}
@@ -2348,21 +2317,21 @@ export class TarsSettingTab {
 					document.body.appendChild(overlay)
 					return
 				}
-				await this.deleteSkill(skill.id)
-				await this.renderSkillsList(container)
+				await this.deleteQuickAction(quickAction.id)
+				await this.renderQuickActionsList(container)
 			}
 
-			// 子技能容器（仅对技能组生效）
-			if (skill.isSkillGroup) {
-				const childrenContainer = parentContainer.createDiv({ cls: 'skill-children-container' })
+			// 子操作容器（仅对操作组生效）
+			if (quickAction.isActionGroup) {
+				const childrenContainer = parentContainer.createDiv({ cls: 'quick-action-children-container' })
 				childrenContainer.style.cssText = 'margin-left: 0; padding-left: 0;'
-				const expanded = this.skillGroupExpandedState.get(skill.id) ?? false
+				const expanded = this.quickActionGroupExpandedState.get(quickAction.id) ?? false
 				childrenContainer.style.display = expanded ? 'block' : 'none'
-				const childrenIds = (skill.children ?? []).filter(id => byId.has(id))
+				const childrenIds = (quickAction.children ?? []).filter(id => byId.has(id))
 				childrenIds.forEach((childId, idx) => {
 					const child = byId.get(childId)
 					if (!child) return
-					renderSkillNode(child, level + 1, skill.id, idx, childrenContainer)
+					renderQuickActionNode(child, level + 1, quickAction.id, idx, childrenContainer)
 				})
 			}
 		}
@@ -2374,8 +2343,8 @@ export class TarsSettingTab {
 		container.ondrop = async (e) => {
 			e.preventDefault()
 			const target = e.target as HTMLElement | null
-			// 如果落点在某个 skill-item 上，交由该项自己的 drop 处理
-			if (target?.closest('.skill-item')) {
+			// 如果落点在某个 quick-action-item 上，交由该项自己的 drop 处理
+			if (target?.closest('.quick-action-item')) {
 				return
 			}
 			const draggedId = e.dataTransfer?.getData('text/plain')
@@ -2384,22 +2353,22 @@ export class TarsSettingTab {
 				return
 			}
 			await performMove(draggedId, null, topLevel.length)
-			await this.renderSkillsList(container)
+			await this.renderQuickActionsList(container)
 		}
 
-		topLevel.forEach((skill, idx) => {
-			renderSkillNode(skill, 0, null, idx, container)
+		topLevel.forEach((quickAction, idx) => {
+			renderQuickActionNode(quickAction, 0, null, idx, container)
 		})
 	}
 
 	/**
-	 * 打开技能编辑模态框
+	 * 打开操作编辑模态框
 	 */
-	private async openSkillEditModal(
-		skill?: import('../chat/types/chat').Skill,
+	private async openQuickActionEditModal(
+		quickAction?: import('../chat/types/chat').QuickAction,
 		options?: {
-			initialIsSkillGroup?: boolean
-			onSaved?: (savedSkill: import('../chat/types/chat').Skill) => Promise<void> | void
+			initialIsActionGroup?: boolean
+			onSaved?: (savedQuickAction: import('../chat/types/chat').QuickAction) => Promise<void> | void
 		}
 	): Promise<void> {
 		// 阻止所有事件冒泡的辅助函数
@@ -2409,7 +2378,7 @@ export class TarsSettingTab {
 
 		// 使用原生 DOM 创建简单的模态框
 		const overlay = document.createElement('div')
-		overlay.className = 'skill-edit-modal-overlay'
+		overlay.className = 'quick-action-edit-modal-overlay'
 		overlay.style.cssText = `
 			position: fixed;
 			top: 0;
@@ -2433,7 +2402,7 @@ export class TarsSettingTab {
 		overlay.addEventListener('focusout', stopAllPropagation)
 
 		const modal = document.createElement('div')
-		modal.className = 'skill-edit-modal'
+		modal.className = 'quick-action-edit-modal'
 		modal.style.cssText = `
 			display: flex;
 			flex-direction: column;
@@ -2458,12 +2427,12 @@ export class TarsSettingTab {
 		modal.addEventListener('focusout', stopAllPropagation)
 		modal.addEventListener('input', stopAllPropagation)
 
-		const isEditMode = !!skill
-		const skillDataService = SkillDataService.getInstance(this.app)
-		await skillDataService.initialize()
-		const allSkills = await skillDataService.getSortedSkills()
-		const existingNames = allSkills
-			.filter(s => s.id !== skill?.id)
+		const isEditMode = !!quickAction
+		const quickActionDataService = QuickActionDataService.getInstance(this.app)
+		await quickActionDataService.initialize()
+		const allQuickActions = await quickActionDataService.getSortedQuickActions()
+		const existingNames = allQuickActions
+			.filter(s => s.id !== quickAction?.id)
 			.map(s => s.name)
 
 		// 头部
@@ -2482,7 +2451,7 @@ export class TarsSettingTab {
 			font-weight: 600;
 			color: var(--text-normal);
 		`
-		title.textContent = isEditMode ? '编辑技能' : '添加技能'
+		title.textContent = isEditMode ? '编辑操作' : '添加操作'
 
 		const closeBtn = document.createElement('button')
 		closeBtn.style.cssText = `
@@ -2512,7 +2481,7 @@ export class TarsSettingTab {
 			pointer-events: auto;
 		`
 
-		// 技能名称字段
+		// 操作名称字段
 		const nameField = document.createElement('div')
 		nameField.style.cssText = 'margin-bottom: 20px; pointer-events: auto;'
 
@@ -2524,7 +2493,7 @@ export class TarsSettingTab {
 			font-weight: 500;
 			color: var(--text-normal);
 		`
-		nameLabel.innerHTML = '技能名称和图标 <span style="color: var(--text-error);">*</span>'
+		nameLabel.innerHTML = '操作名称和图标 <span style="color: var(--text-error);">*</span>'
 
 		const nameRow = document.createElement('div')
 		nameRow.style.cssText = 'display: flex; align-items: center; gap: 8px; pointer-events: auto;'
@@ -2545,9 +2514,9 @@ export class TarsSettingTab {
 			pointer-events: auto;
 			user-select: text;
 		`
-		nameInput.placeholder = '在这里命名你的技能...'
+		nameInput.placeholder = '在这里命名你的操作...'
 		nameInput.maxLength = 20
-		nameInput.value = skill?.name || ''
+		nameInput.value = quickAction?.name || ''
 
 		const nameCounter = document.createElement('span')
 		nameCounter.style.cssText = `
@@ -2591,112 +2560,112 @@ export class TarsSettingTab {
 		nameField.appendChild(nameRow)
 		nameField.appendChild(nameError)
 
-		// 技能类型选择
-		const skillTypeField = document.createElement('div')
-		skillTypeField.style.cssText = 'margin-bottom: 20px; pointer-events: auto;'
+		// 操作类型选择
+		const actionTypeField = document.createElement('div')
+		actionTypeField.style.cssText = 'margin-bottom: 20px; pointer-events: auto;'
 
-		const skillTypeLabel = document.createElement('label')
-		skillTypeLabel.style.cssText = `
+		const actionTypeLabel = document.createElement('label')
+		actionTypeLabel.style.cssText = `
 			display: block;
 			margin-bottom: 8px;
 			font-size: var(--font-ui-small);
 			font-weight: 500;
 			color: var(--text-normal);
 		`
-		skillTypeLabel.textContent = localInstance.skill_type_label
+		actionTypeLabel.textContent = localInstance.quick_action_type_label
 
-		const skillTypeRow = document.createElement('div')
-		skillTypeRow.style.cssText = 'display: flex; gap: 16px; margin-bottom: 12px;'
+		const actionTypeRow = document.createElement('div')
+		actionTypeRow.style.cssText = 'display: flex; gap: 16px; margin-bottom: 12px;'
 
-		// 确定初始技能类型
-		const getInitialSkillType = (): SkillType => {
-			if (skill?.skillType) return skill.skillType
-			if (skill?.isSkillGroup) return 'group'
-			if (skill?.formCommandIds && skill.formCommandIds.length > 0) return 'form'
-			if (options?.initialIsSkillGroup) return 'group'
+		// 确定初始操作类型
+		const getInitialQuickActionType = (): QuickActionType => {
+			if (quickAction?.actionType) return quickAction.actionType
+			if (quickAction?.isActionGroup) return 'group'
+			if (quickAction?.formCommandIds && quickAction.formCommandIds.length > 0) return 'form'
+			if (options?.initialIsActionGroup) return 'group'
 			return 'normal'
 		}
-		let currentSkillType: SkillType = getInitialSkillType()
+		let currentQuickActionType: QuickActionType = getInitialQuickActionType()
 
-		// 普通技能单选按钮
+		// 普通操作单选按钮
 		const normalRadioWrapper = document.createElement('label')
 		normalRadioWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;'
 		const normalRadio = document.createElement('input')
 		normalRadio.type = 'radio'
-		normalRadio.name = 'skillType'
+		normalRadio.name = 'actionType'
 		normalRadio.value = 'normal'
-		normalRadio.checked = currentSkillType === 'normal'
+		normalRadio.checked = currentQuickActionType === 'normal'
 		normalRadio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
 		const normalLabel = document.createElement('span')
-		normalLabel.textContent = localInstance.skill_type_normal
+		normalLabel.textContent = localInstance.quick_action_type_normal
 		normalLabel.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal);'
 		normalRadioWrapper.appendChild(normalRadio)
 		normalRadioWrapper.appendChild(normalLabel)
 
-		// 技能组单选按钮
+		// 操作组单选按钮
 		const groupRadioWrapper = document.createElement('label')
 		groupRadioWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;'
 		const groupRadio = document.createElement('input')
 		groupRadio.type = 'radio'
-		groupRadio.name = 'skillType'
+		groupRadio.name = 'actionType'
 		groupRadio.value = 'group'
-		groupRadio.checked = currentSkillType === 'group'
+		groupRadio.checked = currentQuickActionType === 'group'
 		groupRadio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
 		const groupLabel = document.createElement('span')
-		groupLabel.textContent = localInstance.skill_type_group
+		groupLabel.textContent = localInstance.quick_action_type_group
 		groupLabel.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal);'
 		groupRadioWrapper.appendChild(groupRadio)
 		groupRadioWrapper.appendChild(groupLabel)
 
-		// 表单技能单选按钮
+		// 表单操作单选按钮
 		const formRadioWrapper = document.createElement('label')
 		formRadioWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;'
 		const formRadio = document.createElement('input')
 		formRadio.type = 'radio'
-		formRadio.name = 'skillType'
+		formRadio.name = 'actionType'
 		formRadio.value = 'form'
-		formRadio.checked = currentSkillType === 'form'
+		formRadio.checked = currentQuickActionType === 'form'
 		formRadio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
 		const formLabel = document.createElement('span')
-		formLabel.textContent = localInstance.skill_type_form
+		formLabel.textContent = localInstance.quick_action_type_form
 		formLabel.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal);'
 		formRadioWrapper.appendChild(formRadio)
 		formRadioWrapper.appendChild(formLabel)
 
-		skillTypeRow.appendChild(normalRadioWrapper)
-		skillTypeRow.appendChild(groupRadioWrapper)
-		skillTypeRow.appendChild(formRadioWrapper)
-		skillTypeField.appendChild(skillTypeLabel)
-		skillTypeField.appendChild(skillTypeRow)
+		actionTypeRow.appendChild(normalRadioWrapper)
+		actionTypeRow.appendChild(groupRadioWrapper)
+		actionTypeRow.appendChild(formRadioWrapper)
+		actionTypeField.appendChild(actionTypeLabel)
+		actionTypeField.appendChild(actionTypeRow)
 
-		// 表单技能配置区域
-		const formSkillSection = document.createElement('div')
-		formSkillSection.style.cssText = `
+		// 表单操作配置区域
+		const formQuickActionSection = document.createElement('div')
+		formQuickActionSection.style.cssText = `
 			margin-bottom: 20px;
 			padding: 12px;
 			border: 1px solid var(--background-modifier-border);
 			border-radius: 8px;
 			background: var(--background-primary);
 			pointer-events: auto;
-			display: ${currentSkillType === 'form' ? 'block' : 'none'};
+			display: ${currentQuickActionType === 'form' ? 'block' : 'none'};
 		`
 
 		// 表单列表区域
 		const formListSection = document.createElement('div')
 		const formListLabel = document.createElement('div')
 		formListLabel.style.cssText = 'font-size: var(--font-ui-small); font-weight: 600; color: var(--text-normal); margin-bottom: 8px;'
-		formListLabel.textContent = localInstance.skill_form_list_label
+		formListLabel.textContent = localInstance.quick_action_form_list_label
 		const formListContainer = document.createElement('div')
 		formListContainer.style.cssText = 'display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;'
 
-		// 表单 commandIds 列表（表单技能只允许配置 1 个表单）
-		let pendingFormCommandIds: string[] = (skill?.formCommandIds || []).slice(0, 1)
+		// 表单 commandIds 列表（表单操作只允许配置 1 个表单）
+		let pendingFormCommandIds: string[] = (quickAction?.formCommandIds || []).slice(0, 1)
 		let availableForms: FormInfo[] = []
 
 		// 加载可用表单列表
 		const loadAvailableForms = async () => {
-			const formSkillService = getFormSkillService(this.app)
-			availableForms = await formSkillService.scanForms()
+			const formQuickActionService = getFormQuickActionService(this.app)
+			availableForms = await formQuickActionService.scanForms()
 		}
 		void loadAvailableForms()
 
@@ -2713,7 +2682,7 @@ export class TarsSettingTab {
 			if (pendingFormCommandIds.length === 0) {
 				const empty = document.createElement('div')
 				empty.style.cssText = 'padding: 8px 10px; color: var(--text-muted); font-size: var(--font-ui-smaller); background: var(--background-secondary); border-radius: 6px;'
-				empty.textContent = localInstance.skill_form_list_empty
+				empty.textContent = localInstance.quick_action_form_list_empty
 				formListContainer.appendChild(empty)
 				return
 			}
@@ -2829,7 +2798,7 @@ export class TarsSettingTab {
 			addFormSelect.innerHTML = ''
 			const placeholder = document.createElement('option')
 			placeholder.value = ''
-			placeholder.textContent = localInstance.skill_form_select_placeholder
+			placeholder.textContent = localInstance.quick_action_form_select_placeholder
 			addFormSelect.appendChild(placeholder)
 			for (const form of availableForms) {
 				const opt = document.createElement('option')
@@ -2849,20 +2818,20 @@ export class TarsSettingTab {
 			font-size: var(--font-ui-small);
 			cursor: pointer;
 		`
-		addFormBtn.textContent = localInstance.skill_form_add_button
+		addFormBtn.textContent = localInstance.quick_action_form_add_button
 		addFormBtn.onclick = (e) => {
 			e.stopPropagation()
 			const pickedId = addFormSelect.value
 			if (!pickedId) {
-				new Notice(localInstance.skill_form_select_placeholder)
+				new Notice(localInstance.quick_action_form_select_placeholder)
 				return
 			}
 			if (pendingFormCommandIds.includes(pickedId)) {
-				new Notice(localInstance.skill_form_already_added)
+				new Notice(localInstance.quick_action_form_already_added)
 				return
 			}
 			if (pendingFormCommandIds.length >= 1) {
-				new Notice('表单技能只能添加一个表单，请先删除已添加的表单')
+				new Notice('表单操作只能添加一个表单，请先删除已添加的表单')
 				return
 			}
 			pendingFormCommandIds.push(pickedId)
@@ -2877,7 +2846,7 @@ export class TarsSettingTab {
 		formListSection.appendChild(formListContainer)
 		formListSection.appendChild(addFormRow)
 
-		formSkillSection.appendChild(formListSection)
+		formQuickActionSection.appendChild(formListSection)
 
 		// 延迟刷新表单列表（等待 availableForms 加载完成）
 		setTimeout(() => {
@@ -2885,16 +2854,16 @@ export class TarsSettingTab {
 			refreshFormList()
 		}, 100)
 
-		// 技能组成员管理（仅技能组显示）
-		const originalGroupChildrenIds = (currentSkillType === 'group' ? (skill?.children ?? []) : []).slice()
+		// 操作组成员管理（仅操作组显示）
+		const originalGroupChildrenIds = (currentQuickActionType === 'group' ? (quickAction?.children ?? []) : []).slice()
 		let pendingGroupChildrenIds = originalGroupChildrenIds.slice()
 
 		const excludedAddIds = new Set<string>()
-		if (skill?.id) {
-			excludedAddIds.add(skill.id)
-			if (skill?.isSkillGroup) {
+		if (quickAction?.id) {
+			excludedAddIds.add(quickAction.id)
+			if (quickAction?.isActionGroup) {
 				try {
-					const descendants = await skillDataService.getAllDescendants(skill.id)
+					const descendants = await quickActionDataService.getAllDescendants(quickAction.id)
 					for (const d of descendants) {
 						excludedAddIds.add(d.id)
 					}
@@ -2918,10 +2887,10 @@ export class TarsSettingTab {
 		groupMembersHeader.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;'
 		const groupMembersTitle = document.createElement('div')
 		groupMembersTitle.style.cssText = 'font-size: var(--font-ui-small); font-weight: 600; color: var(--text-normal);'
-		groupMembersTitle.textContent = '技能组成员'
+		groupMembersTitle.textContent = '操作组成员'
 		const groupMembersHint = document.createElement('div')
 		groupMembersHint.style.cssText = 'font-size: var(--font-ui-smaller); color: var(--text-muted);'
-		groupMembersHint.textContent = '可添加已有技能/技能组，或在此新建并加入'
+		groupMembersHint.textContent = '可添加已有操作/操作组，或在此新建并加入'
 		groupMembersHeader.appendChild(groupMembersTitle)
 		groupMembersHeader.appendChild(groupMembersHint)
 
@@ -2959,8 +2928,8 @@ export class TarsSettingTab {
 
 		const createRow = document.createElement('div')
 		createRow.style.cssText = 'display: flex; gap: 8px; align-items: center;'
-		const createSkillBtn = document.createElement('button')
-		createSkillBtn.style.cssText = `
+		const createQuickActionBtn = document.createElement('button')
+		createQuickActionBtn.style.cssText = `
 			flex: 1;
 			padding: 10px 12px;
 			border: none;
@@ -2970,14 +2939,14 @@ export class TarsSettingTab {
 			font-size: var(--font-ui-small);
 			cursor: pointer;
 		`
-		createSkillBtn.textContent = '+ 新建技能'
+		createQuickActionBtn.textContent = '+ 新建操作'
 		const createGroupBtn = document.createElement('button')
-		createGroupBtn.style.cssText = createSkillBtn.style.cssText
-		createGroupBtn.textContent = '+ 新建技能组'
-		createRow.appendChild(createSkillBtn)
+		createGroupBtn.style.cssText = createQuickActionBtn.style.cssText
+		createGroupBtn.textContent = '+ 新建操作组'
+		createRow.appendChild(createQuickActionBtn)
 		createRow.appendChild(createGroupBtn)
 
-		const byId = new Map(allSkills.map(s => [s.id, s] as const))
+		const byId = new Map(allQuickActions.map(s => [s.id, s] as const))
 		let draggingMemberId: string | null = null
 		const refreshMembersList = () => {
 			membersList.innerHTML = ''
@@ -3000,7 +2969,7 @@ export class TarsSettingTab {
 				left.style.cssText = 'display: flex; align-items: center; gap: 8px; min-width: 0;'
 				const tag = document.createElement('span')
 				tag.style.cssText = 'flex: 0 0 auto; font-size: var(--font-ui-smaller); color: var(--text-muted);'
-				tag.textContent = child.isSkillGroup ? '组' : '技'
+				tag.textContent = child.isActionGroup ? '组' : '技'
 				const name = document.createElement('span')
 				name.style.cssText = 'font-size: var(--font-ui-small); color: var(--text-normal); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
 				name.textContent = child.name
@@ -3114,17 +3083,17 @@ export class TarsSettingTab {
 			addExistingSelect.innerHTML = ''
 			const placeholder = document.createElement('option')
 			placeholder.value = ''
-			placeholder.textContent = '选择要加入的技能/技能组...'
+			placeholder.textContent = '选择要加入的操作/操作组...'
 			addExistingSelect.appendChild(placeholder)
 
-			const candidates = allSkills
+			const candidates = allQuickActions
 				.filter(s => !excludedAddIds.has(s.id))
 				.filter(s => !pendingGroupChildrenIds.includes(s.id))
 				.sort((a, b) => a.order - b.order)
 			for (const c of candidates) {
 				const opt = document.createElement('option')
 				opt.value = c.id
-				opt.textContent = (c.isSkillGroup ? '【技能组】' : '【技能】') + c.name
+				opt.textContent = (c.isActionGroup ? '【操作组】' : '【操作】') + c.name
 				addExistingSelect.appendChild(opt)
 			}
 		}
@@ -3133,7 +3102,7 @@ export class TarsSettingTab {
 			e.stopPropagation()
 			const pickedId = addExistingSelect.value
 			if (!pickedId) {
-				new Notice('请选择要加入的技能/技能组')
+				new Notice('请选择要加入的操作/操作组')
 				return
 			}
 			if (!pendingGroupChildrenIds.includes(pickedId)) {
@@ -3143,10 +3112,10 @@ export class TarsSettingTab {
 			}
 		}
 
-		createSkillBtn.onclick = (e) => {
+		createQuickActionBtn.onclick = (e) => {
 			e.stopPropagation()
-			void this.openSkillEditModal(undefined, {
-				initialIsSkillGroup: false,
+			void this.openQuickActionEditModal(undefined, {
+				initialIsActionGroup: false,
 				onSaved: async (created) => {
 					pendingGroupChildrenIds.push(created.id)
 					refreshMembersList()
@@ -3157,8 +3126,8 @@ export class TarsSettingTab {
 
 		createGroupBtn.onclick = (e) => {
 			e.stopPropagation()
-			void this.openSkillEditModal(undefined, {
-				initialIsSkillGroup: true,
+			void this.openQuickActionEditModal(undefined, {
+				initialIsActionGroup: true,
 				onSaved: async (created) => {
 					pendingGroupChildrenIds.push(created.id)
 					refreshMembersList()
@@ -3195,7 +3164,7 @@ export class TarsSettingTab {
 			font-size: var(--font-ui-smaller);
 			color: var(--text-muted);
 		`
-		modelHint.textContent = '选择执行此技能时使用的 AI 模型，留空则使用默认模型'
+		modelHint.textContent = '选择执行此操作时使用的 AI 模型，留空则使用默认模型'
 
 		const modelSelect = document.createElement('select')
 		modelSelect.style.cssText = `
@@ -3221,7 +3190,7 @@ export class TarsSettingTab {
 		const execTimeOption = document.createElement('option')
 		execTimeOption.value = '__EXEC_TIME__'
 		execTimeOption.textContent = '执行时选择模型'
-		if (skill?.modelTag === '__EXEC_TIME__') {
+		if (quickAction?.modelTag === '__EXEC_TIME__') {
 			execTimeOption.selected = true
 		}
 		modelSelect.appendChild(execTimeOption)
@@ -3232,7 +3201,7 @@ export class TarsSettingTab {
 			const option = document.createElement('option')
 			option.value = provider.tag
 			option.textContent = provider.tag
-			if (skill?.modelTag === provider.tag) {
+			if (quickAction?.modelTag === provider.tag) {
 				option.selected = true
 			}
 			modelSelect.appendChild(option)
@@ -3266,7 +3235,7 @@ export class TarsSettingTab {
 		customRadio.type = 'radio'
 		customRadio.name = 'promptSource'
 		customRadio.value = 'custom'
-		customRadio.checked = (skill?.promptSource || 'custom') === 'custom'
+		customRadio.checked = (quickAction?.promptSource || 'custom') === 'custom'
 		customRadio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
 		const customLabel = document.createElement('span')
 		customLabel.textContent = '自定义'
@@ -3281,7 +3250,7 @@ export class TarsSettingTab {
 		templateRadio.type = 'radio'
 		templateRadio.name = 'promptSource'
 		templateRadio.value = 'template'
-		templateRadio.checked = skill?.promptSource === 'template'
+		templateRadio.checked = quickAction?.promptSource === 'template'
 		templateRadio.style.cssText = 'cursor: pointer; accent-color: var(--interactive-accent);'
 		const templateLabel = document.createElement('span')
 		templateLabel.textContent = '内置模板'
@@ -3298,7 +3267,7 @@ export class TarsSettingTab {
 		// 自定义提示词内容区域
 		const customPromptSection = document.createElement('div')
 		customPromptSection.style.cssText = 'pointer-events: auto;'
-		customPromptSection.style.display = (skill?.promptSource || 'custom') === 'custom' ? 'block' : 'none'
+		customPromptSection.style.display = (quickAction?.promptSource || 'custom') === 'custom' ? 'block' : 'none'
 
 		const promptHint = document.createElement('div')
 		promptHint.style.cssText = `
@@ -3328,7 +3297,7 @@ export class TarsSettingTab {
 			user-select: text;
 		`
 		promptTextarea.placeholder = '在此输入提示词，例如：将<user_text>{{}}</user_text>翻译成英文。'
-		promptTextarea.value = skill?.promptSource === 'custom' || !skill?.promptSource ? (skill?.prompt || '') : ''
+		promptTextarea.value = quickAction?.promptSource === 'custom' || !quickAction?.promptSource ? (quickAction?.prompt || '') : ''
 
 		customPromptSection.appendChild(promptHint)
 		customPromptSection.appendChild(promptTextarea)
@@ -3336,7 +3305,7 @@ export class TarsSettingTab {
 		// 内置模板选择区域
 		const templateSection = document.createElement('div')
 		templateSection.style.cssText = 'pointer-events: auto;'
-		templateSection.style.display = skill?.promptSource === 'template' ? 'block' : 'none'
+		templateSection.style.display = quickAction?.promptSource === 'template' ? 'block' : 'none'
 
 		const templateHint = document.createElement('div')
 		templateHint.style.cssText = `
@@ -3379,7 +3348,7 @@ export class TarsSettingTab {
 				? file.path.substring(promptTemplateFolder.length + 1) 
 				: file.name
 			option.textContent = displayName
-			if (skill?.templateFile === file.path) {
+			if (quickAction?.templateFile === file.path) {
 				option.selected = true
 			}
 			templateSelect.appendChild(option)
@@ -3401,7 +3370,7 @@ export class TarsSettingTab {
 		promptSourceField.appendChild(templateSection)
 		promptSourceField.appendChild(promptError)
 
-		// 使用默认系统提示词设置（仅普通技能显示）
+		// 使用默认系统提示词设置（仅普通操作显示）
 		const useDefaultSystemPromptField = document.createElement('div')
 		useDefaultSystemPromptField.style.cssText = 'margin-bottom: 20px; pointer-events: auto;'
 
@@ -3421,7 +3390,7 @@ export class TarsSettingTab {
 		const useDefaultSystemPromptCheckbox = document.createElement('input')
 		useDefaultSystemPromptCheckbox.type = 'checkbox'
 		useDefaultSystemPromptCheckbox.id = 'useDefaultSystemPrompt'
-		useDefaultSystemPromptCheckbox.checked = skill?.useDefaultSystemPrompt ?? true
+		useDefaultSystemPromptCheckbox.checked = quickAction?.useDefaultSystemPrompt ?? true
 		useDefaultSystemPromptCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer; accent-color: var(--interactive-accent);'
 
 		const useDefaultSystemPromptHint = document.createElement('label')
@@ -3445,7 +3414,7 @@ export class TarsSettingTab {
 			margin-top: 12px;
 			padding-left: 24px;
 			border-left: 2px solid var(--background-modifier-border);
-			display: ${skill?.useDefaultSystemPrompt !== false ? 'none' : 'block'};
+			display: ${quickAction?.useDefaultSystemPrompt !== false ? 'none' : 'block'};
 		`
 
 		// 子选项1：自定义提示词角色
@@ -3486,8 +3455,8 @@ export class TarsSettingTab {
 			return wrapper
 		}
 
-		const systemRoleRadio = createRadioOption('customPromptRole', 'system', skill?.customPromptRole, '系统消息')
-		const userRoleRadio = createRadioOption('customPromptRole', 'user', skill?.customPromptRole, '用户消息')
+		const systemRoleRadio = createRadioOption('customPromptRole', 'system', quickAction?.customPromptRole, '系统消息')
+		const userRoleRadio = createRadioOption('customPromptRole', 'user', quickAction?.customPromptRole, '用户消息')
 
 		promptRoleRadios.appendChild(systemRoleRadio)
 		promptRoleRadios.appendChild(userRoleRadio)
@@ -3514,20 +3483,20 @@ export class TarsSettingTab {
 		templateRadio.addEventListener('change', updatePromptSourceDisplay)
 
 		body.appendChild(nameField)
-		body.appendChild(skillTypeField)
-		body.appendChild(formSkillSection)
+		body.appendChild(actionTypeField)
+		body.appendChild(formQuickActionSection)
 		body.appendChild(groupMembersSection)
 		body.appendChild(modelField)
 		body.appendChild(promptSourceField)
 		body.appendChild(useDefaultSystemPromptField)
 
-		// 根据技能类型更新显示
-		const updateSkillTypeDisplay = () => {
-			const isGroup = currentSkillType === 'group'
-			const isForm = currentSkillType === 'form'
-			const isNormal = currentSkillType === 'normal'
+		// 根据操作类型更新显示
+		const updateQuickActionTypeDisplay = () => {
+			const isGroup = currentQuickActionType === 'group'
+			const isForm = currentQuickActionType === 'form'
+			const isNormal = currentQuickActionType === 'normal'
 
-			formSkillSection.style.display = isForm ? 'block' : 'none'
+			formQuickActionSection.style.display = isForm ? 'block' : 'none'
 			groupMembersSection.style.display = isGroup ? 'block' : 'none'
 			modelField.style.display = isNormal ? 'block' : 'none'
 			promptSourceField.style.display = isNormal ? 'block' : 'none'
@@ -3541,25 +3510,25 @@ export class TarsSettingTab {
 			}
 		}
 
-		updateSkillTypeDisplay()
+		updateQuickActionTypeDisplay()
 
-		// 技能类型切换事件
+		// 操作类型切换事件
 		normalRadio.addEventListener('change', () => {
 			if (normalRadio.checked) {
-				currentSkillType = 'normal'
-				updateSkillTypeDisplay()
+				currentQuickActionType = 'normal'
+				updateQuickActionTypeDisplay()
 			}
 		})
 		groupRadio.addEventListener('change', () => {
 			if (groupRadio.checked) {
-				currentSkillType = 'group'
-				updateSkillTypeDisplay()
+				currentQuickActionType = 'group'
+				updateQuickActionTypeDisplay()
 			}
 		})
 		formRadio.addEventListener('change', () => {
 			if (formRadio.checked) {
-				currentSkillType = 'form'
-				updateSkillTypeDisplay()
+				currentQuickActionType = 'form'
+				updateQuickActionTypeDisplay()
 			}
 		})
 		// 底部操作栏
@@ -3604,12 +3573,12 @@ export class TarsSettingTab {
 			let hasError = false
 			
 			if (!nameInput.value.trim()) {
-				nameError.textContent = '技能名称不能为空'
+				nameError.textContent = '操作名称不能为空'
 				nameError.style.display = 'block'
 				nameInput.style.borderColor = 'var(--text-error)'
 				hasError = true
 			} else if (existingNames.includes(nameInput.value.trim())) {
-				nameError.textContent = '技能名称已存在'
+				nameError.textContent = '操作名称已存在'
 				nameError.style.display = 'block'
 				nameInput.style.borderColor = 'var(--text-error)'
 				hasError = true
@@ -3618,9 +3587,9 @@ export class TarsSettingTab {
 				nameInput.style.borderColor = 'var(--background-modifier-border)'
 			}
 
-			const isGroup = currentSkillType === 'group'
-			const isForm = currentSkillType === 'form'
-			const isNormal = currentSkillType === 'normal'
+			const isGroup = currentQuickActionType === 'group'
+			const isForm = currentQuickActionType === 'form'
+			const isNormal = currentQuickActionType === 'normal'
 			const isCustomPrompt = customRadio.checked
 			if (isNormal) {
 				// 根据提示词来源验证
@@ -3646,100 +3615,102 @@ export class TarsSettingTab {
 					}
 				}
 			} else {
-				// 技能组和表单技能允许为空，不校验提示词/模板
+				// 操作组和表单操作允许为空，不校验提示词/模板
 				promptError.style.display = 'none'
 			}
 
 			if (hasError) return
 
-			// 保存技能
+			// 保存操作
 			const now = Date.now()
-			const savedSkill: import('../chat/types/chat').Skill = {
-				id: skill?.id || crypto.randomUUID(),
+			const savedQuickAction: import('../chat/types/chat').QuickAction = {
+				id: quickAction?.id || crypto.randomUUID(),
 				name: nameInput.value.trim(),
-				// 技能类型
-				skillType: currentSkillType,
-				// 普通技能的提示词
+				// 操作类型
+				actionType: currentQuickActionType,
+				// 普通操作的提示词
 				prompt: isNormal
 					? (isCustomPrompt ? promptTextarea.value.trim() : '')
-					: (skill?.prompt ?? ''),
+					: (quickAction?.prompt ?? ''),
 				promptSource: isNormal
 					? (isCustomPrompt ? 'custom' : 'template')
-					: (skill?.promptSource || 'custom'),
+					: (quickAction?.promptSource || 'custom'),
 				templateFile: isNormal
 					? (isCustomPrompt ? undefined : templateSelect.value)
-					: skill?.templateFile,
+					: quickAction?.templateFile,
 				modelTag: isNormal
 					? (modelSelect.value || undefined)
-					: skill?.modelTag,
-				// 技能组相关
-				isSkillGroup: isGroup,
+					: quickAction?.modelTag,
+				// 操作组相关
+				isActionGroup: isGroup,
 				children: isGroup ? pendingGroupChildrenIds.slice() : [],
-				// 表单技能相关
+				// 表单操作相关
 				formCommandIds: isForm ? pendingFormCommandIds.slice(0, 1) : undefined,
 				// 通用字段
-				showInToolbar: skill?.showInToolbar ?? true,
-				useDefaultSystemPrompt: isNormal ? useDefaultSystemPromptCheckbox.checked : (skill?.useDefaultSystemPrompt ?? true),
+				showInToolbar: quickAction?.showInToolbar ?? true,
+				useDefaultSystemPrompt: isNormal ? useDefaultSystemPromptCheckbox.checked : (quickAction?.useDefaultSystemPrompt ?? true),
 				customPromptRole: isNormal && !useDefaultSystemPromptCheckbox.checked
 					? ((document.querySelector('input[name="customPromptRole"]:checked') as HTMLInputElement)?.value as 'system' | 'user' ?? 'system')
-					: (skill?.customPromptRole ?? 'system'),
-				order: skill?.order ?? allSkills.length,
-				createdAt: skill?.createdAt || now,
+					: (quickAction?.customPromptRole ?? 'system'),
+				order: quickAction?.order ?? allQuickActions.length,
+				createdAt: quickAction?.createdAt || now,
 				updatedAt: now
 			}
 
-			await this.saveSkill(savedSkill)
+			await this.saveQuickAction(savedQuickAction)
 
-			// 若为技能组：同步成员关系（加入/移除/重排），并刷新缓存
+			// 若为操作组：同步成员关系（加入/移除/重排），并刷新缓存
 			if (isGroup) {
 				try {
-					await skillDataService.initialize()
-					const desired = pendingGroupChildrenIds.slice().filter(id => id !== savedSkill.id)
-					const previous = (skill?.isSkillGroup ? (skill.children ?? []) : []).slice()
+					await quickActionDataService.initialize()
+					const desired = pendingGroupChildrenIds.slice().filter(id => id !== savedQuickAction.id)
+					const previous = (quickAction?.isActionGroup ? (quickAction.children ?? []) : []).slice()
 					const removed = previous.filter(id => !desired.includes(id))
 
 					// 先清空该组 children，再按顺序逐个 move（确保唯一归属 + 复用校验逻辑）
-					await skillDataService.updateSkillGroupChildren(savedSkill.id, [])
+					await quickActionDataService.updateQuickActionGroupChildren(savedQuickAction.id, [])
 					for (const removedId of removed) {
-						await skillDataService.moveSkillToGroup(removedId, null)
+						await quickActionDataService.moveQuickActionToGroup(removedId, null)
 					}
 					for (let i = 0; i < desired.length; i += 1) {
-						await skillDataService.moveSkillToGroup(desired[i], savedSkill.id, i)
+						await quickActionDataService.moveQuickActionToGroup(desired[i], savedQuickAction.id, i)
 					}
-					await this.settingsContext.refreshSkillsCache?.()
+					await this.settingsContext.refreshQuickActionsCache?.()
 				} catch (error) {
-					new Notice('保存技能组成员失败：' + (error instanceof Error ? error.message : String(error)))
+					new Notice('保存操作组成员失败：' + (error instanceof Error ? error.message : String(error)))
 					return
 				}
 			}
 
-			// 从技能组转换为普通技能时：将其所有后代释放到主列表末尾，避免数据丢失
-			if ((skill?.isSkillGroup ?? false) && !isGroup) {
+			// 从操作组转换为普通操作时：将其所有后代释放到主列表末尾，避免数据丢失
+			if ((quickAction?.isActionGroup ?? false) && !isGroup) {
 				try {
-					const skillDataService = SkillDataService.getInstance(this.app)
-					await skillDataService.initialize()
-					const descendants = await skillDataService.getAllDescendants(savedSkill.id)
+					const quickActionDataService = QuickActionDataService.getInstance(this.app)
+					await quickActionDataService.initialize()
+					const descendants = await quickActionDataService.getAllDescendants(savedQuickAction.id)
 					for (const d of descendants) {
-						await skillDataService.moveSkillToGroup(d.id, null)
+						await quickActionDataService.moveQuickActionToGroup(d.id, null)
 					}
 				} catch (error) {
 					// 不阻断保存流程，仅提示
-					new Notice('释放技能组子技能失败：' + (error instanceof Error ? error.message : String(error)))
+					new Notice('释放操作组子操作失败：' + (error instanceof Error ? error.message : String(error)))
 				}
 			}
 			try {
-				await options?.onSaved?.(savedSkill)
+				await options?.onSaved?.(savedQuickAction)
 			} catch (error) {
 				new Notice('回调处理失败：' + (error instanceof Error ? error.message : String(error)))
 			}
 
 			overlay.remove()
 
-			// 只重新渲染技能列表部分，而不是整个设置页面
-			// 找到技能列表容器并重新渲染
-			const skillsListContainer = this.containerEl.querySelector('.skills-list-content') as HTMLElement
-			if (skillsListContainer) {
-				await this.renderSkillsList(skillsListContainer)
+			// 只重新渲染操作列表部分，而不是整个设置页面
+			// 优先刷新当前激活容器（操作管理弹窗），回退设置页容器
+			const quickActionsListContainer = this.activeQuickActionsListContainer?.isConnected
+				? this.activeQuickActionsListContainer
+				: this.containerEl.querySelector('.quick-actions-list-content') as HTMLElement | null
+			if (quickActionsListContainer) {
+				await this.renderQuickActionsList(quickActionsListContainer)
 			}
 		}
 
@@ -3770,98 +3741,98 @@ export class TarsSettingTab {
 	}
 
 	/**
-	 * 获取技能列表（从 SkillDataService）
+	 * 获取操作列表（从 QuickActionDataService）
 	 */
-	private async getSkillsFromService(): Promise<import('../chat/types/chat').Skill[]> {
-		const skillDataService = SkillDataService.getInstance(this.app)
-		await skillDataService.initialize()
-		return await skillDataService.getSortedSkills()
+	private async getQuickActionsFromService(): Promise<import('../chat/types/chat').QuickAction[]> {
+		const quickActionDataService = QuickActionDataService.getInstance(this.app)
+		await quickActionDataService.initialize()
+		return await quickActionDataService.getSortedQuickActions()
 	}
 
 	/**
-	 * 保存技能
+	 * 保存操作
 	 */
-	private async saveSkill(skill: import('../chat/types/chat').Skill): Promise<void> {
-		DebugLogger.debug('[TarsSettingTab] 开始保存技能:', skill.name, 'ID:', skill.id)
+	private async saveQuickAction(quickAction: import('../chat/types/chat').QuickAction): Promise<void> {
+		DebugLogger.debug('[TarsSettingTab] 开始保存操作:', quickAction.name, 'ID:', quickAction.id)
 
-		const skillDataService = SkillDataService.getInstance(this.app)
-		await skillDataService.initialize()
+		const quickActionDataService = QuickActionDataService.getInstance(this.app)
+		await quickActionDataService.initialize()
 
-		const existingSkills = await skillDataService.getSkills()
-		const existingIndex = existingSkills.findIndex(s => s.id === skill.id)
+		const existingQuickActions = await quickActionDataService.getQuickActions()
+		const existingIndex = existingQuickActions.findIndex(s => s.id === quickAction.id)
 
-		DebugLogger.debug('[TarsSettingTab] 当前技能数量:', existingSkills.length, '是否为更新:', existingIndex >= 0)
+		DebugLogger.debug('[TarsSettingTab] 当前操作数量:', existingQuickActions.length, '是否为更新:', existingIndex >= 0)
 
-		await skillDataService.saveSkill(skill)
+		await quickActionDataService.saveQuickAction(quickAction)
 
-		// 刷新 ChatFeatureManager 中的技能缓存
-		await this.settingsContext.refreshSkillsCache?.()
+		// 刷新 ChatFeatureManager 中的操作缓存
+		await this.settingsContext.refreshQuickActionsCache?.()
 
 		// 验证保存是否成功
-		const savedSkills = await skillDataService.getSkills()
-		DebugLogger.debug('[TarsSettingTab] 保存后技能数量:', savedSkills.length)
+		const savedQuickActions = await quickActionDataService.getQuickActions()
+		DebugLogger.debug('[TarsSettingTab] 保存后操作数量:', savedQuickActions.length)
 
-		new Notice(existingIndex >= 0 ? '技能已更新' : '技能已创建')
+		new Notice(existingIndex >= 0 ? '操作已更新' : '操作已创建')
 	}
 
 	/**
-	 * 删除技能
+	 * 删除操作
 	 */
-	private async deleteSkill(skillId: string): Promise<void> {
-		const skillDataService = SkillDataService.getInstance(this.app)
-		await skillDataService.initialize()
+	private async deleteQuickAction(quickActionId: string): Promise<void> {
+		const quickActionDataService = QuickActionDataService.getInstance(this.app)
+		await quickActionDataService.initialize()
 
-		await skillDataService.deleteSkill(skillId)
+		await quickActionDataService.deleteQuickAction(quickActionId)
 
-		// 刷新 ChatFeatureManager 中的技能缓存
-		await this.settingsContext.refreshSkillsCache?.()
+		// 刷新 ChatFeatureManager 中的操作缓存
+		await this.settingsContext.refreshQuickActionsCache?.()
 
-		new Notice('技能已删除')
+		new Notice('操作已删除')
 	}
 
 	/**
-	 * 更新技能显示在工具栏状态
+	 * 更新操作显示在工具栏状态
 	 */
-	private async updateSkillShowInToolbar(skillId: string, showInToolbar: boolean): Promise<void> {
-		const skillDataService = SkillDataService.getInstance(this.app)
-		await skillDataService.initialize()
+	private async updateQuickActionShowInToolbar(quickActionId: string, showInToolbar: boolean): Promise<void> {
+		const quickActionDataService = QuickActionDataService.getInstance(this.app)
+		await quickActionDataService.initialize()
 
-		await skillDataService.updateSkillShowInToolbar(skillId, showInToolbar)
+		await quickActionDataService.updateQuickActionShowInToolbar(quickActionId, showInToolbar)
 
-		// 刷新 ChatFeatureManager 中的技能缓存
-		await this.settingsContext.refreshSkillsCache?.()
+		// 刷新 ChatFeatureManager 中的操作缓存
+		await this.settingsContext.refreshQuickActionsCache?.()
 	}
 
 	/**
-	 * 重新排序技能
+	 * 重新排序操作
 	 */
-	private async reorderSkills(draggedId: string, targetId: string): Promise<void> {
-		const skillDataService = SkillDataService.getInstance(this.app)
-		await skillDataService.initialize()
+	private async reorderQuickActions(draggedId: string, targetId: string): Promise<void> {
+		const quickActionDataService = QuickActionDataService.getInstance(this.app)
+		await quickActionDataService.initialize()
 
-		const skills = await skillDataService.getSkills()
-		const sortedSkills = skills.sort((a, b) => a.order - b.order)
+		const quickActions = await quickActionDataService.getQuickActions()
+		const sortedQuickActions = quickActions.sort((a, b) => a.order - b.order)
 
-		const draggedIndex = sortedSkills.findIndex(s => s.id === draggedId)
-		const targetIndex = sortedSkills.findIndex(s => s.id === targetId)
+		const draggedIndex = sortedQuickActions.findIndex(s => s.id === draggedId)
+		const targetIndex = sortedQuickActions.findIndex(s => s.id === targetId)
 
 		if (draggedIndex === -1 || targetIndex === -1) return
 
-		// 移动技能
-		const [draggedSkill] = sortedSkills.splice(draggedIndex, 1)
-		sortedSkills.splice(targetIndex, 0, draggedSkill)
+		// 移动操作
+		const [draggedQuickAction] = sortedQuickActions.splice(draggedIndex, 1)
+		sortedQuickActions.splice(targetIndex, 0, draggedQuickAction)
 
-		// 更新所有技能的 order
-		const orderedIds = sortedSkills.map((s, index) => {
+		// 更新所有操作的 order
+		const orderedIds = sortedQuickActions.map((s, index) => {
 			s.order = index
 			s.updatedAt = Date.now()
 			return s.id
 		})
 
-		await skillDataService.updateSkillsOrder(orderedIds)
+		await quickActionDataService.updateQuickActionsOrder(orderedIds)
 
-		// 刷新 ChatFeatureManager 中的技能缓存
-		await this.settingsContext.refreshSkillsCache?.()
+		// 刷新 ChatFeatureManager 中的操作缓存
+		await this.settingsContext.refreshQuickActionsCache?.()
 	}
 
 	/**
