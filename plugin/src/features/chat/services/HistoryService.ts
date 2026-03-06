@@ -79,6 +79,22 @@ export class HistoryService {
 		return fallback;
 	}
 
+	private parseOptionalString(value: unknown): string | undefined {
+		return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+	}
+
+	private parseMultiModelMode(value: unknown): ChatSession['multiModelMode'] {
+		return value === 'compare' || value === 'collaborate' || value === 'single'
+			? value
+			: undefined;
+	}
+
+	private parseLayoutMode(value: unknown): ChatSession['layoutMode'] {
+		return value === 'horizontal' || value === 'tabs' || value === 'vertical'
+			? value
+			: undefined;
+	}
+
 	/**
 	 * 清理文本，使其适合作为文件名
 	 * - 替换空格为下划线
@@ -209,7 +225,11 @@ export class HistoryService {
 					updated: this.formatTimestamp(session.updatedAt),
 					messageCount: session.messages.length,
 					contextNotes: session.contextNotes ?? [],
-					enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false
+					enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false,
+					multiModelMode: session.multiModelMode ?? 'single',
+					activeCompareGroupId: session.activeCompareGroupId,
+					activeCollaborationTemplateId: session.activeCollaborationTemplateId,
+					layoutMode: session.layoutMode
 				});
 				return session.filePath;
 			}
@@ -246,7 +266,11 @@ export class HistoryService {
 			updated: this.formatTimestamp(session.updatedAt),
 			messageCount: session.messages.length,
 			contextNotes: session.contextNotes ?? [],
-			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false
+			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false,
+			multiModelMode: session.multiModelMode ?? 'single',
+			activeCompareGroupId: session.activeCompareGroupId,
+			activeCollaborationTemplateId: session.activeCollaborationTemplateId,
+			layoutMode: session.layoutMode
 		});
 
 		const body = session.messages.map((message) => this.messageService.serializeMessage(message)).join('\n\n');
@@ -285,6 +309,10 @@ ${body}
 				updatedAt: this.parseTimestamp(frontmatter.updated ?? file.stat.mtime),
 				selectedImages: [],
 				enableTemplateAsSystemPrompt: this.parseBoolean(frontmatter.enableTemplateAsSystemPrompt, false),
+				multiModelMode: this.parseMultiModelMode(frontmatter.multiModelMode),
+				activeCompareGroupId: this.parseOptionalString(frontmatter.activeCompareGroupId),
+				activeCollaborationTemplateId: this.parseOptionalString(frontmatter.activeCollaborationTemplateId),
+				layoutMode: this.parseLayoutMode(frontmatter.layoutMode),
 				filePath: filePath // 设置文件路径
 			};
 			return session;
@@ -321,7 +349,11 @@ ${body}
 			created: session.createdAt,
 			updated: session.updatedAt,
 			contextNotes: session.contextNotes ?? [],
-			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false
+			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false,
+			multiModelMode: session.multiModelMode ?? 'single',
+			activeCompareGroupId: session.activeCompareGroupId,
+			activeCollaborationTemplateId: session.activeCollaborationTemplateId,
+			layoutMode: session.layoutMode
 		});
 
 		// 创建文件，只包含frontmatter，不包含任何消息
@@ -444,7 +476,11 @@ ${body}
 			updated: this.formatTimestamp(session.updatedAt),
 			messageCount: 1, // 第一条消息
 			contextNotes: updatedContextNotes,
-			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false
+			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false,
+			multiModelMode: session.multiModelMode ?? 'single',
+			activeCompareGroupId: session.activeCompareGroupId,
+			activeCollaborationTemplateId: session.activeCollaborationTemplateId,
+			layoutMode: session.layoutMode
 		});
 
 		// 序列化第一条消息，但不重复添加文件和文件夹信息（因为已经在消息内容中了）
@@ -592,17 +628,19 @@ ${body}
 		
 		const messages: ChatMessage[] = [];
 		
-		// 使用更精确的正则匹配消息头部格式: # 用户/AI/系统 (YYYY-MM-DD HH:mm:ss) 或 # 用户/AI/系统
+		// 支持单模型格式：# AI (时间)
+		// 以及多模型格式：# AI [model-tag] (时间)
 		// 只在行首的消息头部处分割，避免消息内容中的Markdown标题导致截断
-		const messageHeaderRegex = /^#\s+(用户|AI|系统)\s*(?:\(([^)]+)\))?\s*$/gm;
+		const messageHeaderRegex = /^#\s+(用户|AI|系统)(?:\s+\[([^\]]+)\])?\s*(?:\(([^)]+)\))?\s*$/gm;
 		
 		// 找到所有消息头部的位置
-		const headerMatches: { index: number; header: string; role: ChatRole; timestampStr: string }[] = [];
+		const headerMatches: { index: number; header: string; role: ChatRole; timestampStr: string; modelTag?: string }[] = [];
 		let match;
 		
 		while ((match = messageHeaderRegex.exec(body)) !== null) {
 			const roleLabel = match[1]?.trim() ?? '';
-			const timestampStr = match[2]?.trim() ?? '';
+			const modelTag = match[2]?.trim() ?? '';
+			const timestampStr = match[3]?.trim() ?? '';
 			
 			let role: ChatRole;
 			if (roleLabel === 'AI') {
@@ -617,7 +655,8 @@ ${body}
 				index: match.index,
 				header: match[0],
 				role,
-				timestampStr
+				timestampStr,
+				modelTag: modelTag || undefined
 			});
 		}
 		
@@ -663,6 +702,40 @@ ${body}
 				}
 			}
 			
+			let taskDescription: string | undefined;
+			const taskDescriptionMatch = content.match(/\n\n> 任务:\s*(.+)$/m);
+			if (taskDescriptionMatch?.[1]) {
+				taskDescription = taskDescriptionMatch[1].trim();
+				content = content.replace(/\n\n> 任务:\s*.+$/m, '').trim();
+			}
+
+			let modelName: string | undefined;
+			const modelNameMatch = content.match(/\n\n> 模型名称:\s*(.+)$/m);
+			if (modelNameMatch?.[1]) {
+				modelName = modelNameMatch[1].trim();
+				content = content.replace(/\n\n> 模型名称:\s*.+$/m, '').trim();
+			}
+
+			let executionIndex: number | undefined;
+			const executionIndexMatch = content.match(/\n\n> 执行序号:\s*(\d+)$/m);
+			if (executionIndexMatch?.[1]) {
+				executionIndex = Number(executionIndexMatch[1]);
+				content = content.replace(/\n\n> 执行序号:\s*\d+$/m, '').trim();
+			}
+
+			let parallelGroupId: string | undefined;
+			const parallelGroupMatch = content.match(/\n\n> 对比组:\s*(.+)$/m);
+			if (parallelGroupMatch?.[1]) {
+				parallelGroupId = parallelGroupMatch[1].trim();
+				content = content.replace(/\n\n> 对比组:\s*.+$/m, '').trim();
+			}
+
+			let isError = false;
+			if (content.startsWith('[错误]')) {
+				isError = true;
+				content = content.replace(/^\[错误\]\s*/, '').trim();
+			}
+
 			// 处理图片引用
 			let images: string[] = [];
 			const imageMatches = content.matchAll(/!\[Image \d+\]\(([^)]+)\)/g);
@@ -679,6 +752,12 @@ ${body}
 			const message = this.messageService.createMessage(currentHeader.role, content, {
 				timestamp,
 				images,
+				modelTag: currentHeader.modelTag,
+				modelName: modelName ?? currentHeader.modelTag,
+				taskDescription,
+				executionIndex,
+				parallelGroupId,
+				isError,
 				toolCalls: extracted.toolCalls,
 				metadata: {
 					originalHeader: currentHeader.header.trim(),
@@ -696,11 +775,12 @@ ${body}
 			let currentMessage = '';
 			let currentRole: ChatRole = 'user';
 			let currentTimestamp = Date.now();
+			let currentModelTag: string | undefined;
 			let inMessage = false;
 			
 			for (const line of lines) {
 				// 检查是否为消息头部
-				const headerLineMatch = line.match(/^#\s+(用户|AI|系统)\s*(?:\(([^)]+)\))?\s*$/);
+				const headerLineMatch = line.match(/^#\s+(用户|AI|系统)(?:\s+\[([^\]]+)\])?\s*(?:\(([^)]+)\))?\s*$/);
 				if (headerLineMatch) {
 					// 保存前一条消息
 					if (inMessage && currentMessage.trim()) {
@@ -720,6 +800,8 @@ ${body}
 
 						const message = this.messageService.createMessage(currentRole, content, {
 							timestamp: currentTimestamp,
+							modelTag: currentModelTag,
+							modelName: currentModelTag,
 							toolCalls: extracted.toolCalls
 						});
 
@@ -735,6 +817,7 @@ ${body}
 					} else {
 						currentRole = 'user';
 					}
+					currentModelTag = headerLineMatch[2]?.trim() || undefined;
 					
 					currentMessage = '';
 					inMessage = true;
@@ -753,7 +836,9 @@ ${body}
 				// 清理转换后可能产生的多余空行
 				content = content.replace(/\n{3,}/g, '\n\n').trim();
 				messages.push(this.messageService.createMessage(currentRole, content, {
-					timestamp: currentTimestamp
+					timestamp: currentTimestamp,
+					modelTag: currentModelTag,
+					modelName: currentModelTag
 				}));
 			}
 		}

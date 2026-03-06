@@ -3,6 +3,8 @@ import { Extension, Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import FormPlugin from 'src/main';
 import { ChatService } from './services/ChatService';
+import { MultiModelConfigService } from './services/MultiModelConfigService';
+import { MultiModelChatService } from './services/MultiModelChatService';
 import { ChatView, VIEW_TYPE_CHAT_SIDEBAR, VIEW_TYPE_CHAT_TAB } from './views/ChatView';
 import { ChatModal } from './views/ChatModal';
 import { ChatPersistentModal } from './views/ChatPersistentModal';
@@ -37,6 +39,8 @@ import { buildProviderOptionsWithReasoningDisabled } from '../tars/providers/uti
 
 export class ChatFeatureManager {
 	private readonly service: ChatService;
+	private multiModelConfigService: MultiModelConfigService | null = null;
+	private multiModelChatService: MultiModelChatService | null = null;
 	private ribbonEl: HTMLElement | null = null;
 	private chatTriggerExtension: Extension | null = null;
 	private selectionToolbarExtension: Extension | null = null;
@@ -84,6 +88,11 @@ export class ChatFeatureManager {
 
 	async initialize(initialSettings?: Partial<ChatSettings>) {
 		this.service.initialize(initialSettings);
+		this.multiModelConfigService = new MultiModelConfigService(this.plugin.app, this.plugin.settings.aiDataFolder);
+		await this.multiModelConfigService.initialize();
+		this.multiModelChatService = new MultiModelChatService(this.service, this.multiModelConfigService);
+		this.service.setMultiModelConfigService(this.multiModelConfigService);
+		this.service.setMultiModelService(this.multiModelChatService);
 		this.registerViews();
 		this.registerCommands();
 		this.createRibbon();
@@ -243,6 +252,12 @@ export class ChatFeatureManager {
 	}
 
 	dispose() {
+		this.multiModelChatService?.stopAllGeneration();
+		this.multiModelChatService = null;
+		this.multiModelConfigService?.dispose();
+		this.multiModelConfigService = null;
+		this.service.setMultiModelService(null);
+		this.service.setMultiModelConfigService(null);
 		this.ribbonEl?.remove();
 		this.plugin.app.workspace.detachLeavesOfType(VIEW_TYPE_CHAT_SIDEBAR);
 		this.plugin.app.workspace.detachLeavesOfType(VIEW_TYPE_CHAT_TAB);

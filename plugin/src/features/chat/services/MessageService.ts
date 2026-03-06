@@ -14,6 +14,7 @@ export class MessageService {
 	createMessage(role: ChatRole, content: string, extras?: Partial<ChatMessage>): ChatMessage {
 		const now = Date.now();
 		return {
+			...extras,
 			id: extras?.id ?? uuidv4(),
 			role,
 			content: content.trim(),
@@ -71,6 +72,7 @@ export class MessageService {
 	serializeMessage(message: ChatMessage, selectedFiles?: SelectedFile[], selectedFolders?: SelectedFolder[]): string {
 		const timestamp = this.formatTimestamp(message.timestamp);
 		const roleLabel = this.mapRoleToLabel(message.role);
+		const modelSuffix = message.modelTag ? ` [${message.modelTag}]` : '';
 
 		// 处理图片引用
 		const images = (message.images ?? []).map((image, index) => `![Image ${index + 1}](${image})`).join('\n');
@@ -88,7 +90,23 @@ export class MessageService {
 		}
 
 		// 构建完整消息，确保内容不被截断
-		let fullMessage = `# ${roleLabel} (${timestamp})\n${content}`;
+		let fullMessage = `# ${roleLabel}${modelSuffix} (${timestamp})\n${content}`;
+
+		if (message.taskDescription) {
+			fullMessage += `\n\n> 任务: ${message.taskDescription}`;
+		}
+
+		if (message.modelName && message.modelName !== message.modelTag) {
+			fullMessage += `\n\n> 模型名称: ${message.modelName}`;
+		}
+
+		if (typeof message.executionIndex === 'number') {
+			fullMessage += `\n\n> 执行序号: ${message.executionIndex}`;
+		}
+
+		if (message.parallelGroupId) {
+			fullMessage += `\n\n> 对比组: ${message.parallelGroupId}`;
+		}
 
 		// 如果有选中文本，添加到消息中
 		if (message.metadata?.selectedText && typeof message.metadata.selectedText === 'string') {

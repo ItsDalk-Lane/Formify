@@ -9,6 +9,7 @@ import { HistoryService, ChatHistoryEntry } from './HistoryService';
 import { FileContentService } from './FileContentService';
 import type { ChatMessage, ChatSession, ChatSettings, ChatState, McpToolMode, SelectedFile, SelectedFolder } from '../types/chat';
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
+import type { CollaborationTemplate, CompareGroup, LayoutMode, MultiModelMode, ParallelResponseGroup } from '../types/multiModel';
 import { v4 as uuidv4 } from 'uuid';
 import { InternalLinkParserService } from '../../../service/InternalLinkParserService';
 import { DebugLogger } from 'src/utils/DebugLogger';
@@ -18,21 +19,48 @@ import type { ToolCall, ToolDefinition, ToolExecution } from '../types/tools';
 import { ToolRegistryService } from './ToolRegistryService';
 import { ToolExecutionManager } from './ToolExecutionManager';
 import { getChatHistoryPath } from 'src/utils/AIPathManager';
+import type { MultiModelChatService } from './MultiModelChatService';
+import type { MultiModelConfigService } from './MultiModelConfigService';
 
 type ChatSubscriber = (state: ChatState) => void;
 
+export interface PreparedChatRequest {
+	session: ChatSession;
+	userMessage: ChatMessage;
+	currentSelectedFiles: SelectedFile[];
+	currentSelectedFolders: SelectedFolder[];
+	originalUserInput: string;
+	isImageGenerationIntent: boolean;
+	isModelSupportImageGeneration: boolean;
+}
+
+export interface GenerateAssistantOptions {
+	context?: string;
+	taskDescription?: string;
+	abortSignal?: AbortSignal;
+	onChunk?: (chunk: string, message: ChatMessage) => void;
+	executionIndex?: number;
+	systemPromptOverride?: string;
+	createMessageInSession?: boolean;
+	manageGeneratingState?: boolean;
+}
+
 export class ChatService {
+	private static readonly LAYOUT_MODE_STORAGE_KEY = 'formify-chat-layout-mode';
 	private settings: ChatSettings = DEFAULT_CHAT_SETTINGS;
 	private readonly messageService: MessageService;
 	private readonly historyService: HistoryService;
 	private readonly fileContentService: FileContentService;
 	private readonly toolRegistry: ToolRegistryService;
 	private readonly toolExecutionManager: ToolExecutionManager;
+	private multiModelService: MultiModelChatService | null = null;
+	private multiModelConfigService: MultiModelConfigService | null = null;
 	private state: ChatState = {
 		activeSession: null,
 		isGenerating: false,
 		inputValue: '',
 		selectedModelId: null,
+		selectedModels: [],
 		enableReasoningToggle: false,
 		enableWebSearchToggle: false,
 		enableTemplateAsSystemPrompt: false,
@@ -47,6 +75,11 @@ export class ChatService {
 		toolExecutions: [],
 		mcpToolMode: 'auto',
 		mcpSelectedServerIds: [],
+		activeCompareGroupId: undefined,
+		activeCollaborationTemplateId: undefined,
+		multiModelMode: 'single',
+		parallelResponses: undefined,
+		layoutMode: 'horizontal',
 	};
 	private subscribers: Set<ChatSubscriber> = new Set();
 	private controller: AbortController | null = null;
@@ -77,8 +110,15 @@ export class ChatService {
 		this.updateSettings(initialSettings ?? {});
 		this.loadGlobalTools();
 		this.syncToolSettingsFromTars();
+		const persistedLayoutMode = this.readPersistedLayoutMode();
+		if (persistedLayoutMode) {
+			this.state.layoutMode = persistedLayoutMode;
+		}
 		if (!this.state.selectedModelId) {
 			this.state.selectedModelId = this.getDefaultProviderTag();
+		}
+		if (this.state.selectedModels.length === 0 && this.state.selectedModelId) {
+			this.state.selectedModels = [this.state.selectedModelId];
 		}
 		if (!this.state.activeSession) {
 			this.createNewSession();
@@ -90,12 +130,52 @@ export class ChatService {
 		return JSON.parse(JSON.stringify(this.state));
 	}
 
+	getActiveSession(): ChatSession | null {
+		return this.state.activeSession;
+	}
+
 	subscribe(callback: ChatSubscriber): () => void {
 		this.subscribers.add(callback);
 		callback(this.getState());
 		return () => {
 			this.subscribers.delete(callback);
 		};
+	}
+
+	setMultiModelService(service: MultiModelChatService | null) {
+		this.multiModelService = service;
+	}
+
+	setMultiModelConfigService(service: MultiModelConfigService | null) {
+		this.multiModelConfigService = service;
+	}
+
+	getMultiModelConfigService(): MultiModelConfigService | null {
+		return this.multiModelConfigService;
+	}
+
+	notifyStateChange() {
+		this.emitState();
+	}
+
+	setGeneratingState(isGenerating: boolean) {
+		this.state.isGenerating = isGenerating;
+		this.emitState();
+	}
+
+	setErrorState(error?: string) {
+		this.state.error = error;
+		this.emitState();
+	}
+
+	setParallelResponses(group?: ParallelResponseGroup) {
+		this.state.parallelResponses = group;
+		this.emitState();
+	}
+
+	clearParallelResponses() {
+		this.state.parallelResponses = undefined;
+		this.emitState();
 	}
 
 	createNewSession(initialTitle = '新的聊天'): ChatSession {
@@ -114,7 +194,11 @@ export class ChatService {
 			updatedAt: now,
 			contextNotes: [],
 			selectedImages: [],
-			enableTemplateAsSystemPrompt: false
+			enableTemplateAsSystemPrompt: false,
+			multiModelMode: this.state.multiModelMode,
+			activeCompareGroupId: this.state.activeCompareGroupId,
+			activeCollaborationTemplateId: this.state.activeCollaborationTemplateId,
+			layoutMode: this.state.layoutMode
 		};
 		this.state.activeSession = session;
 		this.state.contextNotes = [];
@@ -128,6 +212,9 @@ export class ChatService {
 		this.state.showTemplateSelector = false;
 		this.state.mcpToolMode = 'auto';
 		this.state.mcpSelectedServerIds = [];
+		this.state.activeCompareGroupId = undefined;
+		this.state.activeCollaborationTemplateId = undefined;
+		this.state.parallelResponses = undefined;
 		// 注意：不清空手动移除记录，这是插件级别的持久化数据
 		this.emitState();
 		return session;
@@ -710,16 +797,123 @@ export class ChatService {
 
 	setModel(tag: string) {
 		this.state.selectedModelId = tag;
+		if (this.state.multiModelMode === 'single') {
+			this.state.selectedModels = tag ? [tag] : [];
+		}
 		if (this.state.activeSession) {
 			this.state.activeSession.modelId = tag;
 		}
 		this.emitState();
 	}
 
-	async sendMessage(content?: string) {
+	setSelectedModels(tags: string[]) {
+		this.state.selectedModels = Array.from(new Set(tags.filter(Boolean)));
+		this.emitState();
+	}
+
+	addSelectedModel(tag: string) {
+		if (!tag) return;
+		this.state.selectedModels = Array.from(new Set([...this.state.selectedModels, tag]));
+		this.emitState();
+	}
+
+	removeSelectedModel(tag: string) {
+		this.state.selectedModels = this.state.selectedModels.filter((item) => item !== tag);
+		this.emitState();
+	}
+
+	getSelectedModels(): string[] {
+		return [...this.state.selectedModels];
+	}
+
+	setMultiModelMode(mode: MultiModelMode) {
+		this.state.multiModelMode = mode;
+		if (mode === 'single' && this.state.selectedModelId) {
+			this.state.selectedModels = [this.state.selectedModelId];
+		}
+		this.syncSessionMultiModelState();
+		void this.persistActiveSessionMultiModelFrontmatter();
+		this.emitState();
+	}
+
+	setLayoutMode(mode: LayoutMode) {
+		this.state.layoutMode = mode;
+		this.syncSessionMultiModelState();
+		this.persistLayoutMode(mode);
+		void this.persistActiveSessionMultiModelFrontmatter();
+		this.emitState();
+	}
+
+	setActiveCompareGroup(groupId?: string) {
+		this.state.activeCompareGroupId = groupId;
+		this.syncSessionMultiModelState();
+		void this.persistActiveSessionMultiModelFrontmatter();
+		this.emitState();
+	}
+
+	setActiveCollaborationTemplate(templateId?: string) {
+		this.state.activeCollaborationTemplateId = templateId;
+		this.syncSessionMultiModelState();
+		void this.persistActiveSessionMultiModelFrontmatter();
+		this.emitState();
+	}
+
+	async loadCompareGroups(): Promise<CompareGroup[]> {
+		if (!this.multiModelConfigService) {
+			return [];
+		}
+		return this.multiModelConfigService.loadCompareGroups();
+	}
+
+	async loadCollaborationTemplates(): Promise<CollaborationTemplate[]> {
+		if (!this.multiModelConfigService) {
+			return [];
+		}
+		return this.multiModelConfigService.loadCollaborationTemplates();
+	}
+
+	async saveCompareGroup(group: CompareGroup): Promise<string | null> {
+		if (!this.multiModelConfigService) {
+			return null;
+		}
+		return this.multiModelConfigService.saveCompareGroup(group);
+	}
+
+	async saveCollaborationTemplate(template: CollaborationTemplate): Promise<string | null> {
+		if (!this.multiModelConfigService) {
+			return null;
+		}
+		return this.multiModelConfigService.saveCollaborationTemplate(template);
+	}
+
+	async deleteCompareGroup(id: string): Promise<void> {
+		if (!this.multiModelConfigService) {
+			return;
+		}
+		await this.multiModelConfigService.deleteCompareGroup(id);
+	}
+
+	async deleteCollaborationTemplate(id: string): Promise<void> {
+		if (!this.multiModelConfigService) {
+			return;
+		}
+		await this.multiModelConfigService.deleteCollaborationTemplate(id);
+	}
+
+	watchMultiModelConfigs(callback: Parameters<MultiModelConfigService['watchConfigs']>[0]): (() => void) | null {
+		if (!this.multiModelConfigService) {
+			return null;
+		}
+		return this.multiModelConfigService.watchConfigs(callback);
+	}
+
+	async prepareChatRequest(
+		content?: string,
+		options?: { skipImageSupportValidation?: boolean }
+	): Promise<PreparedChatRequest | null> {
 		if (this.state.isGenerating) {
 			new Notice('当前已有请求在进行中，请稍候...');
-			return;
+			return null;
 		}
 
 		const contentToSend = content ?? this.state.inputValue;
@@ -728,21 +922,25 @@ export class ChatService {
 			this.state.selectedImages = this.mergeSelectedImages(this.state.selectedImages, inputReferencedImages);
 		}
 
-		let trimmed = contentToSend.trim();
-		if (!trimmed && this.state.selectedImages.length === 0 &&
-			this.state.selectedFiles.length === 0 && this.state.selectedFolders.length === 0) {
-			return;
+		const trimmed = contentToSend.trim();
+		if (
+			!trimmed &&
+			this.state.selectedImages.length === 0 &&
+			this.state.selectedFiles.length === 0 &&
+			this.state.selectedFolders.length === 0
+		) {
+			return null;
 		}
 
-		// 保存用户输入的原始内容，用于在对话消息框中显示
 		const originalUserInput = trimmed;
-
-		// 检测图片生成意图（使用原始输入）
 		const isImageGenerationIntent = this.detectImageGenerationIntent(originalUserInput);
 		const isModelSupportImageGeneration = this.isCurrentModelSupportImageGeneration();
-		
-		// 如果用户意图生成图片但当前模型不支持，提示用户
-		if (isImageGenerationIntent && !isModelSupportImageGeneration) {
+
+		if (
+			!options?.skipImageSupportValidation &&
+			isImageGenerationIntent &&
+			!isModelSupportImageGeneration
+		) {
 			const provider = this.resolveProvider();
 			const modelName = provider?.options.model || '当前模型';
 			new Notice(`⚠️ 当前模型 (${modelName}) 不支持图像生成功能。
@@ -751,12 +949,11 @@ export class ChatService {
 • google/gemini-2.5-flash-image-preview
 • openai/gpt-5-image-mini
 • 其他包含 "image" 的模型`, 10000);
-			return;
+			return null;
 		}
 
 		const session = this.state.activeSession ?? this.createNewSession();
-
-		// 保存文件和文件夹到会话中
+		this.syncSessionMultiModelState(session);
 		session.selectedFiles = [...this.state.selectedFiles];
 		session.selectedFolders = [...this.state.selectedFolders];
 
@@ -765,20 +962,16 @@ export class ChatService {
 			this.state.enableTemplateAsSystemPrompt &&
 			!!selectedPromptTemplate?.content;
 
-		// 处理提示词模板（默认仅用于 Task 层）
 		let finalUserMessage = originalUserInput;
 		let taskTemplate: string | undefined;
-		
+
 		if (selectedPromptTemplate && !useTemplateAsSystemPrompt) {
 			const templateContent = selectedPromptTemplate.content;
 			const templateName = selectedPromptTemplate.name;
-			
-			// 创建提示词模板标签
 			finalUserMessage = `${originalUserInput}\n\n[[${templateName}]]`;
 			taskTemplate = templateContent;
 		}
 
-		// 获取系统提示词（开启模板系统提示词且选中模板时，直接使用模板原文）
 		let systemPrompt: string | undefined;
 		if (useTemplateAsSystemPrompt && selectedPromptTemplate) {
 			systemPrompt = selectedPromptTemplate.content;
@@ -790,28 +983,19 @@ export class ChatService {
 			}
 		}
 
-		// 创建用户消息，包含文件和文件夹信息
 		let messageContent = finalUserMessage;
-
 		if (this.state.selectedFiles.length > 0 || this.state.selectedFolders.length > 0) {
-			const fileTags = [];
-			const folderTags = [];
+			const fileTags: string[] = [];
+			const folderTags: string[] = [];
 
-			// 处理文件标签 - 只包含文件名，不包含路径
-			if (this.state.selectedFiles.length > 0) {
-				for (const file of this.state.selectedFiles) {
-					fileTags.push(`[[${file.name}]]`); // 只使用文件名，不使用路径
-				}
+			for (const file of this.state.selectedFiles) {
+				fileTags.push(`[[${file.name}]]`);
 			}
 
-			// 处理文件夹标签
-			if (this.state.selectedFolders.length > 0) {
-				for (const folder of this.state.selectedFolders) {
-					folderTags.push(`#${folder.path}`);
-				}
+			for (const folder of this.state.selectedFolders) {
+				folderTags.push(`#${folder.path}`);
 			}
 
-			// 添加文件和文件夹标签到消息内容中，不添加"附件:"标题
 			if (fileTags.length > 0 || folderTags.length > 0) {
 				const allTags = [...fileTags, ...folderTags].join(' ');
 				messageContent += `\n\n${allTags}`;
@@ -821,44 +1005,32 @@ export class ChatService {
 		const userMessage = this.messageService.createMessage('user', messageContent, {
 			images: this.state.selectedImages,
 			metadata: {
-				// Task 层：保留原始用户输入与模板，供 PromptBuilder 统一组装/解析
 				taskUserInput: originalUserInput,
-				taskTemplate: taskTemplate,
-				// 存储选中文本，用于UI显示和发送给AI
+				taskTemplate,
 				selectedText: this.state.selectedText
 			}
 		});
-		
-		// 不再将系统提示词作为消息添加到会话中，而是作为内部参数传递
-		// 这样系统提示不会显示在聊天界面和历史消息中
-		
-		// 只有当用户消息有内容或者有图片时，才添加用户消息
+
 		if (messageContent.trim() || this.state.selectedImages.length > 0) {
 			session.messages.push(userMessage);
 		}
 		session.updatedAt = Date.now();
-		
-		// 将系统提示词作为会话的内部属性存储
 		session.systemPrompt = systemPrompt;
 		session.enableTemplateAsSystemPrompt = this.state.enableTemplateAsSystemPrompt;
 
-		// 清空选中状态
 		const currentSelectedFiles = [...this.state.selectedFiles];
 		const currentSelectedFolders = [...this.state.selectedFolders];
 		this.state.inputValue = '';
 		this.state.selectedImages = [];
 		this.state.selectedFiles = [];
 		this.state.selectedFolders = [];
-		this.state.selectedText = undefined; // 清除选中的文本
-		this.state.selectedPromptTemplate = undefined; // 清除选中的模板
+		this.state.selectedText = undefined;
+		this.state.selectedPromptTemplate = undefined;
 		this.emitState();
 
-		// 只有在应该保存历史记录时才保存
 		if (this.state.shouldSaveHistory) {
-			// 如果这是第一条消息，创建历史文件并包含第一条用户消息
 			if (session.messages.length === 1 || (systemPrompt && session.messages.length === 2)) {
 				try {
-					// 获取第一条消息（可能是系统消息或用户消息）
 					const firstMessage = session.messages[0];
 					session.filePath = await this.historyService.createNewSessionFileWithFirstMessage(
 						session,
@@ -871,9 +1043,7 @@ export class ChatService {
 					new Notice('创建会话文件失败，但消息已发送');
 				}
 			} else {
-				// 如果不是第一条消息，追加到现有文件
 				try {
-					// 获取最后一条消息（可能是用户消息或系统消息）
 					const lastMessage = session.messages.last();
 					if (lastMessage) {
 						await this.historyService.appendMessageToFile(
@@ -885,13 +1055,48 @@ export class ChatService {
 					}
 				} catch (error) {
 					console.error('[ChatService] 追加用户消息失败:', error);
-					// 不显示错误通知，避免干扰用户
 				}
 			}
 		}
 
-		// 如果检测到图片生成意图，显示提示信息
-		if (isImageGenerationIntent && isModelSupportImageGeneration) {
+		return {
+			session,
+			userMessage,
+			currentSelectedFiles,
+			currentSelectedFolders,
+			originalUserInput,
+			isImageGenerationIntent,
+			isModelSupportImageGeneration
+		};
+	}
+
+	async sendMessage(content?: string) {
+		const prepared = await this.prepareChatRequest(content, {
+			skipImageSupportValidation: this.state.multiModelMode !== 'single'
+		});
+		if (!prepared) {
+			return;
+		}
+
+		if (this.state.multiModelMode === 'compare') {
+			if (!this.multiModelService) {
+				new Notice('多模型服务尚未初始化');
+				return;
+			}
+			await this.multiModelService.sendCompareMessage(prepared);
+			return;
+		}
+
+		if (this.state.multiModelMode === 'collaborate') {
+			if (!this.multiModelService) {
+				new Notice('多模型服务尚未初始化');
+				return;
+			}
+			await this.multiModelService.sendCollaborateMessage(prepared);
+			return;
+		}
+
+		if (prepared.isImageGenerationIntent && prepared.isModelSupportImageGeneration) {
 			const provider = this.resolveProvider();
 			const modelName = provider?.options.model || '当前模型';
 			new Notice(`🎨 正在使用模型 ${modelName} 生成图片，请稍候...`);
@@ -903,10 +1108,14 @@ export class ChatService {
 			return;
 		}
 
-		await this.generateAssistantResponse(session);
+		await this.generateAssistantResponse(prepared.session);
 	}
 
 	stopGeneration() {
+		if (this.state.multiModelMode !== 'single' && this.multiModelService) {
+			this.multiModelService.stopAllGeneration();
+			return;
+		}
 		if (this.controller) {
 			this.controller.abort();
 			this.controller = null;
@@ -915,6 +1124,36 @@ export class ChatService {
 			this.state.isGenerating = false;
 			this.emitState();
 		}
+	}
+
+	stopAllGeneration() {
+		this.multiModelService?.stopAllGeneration();
+		if (this.controller) {
+			this.controller.abort();
+			this.controller = null;
+		}
+		if (this.state.isGenerating) {
+			this.state.isGenerating = false;
+			this.emitState();
+		}
+	}
+
+	stopModelGeneration(modelTag: string) {
+		this.multiModelService?.stopModelGeneration(modelTag);
+	}
+
+	async retryModel(messageId: string) {
+		if (!this.multiModelService) {
+			return;
+		}
+		await this.multiModelService.retryModel(messageId);
+	}
+
+	async retryAllFailed() {
+		if (!this.multiModelService) {
+			return;
+		}
+		await this.multiModelService.retryAllFailed();
 	}
 
 	async listHistory(): Promise<ChatHistoryEntry[]> {
@@ -933,6 +1172,13 @@ export class ChatService {
 			this.state.selectedFiles = session.selectedFiles ?? [];
 			this.state.selectedFolders = session.selectedFolders ?? [];
 			this.state.selectedModelId = session.modelId || this.getDefaultProviderTag();
+			const restoredMultiModelState = this.restoreMultiModelStateFromSession(session);
+			this.state.multiModelMode = restoredMultiModelState.multiModelMode;
+			this.state.activeCompareGroupId = restoredMultiModelState.activeCompareGroupId;
+			this.state.activeCollaborationTemplateId = restoredMultiModelState.activeCollaborationTemplateId;
+			this.state.selectedModels = restoredMultiModelState.selectedModels;
+			this.state.layoutMode = restoredMultiModelState.layoutMode;
+			this.state.parallelResponses = undefined;
 			this.state.enableTemplateAsSystemPrompt = session.enableTemplateAsSystemPrompt;
 			// 重置模板选择状态
 			this.state.selectedPromptTemplate = undefined;
@@ -1014,6 +1260,22 @@ export class ChatService {
 			}
 		}
 
+		// 对比模式：使用多模型服务重新生成
+		if (this.state.multiModelMode === 'compare' && this.multiModelService) {
+			const prepared: PreparedChatRequest = {
+				session,
+				userMessage: message,
+				currentSelectedFiles: [...(session.selectedFiles ?? [])],
+				currentSelectedFolders: [...(session.selectedFolders ?? [])],
+				originalUserInput: message.content,
+				isImageGenerationIntent: this.detectImageGenerationIntent(message.content),
+				isModelSupportImageGeneration: this.isCurrentModelSupportImageGeneration()
+			};
+			await this.multiModelService.sendCompareMessage(prepared);
+			return;
+		}
+
+		// 单模型模式或协作模式：原有逻辑
 		// 重新生成AI回复
 		await this.generateAssistantResponse(session);
 	}
@@ -1098,12 +1360,20 @@ export class ChatService {
 			new Notice('只能对AI消息执行重新生成操作');
 			return;
 		}
+
+		// 对比模式：始终走多模型重试逻辑，避免误回退到单模型裁剪历史
+		if (this.state.multiModelMode === 'compare') {
+			await this.multiModelService?.retryModel(messageId);
+			return;
+		}
+
+		// 单模型模式或协作模式：原有逻辑
 		// 重新生成历史消息时，目标消息及其后的对话都应被移除
 		// 否则会残留后续上下文，导致对话历史不一致
 		session.messages = session.messages.slice(0, index);
 		session.updatedAt = Date.now();
 		this.emitState();
-		
+
 		// 使用rewriteMessagesOnly更新文件，而不是重写整个文件
 		if (session.filePath) {
 			try {
@@ -1113,21 +1383,35 @@ export class ChatService {
 				// 不显示通知，避免干扰用户重新生成流程
 			}
 		}
-		
+
 		await this.generateAssistantResponse(session);
 	}
 
 	async refreshProviderSettings(tarsSettings: TarsSettings) {
 		if (!tarsSettings.providers.length) {
 			this.state.selectedModelId = null;
+			this.state.selectedModels = [];
 		} else if (!this.state.selectedModelId) {
 			this.state.selectedModelId = tarsSettings.providers[0].tag;
+			if (this.state.selectedModels.length === 0) {
+				this.state.selectedModels = [tarsSettings.providers[0].tag];
+			}
+		} else {
+			const providerTags = new Set(tarsSettings.providers.map((provider) => provider.tag));
+			if (!providerTags.has(this.state.selectedModelId)) {
+				this.state.selectedModelId = tarsSettings.providers[0].tag;
+			}
+			this.state.selectedModels = this.state.selectedModels.filter((tag) => providerTags.has(tag));
+			if (this.state.selectedModels.length === 0 && this.state.selectedModelId) {
+				this.state.selectedModels = [this.state.selectedModelId];
+			}
 		}
 		this.emitState();
 	}
 
 	dispose() {
 		this.subscribers.clear();
+		this.multiModelService?.stopAllGeneration();
 		this.controller?.abort();
 		this.controller = null;
 	}
@@ -1166,7 +1450,7 @@ export class ChatService {
 	 * @param content 用户输入内容
 	 * @returns 是否包含图片生成意图
 	 */
-	private detectImageGenerationIntent(content: string): boolean {
+	detectImageGenerationIntent(content: string): boolean {
 		if (!content) return false;
 		
 		const lowerContent = content.toLowerCase();
@@ -1216,6 +1500,11 @@ export class ChatService {
 		
 		// 其他供应商，只要支持图像生成功能就返回true
 		return true;
+	}
+
+	isProviderSupportImageGenerationByTag(modelTag: string): boolean {
+		const provider = this.findProviderByTagExact(modelTag);
+		return provider ? this.providerSupportsImageGeneration(provider) : false;
 	}
 
 	private normalizeOllamaBaseUrl(baseURL?: string) {
@@ -1537,221 +1826,58 @@ export class ChatService {
 		}
 	}
 
+	async getOllamaCapabilitiesForModel(modelTag: string): Promise<{
+		supported: boolean;
+		shouldWarn: boolean;
+		modelName: string;
+	} | null> {
+		const provider = this.findProviderByTagExact(modelTag);
+		if (!provider || provider.vendor !== 'Ollama' || !this.state.enableReasoningToggle) {
+			return null;
+		}
+
+		const modelName = String((provider.options as any)?.model ?? provider.tag ?? modelTag);
+		const baseURL = String((provider.options as any)?.baseURL ?? '');
+		if (!modelName) {
+			return null;
+		}
+
+		const caps = await this.getOllamaCapabilities(baseURL, modelName);
+		const key = `${this.normalizeOllamaBaseUrl(baseURL)}|${modelName}`;
+		const cached = this.ollamaCapabilityCache.get(key);
+		const shouldWarn = !caps.reasoning && Boolean(cached) && !cached?.warned;
+		if (shouldWarn && cached) {
+			this.ollamaCapabilityCache.set(key, { ...cached, warned: true });
+		}
+
+		return {
+			supported: caps.reasoning,
+			shouldWarn,
+			modelName
+		};
+	}
+
 
 	private async generateAssistantResponse(session: ChatSession) {
+		const modelTag = this.state.selectedModelId ?? this.getDefaultProviderTag();
+		if (!modelTag) {
+			new Notice('尚未配置任何AI模型，请先在Tars设置中添加Provider。');
+			return;
+		}
+
 		try {
-			const provider = this.resolveProvider();
-			if (!provider) {
-				throw new Error('尚未配置任何AI模型，请先在Tars设置中添加Provider。');
-			}
+			const assistantMessage = await this.generateAssistantResponseForModel(session, modelTag, {
+				createMessageInSession: true,
+				manageGeneratingState: true
+			});
 
-			const providerOptionsRaw = (provider?.options as any) ?? {};
-			const providerEnableReasoning =
-				typeof providerOptionsRaw.enableReasoning === 'boolean'
-					? providerOptionsRaw.enableReasoning
-					: provider.vendor === 'Doubao'
-						? ((providerOptionsRaw.thinkingType as string | undefined) ?? 'enabled') !== 'disabled'
-						: false;
-			const providerEnableThinking = providerOptionsRaw.enableThinking ?? false;
-			const providerEnableWebSearch = provider?.options.enableWebSearch ?? false;
-			let enableReasoning = this.state.enableReasoningToggle && providerEnableReasoning;
-			let enableThinking = this.state.enableReasoningToggle && providerEnableThinking;
-			const enableWebSearch = this.state.enableWebSearchToggle && providerEnableWebSearch;
-			const providerOptions: Record<string, unknown> = {
-				...providerOptionsRaw,
-				enableReasoning,
-				enableThinking,
-				enableWebSearch
-			};
-
-			// 推理开关关闭时，同步禁用 thinkingType 防止 MCP 包装器误判推理状态
-			if (!enableReasoning && typeof providerOptionsRaw.thinkingType === 'string') {
-				providerOptions.thinkingType = 'disabled';
-			}
-
-			// 注入 MCP 工具（根据会话 MCP 模式进行过滤）
-			const mcpManager = this.plugin.featureCoordinator.getMcpClientManager();
-			const mcpMode = this.state.mcpToolMode;
-			if (mcpManager && mcpMode !== 'disabled') {
-				try {
-					const allMcpTools = await mcpManager.getAvailableToolsWithLazyStart();
-					// 按模式过滤工具：auto 全量，manual 仅选中服务器
-					const mcpTools = mcpMode === 'manual'
-						? allMcpTools.filter((tool) => this.state.mcpSelectedServerIds.includes(tool.serverId))
-						: allMcpTools;
-					if (mcpTools.length > 0) {
-						providerOptions.mcpTools = mcpTools;
-						providerOptions.mcpCallTool = (serverId: string, name: string, args: Record<string, unknown>) =>
-							mcpManager.callTool(serverId, name, args);
-						const maxLoops = mcpManager.getSettings().maxToolCallLoops;
-						if (typeof maxLoops === 'number' && maxLoops > 0) {
-							providerOptions.mcpMaxToolCallLoops = maxLoops;
-						}
-					} else {
-						const hasEnabledMcpServer = mcpManager.getSettings().servers.some((server) => server.enabled);
-						if (hasEnabledMcpServer) {
-							this.showMcpNoticeOnce('MCP 已启用，但当前没有可用工具，请检查服务器状态与配置。')
-						}
-					}
-				} catch (err) {
-					const msg = err instanceof Error ? err.message : String(err)
-					this.showMcpNoticeOnce(`MCP 工具初始化失败: ${msg}`)
-					DebugLogger.error('[MCP] Chat 注入工具失败', err)
-				}
-			}
-
-			const vendor = availableVendors.find((item) => item.name === provider.vendor);
-			if (!vendor) {
-				throw new Error(`无法找到供应商 ${provider.vendor}`);
-			}
-
-			// Ollama：根据模型能力禁用不支持的功能，避免请求失败
-			if (vendor.name === 'Ollama') {
-				const modelName = String((providerOptions as any).model ?? '');
-				const baseURL = String((providerOptions as any).baseURL ?? '');
-				if (modelName) {
-					const caps = await this.getOllamaCapabilities(baseURL, modelName);
-					enableReasoning = enableReasoning && caps.reasoning;
-					enableThinking = enableThinking && caps.reasoning;
-					(providerOptions as any).enableReasoning = enableReasoning;
-					(providerOptions as any).enableThinking = enableThinking;
-					if (!caps.reasoning) {
-						const key = `${this.normalizeOllamaBaseUrl(baseURL)}|${modelName}`;
-						const cached = this.ollamaCapabilityCache.get(key);
-						if (cached && !cached.warned) {
-							this.ollamaCapabilityCache.set(key, { ...cached, warned: true });
-							new Notice('已根据 Ollama 模型能力自动关闭不支持的推理功能');
-						}
-					}
-				}
-			}
-
-			const sendRequest = vendor.sendRequestFunc(providerOptions);
-			const messages = await this.buildProviderMessages(session);
-			DebugLogger.logLlmMessages('ChatService.generateAssistantResponse', messages, { level: 'debug' });
-			const assistantMessage = this.messageService.createMessage('assistant', '');
-			session.messages.push(assistantMessage);
-			session.updatedAt = Date.now();
-			this.state.isGenerating = true;
-			this.state.error = undefined;
-			this.emitState();
-
-			this.controller = new AbortController();
-			const resolveEmbed: ResolveEmbedAsBinary = async (embed) => {
-				// 检查是否是我们的虚拟EmbedCache对象
-				if (embed && (embed as any)[Symbol.for('originalBase64')]) {
-					const base64Data = (embed as any)[Symbol.for('originalBase64')] as string;
-					return this.base64ToArrayBuffer(base64Data);
-				}
-				// 对于其他情况，返回空缓冲区
-				return new ArrayBuffer(0);
-			};
-
-			// 保存图片附件：与 editor.ts 保持一致，直接使用 Obsidian 内置附件路径解析
-			const saveAttachment: SaveAttachment = async (filename: string, data: ArrayBuffer): Promise<void> => {
-				const attachmentPath = await this.plugin.app.fileManager.getAvailablePathForAttachment(filename);
-				await this.plugin.app.vault.createBinary(attachmentPath, data);
-			};
-
-			// 创建一个临时消息对象用于流式更新
-			let accumulatedContent = '';
-			
-			// 检测是否是图片生成请求
-			const isImageGenerationRequest = this.detectImageGenerationIntent(
-				session.messages[session.messages.length - 2]?.content || ''
-			);
-			
-			// 检查当前模型是否支持图像生成
-			const isModelSupportImageGeneration = this.isCurrentModelSupportImageGeneration();
-			
-			// 如果模型支持图像生成，总是传递saveAttachment函数
-			if (isModelSupportImageGeneration) {
-				try {
-					for await (const chunk of sendRequest(messages, this.controller, resolveEmbed, saveAttachment)) {
-						assistantMessage.content += chunk;
-						accumulatedContent += chunk;
-						session.updatedAt = Date.now();
-						this.emitState();
-					}
-					DebugLogger.logLlmResponsePreview('ChatService.generateAssistantResponse', assistantMessage.content, { level: 'debug', previewChars: 100 });
-				} catch (error) {
-					// 针对图片生成错误的特殊处理
-					if (error instanceof Error) {
-						const errorMessage = error.message.toLowerCase();
-						
-						// 检查是否是模型不支持图像生成的错误
-						if (errorMessage.includes('not support') || errorMessage.includes('modalities') || errorMessage.includes('output_modalities')) {
-							throw new Error(`当前模型不支持图像生成功能。
-
-解决方法：
-1. 选择支持图像生成的模型，如 google/gemini-2.5-flash-image-preview
-2. 在模型设置中确认已启用图像生成功能
-3. 检查API密钥是否有图像生成权限`);
-						}
-						
-						// 检查是否是内容策略错误
-						if (errorMessage.includes('content policy') || errorMessage.includes('safety') || errorMessage.includes('inappropriate')) {
-							throw new Error(`图像生成请求被内容策略阻止。
-
-解决方法：
-1. 修改您的描述，避免敏感内容
-2. 使用更中性、通用的描述
-3. 尝试不同的描述角度`);
-						}
-						
-						// 检查是否是配额或余额不足错误
-						if (errorMessage.includes('quota') || errorMessage.includes('balance') || errorMessage.includes('insufficient')) {
-							throw new Error(`账户配额或余额不足。
-
-解决方法：
-1. 检查API账户余额
-2. 升级到更高的配额计划
-3. 等待配额重置（如果是按天计算）`);
-						}
-						
-						// 检查是否是图片保存错误
-						if (errorMessage.includes('保存图片附件失败')) {
-							throw new Error(`图片生成成功，但保存到本地失败。
-
-解决方法：
-1. 检查Obsidian附件文件夹权限
-2. 确保有足够的磁盘空间
-3. 尝试在设置中更改图片保存位置`);
-						}
-						
-						// 其他错误，直接抛出
-						throw error;
-					} else {
-						throw new Error(`图像生成过程中发生未知错误: ${String(error)}`);
-					}
-				}
-			} else {
-				// 不支持图像生成的模型，不传递saveAttachment函数
-				for await (const chunk of sendRequest(messages, this.controller, resolveEmbed)) {
-					assistantMessage.content += chunk;
-					accumulatedContent += chunk;
-					session.updatedAt = Date.now();
-					this.emitState();
-				}
-				DebugLogger.logLlmResponsePreview('ChatService.generateAssistantResponse', assistantMessage.content, { level: 'debug', previewChars: 100 });
-			}
-
-			this.state.isGenerating = false;
-			this.controller = null;
-			session.updatedAt = Date.now();
-			this.emitState();
-
-			// 追加AI回复到文件，而不是重写整个文件
-			// 只有在应该保存历史记录且有文件路径时才保存
 			if (this.state.shouldSaveHistory && session.filePath) {
 				try {
 					await this.historyService.appendMessageToFile(session.filePath, assistantMessage);
 				} catch (error) {
 					console.error('[ChatService] 追加AI回复失败:', error);
-					// 不显示错误通知，避免干扰用户
 				}
 			} else if (this.state.shouldSaveHistory) {
-				// 如果没有文件路径但应该保存历史（不应该发生），回退到完整保存
 				console.warn('[ChatService] 会话没有文件路径，回退到完整保存');
 				try {
 					await this.saveActiveSession();
@@ -1759,33 +1885,200 @@ export class ChatService {
 					console.error('[ChatService] 保存AI回复失败:', error);
 				}
 			}
-			// 如果 shouldSaveHistory 为 false，不保存任何历史文件
 		} catch (error) {
-			console.error('[Chat][ChatService] generateAssistantResponse error', error);
-			this.state.isGenerating = false;
-			this.controller = null;
-			
-			// 处理错误消息
-			let errorMessage = '生成失败，请稍后再试。';
-			if (error instanceof Error) {
-				errorMessage = error.message;
-			} else {
-				errorMessage = `生成过程中发生未知错误: ${String(error)}`;
+			this.handleAssistantGenerationError(session, error);
+		}
+	}
+
+	async generateAssistantResponseForModel(
+		session: ChatSession,
+		modelTag: string,
+		options?: GenerateAssistantOptions
+	): Promise<ChatMessage> {
+		const provider = this.findProviderByTagExact(modelTag);
+		if (!provider) {
+			throw new Error(`未找到模型配置: ${modelTag}`);
+		}
+
+		const providerOptionsRaw = (provider.options as any) ?? {};
+		const providerEnableReasoning =
+			typeof providerOptionsRaw.enableReasoning === 'boolean'
+				? providerOptionsRaw.enableReasoning
+				: provider.vendor === 'Doubao'
+					? ((providerOptionsRaw.thinkingType as string | undefined) ?? 'enabled') !== 'disabled'
+					: false;
+		const providerEnableThinking = providerOptionsRaw.enableThinking ?? false;
+		const providerEnableWebSearch = provider.options.enableWebSearch ?? false;
+		let enableReasoning = this.state.enableReasoningToggle && providerEnableReasoning;
+		let enableThinking = this.state.enableReasoningToggle && providerEnableThinking;
+		const enableWebSearch = this.state.enableWebSearchToggle && providerEnableWebSearch;
+		const providerOptions: Record<string, unknown> = {
+			...providerOptionsRaw,
+			enableReasoning,
+			enableThinking,
+			enableWebSearch
+		};
+
+		if (!enableReasoning && typeof providerOptionsRaw.thinkingType === 'string') {
+			providerOptions.thinkingType = 'disabled';
+		}
+
+		const mcpManager = this.plugin.featureCoordinator.getMcpClientManager();
+		const mcpMode = this.state.mcpToolMode;
+		if (mcpManager && mcpMode !== 'disabled') {
+			try {
+				const allMcpTools = await mcpManager.getAvailableToolsWithLazyStart();
+				const mcpTools = mcpMode === 'manual'
+					? allMcpTools.filter((tool) => this.state.mcpSelectedServerIds.includes(tool.serverId))
+					: allMcpTools;
+				if (mcpTools.length > 0) {
+					providerOptions.mcpTools = mcpTools;
+					providerOptions.mcpCallTool = (serverId: string, name: string, args: Record<string, unknown>) =>
+						mcpManager.callTool(serverId, name, args);
+					const maxLoops = mcpManager.getSettings().maxToolCallLoops;
+					if (typeof maxLoops === 'number' && maxLoops > 0) {
+						providerOptions.mcpMaxToolCallLoops = maxLoops;
+					}
+				} else {
+					const hasEnabledMcpServer = mcpManager.getSettings().servers.some((server) => server.enabled);
+					if (hasEnabledMcpServer) {
+						this.showMcpNoticeOnce('MCP 已启用，但当前没有可用工具，请检查服务器状态与配置。');
+					}
+				}
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				this.showMcpNoticeOnce(`MCP 工具初始化失败: ${msg}`);
+				DebugLogger.error('[MCP] Chat 注入工具失败', err);
 			}
-			
-			this.state.error = errorMessage;
-			if (session.messages.length > 0) {
-				const last = session.messages[session.messages.length - 1];
-				if (last.role === 'assistant') {
-					last.isError = true;
-					// 在消息中显示错误信息，而不是仅显示在状态中
-					if (!last.content) {
-						last.content = errorMessage;
+		}
+
+		const vendor = availableVendors.find((item) => item.name === provider.vendor);
+		if (!vendor) {
+			throw new Error(`无法找到供应商 ${provider.vendor}`);
+		}
+
+		if (vendor.name === 'Ollama') {
+			const modelName = String((providerOptions as any).model ?? '');
+			const baseURL = String((providerOptions as any).baseURL ?? '');
+			if (modelName) {
+				const caps = await this.getOllamaCapabilities(baseURL, modelName);
+				enableReasoning = enableReasoning && caps.reasoning;
+				enableThinking = enableThinking && caps.reasoning;
+				(providerOptions as any).enableReasoning = enableReasoning;
+				(providerOptions as any).enableThinking = enableThinking;
+				if (!caps.reasoning) {
+					const key = `${this.normalizeOllamaBaseUrl(baseURL)}|${modelName}`;
+					const cached = this.ollamaCapabilityCache.get(key);
+					if (cached && !cached.warned) {
+						this.ollamaCapabilityCache.set(key, { ...cached, warned: true });
+						new Notice('已根据 Ollama 模型能力自动关闭不支持的推理功能');
 					}
 				}
 			}
+		}
+
+		const sendRequest = vendor.sendRequestFunc(providerOptions);
+		const messages = await this.buildProviderMessagesWithOptions(session, {
+			context: options?.context,
+			taskDescription: options?.taskDescription,
+			systemPrompt: options?.systemPromptOverride
+		});
+		DebugLogger.logLlmMessages('ChatService.generateAssistantResponseForModel', messages, { level: 'debug' });
+
+		const assistantMessage = this.messageService.createMessage('assistant', '', {
+			modelTag,
+			modelName: this.getModelDisplayName(provider),
+			taskDescription: options?.taskDescription,
+			executionIndex: options?.executionIndex,
+			metadata: {
+				hiddenFromModel: this.state.multiModelMode !== 'single'
+			}
+		});
+
+		const shouldAttachToSession = options?.createMessageInSession ?? false;
+		const shouldManageGeneratingState = options?.manageGeneratingState ?? true;
+		if (shouldAttachToSession) {
+			session.messages.push(assistantMessage);
+		}
+		session.updatedAt = Date.now();
+		if (shouldManageGeneratingState) {
+			this.state.isGenerating = true;
+			this.state.error = undefined;
 			this.emitState();
-			new Notice(errorMessage, 10000); // 显示10秒，让用户有足够时间阅读
+		}
+
+		const requestController = new AbortController();
+		const externalSignal = options?.abortSignal;
+		const abortListener = () => requestController.abort();
+		if (externalSignal) {
+			if (externalSignal.aborted) {
+				requestController.abort();
+			} else {
+				externalSignal.addEventListener('abort', abortListener, { once: true });
+			}
+		}
+		if (shouldAttachToSession) {
+			this.controller = requestController;
+		}
+
+		const resolveEmbed: ResolveEmbedAsBinary = async (embed) => {
+			if (embed && (embed as any)[Symbol.for('originalBase64')]) {
+				const base64Data = (embed as any)[Symbol.for('originalBase64')] as string;
+				return this.base64ToArrayBuffer(base64Data);
+			}
+			return new ArrayBuffer(0);
+		};
+
+		const saveAttachment: SaveAttachment = async (filename: string, data: ArrayBuffer): Promise<void> => {
+			const attachmentPath = await this.plugin.app.fileManager.getAvailablePathForAttachment(filename);
+			await this.plugin.app.vault.createBinary(attachmentPath, data);
+		};
+
+		try {
+			const supportsImageGeneration = this.providerSupportsImageGeneration(provider);
+			if (supportsImageGeneration) {
+				try {
+					for await (const chunk of sendRequest(messages, requestController, resolveEmbed, saveAttachment)) {
+						assistantMessage.content += chunk;
+						session.updatedAt = Date.now();
+						options?.onChunk?.(chunk, assistantMessage);
+						if (shouldAttachToSession) {
+							this.emitState();
+						}
+					}
+				} catch (error) {
+					this.rethrowImageGenerationError(error);
+				}
+			} else {
+				for await (const chunk of sendRequest(messages, requestController, resolveEmbed)) {
+					assistantMessage.content += chunk;
+					session.updatedAt = Date.now();
+					options?.onChunk?.(chunk, assistantMessage);
+					if (shouldAttachToSession) {
+						this.emitState();
+					}
+				}
+			}
+
+			DebugLogger.logLlmResponsePreview('ChatService.generateAssistantResponseForModel', assistantMessage.content, {
+				level: 'debug',
+				previewChars: 100
+			});
+			return assistantMessage;
+		} finally {
+			if (externalSignal) {
+				externalSignal.removeEventListener('abort', abortListener);
+			}
+			if (shouldAttachToSession && this.controller === requestController) {
+				this.controller = null;
+			}
+			if (shouldManageGeneratingState) {
+				this.state.isGenerating = false;
+			}
+			session.updatedAt = Date.now();
+			if (shouldManageGeneratingState || shouldAttachToSession) {
+				this.emitState();
+			}
 		}
 	}
 
@@ -1796,13 +2089,105 @@ export class ChatService {
 		new Notice(message, 5000)
 	}
 
+	private handleAssistantGenerationError(session: ChatSession, error: unknown) {
+		console.error('[Chat][ChatService] generateAssistantResponse error', error);
+		this.state.isGenerating = false;
+		this.controller = null;
+
+		let errorMessage = '生成失败，请稍后再试。';
+		if (error instanceof Error) {
+			errorMessage = error.message;
+		} else {
+			errorMessage = `生成过程中发生未知错误: ${String(error)}`;
+		}
+
+		this.state.error = errorMessage;
+		if (session.messages.length > 0) {
+			const last = session.messages[session.messages.length - 1];
+			if (last.role === 'assistant') {
+				last.isError = true;
+				if (!last.content) {
+					last.content = errorMessage;
+				}
+			}
+		}
+		this.emitState();
+		new Notice(errorMessage, 10000);
+	}
+
+	private providerSupportsImageGeneration(provider: ProviderSettings): boolean {
+		const vendor = availableVendors.find((item) => item.name === provider.vendor);
+		if (!vendor || !vendor.capabilities.includes('Image Generation')) {
+			return false;
+		}
+		if (provider.vendor === 'OpenRouter') {
+			return isImageGenerationModel(provider.options.model);
+		}
+		return true;
+	}
+
+	private rethrowImageGenerationError(error: unknown): never {
+		if (error instanceof Error) {
+			const errorMessage = error.message.toLowerCase();
+			if (errorMessage.includes('not support') || errorMessage.includes('modalities') || errorMessage.includes('output_modalities')) {
+				throw new Error(`当前模型不支持图像生成功能。
+
+解决方法：
+1. 选择支持图像生成的模型，如 google/gemini-2.5-flash-image-preview
+2. 在模型设置中确认已启用图像生成功能
+3. 检查API密钥是否有图像生成权限`);
+			}
+			if (errorMessage.includes('content policy') || errorMessage.includes('safety') || errorMessage.includes('inappropriate')) {
+				throw new Error(`图像生成请求被内容策略阻止。
+
+解决方法：
+1. 修改您的描述，避免敏感内容
+2. 使用更中性、通用的描述
+3. 尝试不同的描述角度`);
+			}
+			if (errorMessage.includes('quota') || errorMessage.includes('balance') || errorMessage.includes('insufficient')) {
+				throw new Error(`账户配额或余额不足。
+
+解决方法：
+1. 检查API账户余额
+2. 升级到更高的配额计划
+3. 等待配额重置（如果是按天计算）`);
+			}
+			if (errorMessage.includes('保存图片附件失败')) {
+				throw new Error(`图片生成成功，但保存到本地失败。
+
+解决方法：
+1. 检查Obsidian附件文件夹权限
+2. 确保有足够的磁盘空间
+3. 尝试在设置中更改图片保存位置`);
+			}
+			throw error;
+		}
+		throw new Error(`图像生成过程中发生未知错误: ${String(error)}`);
+	}
+
 	private resolveProvider(): ProviderSettings | null {
+		return this.resolveProviderByTag(this.state.selectedModelId ?? undefined);
+	}
+
+	resolveProviderByTag(tag?: string): ProviderSettings | null {
 		const providers = this.plugin.settings.tars.settings.providers;
 		if (!providers.length) return null;
-		if (!this.state.selectedModelId) {
+		if (!tag) {
 			return providers[0];
 		}
-		return providers.find((provider) => provider.tag === this.state.selectedModelId) ?? providers[0];
+		return providers.find((provider) => provider.tag === tag) ?? providers[0];
+	}
+
+	findProviderByTagExact(tag?: string): ProviderSettings | null {
+		if (!tag) {
+			return null;
+		}
+		return this.plugin.settings.tars.settings.providers.find((provider) => provider.tag === tag) ?? null;
+	}
+
+	private getModelDisplayName(provider: ProviderSettings): string {
+		return provider.options.model || provider.tag;
 	}
 
 	/**
@@ -1810,7 +2195,44 @@ export class ChatService {
 	 * @param session 当前会话
 	 */
 	async buildProviderMessages(session: ChatSession): Promise<ProviderMessage[]> {
-		return this.buildProviderMessagesForAgent(session.messages, session, session.systemPrompt);
+		const visibleMessages = session.messages.filter((message) => !message.metadata?.hiddenFromModel);
+		return this.buildProviderMessagesForAgent(visibleMessages, session, session.systemPrompt);
+	}
+
+	async buildProviderMessagesWithOptions(
+		session: ChatSession,
+		options?: {
+			context?: string;
+			taskDescription?: string;
+			systemPrompt?: string;
+		}
+	): Promise<ProviderMessage[]> {
+		const visibleMessages = session.messages.filter((message) => !message.metadata?.hiddenFromModel);
+		const requestMessages = [...visibleMessages];
+
+		if (options?.context || options?.taskDescription) {
+			const contextParts: string[] = [];
+			if (options.taskDescription) {
+				contextParts.push(`当前任务：${options.taskDescription}`);
+			}
+			if (options.context) {
+				contextParts.push(`前一步输出：\n${options.context}`);
+			}
+			requestMessages.push(this.messageService.createMessage('user', contextParts.join('\n\n'), {
+				metadata: {
+					hidden: true,
+					hiddenFromHistory: true,
+					hiddenFromModel: false,
+					isEphemeralContext: true
+				}
+			}));
+		}
+
+		return this.buildProviderMessagesForAgent(
+			requestMessages,
+			session,
+			options?.systemPrompt ?? session.systemPrompt
+		);
 	}
 
 	/**
@@ -1866,5 +2288,106 @@ export class ChatService {
 
 	getProviders(): ProviderSettings[] {
 		return [...this.plugin.settings.tars.settings.providers];
+	}
+
+	async rewriteSessionMessages(session: ChatSession) {
+		if (!this.state.shouldSaveHistory) {
+			return;
+		}
+		this.syncSessionMultiModelState(session);
+		if (session.filePath) {
+			await this.historyService.rewriteMessagesOnly(session.filePath, session.messages);
+			await this.persistSessionMultiModelFrontmatter(session);
+			return;
+		}
+		await this.saveActiveSession();
+	}
+
+	private readPersistedLayoutMode(): LayoutMode | null {
+		try {
+			const raw = window.localStorage.getItem(ChatService.LAYOUT_MODE_STORAGE_KEY);
+			if (raw === 'horizontal' || raw === 'tabs' || raw === 'vertical') {
+				return raw;
+			}
+		} catch (error) {
+			console.warn('[ChatService] 读取布局偏好失败:', error);
+		}
+		return null;
+	}
+
+	private persistLayoutMode(mode: LayoutMode): void {
+		try {
+			window.localStorage.setItem(ChatService.LAYOUT_MODE_STORAGE_KEY, mode);
+		} catch (error) {
+			console.warn('[ChatService] 保存布局偏好失败:', error);
+		}
+	}
+
+	private syncSessionMultiModelState(session = this.state.activeSession): void {
+		if (!session) {
+			return;
+		}
+		session.multiModelMode = this.state.multiModelMode;
+		session.activeCompareGroupId = this.state.activeCompareGroupId;
+		session.activeCollaborationTemplateId = this.state.activeCollaborationTemplateId;
+		session.layoutMode = this.state.layoutMode;
+	}
+
+	private async persistActiveSessionMultiModelFrontmatter(): Promise<void> {
+		if (!this.state.activeSession?.filePath) {
+			return;
+		}
+		this.syncSessionMultiModelState(this.state.activeSession);
+		await this.persistSessionMultiModelFrontmatter(this.state.activeSession);
+	}
+
+	private async persistSessionMultiModelFrontmatter(session: ChatSession): Promise<void> {
+		if (!session.filePath) {
+			return;
+		}
+		await this.historyService.updateSessionFrontmatter(session.filePath, {
+			multiModelMode: session.multiModelMode ?? 'single',
+			activeCompareGroupId: session.activeCompareGroupId,
+			activeCollaborationTemplateId: session.activeCollaborationTemplateId,
+			layoutMode: session.layoutMode ?? this.state.layoutMode
+		});
+	}
+
+	private restoreMultiModelStateFromSession(session: ChatSession): {
+		multiModelMode: MultiModelMode;
+		activeCompareGroupId?: string;
+		activeCollaborationTemplateId?: string;
+		selectedModels: string[];
+		layoutMode: LayoutMode;
+	} {
+		const selectedModels = Array.from(
+			new Set(
+				session.messages
+					.filter((message) => message.role === 'assistant' && message.modelTag)
+					.map((message) => message.modelTag!)
+			)
+		);
+		const hasParallelGroup = session.messages.some((message) => Boolean(message.parallelGroupId));
+		const hasCollaborationSteps = session.messages.some((message) =>
+			message.role === 'assistant' &&
+			(typeof message.executionIndex === 'number' || Boolean(message.taskDescription))
+		);
+		const inferredMode: MultiModelMode = hasParallelGroup
+			? 'compare'
+			: hasCollaborationSteps
+				? 'collaborate'
+				: 'single';
+		const multiModelMode = session.multiModelMode ?? inferredMode;
+		const layoutMode = session.layoutMode ?? this.readPersistedLayoutMode() ?? this.state.layoutMode;
+
+		return {
+			multiModelMode,
+			activeCompareGroupId: session.activeCompareGroupId,
+			activeCollaborationTemplateId: session.activeCollaborationTemplateId,
+			selectedModels: multiModelMode === 'single'
+				? [session.modelId || this.getDefaultProviderTag() || ''].filter(Boolean)
+				: selectedModels,
+			layoutMode
+		};
 	}
 }

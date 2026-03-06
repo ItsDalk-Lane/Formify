@@ -1,4 +1,4 @@
-import { access, copyFile, mkdir, readFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, unlink, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +28,37 @@ async function pathExists(filePath) {
 		return true;
 	} catch {
 		return false;
+	}
+}
+
+/**
+ * 带重试机制的文件复制函数
+ * 在 Windows 上处理文件被锁定的问题（EBUSY 错误）
+ */
+async function copyFileWithRetry(sourcePath, targetPath, maxRetries = 5, delayMs = 200) {
+	for (let attempt = 0; attempt < maxRetries; attempt++) {
+		try {
+			// 先尝试删除目标文件（如果存在），避免覆盖时的锁定问题
+			try {
+				await unlink(targetPath);
+			} catch {
+				// 目标文件不存在或无法删除，继续尝试复制
+			}
+			// 使用临时文件进行复制
+			const tempPath = `${targetPath}.tmp`;
+			await copyFile(sourcePath, tempPath);
+			await rename(tempPath, targetPath);
+			return;
+		} catch (error) {
+			if (error.code === 'EBUSY' || error.code === 'EPERM') {
+				if (attempt < maxRetries - 1) {
+					// 等待后重试
+					await new Promise(resolve => setTimeout(resolve, delayMs * (attempt + 1)));
+					continue;
+				}
+			}
+			throw error;
+		}
 	}
 }
 
@@ -102,7 +133,7 @@ export async function copyToVault(options = {}) {
 	const copiedFiles = [];
 	for (const file of filesToCopy) {
 		const targetPath = join(targetPluginDir, file.name);
-		await copyFile(file.sourcePath, targetPath);
+		await copyFileWithRetry(file.sourcePath, targetPath);
 		copiedFiles.push(file.name);
 	}
 

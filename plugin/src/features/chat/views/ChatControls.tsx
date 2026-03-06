@@ -6,6 +6,9 @@ import type { ChatHistoryEntry } from '../services/HistoryService';
 import { ChatHistoryPanel } from '../components/ChatHistory';
 import { FileMenuPopup } from '../components/FileMenuPopup';
 import { McpModeSelector } from '../components/McpModeSelector';
+import { ModeSelector } from '../components/ModeSelector';
+import { LayoutSelector } from '../components/LayoutSelector';
+import { ToggleButtons } from '../components/ToggleButtons';
 import { App, TFile, TFolder } from 'obsidian';
 
 interface ChatControlsProps {
@@ -133,15 +136,28 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 			border: 'none'
 		}}>
 			<div className="tw-flex tw-items-center tw-gap-2">
-				<span onClick={handleTemplateButtonClick} aria-label="选择模板" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-purple-100 tw-text-purple-700 tw-rounded tw-text-xs hover:tw-bg-purple-200 tw-border-none">
-					<Zap className="tw-size-3" />
-					<span>选择模板</span>
-				</span>
+				<ModeSelector
+					mode={state.multiModelMode}
+					onModeChange={(mode) => service.setMultiModelMode(mode)}
+				/>
+				<ToggleButtons service={service} state={state} />
 				<McpModeSelector
 					mode={state.mcpToolMode}
 					selectedServerIds={state.mcpSelectedServerIds}
 					service={service}
 				/>
+				{(state.multiModelMode === 'compare' || state.multiModelMode === 'collaborate') && (
+					<LayoutSelector
+						layoutMode={state.layoutMode}
+						onLayoutChange={(mode) => service.setLayoutMode(mode)}
+					/>
+				)}
+			</div>
+			<div className="tw-flex-1"></div>
+			<div className="tw-flex tw-items-center tw-gap-2">
+				<span onClick={handleTemplateButtonClick} aria-label="选择模板" title="选择模板" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent tw-flex tw-items-center tw-justify-center tw-p-1 tw-rounded hover:tw-bg-purple-100">
+					<Zap className="tw-size-4" />
+				</span>
 				<span
 					ref={fileMenuButtonRef}
 					onClick={(e) => {
@@ -167,14 +183,11 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 				>
 					<ImageUp className="tw-size-4" />
 				</span>
-			</div>
-			<div className="tw-flex-1"></div>
-			<div className="tw-flex tw-items-center tw-gap-2">
-				<span onClick={handleNewChat} aria-label="新建聊天" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
-					<MessageCirclePlus className="tw-size-4" />
-				</span>
 				<span ref={historyButtonRef} onClick={() => setHistoryOpen((prev) => !prev)} aria-label="历史记录" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 					<History className="tw-size-4" />
+				</span>
+				<span onClick={handleNewChat} aria-label="新建聊天" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+					<MessageCirclePlus className="tw-size-4" />
 				</span>
 			</div>
 			{historyOpen && (

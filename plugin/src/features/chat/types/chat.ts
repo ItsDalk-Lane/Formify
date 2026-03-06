@@ -1,5 +1,6 @@
 import { App, TFile, TFolder } from 'obsidian';
 import type { ToolCall, ToolExecution } from './tools';
+import type { LayoutMode, MultiModelMode, ParallelResponseGroup } from './multiModel';
 
 export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
 
@@ -60,6 +61,11 @@ export interface ChatMessage {
 	 * 用于关联工具结果与对应的工具调用
 	 */
 	toolCallId?: string;
+	modelTag?: string;
+	modelName?: string;
+	taskDescription?: string;
+	executionIndex?: number;
+	parallelGroupId?: string;
 }
 
 export interface ChatSession {
@@ -76,6 +82,10 @@ export interface ChatSession {
 	filePath?: string; // 添加文件路径字段，用于跟踪会话文件
 	systemPrompt?: string; // 添加系统提示词字段，用于内部存储
 	enableTemplateAsSystemPrompt?: boolean; // 会话级模板系统提示词开关
+	multiModelMode?: MultiModelMode;
+	activeCompareGroupId?: string;
+	activeCollaborationTemplateId?: string;
+	layoutMode?: LayoutMode;
 }
 
 export type ChatOpenMode = 'sidebar' | 'left-sidebar' | 'tab' | 'window' | 'persistent-modal';
@@ -192,6 +202,7 @@ export interface ChatState {
 	isGenerating: boolean;
 	inputValue: string;
 	selectedModelId: string | null;
+	selectedModels: string[];
 	enableReasoningToggle: boolean;
 	enableWebSearchToggle: boolean;
 	enableTemplateAsSystemPrompt: boolean;
@@ -220,6 +231,11 @@ export interface ChatState {
 	mcpToolMode: McpToolMode;
 	/** 手动模式下用户选中的 MCP 服务器 ID 数组 */
 	mcpSelectedServerIds: string[];
+	activeCompareGroupId?: string;
+	activeCollaborationTemplateId?: string;
+	multiModelMode: MultiModelMode;
+	parallelResponses?: ParallelResponseGroup;
+	layoutMode: LayoutMode;
 }
 
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {

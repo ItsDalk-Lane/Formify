@@ -1,4 +1,4 @@
-import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download, Highlighter, ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download, Highlighter, ChevronDown, ChevronRight, StopCircle } from 'lucide-react';
 import { Component } from 'obsidian';
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
@@ -7,11 +7,15 @@ import { ChatService } from '../services/ChatService';
 import { MessageService } from '../services/MessageService';
 import { renderMarkdownContent, parseContentBlocks, ContentBlock } from '../utils/markdown';
 import { Notice } from 'obsidian';
+import { ModelTag } from './ModelTag';
+import { availableVendors } from 'src/features/tars/settings';
 
 interface MessageItemProps {
 	message: ChatMessage;
 	service?: ChatService;
 	isGenerating?: boolean;
+	/** 在标签页模式下隐藏模型名称（因为标签栏已显示） */
+	hideModelTag?: boolean;
 }
 
 // 格式化推理耗时
@@ -153,7 +157,7 @@ const TextBlockComponent = ({ content, app }: TextBlockProps) => {
 	return <div ref={containerRef}></div>;
 };
 
-export const MessageItem = ({ message, service, isGenerating }: MessageItemProps) => {
+export const MessageItem = ({ message, service, isGenerating, hideModelTag }: MessageItemProps) => {
 	const app = useObsidianApp();
 	const helper = useMemo(() => new MessageService(), []);
 	const [copied, setCopied] = useState(false);
@@ -343,13 +347,34 @@ export const MessageItem = ({ message, service, isGenerating }: MessageItemProps
 					</div>
 				)}
 
-				<div className="chat-message__content tw-break-words">
-					{editing ? (
-						<textarea
-							value={draft}
-							onChange={(event) => setDraft(event.target.value)}
-							className="chat-message__editor"
-							rows={4}
+			{/* 多模型标识 */}
+			{message.role === 'assistant' && message.modelTag && !hideModelTag && (() => {
+				const provider = service?.getProviders().find((p) => p.tag === message.modelTag);
+				const vendorName = provider ? availableVendors.find((v) => v.name === provider.vendor)?.name : undefined;
+				return (
+					<div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+						<ModelTag
+							modelTag={message.modelTag}
+							modelName={message.modelName}
+							vendor={vendorName}
+							size="sm"
+						/>
+						{message.taskDescription && (
+							<span style={{ fontSize: 'var(--font-ui-smaller)', color: 'var(--text-faint)' }}>
+								{message.taskDescription}
+							</span>
+						)}
+					</div>
+				);
+			})()}
+
+			<div className="chat-message__content tw-break-words">
+				{editing ? (
+					<textarea
+						value={draft}
+						onChange={(event) => setDraft(event.target.value)}
+						className="chat-message__editor"
+						rows={4}
 						/>
 					) : (
 						// 渲染所有内容块
@@ -415,23 +440,34 @@ export const MessageItem = ({ message, service, isGenerating }: MessageItemProps
 									</span>
 								</>
 							)}
-							{/* AI message buttons */}
-							{message.role === 'assistant' && (
-								<>
-									<span onClick={handleInsert} aria-label="插入到编辑器" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
-										<TextCursorInput className="tw-size-4" />
+						{/* AI message buttons */}
+						{message.role === 'assistant' && (
+							<>
+								{/* 停止按钮：仅在对比模式下流式生成时显示 */}
+								{isGenerating && message.modelTag && (
+									<span
+										onClick={() => service?.stopModelGeneration(message.modelTag!)}
+										aria-label="停止此模型"
+										className="tw-cursor-pointer tw-text-muted hover:tw-text-destructive"
+										title="停止此模型"
+									>
+										<StopCircle className="tw-size-4" />
 									</span>
-									<span onClick={handleCopy} aria-label="复制消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
-										{copied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
-									</span>
-									<span onClick={handleRegenerate} aria-label="重新生成" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
-										<RotateCw className="tw-size-4" />
-									</span>
-									<span onClick={handleDelete} aria-label="删除消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
-										<Trash2 className="tw-size-4" />
-									</span>
-								</>
-							)}
+								)}
+								<span onClick={handleInsert} aria-label="插入到编辑器" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+									<TextCursorInput className="tw-size-4" />
+								</span>
+								<span onClick={handleCopy} aria-label="复制消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+									{copied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
+								</span>
+								<span onClick={handleRegenerate} aria-label="重新生成" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+									<RotateCw className="tw-size-4" />
+								</span>
+								<span onClick={handleDelete} aria-label="删除消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+									<Trash2 className="tw-size-4" />
+								</span>
+							</>
+						)}
 						</div>
 					</div>
 				)}

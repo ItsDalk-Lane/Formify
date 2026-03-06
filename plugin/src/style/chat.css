@@ -1046,3 +1046,391 @@
 		transform: rotate(360deg);
 	}
 }
+
+/* ===================================== */
+/* 多模型相关样式 */
+/* ===================================== */
+
+.multi-model-selector {
+	min-width: 0;
+}
+
+.mode-switcher {
+	flex-shrink: 0;
+}
+
+.layout-switcher {
+	flex-shrink: 0;
+}
+
+/* 对比模型多选列表 */
+.compare-model-list label:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+/* 协作步骤预览 */
+.collab-step-preview {
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+/* 并行响应查看器 */
+.parallel-response-viewer {
+	font-size: calc(var(--font-text-size) - 2px);
+}
+
+.parallel-response-viewer--horizontal {
+	min-height: 100px;
+}
+
+.parallel-response-viewer--tabs button {
+	transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.parallel-response-viewer--vertical > div + div {
+	margin-top: 4px;
+}
+
+/* 单个响应块 */
+.parallel-response-item {
+	min-height: 60px;
+}
+
+.parallel-response-item--error {
+	border: 1px solid var(--color-red, #ff5c5c) !important;
+}
+
+.parallel-response-item .chat-message__content {
+	line-height: 1.3;
+}
+
+.parallel-response-item .chat-message__content p {
+	margin: 0 0 0.3rem 0;
+	line-height: 1.3;
+}
+
+.parallel-response-item .chat-message__content p:last-child {
+	margin-bottom: 0;
+}
+
+/* 模型标签 */
+.model-tag {
+	transition: opacity 0.15s ease;
+}
+
+.model-tag:hover {
+	opacity: 0.85;
+}
+
+.model-tag--error {
+	animation: none;
+}
+
+.model-tag--generating {
+	animation: none;
+}
+
+/* 骨架屏加载动画 */
+.parallel-response-skeleton {
+	height: 40px;
+	border-radius: var(--radius-s);
+	background: linear-gradient(
+		90deg,
+		var(--background-modifier-hover) 25%,
+		var(--background-secondary) 50%,
+		var(--background-modifier-hover) 75%
+	);
+	background-size: 200% 100%;
+	animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+	0% { background-position: 200% 0; }
+	100% { background-position: -200% 0; }
+}
+
+/* 多模型停止控制条 */
+.multi-model-stop-bar {
+	white-space: nowrap;
+}
+
+/* 管理弹窗 */
+.compare-group-dialog,
+.collab-template-dialog {
+	box-shadow: var(--shadow-s);
+}
+
+/* 响应式：窄屏下垂直布局 */
+@media (max-width: 500px) {
+	.parallel-response-viewer--horizontal {
+		grid-template-columns: 1fr !important;
+	}
+
+	.multi-model-selector {
+		flex-direction: column;
+	}
+
+	.mode-switcher {
+		width: 100%;
+		justify-content: center;
+	}
+}
+
+/* gap 工具类补充 */
+.tw-gap-0\.5 {
+	gap: 0.125rem;
+}
+
+.tw-size-3 {
+	width: 0.75rem;
+	height: 0.75rem;
+}
+
+.tw-flex-shrink-0 {
+	flex-shrink: 0;
+}
+
+.tw-shrink-0 {
+	flex-shrink: 0;
+}
+
+.tw-max-w-40 {
+	max-width: 10rem;
+}
+
+.tw-max-w-60 {
+	max-width: 15rem;
+}
+
+.tw-truncate {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tw-mb-1 {
+	margin-bottom: 0.25rem;
+}
+
+.tw-mb-2 {
+	margin-bottom: 0.5rem;
+}
+
+.tw-ml-1 {
+	margin-left: 0.25rem;
+}
+
+.tw-ml-2 {
+	margin-left: 0.5rem;
+}
+
+.tw-mt-0 {
+	margin-top: 0;
+}
+
+.tw-p-3 {
+	padding: 0.75rem;
+}
+
+.tw-p-4 {
+	padding: 1rem;
+}
+
+.tw-bg-black\/50 {
+	background-color: rgba(0, 0, 0, 0.5);
+}
+
+.tw-z-\[1500\] {
+	z-index: 1500;
+}
+
+.tw-z-50 {
+	z-index: 50;
+}
+
+.tw-fixed {
+	position: fixed;
+}
+
+.tw-inset-0 {
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+}
+
+.tw-absolute {
+	position: absolute;
+}
+
+.tw-relative {
+	position: relative;
+}
+
+.tw-top-0 {
+	top: 0;
+}
+
+.tw-right-0 {
+	right: 0;
+}
+
+.tw-top-2 {
+	top: 0.5rem;
+}
+
+.tw-right-2 {
+	right: 0.5rem;
+}
+
+.tw-resize-none {
+	resize: none;
+}
+
+.tw-object-contain {
+	object-fit: contain;
+}
+
+.tw-object-cover {
+	object-fit: cover;
+}
+
+.tw-w-16 {
+	width: 4rem;
+}
+
+.tw-h-16 {
+	height: 4rem;
+}
+
+.tw-max-w-xs {
+	max-width: 20rem;
+}
+
+.tw-max-w-full {
+	max-width: 100%;
+}
+
+.tw-max-h-full {
+	max-height: 100%;
+}
+
+.tw-rounded-full {
+	border-radius: 9999px;
+}
+
+.tw-bg-red-500 {
+	background-color: #ef4444;
+}
+
+.tw-bg-green-100 {
+	background-color: rgba(34, 197, 94, 0.15);
+}
+
+.tw-text-green-700 {
+	color: #15803d;
+}
+
+.tw-bg-gray-100 {
+	background-color: rgba(156, 163, 175, 0.15);
+}
+
+.tw-text-gray-700 {
+	color: var(--text-muted);
+}
+
+.tw-bg-blue-100 {
+	background-color: rgba(59, 130, 246, 0.15);
+}
+
+.tw-text-blue-700 {
+	color: #1d4ed8;
+}
+
+.tw-bg-orange-100 {
+	background-color: rgba(249, 115, 22, 0.15);
+}
+
+.tw-text-orange-700 {
+	color: #c2410c;
+}
+
+.tw-bg-purple-100 {
+	background-color: rgba(147, 51, 234, 0.15);
+}
+
+.tw-text-purple-700 {
+	color: #7e22ce;
+}
+
+.tw-bg-white {
+	background-color: #fff;
+}
+
+.tw-text-white {
+	color: #fff;
+}
+
+.tw-text-black {
+	color: #000;
+}
+
+.tw-bg-black {
+	background-color: #000;
+}
+
+.tw-bg-opacity-50 {
+	opacity: 0.5;
+}
+
+.tw-bg-opacity-75 {
+	opacity: 0.75;
+}
+
+.tw-shadow-lg {
+	box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+}
+
+.tw-border-gray-300 {
+	border-color: #d1d5db;
+}
+
+.hover\:tw-text-accent:hover,
+.tw-hover\:tw-text-accent:hover {
+	color: var(--interactive-accent);
+}
+
+.hover\:tw-bg-red-600:hover {
+	background-color: #dc2626;
+}
+
+.hover\:tw-bg-gray-100:hover {
+	background-color: rgba(156, 163, 175, 0.15);
+}
+
+.hover\:tw-opacity-80:hover {
+	opacity: 0.8;
+}
+
+.hover\:tw-text-foreground:hover {
+	color: var(--text-normal);
+}
+
+.hover\:tw-text-purple-900:hover {
+	color: #581c87;
+}
+
+.hover\:tw-text-orange-900:hover {
+	color: #7c2d12;
+}
+
+.tw-text-\[10px\] {
+	font-size: 10px;
+}
+
+.group:hover .group-hover\/image\:tw-opacity-100 {
+	opacity: 1;
+}
+
+.tw-opacity-0 {
+	opacity: 0;
+}

@@ -1,11 +1,14 @@
-import { Brain, CornerDownLeft, Search, StopCircle, X, FileText, Folder, Palette, Zap, Highlighter } from 'lucide-react';
-import { FormEvent, useEffect, useState, useRef, Fragment } from 'react';
+import { CornerDownLeft, StopCircle, X, FileText, Folder, Palette, Zap, Highlighter, RotateCw } from 'lucide-react';
+import { FormEvent, useEffect, useState, useRef, Fragment, useMemo, lazy, Suspense } from 'react';
 import { ChatService } from '../services/ChatService';
 import type { ChatState } from '../types/chat';
-import { ModelSelector } from '../components/ModelSelector';
+import type { CompareGroup, CollaborationTemplate } from '../types/multiModel';
+import { MultiModelSelector } from '../components/MultiModelSelector';
 import { TemplateSelector } from '../components/TemplateSelector';
+import { ModelTag } from '../components/ModelTag';
 import { App } from 'obsidian';
 import { localInstance } from 'src/i18n/locals';
+import { availableVendors } from 'src/features/tars/settings';
 
 interface ChatInputProps {
 	service: ChatService;
@@ -13,72 +16,44 @@ interface ChatInputProps {
 	app: App;
 }
 
+const CompareGroupManagerDialog = lazy(async () => import('../components/CompareGroupManagerDialog').then((module) => ({
+	default: module.CompareGroupManagerDialog
+})));
+const CollabTemplateManagerDialog = lazy(async () => import('../components/CollabTemplateManagerDialog').then((module) => ({
+	default: module.CollabTemplateManagerDialog
+})));
+
 export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 	const [value, setValue] = useState(state.inputValue);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
-	const [maxHeight, setMaxHeight] = useState(80); // Default minimum height
-	const templateSystemPromptLabel = localInstance.chat_template_system_prompt_toggle || '模板系统提示词';
-	const templateSystemPromptDescription = localInstance.chat_template_system_prompt_toggle_desc || '启用后将提示词模板作为系统提示词使用';
+	const [maxHeight, setMaxHeight] = useState(80);
 
-	// 检测当前输入是否包含图片生成意图
 	const [isImageGenerationIntent, setIsImageGenerationIntent] = useState(false);
-	
-	// 检测图片生成意图的函数
-	const detectImageGenerationIntent = (text: string): boolean => {
-		if (!text) return false;
-		
-		const lowerContent = text.toLowerCase();
-		
-		// 图片生成关键词列表
-		const imageGenerationKeywords = [
-			// 中文关键词
-			'生成图片', '生成图像', '画一个', '画一张', '创建图片', '创建图像',
-			'绘制', '画一幅', '画一幅画', '生成一幅画', '画个', '画张',
-			'图片生成', '图像生成', '画图', '作画', '绘画',
-			'设计一个', '设计一张', '创作一个', '创作一张',
-			'制作图片', '制作图像', '制作一张图',
-			// 英文关键词
-			'generate image', 'generate an image', 'create image', 'create an image',
-			'draw a', 'draw an', 'draw me a', 'draw me an',
-			'paint a', 'paint an', 'paint me a', 'paint me an',
-			'make a picture', 'make an image', 'create a picture',
-			'generate a picture', 'generate picture', 'create picture',
-			'design a', 'design an', 'design me a', 'design me an',
-			'make a', 'make an', 'make me a', 'make me an',
-			'visualize', 'visualize a', 'visualize an',
-			'show me a', 'show me an', 'display a', 'display an'
-		];
-		
-		// 检查是否包含任何图片生成关键词
-		return imageGenerationKeywords.some(keyword => lowerContent.includes(keyword));
-	};
-	
-	// 监听输入变化，检测图片生成意图
-	useEffect(() => {
-		setIsImageGenerationIntent(detectImageGenerationIntent(value));
-	}, [value]);
+	const [compareGroups, setCompareGroups] = useState<CompareGroup[]>([]);
+	const [collaborationTemplates, setCollaborationTemplates] = useState<CollaborationTemplate[]>([]);
+	const [isLoadingConfigs, setIsLoadingConfigs] = useState(false);
+	const [showGroupManager, setShowGroupManager] = useState(false);
+	const [showTemplateManager, setShowTemplateManager] = useState(false);
+	const isMultiModel = state.multiModelMode !== 'single';
 
-	// Calculate maximum height (1/4 of viewport height)
+	useEffect(() => {
+		setIsImageGenerationIntent(service.detectImageGenerationIntent(value));
+	}, [service, value]);
+
 	useEffect(() => {
 		const calculateMaxHeight = () => {
 			const viewportHeight = window.innerHeight;
-			const calculatedMaxHeight = Math.floor(viewportHeight / 4); // 1/4 of viewport height
-			setMaxHeight(calculatedMaxHeight);
+			setMaxHeight(Math.floor(viewportHeight / 4));
 		};
-
 		calculateMaxHeight();
 		window.addEventListener('resize', calculateMaxHeight);
 		return () => window.removeEventListener('resize', calculateMaxHeight);
 	}, []);
 
-	// Auto-resize textarea based on content
 	useEffect(() => {
 		const textarea = textareaRef.current;
 		if (textarea) {
-			// Reset height to auto to get the natural scrollHeight
 			textarea.style.height = 'auto';
-
-			// Calculate new height based on content
 			const newHeight = Math.min(textarea.scrollHeight, maxHeight);
 			textarea.style.height = `${newHeight}px`;
 		}
@@ -88,57 +63,271 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 		setValue(state.inputValue);
 	}, [state.inputValue]);
 
+	// 加载多模型配置
+	useEffect(() => {
+		const loadConfigs = async () => {
+			setIsLoadingConfigs(true);
+			const groups = await service.loadCompareGroups();
+			setCompareGroups(groups);
+			const templates = await service.loadCollaborationTemplates();
+			setCollaborationTemplates(templates);
+			setIsLoadingConfigs(false);
+		};
+		void loadConfigs();
+		const unwatch = service.watchMultiModelConfigs?.(() => { void loadConfigs(); });
+		return () => { unwatch?.(); };
+	}, [service]);
+
+	useEffect(() => {
+		const handleShortcut = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') {
+				if (showGroupManager) {
+					setShowGroupManager(false);
+					return;
+				}
+				if (showTemplateManager) {
+					setShowTemplateManager(false);
+					return;
+				}
+			}
+
+			if (!isMultiModel || (!event.ctrlKey && !event.metaKey)) {
+				return;
+			}
+
+			if (event.key === '1') {
+				event.preventDefault();
+				service.setLayoutMode('horizontal');
+			} else if (event.key === '2') {
+				event.preventDefault();
+				service.setLayoutMode('tabs');
+			} else if (event.key === '3') {
+				event.preventDefault();
+				service.setLayoutMode('vertical');
+			}
+		};
+		window.addEventListener('keydown', handleShortcut);
+		return () => window.removeEventListener('keydown', handleShortcut);
+	}, [isMultiModel, service, showGroupManager, showTemplateManager]);
+
 	const handleSubmit = async (event?: FormEvent) => {
 		event?.preventDefault();
 		await service.sendMessage(value);
 	};
 
-	const handleRemoveImage = (image: string) => {
-		service.removeSelectedImage(image);
-	};
+	const handleRemoveImage = (image: string) => service.removeSelectedImage(image);
+	const handleRemoveFile = (fileId: string) => service.removeSelectedFile(fileId);
+	const handleRemoveFolder = (folderId: string) => service.removeSelectedFolder(folderId);
+	const handleClearSelectedText = () => service.clearSelectedText();
 
-	const handleRemoveFile = (fileId: string) => {
-		service.removeSelectedFile(fileId);
-	};
-
-	const handleRemoveFolder = (folderId: string) => {
-		service.removeSelectedFolder(folderId);
-	};
-
-	const handleClearSelectedText = () => {
-		service.clearSelectedText();
-	};
-
-	// 模板选择相关处理函数
 	const handleTemplateSelect = async (templatePath: string) => {
 		await service.selectPromptTemplate(templatePath);
-		// 选择模板后，将焦点返回到输入框
 		textareaRef.current?.focus();
 	};
+	const handleTemplateSelectorClose = () => service.setTemplateSelectorVisibility(false);
+	const handleClearTemplate = () => service.clearSelectedPromptTemplate();
 
-	const handleTemplateSelectorClose = () => {
-		service.setTemplateSelectorVisibility(false);
-	};
-
-	const handleClearTemplate = () => {
-		service.clearSelectedPromptTemplate();
-	};
-
-	const handleTemplateButtonClick = () => {
-		service.setTemplateSelectorVisibility(true);
-	};
-
-	// 处理键盘事件 - 只在textarea中触发
 	const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-		// 处理中文输入法组合输入
-		if (event.nativeEvent.isComposing) {
-			return;
-		}
-		
+		if (event.nativeEvent.isComposing) return;
 		if (event.key === 'Enter' && !event.shiftKey) {
 			event.preventDefault();
 			handleSubmit();
 		}
+	};
+
+	// 多模型生成进度统计
+	const multiModelProgress = useMemo(() => {
+		if (!state.parallelResponses || !isMultiModel) return null;
+		const total = state.parallelResponses.responses.length;
+		const completed = state.parallelResponses.responses.filter((r) => r.isComplete).length;
+		const errors = state.parallelResponses.responses.filter((r) => r.isError).length;
+		const generating = total - completed - errors;
+		return { total, completed, errors, generating };
+	}, [state.parallelResponses, isMultiModel]);
+
+	const providers = service.getProviders();
+
+	// 共享的模板/文本标签组件
+	const renderInfoTags = () => (
+		<>
+			{state.selectedPromptTemplate && (
+				<div className="selected-template tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-purple-100 tw-text-purple-700 tw-rounded tw-text-xs tw-mb-2">
+					<Zap className="tw-size-3 tw-flex-shrink-0" />
+					<span className="tw-max-w-40 tw-truncate" title={state.selectedPromptTemplate.name}>
+						{localInstance.template_label || '模板'}: {state.selectedPromptTemplate.name}
+					</span>
+					<button
+						type="button"
+						className="tw-ml-1 tw-p-0 tw-text-purple-700 hover:tw-text-purple-900 tw-cursor-pointer"
+						onClick={(e) => { e.stopPropagation(); handleClearTemplate(); }}
+						title={localInstance.clear_template || '清除模板'}
+					>
+						<X className="tw-size-4" />
+					</button>
+				</div>
+			)}
+			{state.selectedText && (
+				<div className="selected-text tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-orange-100 tw-text-orange-700 tw-rounded tw-text-xs tw-mb-2">
+					<Highlighter className="tw-size-3 tw-flex-shrink-0" />
+					<span className="tw-max-w-60 tw-truncate" title={state.selectedText}>
+						{state.selectedText.length > 50 ? state.selectedText.substring(0, 50) + '...' : state.selectedText}
+					</span>
+					<button
+						type="button"
+						className="tw-ml-1 tw-p-0 tw-text-orange-700 hover:tw-text-orange-900 tw-cursor-pointer"
+						onClick={(e) => { e.stopPropagation(); handleClearSelectedText(); }}
+						title={localInstance.clear_selected_text || '清除选中文本'}
+					>
+						<X className="tw-size-4" />
+					</button>
+				</div>
+			)}
+		</>
+	);
+
+	// 共享的图片预览
+	const renderImagePreview = () => (
+		state.selectedImages.length > 0 ? (
+			<div className="selected-images tw-flex tw-flex-wrap tw-gap-2 tw-mb-2">
+				{state.selectedImages.map((image, index) => (
+					<div key={image} className="image-preview-container tw-relative">
+						<img src={image} alt={`selected-${index}`}
+							className="selected-image-preview tw-w-16 tw-h-16 tw-object-cover tw-rounded tw-border tw-border-gray-300" />
+						<button type="button"
+							className="remove-image-button tw-absolute tw-top-0 tw-right-0 tw-bg-red-500 tw-text-white tw-rounded-full tw-w-4 tw-h-4 tw-flex tw-items-center tw-justify-center tw-text-xs tw-cursor-pointer hover:tw-bg-red-600"
+							onClick={() => handleRemoveImage(image)}>
+							<X className="tw-size-3" />
+						</button>
+					</div>
+				))}
+			</div>
+		) : null
+	);
+
+	// 共享的文件标签
+	const renderFileTags = () => (
+		(state.selectedFiles.length > 0 || state.selectedFolders.length > 0) ? (
+			<div className="selected-files tw-flex tw-flex-wrap tw-gap-2 tw-mb-2">
+				{state.selectedFiles.map((file) => (
+					<div key={file.id}
+						className={`file-tag tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-rounded tw-text-xs tw-relative group ${
+							file.isAutoAdded ? 'tw-bg-green-100 tw-text-green-700' : 'tw-bg-gray-100 tw-text-gray-700'
+						}`}>
+						<FileText className="tw-size-3 tw-flex-shrink-0" />
+						<span className="tw-max-w-40 tw-truncate" title={file.path}>
+							{file.name}
+							{file.isAutoAdded && <span className="ml-1 tw-px-1 tw-bg-green-600 tw-text-white tw-rounded tw-text-[10px]">活跃</span>}
+							{file.extension === 'pdf' && <span className="ml-1 tw-px-1 tw-bg-blue-500 tw-text-white tw-rounded tw-text-[10px]">pdf</span>}
+							{file.extension === 'canvas' && <span className="ml-1 tw-px-1 tw-bg-green-500 tw-text-white tw-rounded tw-text-[10px]">canvas</span>}
+						</span>
+						<button type="button" className="tw-ml-1 tw-p-0 tw-text-muted hover:tw-text-foreground tw-cursor-pointer"
+							onClick={(e) => { e.stopPropagation(); handleRemoveFile(file.id); }} title={localInstance.delete_file || '删除文件'}>
+							<X className="tw-size-4" />
+						</button>
+					</div>
+				))}
+				{state.selectedFolders.map((folder) => (
+					<div key={folder.id} className="folder-tag tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-blue-100 tw-text-blue-700 tw-rounded tw-text-xs tw-relative group">
+						<Folder className="tw-size-3 tw-flex-shrink-0" />
+						<span className="tw-max-w-40 tw-truncate" title={folder.path}>{folder.name || folder.path}</span>
+						<button type="button" className="tw-ml-1 tw-p-0 tw-text-muted hover:tw-text-foreground tw-cursor-pointer"
+							onClick={(e) => { e.stopPropagation(); handleRemoveFolder(folder.id); }} title={localInstance.delete_folder || '删除文件夹'}>
+							<X className="tw-size-4" />
+						</button>
+					</div>
+				))}
+			</div>
+		) : null
+	);
+
+	// 模型选择器区域
+	const renderModelSelector = () => (
+		isLoadingConfigs ? (
+			<div className="parallel-response-skeleton" style={{ width: '180px', height: '26px' }} />
+		) : (
+		<MultiModelSelector
+			providers={providers}
+			selectedModelId={state.selectedModelId ?? ''}
+			selectedModels={state.selectedModels}
+			multiModelMode={state.multiModelMode}
+			layoutMode={state.layoutMode}
+			compareGroups={compareGroups}
+			collaborationTemplates={collaborationTemplates}
+			activeCompareGroupId={state.activeCompareGroupId}
+			activeCollaborationTemplateId={state.activeCollaborationTemplateId}
+			onSingleModelChange={(modelId) => service.setModel(modelId)}
+			onModelToggle={(tag) => {
+				if (state.selectedModels.includes(tag)) {
+					service.removeSelectedModel(tag);
+				} else {
+					service.addSelectedModel(tag);
+				}
+			}}
+			onModeChange={(mode) => service.setMultiModelMode(mode)}
+			onLayoutChange={(mode) => service.setLayoutMode(mode)}
+			onCompareGroupSelect={(groupId) => {
+				service.setActiveCompareGroup(groupId);
+				if (groupId) {
+					const group = compareGroups.find((g) => g.id === groupId);
+					if (group) service.setSelectedModels(group.modelTags);
+				}
+			}}
+			onCollaborationTemplateSelect={(templateId) => service.setActiveCollaborationTemplate(templateId)}
+			onOpenGroupManager={() => setShowGroupManager(true)}
+			onOpenTemplateManager={() => setShowTemplateManager(true)}
+		/>
+		)
+	);
+
+	// 多模型已选模型提示（对比模式下显示在输入框上方）
+	const renderSelectedModelsHint = () => {
+		if (state.multiModelMode === 'compare' && state.selectedModels.length > 0) {
+			return (
+				<div className="tw-flex tw-flex-wrap tw-gap-1 tw-mb-1">
+					{state.selectedModels.map((tag) => {
+						const p = providers.find((prov) => prov.tag === tag);
+						const vendorName = p ? availableVendors.find((v) => v.name === p.vendor)?.name : undefined;
+						return (
+							<ModelTag
+								key={tag}
+								modelTag={tag}
+								vendor={vendorName}
+								size="sm"
+								onClick={() => service.removeSelectedModel(tag)}
+							/>
+						);
+					})}
+				</div>
+			);
+		}
+		if (state.multiModelMode === 'compare' && state.selectedModels.length === 0) {
+			return (
+				<div className="tw-text-xs tw-text-muted tw-mb-1">
+					{localInstance.no_models_selected || '请至少选择一个模型'}
+				</div>
+			);
+		}
+		if (state.multiModelMode === 'collaborate' && state.activeCollaborationTemplateId) {
+			const tpl = collaborationTemplates.find((t) => t.id === state.activeCollaborationTemplateId);
+			if (tpl) {
+				return (
+					<div className="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-rounded tw-text-xs tw-mb-1"
+						style={{ backgroundColor: 'var(--background-modifier-hover)', color: 'var(--text-muted)' }}>
+						{(localInstance.collaboration_template_summary || '协作模板: {name}（{count} 步）')
+							.replace('{name}', tpl.name)
+							.replace('{count}', String(tpl.steps.length))}
+					</div>
+				);
+			}
+		}
+		if (state.multiModelMode === 'collaborate') {
+			return (
+				<div className="tw-text-xs tw-text-muted tw-mb-1">
+					{localInstance.select_or_create_collaboration_template || '请选择协作模板或创建新模板'}
+				</div>
+			);
+		}
+		return null;
 	};
 
 	return (
@@ -147,47 +336,10 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 				border: '1px solid var(--background-modifier-border)',
 				borderRadius: 'var(--radius-m)'
 			}} onSubmit={handleSubmit}>
-				{/* 显示当前选中的模板标签 */}
-				{state.selectedPromptTemplate && (
-					<div className="selected-template tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-purple-100 tw-text-purple-700 tw-rounded tw-text-xs tw-mb-2">
-						<Zap className="tw-size-3 tw-flex-shrink-0" />
-						<span className="tw-max-w-40 tw-truncate" title={state.selectedPromptTemplate.name}>
-							模板: {state.selectedPromptTemplate.name}
-						</span>
-						<button
-							type="button"
-							className="tw-ml-1 tw-p-0 tw-text-purple-700 hover:tw-text-purple-900 tw-cursor-pointer"
-							onClick={(e) => {
-								e.stopPropagation();
-								handleClearTemplate();
-							}}
-							title="清除模板"
-						>
-							<X className="tw-size-4" />
-						</button>
-					</div>
-				)}
+				{renderInfoTags()}
 
-				{/* 显示选中文本标签 */}
-				{state.selectedText && (
-					<div className="selected-text tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-orange-100 tw-text-orange-700 tw-rounded tw-text-xs tw-mb-2">
-						<Highlighter className="tw-size-3 tw-flex-shrink-0" />
-						<span className="tw-max-w-60 tw-truncate" title={state.selectedText}>
-							{state.selectedText.length > 50 ? state.selectedText.substring(0, 50) + '...' : state.selectedText}
-						</span>
-						<button
-							type="button"
-							className="tw-ml-1 tw-p-0 tw-text-orange-700 hover:tw-text-orange-900 tw-cursor-pointer"
-							onClick={(e) => {
-								e.stopPropagation();
-								handleClearSelectedText();
-							}}
-							title="清除选中文本"
-						>
-							<X className="tw-size-4" />
-						</button>
-					</div>
-				)}
+				{/* 多模型已选模型提示 */}
+				{!state.isGenerating && isMultiModel && renderSelectedModelsHint()}
 
 				{!state.isGenerating ? (
 					<>
@@ -195,189 +347,24 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 							ref={textareaRef}
 							className="tw-w-full tw-resize-none tw-p-3 tw-text-sm"
 							style={{
-								border: 'none',
-								outline: 'none',
-								background: 'transparent',
-								resize: 'none',
-								minHeight: '80px',
-								maxHeight: `${maxHeight}px`,
-								borderRadius: '0',
-								boxShadow: 'none',
-								marginBottom: '0',
-								overflowY: 'auto'
+								border: 'none', outline: 'none', background: 'transparent',
+								resize: 'none', minHeight: '80px', maxHeight: `${maxHeight}px`,
+								borderRadius: '0', boxShadow: 'none', marginBottom: '0', overflowY: 'auto'
 							}}
 							value={value}
-							onChange={(event) => {
-								setValue(event.target.value);
-								service.setInputValue(event.target.value);
-							}}
+							onChange={(event) => { setValue(event.target.value); service.setInputValue(event.target.value); }}
 							onKeyDown={handleKeyDown}
-							placeholder="输入消息，按 Enter 发送，Shift+Enter 换行"
+							placeholder={localInstance.input_description_here || '输入消息，按 Enter 发送，Shift+Enter 换行'}
 						/>
-						{/* 图片预览区域 */}
-						{state.selectedImages.length > 0 && (
-							<div className="selected-images tw-flex tw-flex-wrap tw-gap-2 tw-mb-2">
-								{state.selectedImages.map((image, index) => (
-									<div key={image} className="image-preview-container tw-relative">
-										<img
-											src={image}
-											alt={`selected-${index}`}
-											className="selected-image-preview tw-w-16 tw-h-16 tw-object-cover tw-rounded tw-border tw-border-gray-300"
-										/>
-										<button
-											type="button"
-											className="remove-image-button tw-absolute tw-top-0 tw-right-0 tw-bg-red-500 tw-text-white tw-rounded-full tw-w-4 tw-h-4 tw-flex tw-items-center tw-justify-center tw-text-xs tw-cursor-pointer hover:tw-bg-red-600"
-											onClick={() => handleRemoveImage(image)}
-										>
-											<X className="tw-size-3" />
-										</button>
-									</div>
-								))}
-							</div>
-						)}
-
-						{/* 文件标签区域 */}
-						{(state.selectedFiles.length > 0 || state.selectedFolders.length > 0) && (
-							<div className="selected-files tw-flex tw-flex-wrap tw-gap-2 tw-mb-2">
-								{state.selectedFiles.map((file) => (
-									<div 
-										key={file.id} 
-										className={`file-tag tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-rounded tw-text-xs tw-relative group ${
-											file.isAutoAdded 
-												? 'tw-bg-green-100 tw-text-green-700' 
-												: 'tw-bg-gray-100 tw-text-gray-700'
-										}`}
-									>
-										<FileText className="tw-size-3 tw-flex-shrink-0" />
-										<span className="tw-max-w-40 tw-truncate" title={file.path}>
-											{file.name}
-											{file.isAutoAdded && (
-												<span className="ml-1 tw-px-1 tw-bg-green-600 tw-text-white tw-rounded tw-text-[10px]">活跃</span>
-											)}
-											{file.extension === 'pdf' && (
-												<span className="ml-1 tw-px-1 tw-bg-blue-500 tw-text-white tw-rounded tw-text-[10px]">pdf</span>
-											)}
-											{file.extension === 'canvas' && (
-												<span className="ml-1 tw-px-1 tw-bg-green-500 tw-text-white tw-rounded tw-text-[10px]">canvas</span>
-											)}
-										</span>
-										<button
-											type="button"
-											className="tw-ml-1 tw-p-0 tw-text-muted hover:tw-text-foreground tw-cursor-pointer"
-											onClick={(e) => {
-												e.stopPropagation();
-												handleRemoveFile(file.id);
-											}}
-											title="删除文件"
-										>
-											<X className="tw-size-4" />
-										</button>
-									</div>
-								))}
-								{state.selectedFolders.map((folder) => (
-									<div key={folder.id} className="folder-tag tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-blue-100 tw-text-blue-700 tw-rounded tw-text-xs tw-relative group">
-										<Folder className="tw-size-3 tw-flex-shrink-0" />
-										<span className="tw-max-w-40 tw-truncate" title={folder.path}>
-											{folder.name || folder.path}
-										</span>
-										<button
-											type="button"
-											className="tw-ml-1 tw-p-0 tw-text-muted hover:tw-text-foreground tw-cursor-pointer"
-											onClick={(e) => {
-												e.stopPropagation();
-												handleRemoveFolder(folder.id);
-											}}
-											title="删除文件夹"
-										>
-											<X className="tw-size-4" />
-										</button>
-									</div>
-								))}
-							</div>
-						)}
+						{renderImagePreview()}
+						{renderFileTags()}
 						<div className="tw-flex tw-items-center tw-justify-between tw-mt-0">
-							<div className="tw-flex tw-items-center tw-gap-2">
-								<ModelSelector
-									providers={service.getProviders()}
-									value={state.selectedModelId ?? ''}
-									onChange={(modelId) => service.setModel(modelId)}
-								/>
-								<div className="tw-flex tw-items-center tw-gap-1 tw-flex-wrap">
-									<button
-										type="button"
-										aria-label="模型推理"
-										onClick={() => service.setReasoningToggle(!state.enableReasoningToggle)}
-										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-p-1 tw-cursor-pointer tw-rounded"
-										style={{
-											backgroundColor: state.enableReasoningToggle ? 'var(--interactive-accent)' : 'transparent',
-											color: state.enableReasoningToggle ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)'
-										}}
-										onMouseEnter={(e) => {
-											if (!state.enableReasoningToggle) {
-												e.currentTarget.style.color = 'var(--interactive-accent)';
-											}
-										}}
-										onMouseLeave={(e) => {
-											if (!state.enableReasoningToggle) {
-												e.currentTarget.style.color = 'var(--text-muted)';
-											}
-										}}
-									>
-										<Brain className="tw-size-4" />
-									</button>
-									<button
-										type="button"
-										aria-label="联网搜索"
-										onClick={() => service.setWebSearchToggle(!state.enableWebSearchToggle)}
-										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-p-1 tw-cursor-pointer tw-rounded"
-										style={{
-											backgroundColor: state.enableWebSearchToggle ? 'var(--interactive-accent)' : 'transparent',
-											color: state.enableWebSearchToggle ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)'
-										}}
-										onMouseEnter={(e) => {
-											if (!state.enableWebSearchToggle) {
-												e.currentTarget.style.color = 'var(--interactive-accent)';
-											}
-										}}
-										onMouseLeave={(e) => {
-											if (!state.enableWebSearchToggle) {
-												e.currentTarget.style.color = 'var(--text-muted)';
-											}
-										}}
-									>
-										<Search className="tw-size-4" />
-									</button>
-									<button
-										type="button"
-										aria-label={templateSystemPromptLabel}
-										title={templateSystemPromptDescription}
-										onClick={() => service.setTemplateAsSystemPromptToggle(!state.enableTemplateAsSystemPrompt)}
-										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-p-1 tw-cursor-pointer tw-rounded"
-										style={{
-											backgroundColor: state.enableTemplateAsSystemPrompt ? 'var(--interactive-accent)' : 'transparent',
-											color: state.enableTemplateAsSystemPrompt ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)'
-										}}
-										onMouseEnter={(e) => {
-											if (!state.enableTemplateAsSystemPrompt) {
-												e.currentTarget.style.color = 'var(--interactive-accent)';
-											}
-										}}
-										onMouseLeave={(e) => {
-											if (!state.enableTemplateAsSystemPrompt) {
-												e.currentTarget.style.color = 'var(--text-muted)';
-											}
-										}}
-									>
-										<FileText className="tw-size-4" />
-									</button>
-								</div>
+							<div className="tw-flex tw-items-center tw-gap-2" style={{ flex: 1, minWidth: 0 }}>
+								{renderModelSelector()}
 							</div>
 							<div className="tw-flex tw-items-center tw-gap-2">
 								<span
-									onClick={(e) => {
-										e.preventDefault();
-										handleSubmit();
-									}}
+									onClick={(e) => { e.preventDefault(); handleSubmit(); }}
 									className="tw-cursor-pointer tw-text-muted hover:tw-text-accent tw-flex tw-items-center"
 									aria-label={state.activeSession?.messages.some((msg) => msg.role !== 'system') ? 'Chat' : 'Save'}
 								>
@@ -389,245 +376,72 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 					</>
 				) : (
 					<>
-						{/* 显示当前选中的模板标签 */}
-						{state.selectedPromptTemplate && (
-							<div className="selected-template tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-purple-100 tw-text-purple-700 tw-rounded tw-text-xs tw-mb-2">
-								<Zap className="tw-size-3 tw-flex-shrink-0" />
-								<span className="tw-max-w-40 tw-truncate" title={state.selectedPromptTemplate.name}>
-									模板: {state.selectedPromptTemplate.name}
-								</span>
-								<button
-									type="button"
-									className="tw-ml-1 tw-p-0 tw-text-purple-700 hover:tw-text-purple-900 tw-cursor-pointer"
-									onClick={(e) => {
-										e.stopPropagation();
-										handleClearTemplate();
-									}}
-									title="清除模板"
-								>
-									<X className="tw-size-4" />
-								</button>
-							</div>
-						)}
-
-						{/* 显示选中文本标签 */}
-						{state.selectedText && (
-							<div className="selected-text tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-orange-100 tw-text-orange-700 tw-rounded tw-text-xs tw-mb-2">
-								<Highlighter className="tw-size-3 tw-flex-shrink-0" />
-								<span className="tw-max-w-60 tw-truncate" title={state.selectedText}>
-									{state.selectedText.length > 50 ? state.selectedText.substring(0, 50) + '...' : state.selectedText}
-								</span>
-								<button
-									type="button"
-									className="tw-ml-1 tw-p-0 tw-text-orange-700 hover:tw-text-orange-900 tw-cursor-pointer"
-									onClick={(e) => {
-										e.stopPropagation();
-										handleClearSelectedText();
-									}}
-									title="清除选中文本"
-								>
-									<X className="tw-size-4" />
-								</button>
-							</div>
-						)}
-
-								<textarea
+						<textarea
 							ref={textareaRef}
 							className="tw-w-full tw-resize-none tw-p-3 tw-text-sm"
 							style={{
-								border: 'none',
-								outline: 'none',
-								background: 'transparent',
-								resize: 'none',
-								minHeight: '80px',
-								maxHeight: `${maxHeight}px`,
-								borderRadius: '0',
-								boxShadow: 'none',
-								marginBottom: '0',
-								overflowY: 'auto'
+								border: 'none', outline: 'none', background: 'transparent',
+								resize: 'none', minHeight: '80px', maxHeight: `${maxHeight}px`,
+								borderRadius: '0', boxShadow: 'none', marginBottom: '0', overflowY: 'auto'
 							}}
 							value={value}
-							onChange={(event) => {
-								setValue(event.target.value);
-								service.setInputValue(event.target.value);
-							}}
+							onChange={(event) => { setValue(event.target.value); service.setInputValue(event.target.value); }}
 							onKeyDown={handleKeyDown}
-							placeholder="输入消息，按 Enter 发送，Shift+Enter 换行"
+							placeholder={localInstance.input_description_here || '输入消息，按 Enter 发送，Shift+Enter 换行'}
 							disabled={state.isGenerating}
 						/>
-						{/* 图片预览区域 */}
-						{state.selectedImages.length > 0 && (
-							<div className="selected-images tw-flex tw-flex-wrap tw-gap-2 tw-mb-2">
-								{state.selectedImages.map((image, index) => (
-									<div key={image} className="image-preview-container tw-relative">
-										<img
-											src={image}
-											alt={`selected-${index}`}
-											className="selected-image-preview tw-w-16 tw-h-16 tw-object-cover tw-rounded tw-border tw-border-gray-300"
-										/>
-										<button
-											type="button"
-											className="remove-image-button tw-absolute tw-top-0 tw-right-0 tw-bg-red-500 tw-text-white tw-rounded-full tw-w-4 tw-h-4 tw-flex tw-items-center tw-justify-center tw-text-xs tw-cursor-pointer hover:tw-bg-red-600"
-											onClick={() => handleRemoveImage(image)}
-										>
-											<X className="tw-size-3" />
-										</button>
-									</div>
-								))}
-							</div>
-						)}
-
-						{/* 文件标签区域 */}
-						{(state.selectedFiles.length > 0 || state.selectedFolders.length > 0) && (
-							<div className="selected-files tw-flex tw-flex-wrap tw-gap-2 tw-mb-2">
-								{state.selectedFiles.map((file) => (
-									<div 
-										key={file.id} 
-										className={`file-tag tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-rounded tw-text-xs tw-relative group ${
-											file.isAutoAdded 
-												? 'tw-bg-green-100 tw-text-green-700' 
-												: 'tw-bg-gray-100 tw-text-gray-700'
-										}`}
-									>
-										<FileText className="tw-size-3 tw-flex-shrink-0" />
-										<span className="tw-max-w-40 tw-truncate" title={file.path}>
-											{file.name}
-											{file.isAutoAdded && (
-												<span className="ml-1 tw-px-1 tw-bg-green-600 tw-text-white tw-rounded tw-text-[10px]">活跃</span>
-											)}
-											{file.extension === 'pdf' && (
-												<span className="ml-1 tw-px-1 tw-bg-blue-500 tw-text-white tw-rounded tw-text-[10px]">pdf</span>
-											)}
-											{file.extension === 'canvas' && (
-												<span className="ml-1 tw-px-1 tw-bg-green-500 tw-text-white tw-rounded tw-text-[10px]">canvas</span>
-											)}
-										</span>
-										<button
-											type="button"
-											className="tw-ml-1 tw-p-0 tw-text-muted hover:tw-text-foreground tw-cursor-pointer"
-											onClick={(e) => {
-												e.stopPropagation();
-												handleRemoveFile(file.id);
-											}}
-											title="删除文件"
-										>
-											<X className="tw-size-4" />
-										</button>
-									</div>
-								))}
-								{state.selectedFolders.map((folder) => (
-									<div key={folder.id} className="folder-tag tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-bg-blue-100 tw-text-blue-700 tw-rounded tw-text-xs tw-relative group">
-										<Folder className="tw-size-3 tw-flex-shrink-0" />
-										<span className="tw-max-w-40 tw-truncate" title={folder.path}>
-											{folder.name || folder.path}
-										</span>
-										<button
-											type="button"
-											className="tw-ml-1 tw-p-0 tw-text-muted hover:tw-text-foreground tw-cursor-pointer"
-											onClick={(e) => {
-												e.stopPropagation();
-												handleRemoveFolder(folder.id);
-											}}
-											title="删除文件夹"
-										>
-											<X className="tw-size-4" />
-										</button>
-									</div>
-								))}
-							</div>
-						)}
+						{renderImagePreview()}
+						{renderFileTags()}
 						<div className="tw-flex tw-items-center tw-justify-between tw-mt-0">
-							<div className="tw-flex tw-items-center tw-gap-2">
-								<ModelSelector
-									providers={service.getProviders()}
-									value={state.selectedModelId ?? ''}
-									onChange={(modelId) => service.setModel(modelId)}
-								/>
-								<div className="tw-flex tw-items-center tw-gap-1 tw-flex-wrap">
-									<button
-										type="button"
-										aria-label="模型推理"
-										onClick={() => service.setReasoningToggle(!state.enableReasoningToggle)}
-										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-p-1 tw-cursor-pointer tw-rounded"
-										style={{
-											backgroundColor: state.enableReasoningToggle ? 'var(--interactive-accent)' : 'transparent',
-											color: state.enableReasoningToggle ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)'
-										}}
-										onMouseEnter={(e) => {
-											if (!state.enableReasoningToggle) {
-												e.currentTarget.style.color = 'var(--interactive-accent)';
-											}
-										}}
-										onMouseLeave={(e) => {
-											if (!state.enableReasoningToggle) {
-												e.currentTarget.style.color = 'var(--text-muted)';
-											}
-										}}
-									>
-										<Brain className="tw-size-4" />
-									</button>
-									<button
-										type="button"
-										aria-label="联网搜索"
-										onClick={() => service.setWebSearchToggle(!state.enableWebSearchToggle)}
-										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-p-1 tw-cursor-pointer tw-rounded"
-										style={{
-											backgroundColor: state.enableWebSearchToggle ? 'var(--interactive-accent)' : 'transparent',
-											color: state.enableWebSearchToggle ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)'
-										}}
-										onMouseEnter={(e) => {
-											if (!state.enableWebSearchToggle) {
-												e.currentTarget.style.color = 'var(--interactive-accent)';
-											}
-										}}
-										onMouseLeave={(e) => {
-											if (!state.enableWebSearchToggle) {
-												e.currentTarget.style.color = 'var(--text-muted)';
-											}
-										}}
-									>
-										<Search className="tw-size-4" />
-									</button>
-									<button
-										type="button"
-										aria-label={templateSystemPromptLabel}
-										title={templateSystemPromptDescription}
-										onClick={() => service.setTemplateAsSystemPromptToggle(!state.enableTemplateAsSystemPrompt)}
-										className="tw-inline-flex tw-items-center tw-justify-center tw-border tw-border-transparent tw-p-1 tw-cursor-pointer tw-rounded"
-										style={{
-											backgroundColor: state.enableTemplateAsSystemPrompt ? 'var(--interactive-accent)' : 'transparent',
-											color: state.enableTemplateAsSystemPrompt ? 'var(--text-on-accent, #fff)' : 'var(--text-muted)'
-										}}
-										onMouseEnter={(e) => {
-											if (!state.enableTemplateAsSystemPrompt) {
-												e.currentTarget.style.color = 'var(--interactive-accent)';
-											}
-										}}
-										onMouseLeave={(e) => {
-											if (!state.enableTemplateAsSystemPrompt) {
-												e.currentTarget.style.color = 'var(--text-muted)';
-											}
-										}}
-									>
-										<FileText className="tw-size-4" />
-									</button>
-								</div>
+							<div className="tw-flex tw-items-center tw-gap-2" style={{ flex: 1, minWidth: 0 }}>
+								{renderModelSelector()}
 							</div>
 							<div className="tw-flex tw-items-center tw-gap-2">
-								<span
-									onClick={() => service.stopGeneration()}
-									className="tw-cursor-pointer tw-text-muted hover:tw-text-accent tw-flex tw-items-center"
-									aria-label="Stop"
-								>
-									<StopCircle className="tw-size-4" />
-									<span className="tw-ml-1 tw-text-xs">Stop</span>
-								</span>
+								{/* 停止控制 */}
+								{isMultiModel && multiModelProgress ? (
+									<div className="multi-model-stop-bar tw-flex tw-items-center tw-gap-2">
+										{multiModelProgress.generating > 0 && (
+											<span className="tw-text-xs tw-text-muted">
+												{(localInstance.generating_progress || '{completed}/{total} 生成中')
+													.replace('{completed}', String(multiModelProgress.completed + multiModelProgress.errors))
+													.replace('{total}', String(multiModelProgress.total))}
+											</span>
+										)}
+										<span
+											onClick={() => service.stopAllGeneration()}
+											className="tw-cursor-pointer tw-text-muted hover:tw-text-accent tw-flex tw-items-center"
+											aria-label={localInstance.stop_all || '停止所有'}
+										>
+											<StopCircle className="tw-size-4" />
+											<span className="tw-ml-1 tw-text-xs">{localInstance.stop_all || '停止所有'}</span>
+										</span>
+										{multiModelProgress.errors > 0 && (
+											<span
+												onClick={() => service.retryAllFailed()}
+												className="tw-cursor-pointer tw-flex tw-items-center"
+												style={{ color: 'var(--text-error, #dc2626)' }}
+												aria-label={localInstance.retry_failed || '重试失败'}
+											>
+												<RotateCw style={{ width: 14, height: 14 }} />
+												<span className="tw-ml-1 tw-text-xs">{localInstance.retry_failed || '重试失败'}({multiModelProgress.errors})</span>
+											</span>
+										)}
+									</div>
+								) : (
+									<span
+										onClick={() => service.stopGeneration()}
+										className="tw-cursor-pointer tw-text-muted hover:tw-text-accent tw-flex tw-items-center"
+										aria-label="Stop"
+									>
+										<StopCircle className="tw-size-4" />
+										<span className="tw-ml-1 tw-text-xs">Stop</span>
+									</span>
+								)}
 
-								{/* 图片生成状态提示 */}
 								{isImageGenerationIntent && (
 									<div className="tw-flex tw-items-center tw-gap-1 tw-ml-2 tw-px-2 tw-py-1 tw-bg-purple-100 tw-text-purple-700 tw-rounded tw-text-xs">
 										<Palette className="tw-size-3" />
-										<span>图片生成模式</span>
+										<span>{localInstance.image_generation_mode || '图片生成模式'}</span>
 									</div>
 								)}
 							</div>
@@ -636,13 +450,33 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 				)}
 			</form>
 
-		{/* 模板选择器 */}
-		<TemplateSelector
-			visible={state.showTemplateSelector}
-			onSelect={handleTemplateSelect}
-			onClose={handleTemplateSelectorClose}
-			inputValue={value}
-		/>
-			</Fragment>
+			{/* 模板选择器 */}
+			<TemplateSelector
+				visible={state.showTemplateSelector}
+				onSelect={handleTemplateSelect}
+				onClose={handleTemplateSelectorClose}
+				inputValue={value}
+			/>
+
+			{/* 管理弹窗 */}
+			<Suspense fallback={null}>
+				{showGroupManager && (
+					<CompareGroupManagerDialog
+						isOpen={showGroupManager}
+						onClose={() => setShowGroupManager(false)}
+						service={service}
+						providers={providers}
+					/>
+				)}
+				{showTemplateManager && (
+					<CollabTemplateManagerDialog
+						isOpen={showTemplateManager}
+						onClose={() => setShowTemplateManager(false)}
+						service={service}
+						providers={providers}
+					/>
+				)}
+			</Suspense>
+		</Fragment>
 	);
 };
