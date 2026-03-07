@@ -11,6 +11,7 @@ import { v4 } from "uuid";
 import { CreateFileModal } from "src/component/modal/CreateFileModal";
 import { Files } from "src/utils/Files";
 import { ServiceContainer } from "src/service/ServiceContainer";
+import { recordFormifyTestEvent } from "src/testing/FormifyTestHooks";
 
 export class ApplicationCommandService {
 
@@ -24,6 +25,7 @@ export class ApplicationCommandService {
             name: localInstance.open_form,
             icon: "file-spreadsheet",
             callback: () => {
+                recordFormifyTestEvent("command-open-form-invoked");
                 const modal = new CFormSuggestModal(app,
                     (file) => {
                         this.services?.formService.open(file, app);
@@ -37,6 +39,7 @@ export class ApplicationCommandService {
             name: localInstance.create_form,
             icon: "file-spreadsheet",
             callback: () => {
+                recordFormifyTestEvent("command-create-form-invoked");
                 this.createFormFile(plugin)
             },
         });

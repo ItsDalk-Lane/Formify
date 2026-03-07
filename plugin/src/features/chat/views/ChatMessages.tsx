@@ -4,6 +4,7 @@ import { ChatService } from '../services/ChatService';
 import { MessageItem } from '../components/MessageItem';
 import { ParallelResponseViewer } from '../components/ParallelResponseViewer';
 import { CompareTabBar } from '../components/CompareTabBar';
+import { mergeMessagesWithParallelResponses } from '../utils/parallelMessages';
 
 interface ChatMessagesProps {
 	service: ChatService;
@@ -55,10 +56,15 @@ function getConversationForModel(messages: ChatMessage[], modelTag: string): Cha
 
 export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 	const scrollRef = useRef<HTMLDivElement>(null);
+	const activeGeneratingMessageIdRef = useRef<string | null>(null);
 	const latestMessageId = state.activeSession?.messages.last()?.id;
 	const latestMessageContent = state.activeSession?.messages.last()?.content;
 	const isGenerating = state.isGenerating;
 	const parallelResponsesContent = state.parallelResponses?.responses?.map((r) => r.content).join('');
+	const messages = state.activeSession?.messages ?? [];
+	const isMultiModel = state.multiModelMode !== 'single';
+	const isCompareMode = state.multiModelMode === 'compare';
+	const layoutMode = state.layoutMode;
 
 	// 对比模式：标签页布局的当前激活标签
 	const [activeTabModel, setActiveTabModel] = useState<string | null>(null);
@@ -69,40 +75,92 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 		container.scrollTo({ top: container.scrollHeight, behavior });
 	}, []);
 
-	useEffect(() => {
-		if (latestMessageId) scrollToBottom('smooth');
-	}, [latestMessageId, scrollToBottom]);
+	const findMessageElement = useCallback((messageId: string): HTMLElement | null => {
+		const container = scrollRef.current;
+		if (!container) return null;
+		const elements = container.querySelectorAll<HTMLElement>('[data-chat-message-id]');
+		for (const element of elements) {
+			if (element.dataset.chatMessageId === messageId) {
+				return element;
+			}
+		}
+		return null;
+	}, []);
+
+	const focusMessageIntoView = useCallback((messageId: string, behavior: ScrollBehavior = 'smooth') => {
+		const container = scrollRef.current;
+		const element = findMessageElement(messageId);
+		if (!container || !element) return;
+
+		const padding = 16;
+		const containerRect = container.getBoundingClientRect();
+		const elementRect = element.getBoundingClientRect();
+		const targetTop = container.scrollTop + (elementRect.top - containerRect.top) - padding;
+
+		container.scrollTo({
+			top: Math.max(0, targetTop),
+			behavior
+		});
+	}, [findMessageElement]);
+
+	const followMessageStream = useCallback((messageId: string, behavior: ScrollBehavior = 'auto') => {
+		const container = scrollRef.current;
+		const element = findMessageElement(messageId);
+		if (!container || !element) return;
+
+		const padding = 24;
+		const containerRect = container.getBoundingClientRect();
+		const elementRect = element.getBoundingClientRect();
+		const overflowTop = elementRect.top - (containerRect.top + padding);
+		const overflowBottom = elementRect.bottom - (containerRect.bottom - padding);
+
+		if (overflowTop < 0) {
+			container.scrollBy({ top: overflowTop, behavior });
+			return;
+		}
+
+		if (overflowBottom > 0) {
+			container.scrollBy({ top: overflowBottom, behavior });
+		}
+	}, [findMessageElement]);
 
 	useEffect(() => {
-		if (isGenerating && (latestMessageContent || parallelResponsesContent)) {
+		if (latestMessageId && !isCompareMode) scrollToBottom('smooth');
+	}, [latestMessageId, isCompareMode, scrollToBottom]);
+
+	useEffect(() => {
+		if (!isCompareMode && isGenerating && (latestMessageContent || parallelResponsesContent)) {
 			scrollToBottom('smooth');
 		}
-	}, [latestMessageContent, parallelResponsesContent, isGenerating, scrollToBottom]);
+	}, [latestMessageContent, parallelResponsesContent, isGenerating, isCompareMode, scrollToBottom]);
 
 	useEffect(() => {
-		if (!isGenerating && latestMessageId) {
+		if (!isCompareMode && !isGenerating && latestMessageId) {
 			setTimeout(() => scrollToBottom('smooth'), 100);
 		}
-	}, [isGenerating, latestMessageId, scrollToBottom]);
-
-	const messages = state.activeSession?.messages ?? [];
-	const isMultiModel = state.multiModelMode !== 'single';
-	const isCompareMode = state.multiModelMode === 'compare';
-	const layoutMode = state.layoutMode;
+	}, [isGenerating, latestMessageId, isCompareMode, scrollToBottom]);
 
 	const filteredMessages = useMemo(
 		() => messages.filter((m) => !m.metadata?.hidden),
 		[messages]
+	);
+	const displayMessages = useMemo(
+		() =>
+			mergeMessagesWithParallelResponses(
+				filteredMessages,
+				isCompareMode ? state.parallelResponses : undefined
+			),
+		[filteredMessages, isCompareMode, state.parallelResponses]
 	);
 
 	// 对比模式共享逻辑：可用模型列表
 	const availableModels = useMemo(() => {
 		const fromState = state.selectedModels ?? [];
 		const fromMessages = [...new Set(
-			messages.filter(m => m.role === 'assistant' && m.modelTag).map(m => m.modelTag!)
+			displayMessages.filter(m => m.role === 'assistant' && m.modelTag).map(m => m.modelTag!)
 		)];
 		return [...new Set([...fromState, ...fromMessages])];
-	}, [state.selectedModels, messages]);
+	}, [state.selectedModels, displayMessages]);
 
 	// 对比模式共享逻辑：流式生成状态派生
 	const streamingTags = useMemo(() => {
@@ -147,9 +205,48 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 		return streamingTags.has(msg.modelTag ?? '');
 	}, [isGenerating, state.parallelResponses, streamingTags]);
 
+	const generatingMessageId = useMemo(() => {
+		const generatingMessages = displayMessages.filter((message) => isMessageGenerating(message));
+		if (generatingMessages.length === 0) {
+			return null;
+		}
+
+		if (layoutMode === 'tabs' && activeTabModel) {
+			return generatingMessages.find((message) => message.modelTag === activeTabModel)?.id
+				?? generatingMessages[0]?.id
+				?? null;
+		}
+
+		return generatingMessages.length === 1
+			? generatingMessages[0]?.id ?? null
+			: generatingMessages[generatingMessages.length - 1]?.id ?? null;
+	}, [displayMessages, isMessageGenerating, layoutMode, activeTabModel]);
+
+	useEffect(() => {
+		if (!isCompareMode || !isGenerating || !generatingMessageId) {
+			activeGeneratingMessageIdRef.current = null;
+			return;
+		}
+
+		if (activeGeneratingMessageIdRef.current !== generatingMessageId) {
+			activeGeneratingMessageIdRef.current = generatingMessageId;
+			focusMessageIntoView(generatingMessageId, 'smooth');
+			return;
+		}
+
+		followMessageStream(generatingMessageId, 'auto');
+	}, [
+		isCompareMode,
+		isGenerating,
+		generatingMessageId,
+		parallelResponsesContent,
+		focusMessageIntoView,
+		followMessageStream
+	]);
+
 	const grouped = useMemo(
-		() => (isMultiModel ? groupMessagesByParallelId(filteredMessages) : null),
-		[filteredMessages, isMultiModel]
+		() => (isMultiModel ? groupMessagesByParallelId(displayMessages) : null),
+		[displayMessages, isMultiModel]
 	);
 
 	const containerClasses = useMemo(
@@ -162,7 +259,7 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 
 	// ==================== 标签页布局 ====================
 	if (isCompareMode && layoutMode === 'tabs') {
-		const tabMessages = activeTabModel ? getConversationForModel(filteredMessages, activeTabModel) : [];
+		const tabMessages = activeTabModel ? getConversationForModel(displayMessages, activeTabModel) : [];
 
 		return (
 			<div className={containerClasses}>
@@ -274,7 +371,7 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 		);
 	}
 
-	// ==================== 协作模式 / 单模型模式（保持原有逻辑） ====================
+	// ==================== 单模型模式（保持原有逻辑） ====================
 	return (
 		<div className={containerClasses}>
 			<div
@@ -291,7 +388,7 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 									service={service}
 									isGenerating={
 										entry.message.role === 'assistant' &&
-										entry.message.id === filteredMessages[filteredMessages.length - 1]?.id &&
+										entry.message.id === displayMessages[displayMessages.length - 1]?.id &&
 										isGenerating
 									}
 								/>
@@ -313,14 +410,14 @@ export const ChatMessages = ({ state, service }: ChatMessagesProps) => {
 						);
 					})
 				) : (
-					filteredMessages.map((message, index) => (
+					displayMessages.map((message, index) => (
 						<MessageItem
 							key={message.id}
 							message={message}
 							service={service}
 							isGenerating={
 								message.role === 'assistant' &&
-								index === filteredMessages.length - 1 &&
+								index === displayMessages.length - 1 &&
 								isGenerating
 							}
 						/>

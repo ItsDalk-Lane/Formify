@@ -172,7 +172,7 @@ export class PathResolverService {
 		query: string,
 		options: PathResolutionOptions
 	): Promise<PathMatchResult[]> {
-		const allFiles = PathMatcher.getAllFilesAndFolders(this.app);
+		const allFiles = PathMatcher.getAllFilesAndFolders(this.app.vault);
 		const matches = PathMatcher.matchPaths(query, allFiles);
 
 		const minScore = options.minScore ?? this.defaultMinScore;

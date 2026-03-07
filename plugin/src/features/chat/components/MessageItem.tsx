@@ -6,6 +6,7 @@ import type { ChatMessage } from '../types/chat';
 import { ChatService } from '../services/ChatService';
 import { MessageService } from '../services/MessageService';
 import { renderMarkdownContent, parseContentBlocks, ContentBlock } from '../utils/markdown';
+import { getEditableUserMessageContent } from '../utils/userMessageEditing';
 import { Notice } from 'obsidian';
 import { ModelTag } from './ModelTag';
 import { availableVendors } from 'src/features/tars/settings';
@@ -162,9 +163,11 @@ export const MessageItem = ({ message, service, isGenerating, hideModelTag }: Me
 	const helper = useMemo(() => new MessageService(), []);
 	const [copied, setCopied] = useState(false);
 	const [editing, setEditing] = useState(false);
-	const [draft, setDraft] = useState(message.content);
+	const editableContent = useMemo(() => getEditableUserMessageContent(message), [message]);
+	const [draft, setDraft] = useState(editableContent);
 	const [previewImage, setPreviewImage] = useState<string | null>(null);
 	const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
+	const isTransient = message.metadata?.transient === true;
 
 	const timestamp = useMemo(() => helper.formatTimestamp(message.timestamp), [helper, message.timestamp]);
 	
@@ -173,6 +176,12 @@ export const MessageItem = ({ message, service, isGenerating, hideModelTag }: Me
 		const blocks = parseContentBlocks(message.content);
 		setContentBlocks(blocks);
 	}, [message.content]);
+
+	useEffect(() => {
+		if (!editing) {
+			setDraft(editableContent);
+		}
+	}, [editableContent, editing]);
 
 	const handleCopy = async () => {
 		try {
@@ -198,7 +207,7 @@ export const MessageItem = ({ message, service, isGenerating, hideModelTag }: Me
 	};
 
 	const handleCancelEdit = () => {
-		setDraft(message.content); // 恢复原始内容
+		setDraft(editableContent);
 		setEditing(false);
 	};
 
@@ -292,7 +301,10 @@ export const MessageItem = ({ message, service, isGenerating, hideModelTag }: Me
 
 	return (
 		<>
-			<div className={`group tw-mx-2 tw-my-1 tw-rounded-md tw-p-2 ${roleClass} ${message.isError ? 'chat-message--error' : ''}`}>
+			<div
+				className={`group tw-mx-2 tw-my-1 tw-rounded-md tw-p-2 ${roleClass} ${message.isError ? 'chat-message--error' : ''}`}
+				data-chat-message-id={message.id}
+			>
 				{/* 显示图片 */}
 				{message.images && message.images.length > 0 && (
 					<div className="message-images tw-mb-2 tw-flex tw-flex-wrap tw-gap-2">
@@ -409,8 +421,8 @@ export const MessageItem = ({ message, service, isGenerating, hideModelTag }: Me
 						})
 					)}
 				</div>
-				{/* 只在AI消息非生成状态或非AI消息时显示元数据 */}
-				{(message.role !== 'assistant' || !isGenerating) && (
+				{/* 临时消息在落盘前不展示操作区，避免对不存在的消息执行操作 */}
+				{!isTransient && (message.role !== 'assistant' || !isGenerating) && (
 					<div className="chat-message__meta tw-flex tw-items-center tw-justify-between">
 						<span className="tw-text-xs tw-text-faint">{timestamp}</span>
 						<div className="chat-message__actions tw-flex tw-items-center tw-gap-2 tw-opacity-100 hover:tw-opacity-100 tw-transition-opacity">
@@ -421,7 +433,10 @@ export const MessageItem = ({ message, service, isGenerating, hideModelTag }: Me
 										{copied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
 									</span>
 									{!editing && (
-										<span onClick={() => setEditing(true)} aria-label="编辑消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+										<span onClick={() => {
+											setDraft(editableContent);
+											setEditing(true);
+										}} aria-label="编辑消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 											<PenSquare className="tw-size-4" />
 										</span>
 									)}

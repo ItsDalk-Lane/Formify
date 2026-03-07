@@ -13,6 +13,11 @@ import {
 } from '../model/FormImport';
 import { IFormField } from '../model/field/IFormField';
 import { IFormAction } from '../model/action/IFormAction';
+import { ActionGroup } from '../model/ActionGroup';
+import { ActionTrigger } from '../model/ActionTrigger';
+import { LoopFormAction } from '../model/action/LoopFormAction';
+import { Filter } from '../model/filter/Filter';
+import { FormActionType } from '../model/enums/FormActionType';
 import { v4 as uuidv4 } from 'uuid';
 
 export class FormImportService {
@@ -59,9 +64,9 @@ export class FormImportService {
             const file = formFiles[i];
             try {
                 const content = await this.app.vault.read(file);
-                const config = JSON.parse(content) as FormConfig;
+                const config = this.normalizeFormConfig(JSON.parse(content));
 
-                if (this.isValidFormConfig(config)) {
+                if (config) {
                     const formInfo = this.createFormInfo(file, config);
 
                     // 应用过滤器
@@ -127,17 +132,22 @@ export class FormImportService {
             this.updateProgress('处理导入数据...', 30);
 
             // 4. 执行导入操作
-            const importedConfig = await this.performImport(sourceConfig, importOptions, targetConfig);
+            const importExecution = await this.performImport(sourceConfig, importOptions, targetConfig);
 
             // 5. 生成导入摘要
-            const summary = this.generateImportSummary(sourceConfig, importedConfig, importOptions);
+            const summary = this.generateImportSummary(
+                importOptions,
+                importExecution.importedFields,
+                importExecution.importedActions,
+                importExecution.importedOtherSettingsCount
+            );
 
             this.updateProgress('导入完成', 100);
 
             return {
                 success: true,
                 summary,
-                importedConfig,
+                importedConfig: importExecution.config,
                 warnings: validation.warnings
             };
 
@@ -181,7 +191,33 @@ export class FormImportService {
                typeof config === 'object' &&
                typeof config.id === 'string' &&
                Array.isArray(config.fields) &&
-               Array.isArray(config.actions);
+               (Array.isArray(config.actions) || config.action);
+    }
+
+    private normalizeFormConfig(rawConfig: any): FormConfig | null {
+        if (!this.isValidFormConfig(rawConfig)) {
+            return null;
+        }
+
+        const normalized = JSON.parse(JSON.stringify(rawConfig));
+        normalized.fields = Array.isArray(normalized.fields) ? normalized.fields : [];
+        normalized.actions = Array.isArray(normalized.actions) ? normalized.actions : [];
+        normalized.actionGroups = Array.isArray(normalized.actionGroups) ? normalized.actionGroups : [];
+        normalized.actionTriggers = Array.isArray(normalized.actionTriggers)
+            ? normalized.actionTriggers
+            : [];
+
+        if (normalized.action && normalized.action.id) {
+            const hasLegacyAction = normalized.actions.some(
+                (action: IFormAction) => action.id === normalized.action.id
+            );
+
+            if (!hasLegacyAction) {
+                normalized.actions = [normalized.action, ...normalized.actions];
+            }
+        }
+
+        return FormConfig.fromJSON(normalized);
     }
 
     /**
@@ -286,8 +322,7 @@ export class FormImportService {
             const file = this.app.vault.getAbstractFileByPath(filePath);
             if (file instanceof TFile) {
                 const content = await this.app.vault.read(file);
-                const config = JSON.parse(content);
-                return this.isValidFormConfig(config) ? config : null;
+                return this.normalizeFormConfig(JSON.parse(content));
             }
         } catch (error) {
             console.error(`加载表单配置失败: ${filePath}`, error);
@@ -312,6 +347,14 @@ export class FormImportService {
         // 验证导入选项
         if (importOptions.importType === 'partial' && !importOptions.partialImport) {
             return { valid: false, error: '部分导入需要指定具体导入配置' };
+        }
+
+        if (
+            importOptions.importType === 'partial' &&
+            importOptions.partialImport?.importActionTriggers === true &&
+            importOptions.partialImport.importActions !== true
+        ) {
+            return { valid: false, error: '导入动作触发器时，需要同时导入对应动作' };
         }
 
         // 检查数据完整性
@@ -380,60 +423,106 @@ export class FormImportService {
         sourceConfig: FormConfig,
         importOptions: FormImportOptions,
         targetConfig?: FormConfig
-    ): Promise<FormConfig> {
+    ): Promise<{
+        config: FormConfig;
+        importedFields: IFormField[];
+        importedActions: IFormAction[];
+        importedOtherSettingsCount: number;
+    }> {
         this.updateProgress('准备导入数据...', 40);
 
-        // 创建新的表单配置或基于目标配置
-        const resultConfig: FormConfig = targetConfig ?
-            { ...targetConfig } :
-            new FormConfig(this.generateNewId());
-
-        // 执行深拷贝以确保数据独立性
-        const deepCopy = importOptions.deepCopy !== false; // 默认启用深拷贝
+        const resultConfig = this.cloneFormConfig(targetConfig);
+        const importedFields: IFormField[] = [];
+        const importedActions: IFormAction[] = [];
+        let importedOtherSettingsCount = 0;
+        const sourceFields = sourceConfig.fields || [];
+        const sourceActionGroups = sourceConfig.actionGroups || [];
+        const sourceActionTriggers = sourceConfig.actionTriggers || [];
+        const sourceFieldById = new Map(sourceFields.map(field => [field.id, field]));
+        const targetFieldIdByLabel = this.buildFieldIdByLabel(resultConfig.fields || []);
 
         if (importOptions.importType === 'all') {
             this.updateProgress('导入全部数据...', 60);
 
             // 导入所有字段
             if (sourceConfig.fields && sourceConfig.fields.length > 0) {
-                resultConfig.fields = deepCopy ?
-                    this.deepCloneFields(sourceConfig.fields) :
-                    [...sourceConfig.fields];
+                const fieldImportResult = this.cloneFieldsForImport(
+                    sourceConfig.fields,
+                    sourceFieldById,
+                    targetFieldIdByLabel
+                );
 
-                // 重新生成字段ID以避免冲突
-                resultConfig.fields = resultConfig.fields.map(field => ({
-                    ...field,
-                    id: this.generateNewId()
-                }));
+                resultConfig.fields = [
+                    ...(resultConfig.fields || []),
+                    ...fieldImportResult.fields
+                ];
+                importedFields.push(...fieldImportResult.fields);
+
+                const actionImportResult = this.cloneActionGraphForImport(
+                    sourceConfig.actions || [],
+                    sourceActionGroups,
+                    this.createFieldReferenceResolver(
+                        fieldImportResult.fieldIdMap,
+                        sourceFieldById,
+                        targetFieldIdByLabel,
+                        true
+                    )
+                );
+                resultConfig.actions = [
+                    ...(resultConfig.actions || []),
+                    ...actionImportResult.topLevelActions
+                ];
+                resultConfig.actionGroups = [
+                    ...(resultConfig.actionGroups || []),
+                    ...actionImportResult.actionGroups
+                ];
+                resultConfig.actionTriggers = [
+                    ...(resultConfig.actionTriggers || []),
+                    ...this.cloneActionTriggersForImport(
+                        sourceActionTriggers,
+                        actionImportResult.topLevelActionIdMap
+                    )
+                ];
+                importedActions.push(...actionImportResult.importedActions);
             }
 
-            // 导入所有动作
-            if (sourceConfig.actions && sourceConfig.actions.length > 0) {
-                resultConfig.actions = deepCopy ?
-                    this.deepCloneActions(sourceConfig.actions) :
-                    [...sourceConfig.actions];
-
-                // 重新生成动作ID以避免冲突
-                resultConfig.actions = resultConfig.actions.map(action => ({
-                    ...action,
-                    id: this.generateNewId()
-                }));
+            if ((!sourceConfig.fields || sourceConfig.fields.length === 0) && sourceConfig.actions && sourceConfig.actions.length > 0) {
+                const actionImportResult = this.cloneActionGraphForImport(
+                    sourceConfig.actions,
+                    sourceActionGroups,
+                    this.createFieldReferenceResolver(
+                        new Map(),
+                        sourceFieldById,
+                        targetFieldIdByLabel,
+                        true
+                    )
+                );
+                resultConfig.actions = [
+                    ...(resultConfig.actions || []),
+                    ...actionImportResult.topLevelActions
+                ];
+                resultConfig.actionGroups = [
+                    ...(resultConfig.actionGroups || []),
+                    ...actionImportResult.actionGroups
+                ];
+                resultConfig.actionTriggers = [
+                    ...(resultConfig.actionTriggers || []),
+                    ...this.cloneActionTriggersForImport(
+                        sourceActionTriggers,
+                        actionImportResult.topLevelActionIdMap
+                    )
+                ];
+                importedActions.push(...actionImportResult.importedActions);
             }
 
             // 导入其他设置
-            if (sourceConfig.showSubmitSuccessToast !== undefined) {
-                resultConfig.showSubmitSuccessToast = sourceConfig.showSubmitSuccessToast;
-            }
-            if (sourceConfig.enableExecutionTimeout !== undefined) {
-                resultConfig.enableExecutionTimeout = sourceConfig.enableExecutionTimeout;
-            }
-            if (sourceConfig.executionTimeoutThreshold !== undefined) {
-                resultConfig.executionTimeoutThreshold = sourceConfig.executionTimeoutThreshold;
-            }
+            importedOtherSettingsCount += this.applyOtherSettings(resultConfig, sourceConfig);
 
         } else if (importOptions.importType === 'partial' && importOptions.partialImport) {
             this.updateProgress('导入部分数据...', 60);
             const partial = importOptions.partialImport;
+            let fieldIdMap = new Map<string, string>();
+            let importedTopLevelActionIdMap = new Map<string, string>();
 
             // 选择性导入字段
             if (partial.importFields && sourceConfig.fields) {
@@ -445,15 +534,17 @@ export class FormImportService {
                     );
                 }
 
-                resultConfig.fields = deepCopy ?
-                    this.deepCloneFields(fieldsToImport) :
-                    [...fieldsToImport];
-
-                // 重新生成字段ID
-                resultConfig.fields = resultConfig.fields.map(field => ({
-                    ...field,
-                    id: this.generateNewId()
-                }));
+                const fieldImportResult = this.cloneFieldsForImport(
+                    fieldsToImport,
+                    sourceFieldById,
+                    targetFieldIdByLabel
+                );
+                fieldIdMap = fieldImportResult.fieldIdMap;
+                resultConfig.fields = [
+                    ...(resultConfig.fields || []),
+                    ...fieldImportResult.fields
+                ];
+                importedFields.push(...fieldImportResult.fields);
             }
 
             // 选择性导入动作
@@ -466,34 +557,426 @@ export class FormImportService {
                     );
                 }
 
-                resultConfig.actions = deepCopy ?
-                    this.deepCloneActions(actionsToImport) :
-                    [...actionsToImport];
+                const actionImportResult = this.cloneActionGraphForImport(
+                    actionsToImport,
+                    sourceActionGroups,
+                    this.createFieldReferenceResolver(
+                        fieldIdMap,
+                        sourceFieldById,
+                        targetFieldIdByLabel,
+                        true
+                    )
+                );
+                resultConfig.actions = [
+                    ...(resultConfig.actions || []),
+                    ...actionImportResult.topLevelActions
+                ];
+                resultConfig.actionGroups = [
+                    ...(resultConfig.actionGroups || []),
+                    ...actionImportResult.actionGroups
+                ];
+                importedTopLevelActionIdMap = actionImportResult.topLevelActionIdMap;
+                importedActions.push(...actionImportResult.importedActions);
+            }
 
-                // 重新生成动作ID
-                resultConfig.actions = resultConfig.actions.map(action => ({
-                    ...action,
-                    id: this.generateNewId()
-                }));
+            if (partial.importActionTriggers) {
+                resultConfig.actionTriggers = [
+                    ...(resultConfig.actionTriggers || []),
+                    ...this.cloneActionTriggersForImport(
+                        sourceActionTriggers,
+                        importedTopLevelActionIdMap
+                    )
+                ];
+            }
+
+            if (partial.importExecutionConditions && sourceConfig.startupConditions !== undefined) {
+                resultConfig.startupConditions = JSON.parse(JSON.stringify(sourceConfig.startupConditions));
+                importedOtherSettingsCount++;
             }
 
             // 导入其他设置
             if (partial.importOtherSettings) {
-                const settings = partial.otherSettings || {};
-                if (settings.showSubmitSuccessToast !== undefined && sourceConfig.showSubmitSuccessToast !== undefined) {
-                    resultConfig.showSubmitSuccessToast = sourceConfig.showSubmitSuccessToast;
-                }
-                if (settings.enableExecutionTimeout !== undefined && sourceConfig.enableExecutionTimeout !== undefined) {
-                    resultConfig.enableExecutionTimeout = sourceConfig.enableExecutionTimeout;
-                }
-                if (settings.executionTimeoutThreshold !== undefined && sourceConfig.executionTimeoutThreshold !== undefined) {
-                    resultConfig.executionTimeoutThreshold = sourceConfig.executionTimeoutThreshold;
-                }
+                importedOtherSettingsCount += this.applyOtherSettings(
+                    resultConfig,
+                    sourceConfig,
+                    {
+                        ...partial.otherSettings,
+                        startupConditions: false,
+                    }
+                );
             }
         }
 
+        resultConfig.cleanupTriggerActionRefs();
+
         this.updateProgress('完成数据处理...', 90);
-        return resultConfig;
+        return {
+            config: resultConfig,
+            importedFields,
+            importedActions,
+            importedOtherSettingsCount
+        };
+    }
+
+    private cloneFormConfig(targetConfig?: FormConfig): FormConfig {
+        if (!targetConfig) {
+            return new FormConfig(this.generateNewId());
+        }
+
+        const clonedConfig = FormConfig.fromJSON(JSON.parse(JSON.stringify(targetConfig)));
+        clonedConfig.fields = clonedConfig.fields || [];
+        clonedConfig.actions = clonedConfig.actions || [];
+        clonedConfig.actionGroups = clonedConfig.actionGroups || [];
+        clonedConfig.actionTriggers = clonedConfig.actionTriggers || [];
+        return clonedConfig;
+    }
+
+    private buildFieldIdByLabel(fields: IFormField[]): Map<string, string> {
+        const fieldIdByLabel = new Map<string, string>();
+
+        fields.forEach(field => {
+            if (!fieldIdByLabel.has(field.label)) {
+                fieldIdByLabel.set(field.label, field.id);
+            }
+        });
+
+        return fieldIdByLabel;
+    }
+
+    private createFieldReferenceResolver(
+        fieldIdMap: Map<string, string>,
+        sourceFieldById: Map<string, IFormField>,
+        targetFieldIdByLabel: Map<string, string>,
+        strictResolution = false
+    ): (fieldId: string) => string {
+        return (fieldId: string): string => {
+            const importedFieldId = fieldIdMap.get(fieldId);
+            if (importedFieldId) {
+                return importedFieldId;
+            }
+
+            const sourceField = sourceFieldById.get(fieldId);
+            if (!sourceField) {
+                return fieldId;
+            }
+
+            const targetFieldId = targetFieldIdByLabel.get(sourceField.label);
+            if (targetFieldId) {
+                return targetFieldId;
+            }
+
+            if (strictResolution) {
+                throw new Error(`动作引用的字段“${sourceField.label}”未导入，且目标表单中不存在同名字段`);
+            }
+
+            return fieldId;
+        };
+    }
+
+    private cloneFieldsForImport(
+        fields: IFormField[],
+        sourceFieldById: Map<string, IFormField>,
+        targetFieldIdByLabel: Map<string, string>
+    ): {
+        fields: IFormField[];
+        fieldIdMap: Map<string, string>;
+    } {
+        const clonedFields = this.deepCloneFields(fields);
+        const fieldIdMap = new Map<string, string>();
+
+        clonedFields.forEach(field => {
+            fieldIdMap.set(field.id, this.generateNewId());
+        });
+
+        const resolveFieldReference = this.createFieldReferenceResolver(
+            fieldIdMap,
+            sourceFieldById,
+            targetFieldIdByLabel,
+            true
+        );
+
+        clonedFields.forEach(field => {
+            field.id = fieldIdMap.get(field.id) || field.id;
+            this.remapFilterFieldReferences(field.condition, resolveFieldReference);
+        });
+
+        return {
+            fields: clonedFields,
+            fieldIdMap
+        };
+    }
+
+    private cloneActionsForImport(
+        actions: IFormAction[],
+        resolveFieldReference: (fieldId: string) => string
+    ): {
+        actions: IFormAction[];
+        actionIdMap: Map<string, string>;
+    } {
+        const clonedActions = this.deepCloneActions(actions);
+        const actionIdMap = new Map<string, string>();
+
+        clonedActions.forEach(action => {
+            actionIdMap.set(action.id, this.generateNewId());
+        });
+
+        clonedActions.forEach(action => {
+            action.id = actionIdMap.get(action.id) || action.id;
+            this.remapActionFieldReferences(action, resolveFieldReference);
+        });
+
+        return {
+            actions: clonedActions,
+            actionIdMap
+        };
+    }
+
+    private cloneActionGraphForImport(
+        actions: IFormAction[],
+        sourceActionGroups: ActionGroup[],
+        resolveFieldReference: (fieldId: string) => string
+    ): {
+        topLevelActions: IFormAction[];
+        actionGroups: ActionGroup[];
+        importedActions: IFormAction[];
+        topLevelActionIdMap: Map<string, string>;
+    } {
+        const groupById = new Map(sourceActionGroups.map(group => [group.id, group]));
+        const reachableGroups = this.collectReachableActionGroups(actions, groupById);
+        const topLevelActions = this.deepCloneActions(actions);
+        const actionGroups = reachableGroups.map(group => JSON.parse(JSON.stringify(group)) as ActionGroup);
+        const actionIdMap = new Map<string, string>();
+        const topLevelActionIdMap = new Map<string, string>();
+        const actionGroupIdMap = new Map<string, string>();
+
+        topLevelActions.forEach(action => {
+            const newId = this.generateNewId();
+            actionIdMap.set(action.id, newId);
+            topLevelActionIdMap.set(action.id, newId);
+        });
+
+        actionGroups.forEach(group => {
+            actionGroupIdMap.set(group.id, this.generateNewId());
+            (group.actions || []).forEach(action => {
+                actionIdMap.set(action.id, this.generateNewId());
+            });
+        });
+
+        const resolveActionGroupReference = (groupId: string): string => {
+            return actionGroupIdMap.get(groupId) || groupId;
+        };
+
+        topLevelActions.forEach(action => {
+            action.id = actionIdMap.get(action.id) || action.id;
+            this.remapActionFieldReferences(action, resolveFieldReference, resolveActionGroupReference);
+        });
+
+        actionGroups.forEach(group => {
+            group.id = actionGroupIdMap.get(group.id) || group.id;
+            group.actions = (group.actions || []).map(action => {
+                action.id = actionIdMap.get(action.id) || action.id;
+                this.remapActionFieldReferences(action, resolveFieldReference, resolveActionGroupReference);
+                return action;
+            });
+        });
+
+        return {
+            topLevelActions,
+            actionGroups,
+            importedActions: [
+                ...topLevelActions,
+                ...actionGroups.flatMap(group => group.actions || [])
+            ],
+            topLevelActionIdMap
+        };
+    }
+
+    private collectReachableActionGroups(
+        actions: IFormAction[],
+        groupById: Map<string, ActionGroup>
+    ): ActionGroup[] {
+        const reachableGroups: ActionGroup[] = [];
+        const visitedGroupIds = new Set<string>();
+
+        const walk = (items: IFormAction[]) => {
+            items.forEach(action => {
+                if (action.type !== FormActionType.LOOP) {
+                    return;
+                }
+
+                const actionGroupId = (action as LoopFormAction).actionGroupId;
+                if (!actionGroupId || visitedGroupIds.has(actionGroupId)) {
+                    return;
+                }
+
+                const actionGroup = groupById.get(actionGroupId);
+                if (!actionGroup) {
+                    return;
+                }
+
+                visitedGroupIds.add(actionGroupId);
+                reachableGroups.push(actionGroup);
+                walk(actionGroup.actions || []);
+            });
+        };
+
+        walk(actions || []);
+        return reachableGroups;
+    }
+
+    private cloneActionTriggersForImport(
+        triggers: ActionTrigger[],
+        topLevelActionIdMap: Map<string, string>
+    ): ActionTrigger[] {
+        return triggers
+            .map(trigger => ActionTrigger.fromJSON(JSON.parse(JSON.stringify(trigger))))
+            .map(trigger => {
+                const droppedActionIds = (trigger.actionIds || [])
+                    .filter(actionId => !topLevelActionIdMap.has(actionId));
+
+                if (droppedActionIds.length > 0) {
+                    console.warn(
+                        `导入动作触发器时过滤了 ${droppedActionIds.length} 个非顶层动作引用: ${trigger.name || trigger.id}`
+                    );
+                }
+
+                trigger.actionIds = (trigger.actionIds || [])
+                    .map(actionId => topLevelActionIdMap.get(actionId))
+                    .filter((actionId): actionId is string => Boolean(actionId));
+                return trigger;
+            })
+            .filter(trigger => trigger.actionIds.length > 0)
+            .map(trigger => {
+                trigger.id = this.generateNewId();
+                trigger.commandId = undefined;
+                trigger.lastExecutionTime = undefined;
+                return trigger;
+            });
+    }
+
+    private remapActionFieldReferences(
+        action: IFormAction,
+        resolveFieldReference: (fieldId: string) => string,
+        resolveActionGroupReference?: (groupId: string) => string
+    ): void {
+        this.remapFilterFieldReferences(action.condition, resolveFieldReference);
+
+        if (action.type === FormActionType.LOOP && resolveActionGroupReference) {
+            const loopAction = action as LoopFormAction;
+            if (loopAction.actionGroupId) {
+                loopAction.actionGroupId = resolveActionGroupReference(loopAction.actionGroupId);
+            }
+        }
+
+        this.remapTemplateFieldReferencesInValue(action, resolveFieldReference);
+    }
+
+    private remapFilterFieldReferences(
+        filter: Filter | null | undefined,
+        resolveFieldReference: (fieldId: string) => string
+    ): void {
+        if (!filter) {
+            return;
+        }
+
+        if (typeof filter.property === 'string' && filter.property.trim().length > 0) {
+            filter.property = resolveFieldReference(filter.property.trim());
+        }
+
+        if (filter.value !== undefined) {
+            filter.value = this.remapTemplateFieldReferencesInValue(filter.value, resolveFieldReference);
+        }
+
+        if (filter.extendedConfig !== undefined) {
+            filter.extendedConfig = this.remapTemplateFieldReferencesInValue(
+                filter.extendedConfig,
+                resolveFieldReference
+            );
+        }
+
+        filter.conditions?.forEach(condition => {
+            this.remapFilterFieldReferences(condition, resolveFieldReference);
+        });
+    }
+
+    private remapTemplateFieldReferencesInValue<T>(
+        value: T,
+        resolveFieldReference: (fieldId: string) => string
+    ): T {
+        if (typeof value === 'string') {
+            return value.replace(/\{\{@([^}]+)\}\}/g, (_match, fieldRef: string) => {
+                return `{{@${resolveFieldReference(fieldRef.trim())}}}`;
+            }) as T;
+        }
+
+        if (Array.isArray(value)) {
+            value.forEach((item, index) => {
+                value[index] = this.remapTemplateFieldReferencesInValue(item, resolveFieldReference);
+            });
+            return value;
+        }
+
+        if (value && typeof value === 'object') {
+            Object.entries(value as Record<string, unknown>).forEach(([key, entryValue]) => {
+                (value as Record<string, unknown>)[key] = this.remapTemplateFieldReferencesInValue(
+                    entryValue,
+                    resolveFieldReference
+                );
+            });
+        }
+
+        return value;
+    }
+
+    private applyOtherSettings(
+        targetConfig: FormConfig,
+        sourceConfig: FormConfig,
+        selection?: {
+            showSubmitSuccessToast?: boolean;
+            enableExecutionTimeout?: boolean;
+            executionTimeoutThreshold?: boolean;
+            commandEnabled?: boolean;
+            contextMenuEnabled?: boolean;
+            runOnStartup?: boolean;
+            startupConditions?: boolean;
+            multiSubmitFormExecutionMode?: boolean;
+            multiSubmitFormDisplayMode?: boolean;
+        }
+    ): number {
+        let importedCount = 0;
+
+        const assignSetting = <K extends keyof FormConfig>(
+            key: K,
+            enabled: boolean,
+            cloneValue = false
+        ) => {
+            if (!enabled || sourceConfig[key] === undefined) {
+                return;
+            }
+
+            targetConfig[key] = cloneValue
+                ? JSON.parse(JSON.stringify(sourceConfig[key]))
+                : sourceConfig[key];
+            importedCount++;
+        };
+
+        assignSetting('showSubmitSuccessToast', selection?.showSubmitSuccessToast !== false);
+        assignSetting('enableExecutionTimeout', selection?.enableExecutionTimeout !== false);
+        assignSetting('executionTimeoutThreshold', selection?.executionTimeoutThreshold !== false);
+        assignSetting('commandEnabled', selection?.commandEnabled !== false);
+        assignSetting('contextMenuEnabled', selection?.contextMenuEnabled !== false);
+        assignSetting('runOnStartup', selection?.runOnStartup !== false);
+        assignSetting('startupConditions', selection?.startupConditions !== false, true);
+        assignSetting(
+            'multiSubmitFormExecutionMode',
+            selection?.multiSubmitFormExecutionMode !== false
+        );
+        assignSetting(
+            'multiSubmitFormDisplayMode',
+            selection?.multiSubmitFormDisplayMode !== false
+        );
+
+        return importedCount;
     }
 
     /**
@@ -521,42 +1004,29 @@ export class FormImportService {
      * 生成导入摘要
      */
     private generateImportSummary(
-        sourceConfig: FormConfig,
-        importedConfig: FormConfig,
-        importOptions: FormImportOptions
+        importOptions: FormImportOptions,
+        importedFields: IFormField[],
+        importedActions: IFormAction[],
+        importedOtherSettingsCount: number
     ): ImportSummary {
         return {
-            importedFieldsCount: importedConfig.fields?.length || 0,
-            importedActionsCount: importedConfig.actions?.length || 0,
+            importedFieldsCount: importedFields.length,
+            importedActionsCount: importedActions.length,
             importedStylesCount: importOptions.importType === 'all' ? 1 : 0,
-            importedValidationRulesCount: this.countValidationRules(importedConfig),
-            importedOtherSettingsCount: this.countOtherSettings(importedConfig)
+            importedValidationRulesCount: this.countValidationRules(importedFields),
+            importedOtherSettingsCount
         };
     }
 
     /**
      * 统计验证规则数量
      */
-    private countValidationRules(config: FormConfig): number {
+    private countValidationRules(fields: IFormField[]): number {
         let count = 0;
-        if (config.fields) {
-            config.fields.forEach(field => {
-                if (field.required) count++;
-                // 这里可以添加其他验证规则的统计
-            });
-        }
-        return count;
-    }
-
-    /**
-     * 统计其他设置数量
-     */
-    private countOtherSettings(config: FormConfig): number {
-        let count = 0;
-        if (config.showSubmitSuccessToast !== undefined) count++;
-        if (config.enableExecutionTimeout !== undefined) count++;
-        if (config.executionTimeoutThreshold !== undefined) count++;
-        if (config.commandEnabled !== undefined) count++;
+        fields.forEach(field => {
+            if (field.required) count++;
+            // 这里可以添加其他验证规则的统计
+        });
         return count;
     }
 }

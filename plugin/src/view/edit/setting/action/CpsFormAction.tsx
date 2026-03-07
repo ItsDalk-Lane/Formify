@@ -28,6 +28,23 @@ import Dialog2 from "src/component/dialog/Dialog2";
 import { FilterRoot } from "src/component/filter/FilterRoot";
 import "./CpsFormAction.css";
 import { FormConfig } from "src/model/FormConfig";
+import { FormActionFactory } from "src/model/action/FormActionFactory";
+import { FormActionType } from "src/model/enums/FormActionType";
+
+function createActionForTypeSwitch(
+	action: IFormAction,
+	type: FormActionType
+): IFormAction {
+	if (action.type === type) {
+		return action;
+	}
+
+	return FormActionFactory.create(type, {
+		id: action.id,
+		condition: action.condition,
+		customTitle: action.customTitle,
+	});
+}
 
 export default function CpsFormAction(props: {
 	value: IFormAction;
@@ -53,12 +70,12 @@ export default function CpsFormAction(props: {
 	}, [heading.title]);
 
 	const [openCondition, setOpenCondition] = useState(false);
-	const condition: Filter = value.condition ?? {
+	const condition: Filter = useMemo(() => value.condition ?? {
 		id: v4(),
 		type: FilterType.group,
 		operator: OperatorType.And,
 		conditions: [],
-	};
+	}, [value.condition]);
 
 	const fieldConditionLength = useMemo(() => {
 		// 使用新的hasConditions逻辑来计算实际有效的条件数量
@@ -142,6 +159,7 @@ export default function CpsFormAction(props: {
 				onOpenChange={function (open: boolean): void {
 					setOpenCondition(open);
 				}}
+				closeOnInteractOutside={false}
 			>
 				{(close) => {
 					return (
@@ -202,11 +220,7 @@ function CpsFormActionHeader(props: {
 				value={value.type}
 				styles={typeStyles}
 				onChange={(type) => {
-					const newAction = {
-						...value,
-						type: type,
-					};
-					props.onChange(newAction);
+					props.onChange(createActionForTypeSwitch(value, type));
 				}}
 			/>
 			<div

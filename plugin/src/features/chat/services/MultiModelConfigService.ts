@@ -1,13 +1,12 @@
 import { App, EventRef, TAbstractFile, TFile, TFolder, normalizePath, parseYaml, stringifyYaml } from 'obsidian';
-import type { CollaborationStep, CollaborationTemplate, CompareGroup } from '../types/multiModel';
+import type { CompareGroup } from '../types/multiModel';
 import { ensureAIDataFolders, getMultiModelConfigPath } from 'src/utils/AIPathManager';
 
 type ConfigChangeCallback = (data: {
 	compareGroups: CompareGroup[];
-	collaborationTemplates: CollaborationTemplate[];
 }) => void;
 
-type ConfigType = 'compare-group' | 'collaboration-template';
+type ConfigType = 'compare-group';
 
 const FRONTMATTER_DELIMITER = '---';
 
@@ -53,18 +52,6 @@ export class MultiModelConfigService {
 		return groups.sort((a, b) => b.updatedAt - a.updatedAt);
 	}
 
-	async loadCollaborationTemplates(): Promise<CollaborationTemplate[]> {
-		const files = await this.listMarkdownFiles();
-		const templates: CollaborationTemplate[] = [];
-		for (const file of files) {
-			const parsed = await this.readCollaborationTemplateFile(file);
-			if (parsed) {
-				templates.push(parsed);
-			}
-		}
-		return templates.sort((a, b) => b.updatedAt - a.updatedAt);
-	}
-
 	async saveCompareGroup(group: CompareGroup): Promise<string> {
 		await this.ensureFolder();
 		const nextGroup: CompareGroup = {
@@ -82,32 +69,8 @@ export class MultiModelConfigService {
 		return targetPath;
 	}
 
-	async saveCollaborationTemplate(template: CollaborationTemplate): Promise<string> {
-		await this.ensureFolder();
-		const nextTemplate: CollaborationTemplate = {
-			...template,
-			updatedAt: Date.now()
-		};
-		const existingFile = await this.findConfigFile('collaboration-template', template.id);
-		const targetPath = existingFile?.path ?? this.getCollaborationTemplateFilePath(template.id);
-		const content = this.serializeCollaborationTemplate(nextTemplate);
-		if (existingFile) {
-			await this.app.vault.modify(existingFile, content);
-			return targetPath;
-		}
-		await this.app.vault.create(targetPath, content);
-		return targetPath;
-	}
-
 	async deleteCompareGroup(id: string): Promise<void> {
 		const file = await this.findConfigFile('compare-group', id);
-		if (file) {
-			await this.app.vault.delete(file);
-		}
-	}
-
-	async deleteCollaborationTemplate(id: string): Promise<void> {
-		const file = await this.findConfigFile('collaboration-template', id);
 		if (file) {
 			await this.app.vault.delete(file);
 		}
@@ -157,8 +120,7 @@ export class MultiModelConfigService {
 
 	private async emitConfigChanges(singleCallback?: ConfigChangeCallback): Promise<void> {
 		const payload = {
-			compareGroups: await this.loadCompareGroups(),
-			collaborationTemplates: await this.loadCollaborationTemplates()
+			compareGroups: await this.loadCompareGroups()
 		};
 		if (singleCallback) {
 			singleCallback(payload);
@@ -182,9 +144,7 @@ export class MultiModelConfigService {
 	}
 
 	private async findConfigFile(type: ConfigType, id: string): Promise<TFile | null> {
-		const canonicalPath = type === 'compare-group'
-			? this.getCompareGroupFilePath(id)
-			: this.getCollaborationTemplateFilePath(id);
+		const canonicalPath = this.getCompareGroupFilePath(id);
 		const canonical = this.app.vault.getAbstractFileByPath(canonicalPath);
 		if (canonical instanceof TFile) {
 			return canonical;
@@ -203,11 +163,6 @@ export class MultiModelConfigService {
 	private async readCompareGroupFile(file: TFile): Promise<CompareGroup | null> {
 		const content = await this.app.vault.read(file);
 		return this.parseCompareGroupFromMarkdown(content);
-	}
-
-	private async readCollaborationTemplateFile(file: TFile): Promise<CollaborationTemplate | null> {
-		const content = await this.app.vault.read(file);
-		return this.parseCollaborationTemplateFromMarkdown(content);
 	}
 
 	parseCompareGroupFromMarkdown(content: string): CompareGroup | null {
@@ -233,49 +188,6 @@ export class MultiModelConfigService {
 		};
 	}
 
-	parseCollaborationTemplateFromMarkdown(content: string): CollaborationTemplate | null {
-		const { frontmatter, body } = this.extractFrontmatter(content);
-		if (frontmatter?.type !== 'collaboration-template' || typeof frontmatter.id !== 'string') {
-			return null;
-		}
-
-		return {
-			id: frontmatter.id,
-			name: this.toStringValue(frontmatter.name),
-			description: this.toStringValue(frontmatter.description),
-			steps: this.parseCollaborationSteps(body),
-			createdAt: this.toNumberValue(frontmatter.createdAt),
-			updatedAt: this.toNumberValue(frontmatter.updatedAt),
-			isDefault: this.toBooleanValue(frontmatter.isDefault)
-		};
-	}
-
-	private parseCollaborationSteps(body: string): CollaborationStep[] {
-		const sections = body
-			.split(/\n(?=##\s+步骤\s+\d+)/)
-			.map((section) => section.trim())
-			.filter((section) => section.startsWith('## '));
-
-		return sections.map((section) => {
-			const modelTag = this.extractBulletValue(section, '模型');
-			const taskDescription = this.extractBulletValue(section, '任务');
-			const passContextText = this.extractBulletValue(section, '传递上下文');
-			const systemPromptOverride = this.extractBulletValue(section, '系统提示词');
-
-			return {
-				modelTag,
-				taskDescription,
-				passContext: passContextText === '是',
-				systemPromptOverride: systemPromptOverride || undefined
-			};
-		}).filter((step) => step.modelTag.length > 0);
-	}
-
-	private extractBulletValue(section: string, label: string): string {
-		const match = section.match(new RegExp(`-\\s*${label}：\\s*(.+)`));
-		return match?.[1]?.trim() ?? '';
-	}
-
 	private serializeCompareGroup(group: CompareGroup): string {
 		const frontmatter = stringifyYaml({
 			type: 'compare-group',
@@ -293,37 +205,6 @@ ${frontmatter}${FRONTMATTER_DELIMITER}
 ## 包含模型
 
 ${modelsBlock}
-`;
-	}
-
-	private serializeCollaborationTemplate(template: CollaborationTemplate): string {
-		const frontmatter = stringifyYaml({
-			type: 'collaboration-template',
-			id: template.id,
-			name: template.name,
-			description: template.description,
-			createdAt: template.createdAt,
-			updatedAt: template.updatedAt,
-			isDefault: template.isDefault
-		});
-		const stepsBlock = template.steps.map((step, index) => {
-			const lines = [
-				`## 步骤 ${index + 1}：${step.taskDescription || `步骤 ${index + 1}`}`,
-				'',
-				`- 模型：${step.modelTag}`,
-				`- 任务：${step.taskDescription}`,
-				`- 传递上下文：${step.passContext ? '是' : '否'}`
-			];
-			if (step.systemPromptOverride?.trim()) {
-				lines.push(`- 系统提示词：${step.systemPromptOverride.trim()}`);
-			}
-			return lines.join('\n');
-		}).join('\n\n');
-
-		return `${FRONTMATTER_DELIMITER}
-${frontmatter}${FRONTMATTER_DELIMITER}
-
-${stepsBlock}
 `;
 	}
 
@@ -358,10 +239,6 @@ ${stepsBlock}
 
 	private getCompareGroupFilePath(id: string): string {
 		return normalizePath(`${this.configFolderPath}/compare-group-${id}.md`);
-	}
-
-	private getCollaborationTemplateFilePath(id: string): string {
-		return normalizePath(`${this.configFolderPath}/collaboration-template-${id}.md`);
 	}
 
 	private toStringValue(value: unknown): string {

@@ -15,6 +15,7 @@ import { MonitorContextMenu } from './features/file-expiry-monitor/service/Monit
 import { ExpiryNoticeManager } from './features/file-expiry-monitor/service/ExpiryNoticeManager';
 import { localInstance } from './i18n/locals';
 import { ensureAIDataFolders } from './utils/AIPathManager';
+import { FormifyTestHooks } from './testing/FormifyTestHooks';
 
 export default class FormPlugin extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
@@ -27,6 +28,7 @@ export default class FormPlugin extends Plugin {
 	private conflictMonitor: ConflictMonitor | null = null;
 	private monitorContextMenu: MonitorContextMenu | null = null;
 	private expiryNoticeManager: ExpiryNoticeManager | null = null;
+	private readonly testHooks = new FormifyTestHooks(this);
 
 
 	async onload() {
@@ -60,6 +62,7 @@ export default class FormPlugin extends Plugin {
 		await this.services.contextMenuService.initialize(this, this.services);
 		this.featureCoordinator.initializeTars(this.settings);
 		this.featureCoordinator.initializeMcp(this.settings);
+		this.testHooks.initialize();
 
 		this.app.workspace.onLayoutReady(async () => {
 			this.conflictMonitor = new ConflictMonitor(this.app);
@@ -154,6 +157,7 @@ export default class FormPlugin extends Plugin {
 		this.services.applicationCommandService.unload(this);
 		this.services.applicationFileViewService.unload(this);
 		this.featureCoordinator.dispose();
+		this.testHooks.dispose();
 	}
 
 	private async loadSettings() {
@@ -198,6 +202,7 @@ export default class FormPlugin extends Plugin {
 		await this.services.formIntegrationService.initialize(this, true);
 		this.services.contextMenuService.refreshContextMenuItems();
 		this.featureCoordinator.refresh(this.settings);
+		this.testHooks.syncWindowBinding();
 	}
 
 	private applyDebugSettings() {

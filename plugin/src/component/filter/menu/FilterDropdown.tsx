@@ -38,7 +38,7 @@ export function FilterDropdown(props: Props) {
 							<RadixDropdownMenu.Item
 								key={item.value}
 								className="form--FilterDropdownMenuItem"
-								onClick={() => {
+								onSelect={() => {
 									if (item.onSelect) {
 										item.onSelect();
 									}

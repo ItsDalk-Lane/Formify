@@ -227,6 +227,14 @@ export class FormConfig {
      */
     cleanupTriggerActionRefs(): void {
         const validIds = new Set(this.actions.map(a => a.id));
+        this.actionTriggers = (this.actionTriggers || [])
+            .filter((trigger): trigger is ActionTrigger => trigger != null)
+            .map((trigger) =>
+                trigger instanceof ActionTrigger
+                    ? trigger
+                    : ActionTrigger.fromJSON(trigger)
+            );
+
         for (const trigger of this.actionTriggers) {
             trigger.removeInvalidActionIds(validIds);
         }

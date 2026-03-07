@@ -946,7 +946,6 @@ export class ZhTw implements Local {
 	trigger_section_title = "動作觸發器";
 	multi_model_mode_single = "單模型";
 	multi_model_mode_compare = "對比模式";
-	multi_model_mode_collaborate = "協作模式";
 	layout_horizontal = "並排";
 	layout_tabs = "標籤頁";
 	layout_vertical = "垂直";
@@ -959,15 +958,6 @@ export class ZhTw implements Local {
 	compare_group_name = "對比組名稱";
 	compare_group_description = "描述";
 	compare_group_models = "包含模型";
-	collaboration_template = "協作模板";
-	new_collaboration_template = "新建協作模板";
-	edit_collaboration_template = "編輯協作模板";
-	delete_collaboration_template = "刪除協作模板";
-	template_step = "步驟 {index}";
-	add_step = "添加步驟";
-	remove_step = "移除步驟";
-	task_description = "任務描述";
-	pass_context = "傳遞上下文";
 	stop_all = "停止所有";
 	retry_failed = "重試失敗";
 	generating_progress = "{completed}/{total} 生成中";
@@ -976,14 +966,9 @@ export class ZhTw implements Local {
 	partial_success = "{success}/{total} 個模型響應成功，{failed} 個失敗";
 	retrying_failed = "正在重試 {count} 個失敗的模型...";
 	select_compare_models = "選擇對比模型";
-	select_collaboration_template = "選擇協作模板";
 	no_compare_configs = "暫無配置，點擊新建";
-	no_collaboration_templates = "暫無配置，點擊新建";
-	select_or_create_collaboration_template = "請選擇協作模板或建立新模板";
 	manage_compare_group = "管理對比組";
-	manage_collaboration_template = "管理協作模板";
 	compare_group_empty_state = "選擇一個對比組進行編輯，或點擊新建";
-	collaboration_template_empty_state = "選擇一個模板進行編輯，或點擊新建";
 	model_reasoning = "模型推理";
 	web_search = "聯網搜尋";
 	clear_template = "清除模板";
@@ -991,7 +976,6 @@ export class ZhTw implements Local {
 	delete_file = "刪除檔案";
 	delete_folder = "刪除資料夾";
 	template_label = "模板";
-	collaboration_template_summary = "協作模板: {name}（{count} 步）";
 	image_generation_mode = "圖片生成模式";
 	stop_this_model = "停止此模型";
 	retry_this_model = "重試此模型";

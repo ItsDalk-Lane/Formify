@@ -1,6 +1,9 @@
 import { IFormAction } from "src/model/action/IFormAction";
 import { IFormField } from "src/model/field/IFormField";
 import { Filter } from "src/model/filter/Filter";
+import { ActionGroup } from "src/model/ActionGroup";
+import { FormActionType } from "src/model/enums/FormActionType";
+import { LoopFormAction } from "src/model/action/LoopFormAction";
 
 /**
  * 动作依赖分析结果
@@ -25,6 +28,34 @@ export class ActionDependencyAnalyzer {
 
 	/** 匹配 {{output:varName}} 模式 */
 	private static readonly OUTPUT_REF_REGEX = /\{\{output:([^}]+)\}\}/g;
+
+	private static flattenActions(actions: IFormAction[], actionGroups: ActionGroup[] = []): IFormAction[] {
+		const flattened: IFormAction[] = [];
+		const groupById = new Map((actionGroups || []).map((group) => [group.id, group]));
+		const visitedGroupIds = new Set<string>();
+
+		const walk = (items: IFormAction[]) => {
+			for (const action of items) {
+				flattened.push(action);
+				if (action.type !== FormActionType.LOOP) {
+					continue;
+				}
+				const loopAction = action as LoopFormAction;
+				if (!loopAction.actionGroupId || visitedGroupIds.has(loopAction.actionGroupId)) {
+					continue;
+				}
+				const group = groupById.get(loopAction.actionGroupId);
+				if (!group) {
+					continue;
+				}
+				visitedGroupIds.add(loopAction.actionGroupId);
+				walk(group.actions ?? []);
+			}
+		};
+
+		walk(actions ?? []);
+		return flattened;
+	}
 
 	/** 提取对象中的 {{@...}} 字段引用 */
 	private static collectTemplateFieldRefs(target: unknown, refs: Set<string>): void {
@@ -148,9 +179,10 @@ export class ActionDependencyAnalyzer {
 	 * @param selectedActions 触发器选中的动作列表
 	 * @returns 验证结果，包含缺失的 output 变量名
 	 */
-	static validateOutputDependencies(selectedActions: IFormAction[]): DependencyValidationResult {
-		const required = this.getRequiredOutputVariables(selectedActions);
-		const produced = this.getProducedOutputVariables(selectedActions);
+	static validateOutputDependencies(selectedActions: IFormAction[], actionGroups: ActionGroup[] = []): DependencyValidationResult {
+		const flattenedActions = this.flattenActions(selectedActions, actionGroups);
+		const required = this.getRequiredOutputVariables(flattenedActions);
+		const produced = this.getProducedOutputVariables(flattenedActions);
 
 		const missingOutputs: string[] = [];
 		for (const varName of required) {
@@ -211,10 +243,15 @@ export class ActionDependencyAnalyzer {
 	 * - 动作执行条件引用字段
 	 * - 上述字段的显示条件依赖（递归闭包）
 	 */
-	static getReferencedFieldsWithConditionClosure(actions: IFormAction[], allFields: IFormField[]): IFormField[] {
+	static getReferencedFieldsWithConditionClosure(
+		actions: IFormAction[],
+		allFields: IFormField[],
+		actionGroups: ActionGroup[] = []
+	): IFormField[] {
+		const flattenedActions = this.flattenActions(actions, actionGroups);
 		const directRefs = new Set<string>();
-		const templateRefs = this.getReferencedFieldIds(actions);
-		const actionConditionRefs = this.getActionConditionReferencedFieldIds(actions);
+		const templateRefs = this.getReferencedFieldIds(flattenedActions);
+		const actionConditionRefs = this.getActionConditionReferencedFieldIds(flattenedActions);
 		for (const ref of templateRefs) {
 			directRefs.add(ref);
 		}

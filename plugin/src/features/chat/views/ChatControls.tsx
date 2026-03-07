@@ -146,7 +146,7 @@ export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
 					selectedServerIds={state.mcpSelectedServerIds}
 					service={service}
 				/>
-				{(state.multiModelMode === 'compare' || state.multiModelMode === 'collaborate') && (
+				{state.multiModelMode === 'compare' && (
 					<LayoutSelector
 						layoutMode={state.layoutMode}
 						onLayoutChange={(mode) => service.setLayoutMode(mode)}

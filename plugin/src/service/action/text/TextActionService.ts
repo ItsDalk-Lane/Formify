@@ -30,6 +30,12 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { FileOperationService, FolderDeleteMode } from "src/service/FileOperationService";
 import { expandTargetPaths } from "src/utils/expandTargetPaths";
+import {
+    consumeFormifyTestResponse,
+    isFormifyTestHooksEnabled,
+    recordFormifyTestArtifact,
+    recordFormifyTestEvent,
+} from "src/testing/FormifyTestHooks";
 
 type CleanupResult = {
     processed: string[];
@@ -125,6 +131,17 @@ export class TextActionService implements IActionService {
 
         const htmlContent = await this.convertToHtml(content, activeFile, app);
 
+        if (isFormifyTestHooksEnabled()) {
+            recordFormifyTestArtifact("text-operation", {
+                type: TextOperationType.COPY_RICH_TEXT,
+                filePath: activeFile.path,
+                content,
+                htmlContent,
+            });
+            new Notice(localInstance.text_operation_copy_success);
+            return;
+        }
+
         try {
             await navigator.clipboard.write([
                 new ClipboardItem({
@@ -176,6 +193,16 @@ export class TextActionService implements IActionService {
         // 将Obsidian图片链接转换为标准Markdown链接
         content = await this.replaceImageLinks(content, activeFile, app);
 
+        if (isFormifyTestHooksEnabled()) {
+            recordFormifyTestArtifact("text-operation", {
+                type: TextOperationType.COPY_MARKDOWN,
+                filePath: activeFile.path,
+                content,
+            });
+            new Notice(localInstance.text_operation_copy_markdown_success);
+            return;
+        }
+
         await navigator.clipboard.writeText(content);
         new Notice(localInstance.text_operation_copy_markdown_success);
     }
@@ -206,24 +233,41 @@ export class TextActionService implements IActionService {
         const htmlContent = await this.convertToHtml(content, activeFile, app);
         const fileName = activeFile.basename + '.html';
 
-        // 使用Electron的dialog选择保存目录
-        const { dialog } = require('@electron/remote');
-        const result = await dialog.showOpenDialog({
-            properties: ['openDirectory', 'createDirectory'],
-            title: localInstance.text_operation_select_export_dir,
-            defaultPath: activeFile.parent?.path || ''
-        });
+        let exportFolderPath = "";
+        const presetExportFolder = consumeFormifyTestResponse("exportHtmlFolder");
+        if (typeof presetExportFolder === "string" && presetExportFolder.trim().length > 0) {
+            exportFolderPath = presetExportFolder.trim();
+            recordFormifyTestEvent("text-export-folder-auto-selected", {
+                folder: exportFolderPath,
+            });
+        } else {
+            // 使用Electron的dialog选择保存目录
+            const { dialog } = require('@electron/remote');
+            const result = await dialog.showOpenDialog({
+                properties: ['openDirectory', 'createDirectory'],
+                title: localInstance.text_operation_select_export_dir,
+                defaultPath: activeFile.parent?.path || ''
+            });
 
-        if (result.canceled || result.filePaths.length === 0) {
-            new Notice(localInstance.text_operation_export_canceled);
-            return;
+            if (result.canceled || result.filePaths.length === 0) {
+                new Notice(localInstance.text_operation_export_canceled);
+                return;
+            }
+
+            exportFolderPath = result.filePaths[0];
         }
-
-        const exportFolderPath = result.filePaths[0];
 
         const nodeFsPath = path.join(exportFolderPath, fileName);
         await fs.mkdir(exportFolderPath, { recursive: true });
         await fs.writeFile(nodeFsPath, htmlContent);
+        if (isFormifyTestHooksEnabled()) {
+            recordFormifyTestArtifact("text-operation", {
+                type: TextOperationType.EXPORT_HTML,
+                filePath: activeFile.path,
+                exportPath: nodeFsPath,
+                htmlContent,
+            });
+        }
 
         new Notice(localInstance.text_operation_export_success + nodeFsPath);
 
@@ -258,6 +302,16 @@ export class TextActionService implements IActionService {
 
         // 使用TextConverter移除所有Markdown格式
         const plainText = TextConverter.removeAllMarkdownFormats(content);
+
+        if (isFormifyTestHooksEnabled()) {
+            recordFormifyTestArtifact("text-operation", {
+                type: TextOperationType.COPY_PLAIN_TEXT,
+                filePath: activeFile.path,
+                content: plainText,
+            });
+            new Notice(localInstance.text_operation_copy_plain_text_success);
+            return;
+        }
 
         // 复制到剪贴板
         await navigator.clipboard.writeText(plainText);
@@ -782,6 +836,22 @@ export class TextActionService implements IActionService {
     private async showConfirm(context: ActionContext, message: string): Promise<boolean> {
         const renderedMessage = await this.renderTemplate(message, context);
         const display = Strings.isBlank(renderedMessage) ? message : renderedMessage;
+        const preset = consumeFormifyTestResponse("confirm");
+        if (typeof preset === "boolean") {
+            recordFormifyTestEvent("text-action-auto-confirm", {
+                message: display,
+                confirmed: preset,
+            });
+            return preset;
+        }
+        if (preset === "confirm" || preset === "cancel") {
+            const confirmed = preset === "confirm";
+            recordFormifyTestEvent("text-action-auto-confirm", {
+                message: display,
+                confirmed,
+            });
+            return confirmed;
+        }
         return new Promise((resolve) => {
             const modal = new TextActionConfirmModal(context.app, display, resolve);
             modal.open();

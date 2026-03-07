@@ -7,6 +7,7 @@ import { Strings } from "src/utils/Strings";
 import { FormTemplateProcessEngine } from "../../engine/FormTemplateProcessEngine";
 import { ActionChain, ActionContext, IActionService } from "../IActionService";
 import CommonSuggestModal from "src/component/modal/CommonSuggestModal";
+import { consumeFormifyTestResponse, recordFormifyTestEvent } from "src/testing/FormifyTestHooks";
 
 type ObjectItem = {
     label: string;
@@ -44,12 +45,10 @@ export default class SuggestModalActionService implements IActionService {
                 typeof item === "string" ? item : item.label
             );
 
-
-            const suggestModal = new CommonSuggestModal(context.app, itemLabels, async (value) => {
+            const resolveSelection = async (value: string) => {
                 const selectedItem = items.length > 0 && typeof items[0] === "string"
                     ? (items as string[]).find(item => item === value)
-                    : (items as ObjectItem[]).find(item => item.label === value);
-
+                    : (items as ObjectItem[]).find(item => item.label === value || item.value === value);
 
                 let selected: string;
                 if (typeof selectedItem === "string") {
@@ -57,15 +56,33 @@ export default class SuggestModalActionService implements IActionService {
                 } else {
                     selected = Strings.defaultIfBlank(selectedItem?.value, selectedItem?.label || "");
                 }
-                selected = await new FormTemplateProcessEngine().process(selected, state, context.app)
+                selected = await new FormTemplateProcessEngine().process(selected, state, context.app);
                 state.values[suggestAction.fieldName] = selected;
+                recordFormifyTestEvent("suggest-modal-selected", {
+                    fieldName: suggestAction.fieldName,
+                    selected,
+                });
                 if (chain) {
                     resolve(chain.next(context));
                 } else {
                     resolve(undefined);
                 }
+            };
+
+            const presetSelection = consumeFormifyTestResponse("suggestModal");
+            if (typeof presetSelection === "string" && presetSelection.trim().length > 0) {
+                void resolveSelection(presetSelection.trim());
+                return;
+            }
+
+
+            const suggestModal = new CommonSuggestModal(context.app, itemLabels, async (value) => {
+                await resolveSelection(value);
             })
             suggestModal.onCancel = () => {
+                recordFormifyTestEvent("suggest-modal-cancelled", {
+                    fieldName: suggestAction.fieldName,
+                });
                 resolve(undefined);
             }
             suggestModal.setTitle(suggestAction.fieldName)

@@ -270,6 +270,7 @@ export function FormFieldSettingHeader(props: {
 				onOpenChange={(open: boolean) => {
 					setOpenCondition(open);
 				}}
+				closeOnInteractOutside={false}
 			>
 				{() => {
 					return (

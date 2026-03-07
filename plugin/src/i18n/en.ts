@@ -921,7 +921,6 @@ export class En implements Local {
 	trigger_section_title = "Action Triggers";
 	multi_model_mode_single = "Single Model";
 	multi_model_mode_compare = "Compare";
-	multi_model_mode_collaborate = "Collaborate";
 	layout_horizontal = "Horizontal";
 	layout_tabs = "Tabs";
 	layout_vertical = "Vertical";
@@ -934,15 +933,6 @@ export class En implements Local {
 	compare_group_name = "Group Name";
 	compare_group_description = "Description";
 	compare_group_models = "Models";
-	collaboration_template = "Collaboration Template";
-	new_collaboration_template = "New Template";
-	edit_collaboration_template = "Edit Template";
-	delete_collaboration_template = "Delete Template";
-	template_step = "Step {index}";
-	add_step = "Add Step";
-	remove_step = "Remove Step";
-	task_description = "Task Description";
-	pass_context = "Pass Context";
 	stop_all = "Stop All";
 	retry_failed = "Retry Failed";
 	generating_progress = "{completed}/{total} Generating";
@@ -951,14 +941,9 @@ export class En implements Local {
 	partial_success = "{success}/{total} models succeeded, {failed} failed";
 	retrying_failed = "Retrying {count} failed models...";
 	select_compare_models = "Select compare models";
-	select_collaboration_template = "Select collaboration template";
 	no_compare_configs = "No configs yet, click New";
-	no_collaboration_templates = "No configs yet, click New";
-	select_or_create_collaboration_template = "Please select a collaboration template or create a new one";
 	manage_compare_group = "Manage Compare Groups";
-	manage_collaboration_template = "Manage Collaboration Templates";
 	compare_group_empty_state = "Select a compare group to edit, or click New";
-	collaboration_template_empty_state = "Select a template to edit, or click New";
 	model_reasoning = "Model Reasoning";
 	web_search = "Web Search";
 	clear_template = "Clear template";
@@ -966,7 +951,6 @@ export class En implements Local {
 	delete_file = "Delete file";
 	delete_folder = "Delete folder";
 	template_label = "Template";
-	collaboration_template_summary = "Template: {name} ({count} steps)";
 	image_generation_mode = "Image generation mode";
 	stop_this_model = "Stop this model";
 	retry_this_model = "Retry this model";

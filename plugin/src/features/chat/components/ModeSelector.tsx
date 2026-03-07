@@ -1,4 +1,4 @@
-import { User, GitCompareArrows, Workflow, ChevronDown } from 'lucide-react';
+import { User, GitCompareArrows, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import type { MultiModelMode } from '../types/multiModel';
 import { localInstance } from 'src/i18n/locals';
@@ -16,7 +16,6 @@ export const ModeSelector = ({ mode, onModeChange }: ModeSelectorProps) => {
 	const modeOptions: { mode: MultiModelMode; icon: typeof User; label: string }[] = [
 		{ mode: 'single', icon: User, label: localInstance.multi_model_mode_single || '单模型' },
 		{ mode: 'compare', icon: GitCompareArrows, label: localInstance.multi_model_mode_compare || '对比模式' },
-		{ mode: 'collaborate', icon: Workflow, label: localInstance.multi_model_mode_collaborate || '协作模式' },
 	];
 
 	const currentMode = modeOptions.find((m) => m.mode === mode) || modeOptions[0];

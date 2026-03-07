@@ -131,6 +131,22 @@ export function GeneralSettingTabItem(props: { plugin: FormPlugin }) {
 				});
 			});
 
+		new Setting(el)
+			.setName("Enable test hooks")
+			.setDesc("仅供自动测试使用。开启后会暴露 window.__formifyTestHooks，并启用测试专用交互钩子。")
+			.addToggle((cb) => {
+				cb.setValue(settingsValue.testing?.enableTestHooks ?? false);
+				cb.onChange((v) => {
+					setSettingsValue((prev) => ({
+						...prev,
+						testing: {
+							...(prev.testing ?? DEFAULT_SETTINGS.testing),
+							enableTestHooks: v,
+						},
+					}));
+				});
+			});
+
 		return () => {
 			el.empty();
 		};

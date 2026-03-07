@@ -1003,14 +1003,35 @@ class SystemConditionEvaluator implements IConditionEvaluator {
       return { satisfied: true, details: "未指定版本要求" };
     }
 
-    // @ts-ignore - 访问 Obsidian 内部 API
-    const obsidianVersion = context.app.version || "unknown";
+    const obsidianVersion = this.resolveObsidianVersion(context.app);
+    if (obsidianVersion === "unknown") {
+      return {
+        satisfied: false,
+        details: "无法解析当前 Obsidian 版本",
+      };
+    }
     const satisfied = this.compareVersions(obsidianVersion, config.version, config.operator);
 
     return {
       satisfied,
       details: `Obsidian 版本 ${obsidianVersion} ${satisfied ? "满足" : "不满足"} ${config.operator} ${config.version}`,
     };
+  }
+
+  private resolveObsidianVersion(app: App): string {
+    // @ts-ignore - 访问 Obsidian 内部 API
+    const directVersion = typeof app.version === "string" ? app.version.trim() : "";
+    if (directVersion) {
+      return directVersion;
+    }
+
+    const userAgent = typeof navigator?.userAgent === "string" ? navigator.userAgent : "";
+    const matched = userAgent.match(/obsidian\/([0-9.]+)/i);
+    if (matched?.[1]) {
+      return matched[1];
+    }
+
+    return "unknown";
   }
 
   private evaluateWorkspaceLayout(

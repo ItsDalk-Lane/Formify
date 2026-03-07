@@ -9,18 +9,18 @@ import { HistoryService, ChatHistoryEntry } from './HistoryService';
 import { FileContentService } from './FileContentService';
 import type { ChatMessage, ChatSession, ChatSettings, ChatState, McpToolMode, SelectedFile, SelectedFolder } from '../types/chat';
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
-import type { CollaborationTemplate, CompareGroup, LayoutMode, MultiModelMode, ParallelResponseGroup } from '../types/multiModel';
+import type { CompareGroup, LayoutMode, MultiModelMode, ParallelResponseGroup } from '../types/multiModel';
 import { v4 as uuidv4 } from 'uuid';
 import { InternalLinkParserService } from '../../../service/InternalLinkParserService';
 import { DebugLogger } from 'src/utils/DebugLogger';
 import { SystemPromptAssembler } from 'src/service/SystemPromptAssembler';
 import { arrayBufferToBase64, getMimeTypeFromFilename } from 'src/features/tars/providers/utils';
-import type { ToolCall, ToolDefinition, ToolExecution } from '../types/tools';
-import { ToolRegistryService } from './ToolRegistryService';
-import { ToolExecutionManager } from './ToolExecutionManager';
+import type { ToolCall } from '../types/tools';
 import { getChatHistoryPath } from 'src/utils/AIPathManager';
 import type { MultiModelChatService } from './MultiModelChatService';
 import type { MultiModelConfigService } from './MultiModelConfigService';
+import { filterMessagesForCompareModel } from '../utils/compareContext';
+import { buildEditedUserMessage, getEditableUserMessageContent } from '../utils/userMessageEditing';
 
 type ChatSubscriber = (state: ChatState) => void;
 
@@ -51,8 +51,6 @@ export class ChatService {
 	private readonly messageService: MessageService;
 	private readonly historyService: HistoryService;
 	private readonly fileContentService: FileContentService;
-	private readonly toolRegistry: ToolRegistryService;
-	private readonly toolExecutionManager: ToolExecutionManager;
 	private multiModelService: MultiModelChatService | null = null;
 	private multiModelConfigService: MultiModelConfigService | null = null;
 	private state: ChatState = {
@@ -71,12 +69,9 @@ export class ChatService {
 		selectedText: undefined,
 		showTemplateSelector: false,
 		shouldSaveHistory: true, // 默认保存历史记录
-		pendingToolExecutions: [],
-		toolExecutions: [],
 		mcpToolMode: 'auto',
 		mcpSelectedServerIds: [],
 		activeCompareGroupId: undefined,
-		activeCollaborationTemplateId: undefined,
 		multiModelMode: 'single',
 		parallelResponses: undefined,
 		layoutMode: 'horizontal',
@@ -94,12 +89,6 @@ export class ChatService {
 		this.fileContentService = new FileContentService(plugin.app);
 		this.messageService = new MessageService(plugin.app, this.fileContentService);
 		this.historyService = new HistoryService(plugin.app, getChatHistoryPath(plugin.settings.aiDataFolder));
-		this.toolRegistry = new ToolRegistryService();
-		this.toolExecutionManager = new ToolExecutionManager(this.toolRegistry, (executions) => {
-			this.state.pendingToolExecutions = executions.filter((e) => e.status === 'pending');
-			this.state.toolExecutions = executions;
-			this.emitState();
-		});
 	}
 
 	private get app() {
@@ -108,8 +97,7 @@ export class ChatService {
 
 	initialize(initialSettings?: Partial<ChatSettings>) {
 		this.updateSettings(initialSettings ?? {});
-		this.loadGlobalTools();
-		this.syncToolSettingsFromTars();
+
 		const persistedLayoutMode = this.readPersistedLayoutMode();
 		if (persistedLayoutMode) {
 			this.state.layoutMode = persistedLayoutMode;
@@ -197,7 +185,6 @@ export class ChatService {
 			enableTemplateAsSystemPrompt: false,
 			multiModelMode: this.state.multiModelMode,
 			activeCompareGroupId: this.state.activeCompareGroupId,
-			activeCollaborationTemplateId: this.state.activeCollaborationTemplateId,
 			layoutMode: this.state.layoutMode
 		};
 		this.state.activeSession = session;
@@ -213,7 +200,6 @@ export class ChatService {
 		this.state.mcpToolMode = 'auto';
 		this.state.mcpSelectedServerIds = [];
 		this.state.activeCompareGroupId = undefined;
-		this.state.activeCollaborationTemplateId = undefined;
 		this.state.parallelResponses = undefined;
 		// 注意：不清空手动移除记录，这是插件级别的持久化数据
 		this.emitState();
@@ -340,39 +326,11 @@ export class ChatService {
 		);
 	}
 
-	private async updateTarsToolSettings(update: Partial<{ globalTools: ToolDefinition[]; executionMode: 'manual' | 'auto'; enabled: boolean }>) {
-		const current = this.getTarsToolSettings();
-		this.plugin.settings.tars.settings.tools = {
-			...current,
-			...update
-		};
-		await this.plugin.saveSettings();
-	}
 
-	private syncToolSettingsFromTars() {
-		this.state.pendingToolExecutions = this.toolExecutionManager.getPending();
-	}
 
-	loadGlobalTools() {
-		const tools = this.getTarsToolSettings();
-		for (const def of tools.globalTools ?? []) {
-			// 如果是内置工具，只应用 enabled 覆盖（避免用 user 工具覆盖内置实现）
-			if (this.toolRegistry.isBuiltin(def.id)) {
-				this.toolRegistry.setToolEnabled(def.id, def.enabled);
-				// 如果有 executionMode，也应用
-				if (def.executionMode) {
-					this.toolRegistry.setToolExecutionMode(def.id, def.executionMode);
-				}
-				continue;
-			}
-			// 确保 executionMode 字段存在
-			const toolWithMode = {
-				...def,
-				executionMode: def.executionMode ?? 'manual'
-			};
-			this.toolRegistry.upsertUserTool(toolWithMode);
-		}
-	}
+
+
+
 
 	/**
 	 * 获取消息服务实例
@@ -381,162 +339,35 @@ export class ChatService {
 		return this.messageService;
 	}
 
-	/**
-	 * 获取工具注册服务实例
-	 */
-	getToolRegistry(): ToolRegistryService {
-		return this.toolRegistry;
-	}
 
-	/**
-	 * 获取工具执行管理器实例
-	 */
-	getToolExecutionManager(): ToolExecutionManager {
-		return this.toolExecutionManager;
-	}
 
-	getTools(): ToolDefinition[] {
-		return this.toolRegistry.list();
-	}
 
-	isBuiltinTool(id: string): boolean {
-		return this.toolRegistry.isBuiltin(id);
-	}
 
-	async setToolExecutionMode(id: string, executionMode: 'manual' | 'auto') {
-		this.toolRegistry.setToolExecutionMode(id, executionMode);
-		const tools = this.getTarsToolSettings();
-		const list = tools.globalTools ?? [];
-		const now = Date.now();
-		const hasEntry = list.some((t) => t.id === id);
-		let next: ToolDefinition[];
-		if (hasEntry) {
-			next = list.map((t) => (t.id === id ? { ...t, executionMode, updatedAt: now } : t));
-		} else {
-			const def = this.toolRegistry.get(id);
-			next = def ? [...list, { ...def, executionMode, updatedAt: now }] : list;
-		}
-		await this.updateTarsToolSettings({ globalTools: next });
-		this.emitState();
-	}
 
-	async upsertToolDefinition(tool: ToolDefinition) {
-		if (this.toolRegistry.isBuiltin(tool.id)) {
-			new Notice(`不能创建/覆盖内置工具：${tool.id}`);
-			return;
-		}
-		this.toolRegistry.upsertUserTool(tool);
-		const tools = this.getTarsToolSettings();
-		const list = tools.globalTools ?? [];
-		const next = [...list.filter((t) => t.id !== tool.id), tool];
-		await this.updateTarsToolSettings({ globalTools: next });
-		this.emitState();
-	}
 
-	async deleteToolDefinition(id: string) {
-		if (!this.toolRegistry.remove(id)) return;
-		const tools = this.getTarsToolSettings();
-		await this.updateTarsToolSettings({ globalTools: (tools.globalTools ?? []).filter((t) => t.id !== id) });
-		this.emitState();
-	}
 
-	async setToolEnabled(id: string, enabled: boolean) {
-		this.toolRegistry.setToolEnabled(id, enabled);
-		const tools = this.getTarsToolSettings();
-		const list = tools.globalTools ?? [];
-		const now = Date.now();
-		const hasEntry = list.some((t) => t.id === id);
-		let next: ToolDefinition[];
-		if (hasEntry) {
-			next = list.map((t) => (t.id === id ? { ...t, enabled, updatedAt: now } : t));
-		} else {
-			const def = this.toolRegistry.get(id);
-			next = def ? [...list, { ...def, enabled, updatedAt: now }] : list;
-		}
-		await this.updateTarsToolSettings({ globalTools: next });
-		this.emitState();
-	}
 
-	getPendingToolExecutions(): ToolExecution[] {
-		return this.toolExecutionManager.getPending();
-	}
 
-	async approveToolExecution(id: string) {
-		const exec = await this.toolExecutionManager.approve(id);
-		this.applyExecutionResultToMessage(exec);
-		this.emitState();
-	}
 
-	rejectToolExecution(id: string) {
-		const exec = this.toolExecutionManager.reject(id);
-		this.applyExecutionResultToMessage(exec);
-		this.emitState();
-	}
 
-	async approveAllPendingToolExecutions() {
-		const pending = this.toolExecutionManager.getPending();
-		for (const exec of pending) {
-			await this.approveToolExecution(exec.id);
-		}
-	}
 
-	rejectAllPendingToolExecutions() {
-		const pending = this.toolExecutionManager.getPending();
-		for (const exec of pending) {
-			this.rejectToolExecution(exec.id);
-		}
-	}
 
-	private applyExecutionResultToMessage(exec: ToolExecution) {
-		const session = this.state.activeSession;
-		if (!session) return;
-		const msg = session.messages.find((m) => m.id === exec.messageId);
-		if (!msg || !msg.toolCalls?.length) return;
-		if (!exec.toolCallId) return;
-		const call = msg.toolCalls.find((c) => c.id === exec.toolCallId);
-		if (!call) return;
 
-		if (exec.status === 'completed') {
-			call.status = 'completed';
-			call.result = exec.result;
-		} else if (exec.status === 'failed') {
-			call.status = 'failed';
-			call.result = exec.error;
-		} else if (exec.status === 'rejected') {
-			call.status = 'failed';
-			call.result = '用户已拒绝';
-		}
-	}
 
-	async retryToolCall(messageId: string, toolCallId: string) {
-		const session = this.state.activeSession;
-		if (!session) return;
-		const message = session.messages.find((msg) => msg.id === messageId);
-		if (!message?.toolCalls?.length) return;
-		const call = message.toolCalls.find((item) => item.id === toolCallId);
-		if (!call) return;
 
-		call.status = 'pending';
-		call.result = undefined;
-		call.timestamp = Date.now();
 
-		const exec = this.toolExecutionManager.createPending({
-			toolId: call.name,
-			toolCallId: call.id,
-			sessionId: session.id,
-			messageId: message.id,
-			args: call.arguments ?? {}
-		});
 
-		const tool = this.toolRegistry.get(call.name);
-		const executionMode = tool?.executionMode ?? 'manual';
-		if (executionMode === 'auto') {
-			await this.approveToolExecution(exec.id);
-		} else {
-			new Notice(`工具调用待审批：${call.name}`);
-		}
-		this.emitState();
-	}
+
+
+
+
+
+
+
+
+
+
+
 
 	/**
 	 * 保存当前会话状态（用于模态框模式）
@@ -851,25 +682,11 @@ export class ChatService {
 		this.emitState();
 	}
 
-	setActiveCollaborationTemplate(templateId?: string) {
-		this.state.activeCollaborationTemplateId = templateId;
-		this.syncSessionMultiModelState();
-		void this.persistActiveSessionMultiModelFrontmatter();
-		this.emitState();
-	}
-
 	async loadCompareGroups(): Promise<CompareGroup[]> {
 		if (!this.multiModelConfigService) {
 			return [];
 		}
 		return this.multiModelConfigService.loadCompareGroups();
-	}
-
-	async loadCollaborationTemplates(): Promise<CollaborationTemplate[]> {
-		if (!this.multiModelConfigService) {
-			return [];
-		}
-		return this.multiModelConfigService.loadCollaborationTemplates();
 	}
 
 	async saveCompareGroup(group: CompareGroup): Promise<string | null> {
@@ -879,25 +696,11 @@ export class ChatService {
 		return this.multiModelConfigService.saveCompareGroup(group);
 	}
 
-	async saveCollaborationTemplate(template: CollaborationTemplate): Promise<string | null> {
-		if (!this.multiModelConfigService) {
-			return null;
-		}
-		return this.multiModelConfigService.saveCollaborationTemplate(template);
-	}
-
 	async deleteCompareGroup(id: string): Promise<void> {
 		if (!this.multiModelConfigService) {
 			return;
 		}
 		await this.multiModelConfigService.deleteCompareGroup(id);
-	}
-
-	async deleteCollaborationTemplate(id: string): Promise<void> {
-		if (!this.multiModelConfigService) {
-			return;
-		}
-		await this.multiModelConfigService.deleteCollaborationTemplate(id);
 	}
 
 	watchMultiModelConfigs(callback: Parameters<MultiModelConfigService['watchConfigs']>[0]): (() => void) | null {
@@ -1087,15 +890,6 @@ export class ChatService {
 			return;
 		}
 
-		if (this.state.multiModelMode === 'collaborate') {
-			if (!this.multiModelService) {
-				new Notice('多模型服务尚未初始化');
-				return;
-			}
-			await this.multiModelService.sendCollaborateMessage(prepared);
-			return;
-		}
-
 		if (prepared.isImageGenerationIntent && prepared.isModelSupportImageGeneration) {
 			const provider = this.resolveProvider();
 			const modelName = provider?.options.model || '当前模型';
@@ -1175,7 +969,6 @@ export class ChatService {
 			const restoredMultiModelState = this.restoreMultiModelStateFromSession(session);
 			this.state.multiModelMode = restoredMultiModelState.multiModelMode;
 			this.state.activeCompareGroupId = restoredMultiModelState.activeCompareGroupId;
-			this.state.activeCollaborationTemplateId = restoredMultiModelState.activeCollaborationTemplateId;
 			this.state.selectedModels = restoredMultiModelState.selectedModels;
 			this.state.layoutMode = restoredMultiModelState.layoutMode;
 			this.state.parallelResponses = undefined;
@@ -1214,7 +1007,9 @@ export class ChatService {
 		if (!session) return;
 		const message = session.messages.find((msg) => msg.id === messageId);
 		if (!message || message.role !== 'user') return;
-		message.content = content.trim();
+		const editedMessage = buildEditedUserMessage(message, content);
+		message.content = editedMessage.content;
+		message.metadata = editedMessage.metadata;
 		message.timestamp = Date.now();
 		session.updatedAt = Date.now();
 		this.emitState();
@@ -1242,7 +1037,9 @@ export class ChatService {
 		if (!message || message.role !== 'user') return;
 
 		// 更新消息内容
-		message.content = content.trim();
+		const editedMessage = buildEditedUserMessage(message, content);
+		message.content = editedMessage.content;
+		message.metadata = editedMessage.metadata;
 		message.timestamp = Date.now();
 
 		// 删除这条消息之后的所有消息（包括AI回复）
@@ -1262,20 +1059,21 @@ export class ChatService {
 
 		// 对比模式：使用多模型服务重新生成
 		if (this.state.multiModelMode === 'compare' && this.multiModelService) {
+			const editableContent = getEditableUserMessageContent(message);
 			const prepared: PreparedChatRequest = {
 				session,
 				userMessage: message,
 				currentSelectedFiles: [...(session.selectedFiles ?? [])],
 				currentSelectedFolders: [...(session.selectedFolders ?? [])],
-				originalUserInput: message.content,
-				isImageGenerationIntent: this.detectImageGenerationIntent(message.content),
+				originalUserInput: editableContent,
+				isImageGenerationIntent: this.detectImageGenerationIntent(editableContent),
 				isModelSupportImageGeneration: this.isCurrentModelSupportImageGeneration()
 			};
 			await this.multiModelService.sendCompareMessage(prepared);
 			return;
 		}
 
-		// 单模型模式或协作模式：原有逻辑
+		// 单模型模式：原有逻辑
 		// 重新生成AI回复
 		await this.generateAssistantResponse(session);
 	}
@@ -1367,7 +1165,7 @@ export class ChatService {
 			return;
 		}
 
-		// 单模型模式或协作模式：原有逻辑
+		// 单模型模式：原有逻辑
 		// 重新生成历史消息时，目标消息及其后的对话都应被移除
 		// 否则会残留后续上下文，导致对话历史不一致
 		session.messages = session.messages.slice(0, index);
@@ -1981,7 +1779,8 @@ export class ChatService {
 		const messages = await this.buildProviderMessagesWithOptions(session, {
 			context: options?.context,
 			taskDescription: options?.taskDescription,
-			systemPrompt: options?.systemPromptOverride
+			systemPrompt: options?.systemPromptOverride,
+			modelTag
 		});
 		DebugLogger.logLlmMessages('ChatService.generateAssistantResponseForModel', messages, { level: 'debug' });
 
@@ -2205,9 +2004,13 @@ export class ChatService {
 			context?: string;
 			taskDescription?: string;
 			systemPrompt?: string;
+			modelTag?: string;
 		}
 	): Promise<ProviderMessage[]> {
-		const visibleMessages = session.messages.filter((message) => !message.metadata?.hiddenFromModel);
+		const visibleMessages =
+			(session.multiModelMode ?? this.state.multiModelMode) === 'compare' && options?.modelTag
+				? filterMessagesForCompareModel(session.messages, options.modelTag)
+				: session.messages.filter((message) => !message.metadata?.hiddenFromModel);
 		const requestMessages = [...visibleMessages];
 
 		if (options?.context || options?.taskDescription) {
@@ -2329,7 +2132,6 @@ export class ChatService {
 		}
 		session.multiModelMode = this.state.multiModelMode;
 		session.activeCompareGroupId = this.state.activeCompareGroupId;
-		session.activeCollaborationTemplateId = this.state.activeCollaborationTemplateId;
 		session.layoutMode = this.state.layoutMode;
 	}
 
@@ -2348,7 +2150,6 @@ export class ChatService {
 		await this.historyService.updateSessionFrontmatter(session.filePath, {
 			multiModelMode: session.multiModelMode ?? 'single',
 			activeCompareGroupId: session.activeCompareGroupId,
-			activeCollaborationTemplateId: session.activeCollaborationTemplateId,
 			layoutMode: session.layoutMode ?? this.state.layoutMode
 		});
 	}
@@ -2356,7 +2157,6 @@ export class ChatService {
 	private restoreMultiModelStateFromSession(session: ChatSession): {
 		multiModelMode: MultiModelMode;
 		activeCompareGroupId?: string;
-		activeCollaborationTemplateId?: string;
 		selectedModels: string[];
 		layoutMode: LayoutMode;
 	} {
@@ -2368,22 +2168,15 @@ export class ChatService {
 			)
 		);
 		const hasParallelGroup = session.messages.some((message) => Boolean(message.parallelGroupId));
-		const hasCollaborationSteps = session.messages.some((message) =>
-			message.role === 'assistant' &&
-			(typeof message.executionIndex === 'number' || Boolean(message.taskDescription))
-		);
 		const inferredMode: MultiModelMode = hasParallelGroup
 			? 'compare'
-			: hasCollaborationSteps
-				? 'collaborate'
-				: 'single';
+			: 'single';
 		const multiModelMode = session.multiModelMode ?? inferredMode;
 		const layoutMode = session.layoutMode ?? this.readPersistedLayoutMode() ?? this.state.layoutMode;
 
 		return {
 			multiModelMode,
 			activeCompareGroupId: session.activeCompareGroupId,
-			activeCollaborationTemplateId: session.activeCollaborationTemplateId,
 			selectedModels: multiModelMode === 'single'
 				? [session.modelId || this.getDefaultProviderTag() || ''].filter(Boolean)
 				: selectedModels,

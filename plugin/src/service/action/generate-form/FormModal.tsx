@@ -4,6 +4,7 @@ import { Root, createRoot } from "react-dom/client";
 import { ObsidianAppContext } from "src/context/obsidianAppContext";
 import { IFormField } from "src/model/field/IFormField";
 import { CpsFormRenderView } from "src/view/preview/CpsFormRenderView";
+import { consumeFormifyTestResponse, recordFormifyTestEvent } from "src/testing/FormifyTestHooks";
 
 export default class extends Modal {
 	root: Root | null;
@@ -19,6 +20,30 @@ export default class extends Modal {
 	}
 
 	async onOpen() {
+		const preset = consumeFormifyTestResponse("generateForm");
+		if (preset && typeof preset === "object") {
+			recordFormifyTestEvent("generate-form-auto-submitted", {
+				fieldCount: this.fields.length,
+			});
+			await this.onSubmit(preset as Record<string, any>);
+			this.isCancel = false;
+			this.close();
+			return;
+		}
+		if (preset === "__USE_DEFAULTS__") {
+			const defaults = this.fields.reduce<Record<string, any>>((acc, field) => {
+				acc[field.label] = (field as any).defaultValue;
+				return acc;
+			}, {});
+			recordFormifyTestEvent("generate-form-auto-submitted", {
+				fieldCount: this.fields.length,
+				defaulted: true,
+			});
+			await this.onSubmit(defaults);
+			this.isCancel = false;
+			this.close();
+			return;
+		}
 		this.renderFromObject();
 	}
 	private renderFromObject() {
@@ -48,6 +73,7 @@ export default class extends Modal {
 	onClose(): void {
 		super.onClose();
 		if (this.isCancel && this.onCancel) {
+			recordFormifyTestEvent("generate-form-cancelled");
 			this.onCancel();
 		}
 		setTimeout(() => {

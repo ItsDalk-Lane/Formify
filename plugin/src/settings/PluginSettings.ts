@@ -7,6 +7,10 @@ export interface TarsFeatureConfig {
     settings: TarsSettings;
 }
 
+export interface TestingFeatureConfig {
+	enableTestHooks: boolean;
+}
+
 export interface PluginSettings {
 
     formFolder: string;
@@ -18,6 +22,8 @@ export interface PluginSettings {
     tars: TarsFeatureConfig;
 
 	chat: ChatSettings;
+
+	testing: TestingFeatureConfig;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -28,4 +34,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
         settings: cloneTarsSettings(),
     },
 	chat: DEFAULT_CHAT_SETTINGS,
+	testing: {
+		enableTestHooks: false,
+	},
 };

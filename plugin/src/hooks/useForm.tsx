@@ -24,7 +24,7 @@ export function useForm(filePath: string, defaultConfig: FormConfig) {
 		}
 		try {
 			const config = JSON.parse(data);
-			return config;
+			return FormConfig.fromJSON(config);
 		} catch (e) {
 			return null;
 		}

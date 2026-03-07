@@ -6,6 +6,14 @@ import "./Dialog2.css";
 import { Strings } from "src/utils/Strings";
 import { localInstance } from "src/i18n/locals";
 
+function isInsideRadixFloatingLayer(target: EventTarget | null): boolean {
+	if (!(target instanceof Element)) {
+		return false;
+	}
+
+	return target.closest("[data-radix-popper-content-wrapper]") != null;
+}
+
 export default function Dialog2(props: {
 	/** 兼容：原有字符串标题 */
 	title?: string;
@@ -38,11 +46,17 @@ export default function Dialog2(props: {
 							props.dialogClassName || ""
 						}`}
 						onPointerDownOutside={(event) => {
+							if (isInsideRadixFloatingLayer(event.target)) {
+								return;
+							}
 							if (!closeOnInteractOutside) {
 								event.preventDefault();
 							}
 						}}
 						onFocusOutside={(event) => {
+							if (isInsideRadixFloatingLayer(event.target)) {
+								return;
+							}
 							if (!closeOnInteractOutside) {
 								event.preventDefault();
 							}

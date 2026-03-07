@@ -1,6 +1,7 @@
 import { App, SuggestModal, TFile } from "obsidian";
 import "./CFormSuggestModal.css";
 import { localInstance } from "src/i18n/locals";
+import { recordFormifyTestEvent } from "src/testing/FormifyTestHooks";
 
 export default class extends SuggestModal<TFile> {
 	emptyStateText: string = localInstance.none;
@@ -48,11 +49,17 @@ export default class extends SuggestModal<TFile> {
 
 	onOpen(): void {
 		super.onOpen();
+		const modalEl = (this as any).modalEl ?? this.containerEl;
+		modalEl?.setAttribute?.("data-testid", "formify-open-form-modal");
+		recordFormifyTestEvent("open-form-modal-opened", {
+			candidateCount: this.getItems().length,
+		});
 		this.containerEl.addEventListener("keydown", this.tabEventHandler);
 	}
 
 	onClose(): void {
 		super.onClose();
+		recordFormifyTestEvent("open-form-modal-closed");
 		this.containerEl.removeEventListener("keydown", this.tabEventHandler);
 	}
 
@@ -85,6 +92,9 @@ export default class extends SuggestModal<TFile> {
 	}
 
 	onChooseSuggestion(item: TFile, evt: MouseEvent | KeyboardEvent) {
+		recordFormifyTestEvent("open-form-modal-chosen", {
+			path: item.path,
+		});
 		this.onChoose(item);
 	}
 

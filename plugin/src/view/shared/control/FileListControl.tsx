@@ -14,7 +14,7 @@ const FILE_PATH_SEPARATOR = "<<<FILE_PATH>>>";
 const CONTENT_SEPARATOR = "<<<CONTENT>>>";
 
 // 编码：将路径和内容组合成一个字符串
-function encodePathAndContent(path: string, content: string): string {
+export function encodePathAndContent(path: string, content: string): string {
 	return `${FILE_PATH_SEPARATOR}${path}${CONTENT_SEPARATOR}${content}`;
 }
 

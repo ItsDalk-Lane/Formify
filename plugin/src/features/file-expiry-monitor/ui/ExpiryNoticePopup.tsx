@@ -1,9 +1,10 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { localInstance } from 'src/i18n/locals';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
 import { FileOperationService } from 'src/service/FileOperationService';
 import { DebugLogger } from 'src/utils/DebugLogger';
 import { FolderPickerModal } from 'src/features/file-expiry-monitor/ui/FolderPickerModal';
+import { recordFormifyTestEvent } from 'src/testing/FormifyTestHooks';
 import './ExpiryNoticePopup.css';
 
 /**
@@ -43,8 +44,21 @@ export function ExpiryNoticePopup(props: ExpiryNoticePopupProps) {
 		[files.length, selectedPaths.size]
 	);
 
+	useEffect(() => {
+		recordFormifyTestEvent('expiry-popup-opened', {
+			fileCount: files.length,
+		});
+		return () => {
+			recordFormifyTestEvent('expiry-popup-closed');
+		};
+	}, [files.length]);
+
 	// 全选/取消全选
 	const handleToggleAll = useCallback(() => {
+		recordFormifyTestEvent('expiry-popup-toggle-all', {
+			allSelected,
+			fileCount: files.length,
+		});
 		if (allSelected) {
 			setSelectedPaths(new Set());
 		} else {
@@ -54,6 +68,7 @@ export function ExpiryNoticePopup(props: ExpiryNoticePopupProps) {
 
 	// 切换单个文件选中
 	const handleToggleFile = useCallback((path: string) => {
+		recordFormifyTestEvent('expiry-popup-toggle-file', { path });
 		setSelectedPaths(prev => {
 			const next = new Set(prev);
 			if (next.has(path)) {
@@ -68,6 +83,9 @@ export function ExpiryNoticePopup(props: ExpiryNoticePopupProps) {
 	// 批量删除
 	const handleDeleteSelected = useCallback(async () => {
 		if (selectedPaths.size === 0 || !app) return;
+		recordFormifyTestEvent('expiry-popup-delete-requested', {
+			paths: Array.from(selectedPaths),
+		});
 
 		setProcessing(true);
 		try {
@@ -94,6 +112,9 @@ export function ExpiryNoticePopup(props: ExpiryNoticePopupProps) {
 	// 批量移动（打开文件夹选择后执行）
 	const handleMoveSelected = useCallback(async () => {
 		if (selectedPaths.size === 0 || !app) return;
+		recordFormifyTestEvent('expiry-popup-move-requested', {
+			paths: Array.from(selectedPaths),
+		});
 
 		// 使用 Obsidian 的 FolderSuggest 模态框选择目标文件夹
 		const modal = new FolderPickerModal(app, async (targetFolder: string) => {
@@ -124,6 +145,7 @@ export function ExpiryNoticePopup(props: ExpiryNoticePopupProps) {
 	// 打开文件
 	const handleOpenFile = useCallback((path: string) => {
 		if (!app) return;
+		recordFormifyTestEvent('expiry-popup-open-file-requested', { path });
 		const file = app.vault.getAbstractFileByPath(path);
 		if (file) {
 			void app.workspace.openLinkText(path, '', false);
@@ -132,11 +154,11 @@ export function ExpiryNoticePopup(props: ExpiryNoticePopupProps) {
 
 	if (files.length === 0) {
 		return (
-			<div className="fem-popup">
+			<div className="fem-popup" data-testid="formify-expiry-popup">
 				<div className="fem-popup__header">
 					<span className="fem-popup__title">{localInstance.expired_files_title}</span>
 					<div className="fem-popup__header-actions">
-						<button className="fem-popup__header-btn" onClick={onClose}>✕</button>
+						<button className="fem-popup__header-btn" data-testid="formify-expiry-close" onClick={onClose}>✕</button>
 					</div>
 				</div>
 				<div className="fem-popup__empty">{localInstance.no_expired_files}</div>
@@ -145,28 +167,29 @@ export function ExpiryNoticePopup(props: ExpiryNoticePopupProps) {
 	}
 
 	return (
-		<div className="fem-popup">
+		<div className="fem-popup" data-testid="formify-expiry-popup">
 			{/* 标题栏 */}
 			<div className="fem-popup__header">
 				<span className="fem-popup__title">
 					{localInstance.expired_files_title} ({files.length})
 				</span>
 				<div className="fem-popup__header-actions">
-					<button className="fem-popup__header-btn" onClick={onMinimize} title="Minimize">
+					<button className="fem-popup__header-btn" data-testid="formify-expiry-minimize" onClick={onMinimize} title="Minimize">
 						—
 					</button>
-					<button className="fem-popup__header-btn" onClick={onClose}>✕</button>
+					<button className="fem-popup__header-btn" data-testid="formify-expiry-close" onClick={onClose}>✕</button>
 				</div>
 			</div>
 
 			{/* 工具栏 */}
 			<div className="fem-popup__toolbar">
-				<button className="fem-popup__toolbar-btn" onClick={handleToggleAll}>
+				<button className="fem-popup__toolbar-btn" data-testid="formify-expiry-toggle-all" onClick={handleToggleAll}>
 					{allSelected ? localInstance.deselect_all : localInstance.select_all}
 				</button>
 				<div className="fem-popup__toolbar-spacer" />
 				<button
 					className="fem-popup__toolbar-btn fem-popup__toolbar-btn--danger"
+					data-testid="formify-expiry-delete-selected"
 					onClick={handleDeleteSelected}
 					disabled={selectedPaths.size === 0 || processing}
 				>
@@ -174,6 +197,7 @@ export function ExpiryNoticePopup(props: ExpiryNoticePopupProps) {
 				</button>
 				<button
 					className="fem-popup__toolbar-btn"
+					data-testid="formify-expiry-move-selected"
 					onClick={handleMoveSelected}
 					disabled={selectedPaths.size === 0 || processing}
 				>
@@ -193,11 +217,13 @@ export function ExpiryNoticePopup(props: ExpiryNoticePopupProps) {
 						<input
 							type="checkbox"
 							checked={selectedPaths.has(file.path)}
+							data-testid={`formify-expiry-checkbox-${file.path}`}
 							onChange={() => handleToggleFile(file.path)}
 							className="fem-popup__list-checkbox"
 						/>
 						<button
 							className="fem-popup__list-path"
+							data-testid={`formify-expiry-open-${file.path}`}
 							onClick={() => handleOpenFile(file.path)}
 							title={file.path}
 						>

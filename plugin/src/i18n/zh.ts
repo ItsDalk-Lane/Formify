@@ -930,7 +930,6 @@ export class Zh implements Local {
 	trigger_section_title = "动作触发器";
 	multi_model_mode_single = "单模型";
 	multi_model_mode_compare = "对比模式";
-	multi_model_mode_collaborate = "协作模式";
 	layout_horizontal = "并排";
 	layout_tabs = "标签页";
 	layout_vertical = "垂直";
@@ -943,15 +942,6 @@ export class Zh implements Local {
 	compare_group_name = "对比组名称";
 	compare_group_description = "描述";
 	compare_group_models = "包含模型";
-	collaboration_template = "协作模板";
-	new_collaboration_template = "新建协作模板";
-	edit_collaboration_template = "编辑协作模板";
-	delete_collaboration_template = "删除协作模板";
-	template_step = "步骤 {index}";
-	add_step = "添加步骤";
-	remove_step = "移除步骤";
-	task_description = "任务描述";
-	pass_context = "传递上下文";
 	stop_all = "停止所有";
 	retry_failed = "重试失败";
 	generating_progress = "{completed}/{total} 生成中";
@@ -960,14 +950,9 @@ export class Zh implements Local {
 	partial_success = "{success}/{total} 个模型响应成功，{failed} 个失败";
 	retrying_failed = "正在重试 {count} 个失败的模型...";
 	select_compare_models = "选择对比模型";
-	select_collaboration_template = "选择协作模板";
 	no_compare_configs = "暂无配置，点击新建";
-	no_collaboration_templates = "暂无配置，点击新建";
-	select_or_create_collaboration_template = "请选择协作模板或创建新模板";
 	manage_compare_group = "管理对比组";
-	manage_collaboration_template = "管理协作模板";
 	compare_group_empty_state = "选择一个对比组进行编辑，或点击新建";
-	collaboration_template_empty_state = "选择一个模板进行编辑，或点击新建";
 	model_reasoning = "模型推理";
 	web_search = "联网搜索";
 	clear_template = "清除模板";
@@ -975,7 +960,6 @@ export class Zh implements Local {
 	delete_file = "删除文件";
 	delete_folder = "删除文件夹";
 	template_label = "模板";
-	collaboration_template_summary = "协作模板: {name}（{count} 步）";
 	image_generation_mode = "图片生成模式";
 	stop_this_model = "停止此模型";
 	retry_this_model = "重试此模型";

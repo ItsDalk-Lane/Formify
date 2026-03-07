@@ -856,7 +856,6 @@ export interface Local {
 	trigger_section_title: string;
 	multi_model_mode_single: string;
 	multi_model_mode_compare: string;
-	multi_model_mode_collaborate: string;
 	layout_horizontal: string;
 	layout_tabs: string;
 	layout_vertical: string;
@@ -869,15 +868,6 @@ export interface Local {
 	compare_group_name: string;
 	compare_group_description: string;
 	compare_group_models: string;
-	collaboration_template: string;
-	new_collaboration_template: string;
-	edit_collaboration_template: string;
-	delete_collaboration_template: string;
-	template_step: string;
-	add_step: string;
-	remove_step: string;
-	task_description: string;
-	pass_context: string;
 	stop_all: string;
 	retry_failed: string;
 	generating_progress: string;
@@ -886,14 +876,9 @@ export interface Local {
 	partial_success: string;
 	retrying_failed: string;
 	select_compare_models: string;
-	select_collaboration_template: string;
 	no_compare_configs: string;
-	no_collaboration_templates: string;
-	select_or_create_collaboration_template: string;
 	manage_compare_group: string;
-	manage_collaboration_template: string;
 	compare_group_empty_state: string;
-	collaboration_template_empty_state: string;
 	model_reasoning: string;
 	web_search: string;
 	clear_template: string;
@@ -901,7 +886,6 @@ export interface Local {
 	delete_file: string;
 	delete_folder: string;
 	template_label: string;
-	collaboration_template_summary: string;
 	image_generation_mode: string;
 	stop_this_model: string;
 	retry_this_model: string;

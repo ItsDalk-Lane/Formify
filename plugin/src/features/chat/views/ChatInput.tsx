@@ -2,7 +2,7 @@ import { CornerDownLeft, StopCircle, X, FileText, Folder, Palette, Zap, Highligh
 import { FormEvent, useEffect, useState, useRef, Fragment, useMemo, lazy, Suspense } from 'react';
 import { ChatService } from '../services/ChatService';
 import type { ChatState } from '../types/chat';
-import type { CompareGroup, CollaborationTemplate } from '../types/multiModel';
+import type { CompareGroup } from '../types/multiModel';
 import { MultiModelSelector } from '../components/MultiModelSelector';
 import { TemplateSelector } from '../components/TemplateSelector';
 import { ModelTag } from '../components/ModelTag';
@@ -19,9 +19,6 @@ interface ChatInputProps {
 const CompareGroupManagerDialog = lazy(async () => import('../components/CompareGroupManagerDialog').then((module) => ({
 	default: module.CompareGroupManagerDialog
 })));
-const CollabTemplateManagerDialog = lazy(async () => import('../components/CollabTemplateManagerDialog').then((module) => ({
-	default: module.CollabTemplateManagerDialog
-})));
 
 export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 	const [value, setValue] = useState(state.inputValue);
@@ -30,10 +27,8 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 
 	const [isImageGenerationIntent, setIsImageGenerationIntent] = useState(false);
 	const [compareGroups, setCompareGroups] = useState<CompareGroup[]>([]);
-	const [collaborationTemplates, setCollaborationTemplates] = useState<CollaborationTemplate[]>([]);
 	const [isLoadingConfigs, setIsLoadingConfigs] = useState(false);
 	const [showGroupManager, setShowGroupManager] = useState(false);
-	const [showTemplateManager, setShowTemplateManager] = useState(false);
 	const isMultiModel = state.multiModelMode !== 'single';
 
 	useEffect(() => {
@@ -69,8 +64,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 			setIsLoadingConfigs(true);
 			const groups = await service.loadCompareGroups();
 			setCompareGroups(groups);
-			const templates = await service.loadCollaborationTemplates();
-			setCollaborationTemplates(templates);
 			setIsLoadingConfigs(false);
 		};
 		void loadConfigs();
@@ -83,10 +76,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 			if (event.key === 'Escape') {
 				if (showGroupManager) {
 					setShowGroupManager(false);
-					return;
-				}
-				if (showTemplateManager) {
-					setShowTemplateManager(false);
 					return;
 				}
 			}
@@ -108,7 +97,7 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 		};
 		window.addEventListener('keydown', handleShortcut);
 		return () => window.removeEventListener('keydown', handleShortcut);
-	}, [isMultiModel, service, showGroupManager, showTemplateManager]);
+	}, [isMultiModel, service, showGroupManager]);
 
 	const handleSubmit = async (event?: FormEvent) => {
 		event?.preventDefault();
@@ -252,9 +241,7 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 			multiModelMode={state.multiModelMode}
 			layoutMode={state.layoutMode}
 			compareGroups={compareGroups}
-			collaborationTemplates={collaborationTemplates}
 			activeCompareGroupId={state.activeCompareGroupId}
-			activeCollaborationTemplateId={state.activeCollaborationTemplateId}
 			onSingleModelChange={(modelId) => service.setModel(modelId)}
 			onModelToggle={(tag) => {
 				if (state.selectedModels.includes(tag)) {
@@ -272,9 +259,7 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 					if (group) service.setSelectedModels(group.modelTags);
 				}
 			}}
-			onCollaborationTemplateSelect={(templateId) => service.setActiveCollaborationTemplate(templateId)}
 			onOpenGroupManager={() => setShowGroupManager(true)}
-			onOpenTemplateManager={() => setShowTemplateManager(true)}
 		/>
 		)
 	);
@@ -304,26 +289,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 			return (
 				<div className="tw-text-xs tw-text-muted tw-mb-1">
 					{localInstance.no_models_selected || '请至少选择一个模型'}
-				</div>
-			);
-		}
-		if (state.multiModelMode === 'collaborate' && state.activeCollaborationTemplateId) {
-			const tpl = collaborationTemplates.find((t) => t.id === state.activeCollaborationTemplateId);
-			if (tpl) {
-				return (
-					<div className="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1 tw-rounded tw-text-xs tw-mb-1"
-						style={{ backgroundColor: 'var(--background-modifier-hover)', color: 'var(--text-muted)' }}>
-						{(localInstance.collaboration_template_summary || '协作模板: {name}（{count} 步）')
-							.replace('{name}', tpl.name)
-							.replace('{count}', String(tpl.steps.length))}
-					</div>
-				);
-			}
-		}
-		if (state.multiModelMode === 'collaborate') {
-			return (
-				<div className="tw-text-xs tw-text-muted tw-mb-1">
-					{localInstance.select_or_create_collaboration_template || '请选择协作模板或创建新模板'}
 				</div>
 			);
 		}
@@ -464,14 +429,6 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 					<CompareGroupManagerDialog
 						isOpen={showGroupManager}
 						onClose={() => setShowGroupManager(false)}
-						service={service}
-						providers={providers}
-					/>
-				)}
-				{showTemplateManager && (
-					<CollabTemplateManagerDialog
-						isOpen={showTemplateManager}
-						onClose={() => setShowTemplateManager(false)}
 						service={service}
 						providers={providers}
 					/>

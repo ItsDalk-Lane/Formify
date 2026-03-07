@@ -1,8 +1,7 @@
 import type { ProviderSettings } from 'src/features/tars/providers';
-import type { MultiModelMode, LayoutMode, CompareGroup, CollaborationTemplate } from '../types/multiModel';
+import type { MultiModelMode, LayoutMode, CompareGroup } from '../types/multiModel';
 import { ModelSelector } from './ModelSelector';
 import { CompareModelSelector } from './CompareModelSelector';
-import { CollabTemplateSelector } from './CollabTemplateSelector';
 
 export interface MultiModelSelectorProps {
 	providers: ProviderSettings[];
@@ -11,17 +10,13 @@ export interface MultiModelSelectorProps {
 	multiModelMode: MultiModelMode;
 	layoutMode: LayoutMode;
 	compareGroups: CompareGroup[];
-	collaborationTemplates: CollaborationTemplate[];
 	activeCompareGroupId?: string;
-	activeCollaborationTemplateId?: string;
 	onSingleModelChange: (tag: string) => void;
 	onModelToggle: (tag: string) => void;
 	onModeChange: (mode: MultiModelMode) => void;
 	onLayoutChange: (mode: LayoutMode) => void;
 	onCompareGroupSelect: (groupId?: string) => void;
-	onCollaborationTemplateSelect: (templateId?: string) => void;
 	onOpenGroupManager: () => void;
-	onOpenTemplateManager: () => void;
 }
 
 export const MultiModelSelector = ({
@@ -31,17 +26,13 @@ export const MultiModelSelector = ({
 	multiModelMode,
 	layoutMode,
 	compareGroups,
-	collaborationTemplates,
 	activeCompareGroupId,
-	activeCollaborationTemplateId,
 	onSingleModelChange,
 	onModelToggle,
 	onModeChange,
 	onLayoutChange,
 	onCompareGroupSelect,
-	onCollaborationTemplateSelect,
 	onOpenGroupManager,
-	onOpenTemplateManager,
 }: MultiModelSelectorProps) => {
 	return (
 		<div className="multi-model-selector" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -65,14 +56,6 @@ export const MultiModelSelector = ({
 							onModelToggle={onModelToggle}
 							onCompareGroupSelect={onCompareGroupSelect}
 							onOpenGroupManager={onOpenGroupManager}
-						/>
-					)}
-					{multiModelMode === 'collaborate' && (
-						<CollabTemplateSelector
-							collaborationTemplates={collaborationTemplates}
-							activeCollaborationTemplateId={activeCollaborationTemplateId}
-							onCollaborationTemplateSelect={onCollaborationTemplateSelect}
-							onOpenTemplateManager={onOpenTemplateManager}
 						/>
 					)}
 				</div>

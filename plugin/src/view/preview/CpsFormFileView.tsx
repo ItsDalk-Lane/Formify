@@ -11,6 +11,7 @@ import { FormConfigContext } from "src/hooks/useFormConfig";
 import { localInstance } from "src/i18n/locals";
 import { FormImportDialog } from "../edit/setting/import/FormImportDialog";
 import FormVariableQuotePanel from "../edit/setting/action/common/variable-quoter/FormVariableQuotePanel";
+import { recordFormifyTestEvent } from "src/testing/FormifyTestHooks";
 
 type Props = {
 	filePath: string;
@@ -39,6 +40,9 @@ export function CpsFormFileView(props: Props) {
 
 	// 处理导入对话框关闭（无论是完成导入、取消还是点击X）
 	const handleImportDialogClose = () => {
+		recordFormifyTestEvent("form-import-dialog-close-requested", {
+			filePath: formFile,
+		});
 		setShowImportDialog(false);
 		// 从文件重新加载表单配置，确保界面显示最新数据
 		reload();
@@ -46,39 +50,16 @@ export function CpsFormFileView(props: Props) {
 
 	// 处理导入完成
 	const handleImportComplete = (importedConfig: FormConfig) => {
-		// 合并导入的配置到当前表单
-		const mergedConfig = new FormConfig(formConfig.id);
-		Object.assign(mergedConfig, {
-			...formConfig,
-			// 合并字段
-			fields: [
-				...(formConfig.fields || []),
-				...(importedConfig.fields || []),
-			],
-			// 合并动作
-			actions: [
-				...(formConfig.actions || []),
-				...(importedConfig.actions || []),
-			],
-			// 合并其他设置（如果导入的设置存在）
-			...(importedConfig.showSubmitSuccessToast !== undefined && {
-				showSubmitSuccessToast: importedConfig.showSubmitSuccessToast,
-			}),
-			...(importedConfig.enableExecutionTimeout !== undefined && {
-				enableExecutionTimeout: importedConfig.enableExecutionTimeout,
-			}),
-			...(importedConfig.executionTimeoutThreshold !== undefined && {
-				executionTimeoutThreshold: importedConfig.executionTimeoutThreshold,
-			}),
-			...(importedConfig.runOnStartup !== undefined && {
-				runOnStartup: importedConfig.runOnStartup,
-			}),
+		recordFormifyTestEvent("form-import-complete", {
+			filePath: formFile,
+			fields: importedConfig.fields?.length ?? 0,
+			actions: importedConfig.actions?.length ?? 0,
 		});
 
 		// 先更新本地状态以立刻刷新界面，再写入文件确保落盘
-		setFormConfig(mergedConfig);
+		setFormConfig(importedConfig);
 		app.vault
-			.writeJson(formFile, mergedConfig)
+			.writeJson(formFile, importedConfig)
 			.then(() => {
 				setShowImportDialog(false);
 			})
@@ -119,7 +100,13 @@ export function CpsFormFileView(props: Props) {
 										alignItems: 'center',
 										transition: 'background-color 0.2s ease',
 									}}
-									onClick={() => setShowImportDialog(true)}
+									data-testid="formify-import-button"
+									onClick={() => {
+										recordFormifyTestEvent("form-import-button-clicked", {
+											filePath: formFile,
+										});
+										setShowImportDialog(true);
+									}}
 									title={localInstance.import_form || '导入表单'}
 									onMouseOver={(e) => {
 										e.currentTarget.style.background = 'var(--interactive-accent-hover)';

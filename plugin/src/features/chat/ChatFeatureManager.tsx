@@ -36,6 +36,7 @@ import { createModifyGhostTextExtension, setModifyGhostEffect } from './selectio
 import { availableVendors } from '../tars/settings';
 import type { Message, ProviderSettings } from '../tars/providers';
 import { buildProviderOptionsWithReasoningDisabled } from '../tars/providers/utils';
+import { recordFormifyTestEvent } from 'src/testing/FormifyTestHooks';
 
 export class ChatFeatureManager {
 	private readonly service: ChatService;
@@ -176,6 +177,7 @@ export class ChatFeatureManager {
 
 	async activateChatView(mode: ChatOpenMode) {
 		try {
+			recordFormifyTestEvent('chat-view-activate-requested', { mode });
 			if (mode === 'window') {
 				// 在新窗口中打开 - 首先检查是否已存在
 				const existingLeaf = this.findExistingView(VIEW_TYPE_CHAT_TAB);
@@ -246,8 +248,18 @@ export class ChatFeatureManager {
 					await this.openLeaf(leaf, VIEW_TYPE_CHAT_TAB, true);
 				}
 			}
+			recordFormifyTestEvent('chat-view-activate-finished', {
+				mode,
+				sidebarLeaves: this.plugin.app.workspace.getLeavesOfType(VIEW_TYPE_CHAT_SIDEBAR).length,
+				tabLeaves: this.plugin.app.workspace.getLeavesOfType(VIEW_TYPE_CHAT_TAB).length,
+				persistentModalOpen: Boolean(document.querySelector('.chat-persistent-modal')),
+			});
 		} catch (error) {
 			console.error('FormFlow Chat: 激活聊天视图失败:', error);
+			recordFormifyTestEvent('chat-view-activate-failed', {
+				mode,
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 	}
 
@@ -310,6 +322,9 @@ export class ChatFeatureManager {
 	openChatInPersistentModal(activeFile?: TFile | null) {
 		// 如果已存在持久化模态框，聚焦它并更新当前文件
 		if (this.persistentModal) {
+			recordFormifyTestEvent('chat-persistent-modal-reused', {
+				activeFilePath: activeFile?.path ?? this.plugin.app.workspace.getActiveFile()?.path ?? null,
+			});
 			this.persistentModal.focus();
 
 			// 如果指定了新的活动文件，更新上下文
@@ -333,10 +348,14 @@ export class ChatFeatureManager {
 				activeFile: file,
 				onClose: () => {
 					// 模态框关闭时清除引用
+					recordFormifyTestEvent('chat-persistent-modal-closed');
 					this.persistentModal = null;
 				}
 			}
 		);
+		recordFormifyTestEvent('chat-persistent-modal-opened', {
+			activeFilePath: file?.path ?? null,
+		});
 		this.persistentModal.open();
 	}
 

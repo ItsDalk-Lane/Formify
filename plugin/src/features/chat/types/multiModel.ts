@@ -1,4 +1,4 @@
-export type MultiModelMode = 'single' | 'compare' | 'collaborate';
+export type MultiModelMode = 'single' | 'compare';
 
 export type LayoutMode = 'horizontal' | 'tabs' | 'vertical';
 
@@ -7,23 +7,6 @@ export interface CompareGroup {
 	name: string;
 	description: string;
 	modelTags: string[];
-	createdAt: number;
-	updatedAt: number;
-	isDefault: boolean;
-}
-
-export interface CollaborationStep {
-	modelTag: string;
-	taskDescription: string;
-	passContext: boolean;
-	systemPromptOverride?: string;
-}
-
-export interface CollaborationTemplate {
-	id: string;
-	name: string;
-	description: string;
-	steps: CollaborationStep[];
 	createdAt: number;
 	updatedAt: number;
 	isDefault: boolean;

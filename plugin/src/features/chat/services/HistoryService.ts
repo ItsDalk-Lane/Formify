@@ -84,9 +84,13 @@ export class HistoryService {
 	}
 
 	private parseMultiModelMode(value: unknown): ChatSession['multiModelMode'] {
-		return value === 'compare' || value === 'collaborate' || value === 'single'
-			? value
-			: undefined;
+		if (value === 'compare' || value === 'single') {
+			return value;
+		}
+		if (value === 'collaborate') {
+			return 'single';
+		}
+		return undefined;
 	}
 
 	private parseLayoutMode(value: unknown): ChatSession['layoutMode'] {
@@ -228,7 +232,6 @@ export class HistoryService {
 					enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false,
 					multiModelMode: session.multiModelMode ?? 'single',
 					activeCompareGroupId: session.activeCompareGroupId,
-					activeCollaborationTemplateId: session.activeCollaborationTemplateId,
 					layoutMode: session.layoutMode
 				});
 				return session.filePath;
@@ -269,7 +272,6 @@ export class HistoryService {
 			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false,
 			multiModelMode: session.multiModelMode ?? 'single',
 			activeCompareGroupId: session.activeCompareGroupId,
-			activeCollaborationTemplateId: session.activeCollaborationTemplateId,
 			layoutMode: session.layoutMode
 		});
 
@@ -311,7 +313,6 @@ ${body}
 				enableTemplateAsSystemPrompt: this.parseBoolean(frontmatter.enableTemplateAsSystemPrompt, false),
 				multiModelMode: this.parseMultiModelMode(frontmatter.multiModelMode),
 				activeCompareGroupId: this.parseOptionalString(frontmatter.activeCompareGroupId),
-				activeCollaborationTemplateId: this.parseOptionalString(frontmatter.activeCollaborationTemplateId),
 				layoutMode: this.parseLayoutMode(frontmatter.layoutMode),
 				filePath: filePath // 设置文件路径
 			};
@@ -352,7 +353,6 @@ ${body}
 			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false,
 			multiModelMode: session.multiModelMode ?? 'single',
 			activeCompareGroupId: session.activeCompareGroupId,
-			activeCollaborationTemplateId: session.activeCollaborationTemplateId,
 			layoutMode: session.layoutMode
 		});
 
@@ -479,7 +479,6 @@ ${body}
 			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false,
 			multiModelMode: session.multiModelMode ?? 'single',
 			activeCompareGroupId: session.activeCompareGroupId,
-			activeCollaborationTemplateId: session.activeCollaborationTemplateId,
 			layoutMode: session.layoutMode
 		});
 
@@ -760,6 +759,7 @@ ${body}
 				isError,
 				toolCalls: extracted.toolCalls,
 				metadata: {
+					hiddenFromModel: currentHeader.role === 'assistant' && Boolean(parallelGroupId),
 					originalHeader: currentHeader.header.trim(),
 					originalTimestamp: currentHeader.timestampStr
 				}

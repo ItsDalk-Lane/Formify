@@ -41,7 +41,7 @@ export class FormService {
     async submit(idValues: FormIdValues, config: FormConfig, options: FormSubmitOptions) {
         const actions = getActionsCompatible(config);
 
-        const depResult = ActionDependencyAnalyzer.validateOutputDependencies(actions);
+        const depResult = ActionDependencyAnalyzer.validateOutputDependencies(actions, config.actionGroups || []);
         if (!depResult.valid) {
             throw new Error(`未满足的输出依赖：${depResult.missingOutputs.join(", ")}`);
         }
@@ -106,7 +106,7 @@ export class FormService {
                         currentFile: app.workspace.getActiveFile(),
                         formFilePath: formConfig.filePath,
                         lastExecutionTime: formConfig.lastExecutionTime,
-                        pluginVersion: app.plugins.getPlugin('obsidian-formify')?.manifest.version || '0.0.0'
+                        pluginVersion: app.plugins.getPlugin('formify')?.manifest.version || '0.0.0'
                     },
                     "startup"
                 );
@@ -240,7 +240,7 @@ export class FormService {
         }
 
         // 验证输出变量依赖完整性
-        const depResult = ActionDependencyAnalyzer.validateOutputDependencies(triggerActions);
+        const depResult = ActionDependencyAnalyzer.validateOutputDependencies(triggerActions, config.actionGroups || []);
         if (!depResult.valid) {
             ToastManager.error(
                 (localInstance.trigger_missing_deps || `触发器 ${trigger.name} 的动作存在未满足的输出依赖：${depResult.missingOutputs.join(", ")}`),
@@ -283,7 +283,7 @@ export class FormService {
             return { submitted: false };
         }
 
-        const depResult = ActionDependencyAnalyzer.validateOutputDependencies(triggerActions);
+        const depResult = ActionDependencyAnalyzer.validateOutputDependencies(triggerActions, formConfig.actionGroups || []);
         if (!depResult.valid) {
             ToastManager.error(
                 (localInstance.trigger_missing_deps || `触发器 ${trigger.name} 的动作存在未满足的输出依赖：${depResult.missingOutputs.join(", ")}`),
@@ -338,7 +338,8 @@ export class FormService {
         const filteredActions = config.getActionsForTrigger(trigger);
         const referencedFields = ActionDependencyAnalyzer.getReferencedFieldsWithConditionClosure(
             filteredActions,
-            config.fields
+            config.fields,
+            config.actionGroups || []
         );
 
         // 深拷贝 → 替换动作和字段

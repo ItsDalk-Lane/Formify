@@ -1,5 +1,5 @@
 import { App, TFile, TFolder } from 'obsidian';
-import type { ToolCall, ToolExecution } from './tools';
+import type { ToolCall } from './tools';
 import type { LayoutMode, MultiModelMode, ParallelResponseGroup } from './multiModel';
 
 export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
@@ -84,7 +84,6 @@ export interface ChatSession {
 	enableTemplateAsSystemPrompt?: boolean; // 会话级模板系统提示词开关
 	multiModelMode?: MultiModelMode;
 	activeCompareGroupId?: string;
-	activeCollaborationTemplateId?: string;
 	layoutMode?: LayoutMode;
 }
 
@@ -223,8 +222,6 @@ export interface ChatState {
 	shouldSaveHistory: boolean;
 
 	// 工具相关状态
-	pendingToolExecutions: ToolExecution[];
-	toolExecutions?: ToolExecution[];
 
 	// MCP 会话级控制（运行时状态，不持久化）
 	/** 当前会话的 MCP 工具调用模式，默认 'auto' */
@@ -232,7 +229,6 @@ export interface ChatState {
 	/** 手动模式下用户选中的 MCP 服务器 ID 数组 */
 	mcpSelectedServerIds: string[];
 	activeCompareGroupId?: string;
-	activeCollaborationTemplateId?: string;
 	multiModelMode: MultiModelMode;
 	parallelResponses?: ParallelResponseGroup;
 	layoutMode: LayoutMode;

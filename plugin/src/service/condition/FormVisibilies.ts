@@ -9,8 +9,22 @@ import { ConditionVariableResolver } from "src/utils/ConditionVariableResolver";
 import { FormConfig } from "src/model/FormConfig";
 import { FormFieldType } from "src/model/enums/FormFieldType";
 import { DatabaseFieldOutputFormat, IDatabaseField } from "src/model/field/IDatabaseField";
+import { Filter, FilterType } from "src/model/filter/Filter";
+
+type FieldVisibilityResolution = {
+    isVisible: boolean;
+};
 
 export class FormVisibilies {
+    private static resolveFieldValue(values: FormIdValues, field: IFormField) {
+        if (Object.prototype.hasOwnProperty.call(values, field.id)) {
+            const currentValue = values[field.id];
+            if (currentValue !== undefined) {
+                return currentValue;
+            }
+        }
+        return getFieldDefaultValue(field);
+    }
 
     /**
      * 获取可见字段列表
@@ -19,61 +33,83 @@ export class FormVisibilies {
      * @param app Obsidian App 实例（可选，用于扩展条件评估）
      */
     static visibleFields(fields: IFormField[], values: FormIdValues, app?: App) {
-        const visibleFields: IFormField[] = [];
-        const visibleFormIdValues: FormIdValues = {};
-        
-        // 创建用于变量解析的模拟 FormConfig
-        const formConfigForResolver: FormConfig = {
-            fields: fields as any,
-        } as FormConfig;
-        
-        // 创建扩展条件评估上下文
-        const extendedContext: ExtendedConditionContext | undefined = app ? {
-            app,
-            currentFile: app.workspace.getActiveFile(),
-            formConfig: formConfigForResolver,
-            formValues: values,
-        } : undefined;
+        const fieldById = new Map(fields.map((field) => [field.id, field]));
+        const cyclicFieldIds = this.collectCyclicFieldIds(fields, fieldById);
+        const formConfigForResolver = this.createFormConfigForResolver(fields);
+        const extendedContext = this.createExtendedContext(formConfigForResolver, values, app);
+        const resolvedValueCache = new Map<string, any>();
+        const visibilityCache = new Map<string, FieldVisibilityResolution>();
+        const visitingFieldIds = new Set<string>();
 
-        const isVisible = (id: string) => visibleFields.some(f => f.id === id);
-        
-        for (let i = 0; i < fields.length; i++) {
-            const field = fields[i];
-            let isMatch;
-            if (!field.condition) {
-                isMatch = true;
-            } else {
-                isMatch = FilterService.match(field.condition,
+        const resolveConditionValue = (value: any) => {
+            if (value === undefined) {
+                return undefined;
+            }
+            return ConditionVariableResolver.resolve(value, {
+                formConfig: formConfigForResolver,
+                formValues: values,
+            });
+        };
+
+        const resolveVisibleFieldValue = (field: IFormField) => {
+            if (!resolvedValueCache.has(field.id)) {
+                resolvedValueCache.set(field.id, this.resolveFieldValue(values, field));
+            }
+            return resolvedValueCache.get(field.id);
+        };
+
+        const evaluateVisibility = (field: IFormField): FieldVisibilityResolution => {
+            const cached = visibilityCache.get(field.id);
+            if (cached) {
+                return cached;
+            }
+
+            if (cyclicFieldIds.has(field.id) || visitingFieldIds.has(field.id)) {
+                const resolution = { isVisible: false };
+                visibilityCache.set(field.id, resolution);
+                return resolution;
+            }
+
+            visitingFieldIds.add(field.id);
+
+            try {
+                const isVisible = !field.condition || FilterService.match(
+                    field.condition,
                     (property) => {
-                        if (!property) {
+                        if (!property || cyclicFieldIds.has(property)) {
                             return undefined;
                         }
-                        if (!isVisible(property)) {
+
+                        const dependencyField = fieldById.get(property);
+                        if (!dependencyField) {
                             return undefined;
                         }
-                        return visibleFormIdValues[property];
+
+                        const dependencyVisibility = evaluateVisibility(dependencyField);
+                        if (!dependencyVisibility.isVisible) {
+                            return undefined;
+                        }
+
+                        return resolveVisibleFieldValue(dependencyField);
                     },
-                    (value) => {
-                        if (value === undefined) {
-                            return undefined;
-                        }
-                        // 使用变量解析器解析条件值中的变量引用
-                        // 注意：使用原始 values 对象以便能引用任何字段的值
-                        return ConditionVariableResolver.resolve(value, {
-                            formConfig: formConfigForResolver,
-                            formValues: values,
-                        });
-                    },
-                    fields,  // 传递字段定义数组
-                    extendedContext  // 传递扩展条件上下文
+                    resolveConditionValue,
+                    fields,
+                    extendedContext
                 );
+
+                const resolution = { isVisible };
+                visibilityCache.set(field.id, resolution);
+                return resolution;
+            } finally {
+                visitingFieldIds.delete(field.id);
             }
-            if (isMatch) {
-                visibleFields.push(field);
-                visibleFormIdValues[field.id] = values[field.id] || getFieldDefaultValue(field);
-            }
-        }
-        return visibleFields;
+        };
+
+        fields.forEach((field) => {
+            evaluateVisibility(field);
+        });
+
+        return fields.filter((field) => visibilityCache.get(field.id)?.isVisible === true);
     }
 
     static toFormLabelValues(fields: IFormField[], values: FormIdValues, app?: App): FormLabelValues {
@@ -87,7 +123,7 @@ export class FormVisibilies {
                 formLabelValues[field.label] = databaseValue ?? defaultValue;
                 return;
             }
-            formLabelValues[field.label] = values[field.id] || defaultValue;
+            formLabelValues[field.label] = this.resolveFieldValue(values, field);
         });
         return formLabelValues;
     }
@@ -216,8 +252,7 @@ export class FormVisibilies {
     ): FormIdValues {
         const visibleIdValues: FormIdValues = {};
         visibleFields.forEach((field) => {
-            const defaultValue = getFieldDefaultValue(field);
-            visibleIdValues[field.id] = values[field.id] || defaultValue;
+            visibleIdValues[field.id] = this.resolveFieldValue(values, field);
         });
         return visibleIdValues;
     }
@@ -232,5 +267,99 @@ export class FormVisibilies {
             return undefined;
         }
         return fieldById.get(trimmedRef) || fieldByLabel.get(trimmedRef);
+    }
+
+    private static createFormConfigForResolver(fields: IFormField[]): FormConfig {
+        return {
+            fields: fields as any,
+        } as FormConfig;
+    }
+
+    private static createExtendedContext(
+        formConfig: FormConfig,
+        values: FormIdValues,
+        app?: App
+    ): ExtendedConditionContext | undefined {
+        if (!app) {
+            return undefined;
+        }
+
+        return {
+            app,
+            currentFile: app.workspace.getActiveFile(),
+            formConfig,
+            formValues: values,
+        };
+    }
+
+    private static collectCyclicFieldIds(
+        fields: IFormField[],
+        fieldById: Map<string, IFormField>
+    ): Set<string> {
+        const dependenciesByFieldId = new Map<string, string[]>();
+        const visitState = new Map<string, "visiting" | "visited">();
+        const cyclicFieldIds = new Set<string>();
+        const path: string[] = [];
+
+        fields.forEach((field) => {
+            const dependencies = Array.from(this.collectConditionDependencies(field.condition)).filter(
+                (dependencyId) => fieldById.has(dependencyId)
+            );
+            dependenciesByFieldId.set(field.id, dependencies);
+        });
+
+        const visit = (fieldId: string) => {
+            const currentState = visitState.get(fieldId);
+            if (currentState === "visited") {
+                return;
+            }
+
+            if (currentState === "visiting") {
+                const cycleStartIndex = path.indexOf(fieldId);
+                const cycleFieldIds = cycleStartIndex >= 0 ? path.slice(cycleStartIndex) : [fieldId];
+                cycleFieldIds.forEach((cycleFieldId) => cyclicFieldIds.add(cycleFieldId));
+                return;
+            }
+
+            visitState.set(fieldId, "visiting");
+            path.push(fieldId);
+
+            const dependencyIds = dependenciesByFieldId.get(fieldId) || [];
+            dependencyIds.forEach((dependencyId) => {
+                visit(dependencyId);
+            });
+
+            path.pop();
+            visitState.set(fieldId, "visited");
+        };
+
+        fields.forEach((field) => {
+            visit(field.id);
+        });
+
+        return cyclicFieldIds;
+    }
+
+    private static collectConditionDependencies(condition?: Filter): Set<string> {
+        const dependencies = new Set<string>();
+        if (!condition) {
+            return dependencies;
+        }
+
+        const visit = (currentCondition: Filter) => {
+            if (currentCondition.type === FilterType.group) {
+                (currentCondition.conditions || []).forEach((childCondition) => {
+                    visit(childCondition);
+                });
+                return;
+            }
+
+            if (currentCondition.type === FilterType.filter && currentCondition.property) {
+                dependencies.add(currentCondition.property);
+            }
+        };
+
+        visit(condition);
+        return dependencies;
     }
 }

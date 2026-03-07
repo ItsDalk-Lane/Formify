@@ -1,6 +1,7 @@
 import { App, Modal, Setting } from 'obsidian';
 import FolderSuggest from 'src/component/combobox/FolderSuggest';
 import { localInstance } from 'src/i18n/locals';
+import { consumeFormifyTestResponse, recordFormifyTestEvent } from 'src/testing/FormifyTestHooks';
 
 /**
  * 文件夹选择模态框
@@ -19,6 +20,17 @@ export class FolderPickerModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass('fem-folder-picker-modal');
+		recordFormifyTestEvent('folder-picker-opened');
+
+		const presetFolder = consumeFormifyTestResponse('folderPicker');
+		if (typeof presetFolder === 'string' && presetFolder.trim().length > 0) {
+			recordFormifyTestEvent('folder-picker-auto-selected', {
+				folder: presetFolder,
+			});
+			this.onChoose(presetFolder.trim());
+			this.close();
+			return;
+		}
 
 		new Setting(contentEl)
 			.setName(localInstance.choose_folder)
@@ -59,6 +71,7 @@ export class FolderPickerModal extends Modal {
 	}
 
 	onClose(): void {
+		recordFormifyTestEvent('folder-picker-closed');
 		this.contentEl.empty();
 	}
 }

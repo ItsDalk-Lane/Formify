@@ -1,10 +1,11 @@
 import { Notice } from 'obsidian';
 import { v4 as uuidv4 } from 'uuid';
 import type { ChatMessage } from '../types/chat';
-import type { CollaborationTemplate, ParallelResponseEntry, ParallelResponseGroup } from '../types/multiModel';
+import type { ParallelResponseEntry, ParallelResponseGroup } from '../types/multiModel';
 import type { ChatService, PreparedChatRequest } from './ChatService';
 import { MultiModelConfigService } from './MultiModelConfigService';
 import { localInstance } from 'src/i18n/locals';
+import { buildRetryContextMessages } from '../utils/compareContext';
 
 export class MultiModelChatService {
 	private static readonly MAX_COMPARE_CONCURRENCY = 5;
@@ -142,66 +143,6 @@ export class MultiModelChatService {
 		}
 	}
 
-	async sendCollaborateMessage(prepared: PreparedChatRequest): Promise<void> {
-		const session = prepared.session;
-		const template = await this.resolveActiveCollaborationTemplate();
-		if (!template) {
-			new Notice('请先选择有效的协作模板。');
-			return;
-		}
-
-		this.chatService.setErrorState(undefined);
-		this.chatService.setGeneratingState(true);
-
-		let previousOutput = '';
-		try {
-			for (let index = 0; index < template.steps.length; index += 1) {
-				const step = template.steps[index];
-				const controller = new AbortController();
-				const controllerKey = `${step.modelTag}::${index}`;
-				this.abortControllers.set(controllerKey, controller);
-
-				try {
-					const message = await this.chatService.generateAssistantResponseForModel(session, step.modelTag, {
-						abortSignal: controller.signal,
-						context: step.passContext ? previousOutput : undefined,
-						taskDescription: step.taskDescription,
-						executionIndex: index + 1,
-						systemPromptOverride: step.systemPromptOverride,
-						createMessageInSession: false,
-						manageGeneratingState: false
-					});
-					message.metadata = {
-						...(message.metadata ?? {}),
-						hiddenFromModel: true
-					};
-					session.messages.push(message);
-					previousOutput = message.content;
-					session.updatedAt = Date.now();
-					this.chatService.notifyStateChange();
-
-					if (controller.signal.aborted) {
-						break;
-					}
-				} catch (error) {
-					const failedMessage = this.createErrorMessage(step.modelTag, error, {
-						taskDescription: step.taskDescription,
-						executionIndex: index + 1
-					});
-					session.messages.push(failedMessage);
-					session.updatedAt = Date.now();
-					this.chatService.notifyStateChange();
-				} finally {
-					this.abortControllers.delete(controllerKey);
-				}
-			}
-
-			await this.chatService.rewriteSessionMessages(session);
-		} finally {
-			this.chatService.setGeneratingState(false);
-		}
-	}
-
 	stopAllGeneration(): void {
 		this.compareStopRequested = true;
 		for (const controller of this.abortControllers.values()) {
@@ -242,11 +183,107 @@ export class MultiModelChatService {
 			return;
 		}
 
-		const replacement = await this.retrySingleMessage(session, target);
-		session.messages.splice(index, 1, replacement);
+		const modelTag = target.modelTag;
+		const parallelGroupId = target.parallelGroupId ?? `compare-retry-${uuidv4()}`;
+		const retryContextSession = {
+			...session,
+			messages: buildRetryContextMessages(session.messages, index)
+		};
+		const userMessageId = retryContextSession.messages[retryContextSession.messages.length - 1]?.id ?? '';
+		const draftMessage: ChatMessage = {
+			...target,
+			content: '',
+			isError: false,
+			timestamp: Date.now()
+		};
+
+		session.messages.splice(index, 1, draftMessage);
 		session.updatedAt = Date.now();
-		this.chatService.notifyStateChange();
-		await this.chatService.rewriteSessionMessages(session);
+		this.chatService.setErrorState(undefined);
+		this.chatService.setParallelResponses({
+			groupId: parallelGroupId,
+			userMessageId,
+			responses: [
+				{
+					modelTag,
+					modelName: draftMessage.modelName ?? this.getModelDisplayName(modelTag),
+					content: '',
+					isComplete: false,
+					isError: false,
+					messageId: target.id
+				}
+			]
+		});
+		this.chatService.setGeneratingState(true);
+
+		const controller = new AbortController();
+		this.abortControllers.set(modelTag, controller);
+
+		try {
+			const message = await this.chatService.generateAssistantResponseForModel(retryContextSession, modelTag, {
+				abortSignal: controller.signal,
+				taskDescription: target.taskDescription,
+				executionIndex: target.executionIndex,
+				createMessageInSession: false,
+				manageGeneratingState: false,
+				onChunk: (_chunk, currentMessage) => {
+					draftMessage.content = currentMessage.content;
+					draftMessage.timestamp = Date.now();
+					draftMessage.isError = false;
+					session.updatedAt = Date.now();
+					this.chatService.setParallelResponses({
+						groupId: parallelGroupId,
+						userMessageId,
+						responses: [
+							{
+								modelTag,
+								modelName: currentMessage.modelName ?? this.getModelDisplayName(modelTag),
+								content: currentMessage.content,
+								isComplete: false,
+								isError: false,
+								messageId: target.id
+							}
+						]
+					});
+				}
+			});
+
+			message.id = target.id;
+			message.parallelGroupId = target.parallelGroupId;
+			message.timestamp = Date.now();
+			message.metadata = {
+				...(message.metadata ?? {}),
+				hiddenFromModel: true
+			};
+
+			session.messages.splice(index, 1, message);
+			session.updatedAt = Date.now();
+			await this.chatService.rewriteSessionMessages(session);
+		} catch (error) {
+			if (this.isAbortError(error)) {
+				if (draftMessage.content.trim().length === 0) {
+					session.messages.splice(index, 1, target);
+				}
+			} else {
+				const failedMessage = this.createErrorMessage(modelTag, error, {
+					taskDescription: target.taskDescription,
+					executionIndex: target.executionIndex,
+					parallelGroupId: target.parallelGroupId
+				});
+				failedMessage.id = target.id;
+				failedMessage.timestamp = Date.now();
+				session.messages.splice(index, 1, failedMessage);
+			}
+			session.updatedAt = Date.now();
+			await this.chatService.rewriteSessionMessages(session);
+		} finally {
+			this.abortControllers.delete(modelTag);
+			this.chatService.clearParallelResponses();
+			if (this.abortControllers.size === 0) {
+				this.chatService.setGeneratingState(false);
+			}
+			this.chatService.notifyStateChange();
+		}
 	}
 
 	async retryAllFailed(): Promise<void> {
@@ -264,31 +301,6 @@ export class MultiModelChatService {
 		}
 		for (const message of failedMessages) {
 			await this.retryModel(message.id);
-		}
-	}
-
-	private async retrySingleMessage(session: NonNullable<ReturnType<ChatService['getActiveSession']>>, target: ChatMessage): Promise<ChatMessage> {
-		try {
-			const message = await this.chatService.generateAssistantResponseForModel(session, target.modelTag!, {
-				taskDescription: target.taskDescription,
-				executionIndex: target.executionIndex,
-				createMessageInSession: false,
-				manageGeneratingState: false
-			});
-
-			message.parallelGroupId = target.parallelGroupId;
-			message.metadata = {
-				...(message.metadata ?? {}),
-				hiddenFromModel: true
-			};
-
-			return message;
-		} catch (error) {
-			return this.createErrorMessage(target.modelTag!, error, {
-				taskDescription: target.taskDescription,
-				executionIndex: target.executionIndex,
-				parallelGroupId: target.parallelGroupId
-			});
 		}
 	}
 
@@ -369,15 +381,6 @@ export class MultiModelChatService {
 		}
 
 		return validTags;
-	}
-
-	private async resolveActiveCollaborationTemplate(): Promise<CollaborationTemplate | null> {
-		const state = this.chatService.getState();
-		if (!state.activeCollaborationTemplateId) {
-			return null;
-		}
-		const templates = await this.configService.loadCollaborationTemplates();
-		return templates.find((item) => item.id === state.activeCollaborationTemplateId) ?? null;
 	}
 
 	private queueParallelResponseUpdate(groupId: string, modelTag: string, patch: Partial<ParallelResponseEntry>): void {

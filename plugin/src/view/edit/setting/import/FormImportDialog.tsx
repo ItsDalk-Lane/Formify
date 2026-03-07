@@ -8,13 +8,14 @@ import {
     FormImportOptions,
     FormImportResult,
     ImportProgress,
-    PartialImportConfig,
+    PartialImportOtherSettings,
     ImportConflict,
     ConflictResolution
 } from 'src/model/FormImport';
 import { FormFieldType } from 'src/model/enums/FormFieldType';
 import { FormActionType } from 'src/model/enums/FormActionType';
 import { localInstance } from 'src/i18n/locals';
+import { recordFormifyTestEvent } from 'src/testing/FormifyTestHooks';
 import './FormImportDialog.css';
 
 interface FormImportDialogProps {
@@ -23,6 +24,65 @@ interface FormImportDialogProps {
     onClose: () => void;
     onComplete: (importedConfig: FormConfig) => void;
 }
+
+const DEFAULT_OTHER_SETTINGS: PartialImportOtherSettings = {
+    showSubmitSuccessToast: true,
+    enableExecutionTimeout: true,
+    executionTimeoutThreshold: true,
+    commandEnabled: true,
+    contextMenuEnabled: true,
+    runOnStartup: true,
+    startupConditions: true,
+    multiSubmitFormExecutionMode: true,
+    multiSubmitFormDisplayMode: true,
+};
+
+const OTHER_SETTINGS_OPTIONS: Array<{
+    key: keyof PartialImportOtherSettings;
+    title: string;
+    description: string;
+}> = [
+    {
+        key: 'showSubmitSuccessToast',
+        title: '显示提交成功提示',
+        description: '提交表单后显示成功通知消息',
+    },
+    {
+        key: 'enableExecutionTimeout',
+        title: '启用执行超时',
+        description: '同步迁移是否启用表单执行超时控制',
+    },
+    {
+        key: 'executionTimeoutThreshold',
+        title: '执行超时阈值',
+        description: '同步迁移超时时间阈值配置',
+    },
+    {
+        key: 'commandEnabled',
+        title: '表单命令开关',
+        description: '同步迁移表单级命令面板启用状态',
+    },
+    {
+        key: 'contextMenuEnabled',
+        title: '右键菜单开关',
+        description: '同步迁移表单级右键菜单启用状态',
+    },
+    {
+        key: 'runOnStartup',
+        title: localInstance.run_on_startup,
+        description: localInstance.run_on_startup_description,
+    },
+    {
+        key: 'multiSubmitFormExecutionMode',
+        title: '多表单执行模式',
+        description: '同步迁移多表单提交的执行模式',
+    },
+    {
+        key: 'multiSubmitFormDisplayMode',
+        title: '多表单显示模式',
+        description: '同步迁移多表单提交的显示模式',
+    },
+];
 
 export function FormImportDialog({
     app,
@@ -61,6 +121,8 @@ export function FormImportDialog({
     const [expandedSections, setExpandedSections] = useState({
         fields: true,
         actions: true,
+        actionTriggers: true,
+        executionConditions: true,
         otherSettings: true
     });
 
@@ -140,7 +202,15 @@ export function FormImportDialog({
 
     // 初始化
     useEffect(() => {
+        recordFormifyTestEvent('form-import-dialog-opened', {
+            currentFormId: currentConfig.id,
+        });
         loadForms();
+        return () => {
+            recordFormifyTestEvent('form-import-dialog-closed', {
+                currentFormId: currentConfig.id,
+            });
+        };
     }, []);
 
     // 加载表单列表
@@ -240,9 +310,19 @@ export function FormImportDialog({
             partialImport: {
                 ...prev.partialImport!,
                 otherSettings: {
-                    ...prev.partialImport?.otherSettings,
+                    ...(prev.partialImport?.otherSettings || DEFAULT_OTHER_SETTINGS),
                     [key]: value
                 }
+            }
+        }));
+    };
+
+    const setDefaultOtherSettings = () => {
+        setImportOptions(prev => ({
+            ...prev,
+            partialImport: {
+                ...prev.partialImport!,
+                otherSettings: { ...DEFAULT_OTHER_SETTINGS }
             }
         }));
     };
@@ -256,9 +336,11 @@ export function FormImportDialog({
 
         const hasFields = partial.importFields && (partial.fieldIds?.length || 0) > 0;
         const hasActions = partial.importActions && (partial.actionIds?.length || 0) > 0;
+        const hasActionTriggers = partial.importActionTriggers === true;
+        const hasExecutionConditions = partial.importExecutionConditions === true;
         const hasOtherSettings = partial.importOtherSettings;
 
-        return hasFields || hasActions || hasOtherSettings;
+        return hasFields || hasActions || hasActionTriggers || hasExecutionConditions || hasOtherSettings;
     };
 
     // 执行导入
@@ -573,9 +655,12 @@ export function FormImportDialog({
                             partialImport: {
                                 importFields: false,
                                 importActions: false,
+                                importActionTriggers: false,
+                                importExecutionConditions: false,
                                 importStyles: true,
                                 importValidationRules: true,
                                 importOtherSettings: false,
+                                otherSettings: {},
                                 fieldIds: [],
                                 actionIds: []
                             }
@@ -793,6 +878,19 @@ export function FormImportDialog({
                             </span>
                         </div>
 
+                        {importOptions.partialImport.importActions && (
+                            <div style={{
+                                marginBottom: '8px',
+                                padding: '8px 12px',
+                                fontSize: '11px',
+                                color: 'var(--text-muted)',
+                                background: 'var(--background-modifier-hover)',
+                                borderRadius: '6px'
+                            }}>
+                                导入动作时会自动携带关联的循环动作组、组内动作和动作触发器，并重写相关 ID 与条件引用。
+                            </div>
+                        )}
+
                         {expandedSections.actions && selectedFormData?.actions && (
                             <div style={{
                                 padding: '12px',
@@ -846,6 +944,153 @@ export function FormImportDialog({
                         )}
                     </div>
 
+                    {/* 动作触发器选择 */}
+                    <div style={{ marginBottom: '16px' }}>
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px',
+                            background: 'var(--background-secondary)',
+                            borderRadius: '6px',
+                            marginBottom: '8px',
+                            cursor: 'pointer'
+                        }}
+                        onClick={(e) => {
+                            const target = e.target;
+                            const isCheckbox = target.tagName === 'INPUT' && target.type === 'checkbox';
+                            const isTitle = target.classList.contains('trigger-title');
+
+                            if (isCheckbox || isTitle) {
+                                return;
+                            }
+
+                            setExpandedSections(prev => ({
+                                ...prev,
+                                actionTriggers: !prev.actionTriggers
+                            }));
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={importOptions.partialImport.importActionTriggers === true}
+                                    onChange={(e) => {
+                                        const newValue = e.target.checked;
+                                        updatePartialImportConfig('importActionTriggers', newValue);
+                                        if (newValue && selectedFormData?.actions) {
+                                            updatePartialImportConfig('importActions', true);
+                                            if ((importOptions.partialImport.actionIds || []).length === 0) {
+                                                updatePartialImportConfig('actionIds', selectedFormData.actions.map(a => a.id));
+                                            }
+                                        }
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                                <span
+                                    className="trigger-title"
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        const newValue = !(importOptions.partialImport.importActionTriggers === true);
+                                        updatePartialImportConfig('importActionTriggers', newValue);
+                                        if (newValue && selectedFormData?.actions) {
+                                            updatePartialImportConfig('importActions', true);
+                                            if ((importOptions.partialImport.actionIds || []).length === 0) {
+                                                updatePartialImportConfig('actionIds', selectedFormData.actions.map(a => a.id));
+                                            }
+                                            setExpandedSections(prev => ({ ...prev, actionTriggers: true }));
+                                        }
+                                    }}
+                                >
+                                    动作触发器
+                                </span>
+                            </div>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                {selectedFormData?.actionTriggers?.length || 0} 个触发器
+                            </span>
+                        </div>
+
+                        {expandedSections.actionTriggers && (
+                            <div style={{
+                                padding: '12px',
+                                background: 'var(--background-primary)',
+                                border: '1px solid var(--background-modifier-border)',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                color: 'var(--text-muted)'
+                            }}>
+                                导入动作触发器时会自动重写其关联动作 ID。该配置组依赖顶层动作，因此启用时会自动勾选“表单动作”。
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 执行条件选择 */}
+                    <div style={{ marginBottom: '16px' }}>
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px',
+                            background: 'var(--background-secondary)',
+                            borderRadius: '6px',
+                            marginBottom: '8px',
+                            cursor: 'pointer'
+                        }}
+                        onClick={(e) => {
+                            const target = e.target;
+                            const isCheckbox = target.tagName === 'INPUT' && target.type === 'checkbox';
+                            const isTitle = target.classList.contains('execution-title');
+
+                            if (isCheckbox || isTitle) {
+                                return;
+                            }
+
+                            setExpandedSections(prev => ({
+                                ...prev,
+                                executionConditions: !prev.executionConditions
+                            }));
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={importOptions.partialImport.importExecutionConditions === true}
+                                    onChange={(e) => updatePartialImportConfig('importExecutionConditions', e.target.checked)}
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                                <span
+                                    className="execution-title"
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        const newValue = !(importOptions.partialImport.importExecutionConditions === true);
+                                        updatePartialImportConfig('importExecutionConditions', newValue);
+                                        if (newValue) {
+                                            setExpandedSections(prev => ({ ...prev, executionConditions: true }));
+                                        }
+                                    }}
+                                >
+                                    执行条件
+                                </span>
+                            </div>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                {selectedFormData?.startupConditions?.conditions?.length || 0} 条条件
+                            </span>
+                        </div>
+
+                        {expandedSections.executionConditions && (
+                            <div style={{
+                                padding: '12px',
+                                background: 'var(--background-primary)',
+                                border: '1px solid var(--background-modifier-border)',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                color: 'var(--text-muted)'
+                            }}>
+                                该项会导入表单“基本设置”页中的执行条件配置，不包含动作自身的执行条件。
+                            </div>
+                        )}
+                    </div>
+
                     {/* 其他设置选择 */}
                     <div>
                         <div style={{
@@ -882,16 +1127,10 @@ export function FormImportDialog({
                                     onChange={(e) => {
                                         const newValue = e.target.checked;
                                         updatePartialImportConfig('importOtherSettings', newValue);
-                                        // 当启用其他设置时，默认启用所有子项
                                         if (newValue) {
-                                            updateOtherSetting('showSubmitSuccessToast', true);
-                                            updateOtherSetting('enableExecutionTimeout', true);
-                                            updateOtherSetting('executionTimeoutThreshold', 30);
-                                            updateOtherSetting('runOnStartup', false);
+                                            setDefaultOtherSettings();
                                         } else {
-                                            updateOtherSetting('showSubmitSuccessToast', false);
-                                            updateOtherSetting('enableExecutionTimeout', false);
-                                            updateOtherSetting('runOnStartup', false);
+                                            updatePartialImportConfig('otherSettings', {});
                                         }
                                     }}
                                     onClick={(e) => e.stopPropagation()}
@@ -903,18 +1142,11 @@ export function FormImportDialog({
                                         e.stopPropagation();
                                         const newValue = !importOptions.partialImport.importOtherSettings;
                                         updatePartialImportConfig('importOtherSettings', newValue);
-                                        // 当启用其他设置时，默认启用所有子项
                                         if (newValue) {
-                                            updateOtherSetting('showSubmitSuccessToast', true);
-                                            updateOtherSetting('enableExecutionTimeout', true);
-                                            updateOtherSetting('executionTimeoutThreshold', 30);
-                                            updateOtherSetting('runOnStartup', false);
-                                            // 如果选择了其他设置，确保展开状态为true
+                                            setDefaultOtherSettings();
                                             setExpandedSections(prev => ({ ...prev, otherSettings: true }));
                                         } else {
-                                            updateOtherSetting('showSubmitSuccessToast', false);
-                                            updateOtherSetting('enableExecutionTimeout', false);
-                                            updateOtherSetting('runOnStartup', false);
+                                            updatePartialImportConfig('otherSettings', {});
                                         }
                                     }}
                                 >
@@ -934,104 +1166,34 @@ export function FormImportDialog({
                                 borderRadius: '6px'
                             }}>
                                 <div style={{ display: 'grid', gap: '8px' }}>
-                                    <label style={{
-                                        display: 'flex',
-                                        alignItems: 'flex-start',
-                                        gap: '8px',
-                                        cursor: 'pointer',
-                                        fontSize: '12px',
-                                        padding: '8px 12px',
-                                        borderRadius: '4px',
-                                        background: 'var(--background-secondary)',
-                                    }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={importOptions.partialImport.otherSettings?.showSubmitSuccessToast !== false}
-                                            onChange={(e) => updateOtherSetting('showSubmitSuccessToast', e.target.checked)}
-                                            style={{ marginTop: '2px' }}
-                                        />
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{ fontWeight: '500', marginBottom: '2px' }}>显示提交成功提示</div>
-                                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                                                提交表单后显示成功通知消息
-                                            </div>
-                                        </div>
-                                    </label>
-                                    <label style={{
-                                        display: 'flex',
-                                        alignItems: 'flex-start',
-                                        gap: '8px',
-                                        cursor: 'pointer',
-                                        fontSize: '12px',
-                                        padding: '8px 12px',
-                                        borderRadius: '4px',
-                                        background: 'var(--background-secondary)',
-                                    }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={importOptions.partialImport.otherSettings?.enableExecutionTimeout === true}
-                                            onChange={(e) => updateOtherSetting('enableExecutionTimeout', e.target.checked)}
-                                            style={{ marginTop: '2px' }}
-                                        />
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{ fontWeight: '500', marginBottom: '2px' }}>启用执行超时</div>
-                                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                                                防止表单动作执行时间过长
-                                            </div>
-                                        </div>
-                                    </label>
-                                    {importOptions.partialImport.otherSettings?.enableExecutionTimeout && (
-                                        <div style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                            fontSize: '12px',
-                                            padding: '8px 12px',
-                                            borderRadius: '4px',
-                                            background: 'var(--background-modifier-hover)',
-                                        }}>
-                                            <span style={{ minWidth: '80px' }}>超时阈值:</span>
+                                    {OTHER_SETTINGS_OPTIONS.map(option => (
+                                        <label
+                                            key={option.key}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'flex-start',
+                                                gap: '8px',
+                                                cursor: 'pointer',
+                                                fontSize: '12px',
+                                                padding: '8px 12px',
+                                                borderRadius: '4px',
+                                                background: 'var(--background-secondary)',
+                                            }}
+                                        >
                                             <input
-                                                type="number"
-                                                min="5"
-                                                step="1"
-                                                value={importOptions.partialImport.otherSettings?.executionTimeoutThreshold || 30}
-                                                onChange={(e) => updateOtherSetting('executionTimeoutThreshold', parseInt(e.target.value, 10) || 30)}
-                                                style={{
-                                                    width: '80px',
-                                                    padding: '4px 6px',
-                                                    border: '1px solid var(--background-modifier-border)',
-                                                    borderRadius: '4px',
-                                                    background: 'var(--background-primary)',
-                                                    color: 'var(--text-normal)'
-                                                }}
+                                                type="checkbox"
+                                                checked={importOptions.partialImport.otherSettings?.[option.key] === true}
+                                                onChange={(e) => updateOtherSetting(option.key, e.target.checked)}
+                                                style={{ marginTop: '2px' }}
                                             />
-                                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>秒后超时</span>
-                                        </div>
-                                    )}
-                                    <label style={{
-                                        display: 'flex',
-                                        alignItems: 'flex-start',
-                                        gap: '8px',
-                                        cursor: 'pointer',
-                                        fontSize: '12px',
-                                        padding: '8px 12px',
-                                        borderRadius: '4px',
-                                        background: 'var(--background-secondary)',
-                                    }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={importOptions.partialImport.otherSettings?.runOnStartup === true}
-                                            onChange={(e) => updateOtherSetting('runOnStartup', e.target.checked)}
-                                            style={{ marginTop: '2px' }}
-                                        />
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{ fontWeight: '500', marginBottom: '2px' }}>{localInstance.run_on_startup}</div>
-                                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                                                {localInstance.run_on_startup_description}
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontWeight: '500', marginBottom: '2px' }}>{option.title}</div>
+                                                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                                    {option.description}
+                                                </div>
                                             </div>
-                                        </div>
-                                    </label>
+                                        </label>
+                                    ))}
                                 </div>
                             </div>
                         )}
@@ -1325,7 +1487,7 @@ export function FormImportDialog({
     );
 
     return (
-        <div className="form-import-dialog-overlay" style={{
+        <div className="form-import-dialog-overlay" data-testid="formify-import-dialog" style={{
             position: 'fixed',
             top: 0,
             left: 0,

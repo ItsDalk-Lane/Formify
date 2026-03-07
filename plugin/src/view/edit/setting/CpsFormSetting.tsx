@@ -225,36 +225,7 @@ export default function CpsFormSetting(props: {
 
 	// 处理导入完成
 	const handleImportComplete = (importedConfig: FormConfig) => {
-		// 合并导入的配置到当前表单
-		const mergedConfig = new FormConfig(formConfig.id);
-		Object.assign(mergedConfig, {
-			...formConfig,
-			// 合并字段
-			fields: [
-				...(formConfig.fields || []),
-				...(importedConfig.fields || []),
-			],
-			// 合并动作
-			actions: [
-				...(formConfig.actions || []),
-				...(importedConfig.actions || []),
-			],
-			// 合并其他设置（如果导入的设置存在）
-			...(importedConfig.showSubmitSuccessToast !== undefined && {
-				showSubmitSuccessToast: importedConfig.showSubmitSuccessToast
-			}),
-			...(importedConfig.enableExecutionTimeout !== undefined && {
-				enableExecutionTimeout: importedConfig.enableExecutionTimeout
-			}),
-			...(importedConfig.executionTimeoutThreshold !== undefined && {
-				executionTimeoutThreshold: importedConfig.executionTimeoutThreshold
-			}),
-			...(importedConfig.runOnStartup !== undefined && {
-				runOnStartup: importedConfig.runOnStartup
-			}),
-		});
-
-		onChange(mergedConfig);
+		onChange(importedConfig);
 		setShowImportDialog(false);
 	};
 

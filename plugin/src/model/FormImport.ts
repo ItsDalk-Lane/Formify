@@ -26,6 +26,10 @@ export interface PartialImportConfig {
     importActions: boolean;
     /** 要导入的具体动作ID列表，为空则导入所有动作 */
     actionIds?: string[];
+    /** 是否导入动作触发器（依赖导入后的顶层动作） */
+    importActionTriggers?: boolean;
+    /** 是否导入表单执行条件 */
+    importExecutionConditions?: boolean;
     /** 是否导入样式设置 */
     importStyles: boolean;
     /** 是否导入验证规则 */
@@ -33,12 +37,19 @@ export interface PartialImportConfig {
     /** 是否导入其他设置 */
     importOtherSettings: boolean;
     /** 其他设置的具体项 */
-    otherSettings?: {
-        showSubmitSuccessToast?: boolean;
-        enableExecutionTimeout?: boolean;
-        executionTimeoutThreshold?: number;
-        runOnStartup?: boolean;
-    };
+    otherSettings?: PartialImportOtherSettings;
+}
+
+export interface PartialImportOtherSettings {
+    showSubmitSuccessToast?: boolean;
+    enableExecutionTimeout?: boolean;
+    executionTimeoutThreshold?: boolean;
+    commandEnabled?: boolean;
+    contextMenuEnabled?: boolean;
+    runOnStartup?: boolean;
+    startupConditions?: boolean;
+    multiSubmitFormExecutionMode?: boolean;
+    multiSubmitFormDisplayMode?: boolean;
 }
 
 /**

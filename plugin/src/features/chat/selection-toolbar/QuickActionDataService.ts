@@ -593,7 +593,18 @@ export class QuickActionDataService {
 
 		for (const file of this.listMarkdownFiles(folderPath)) {
 			if (!expectedPaths.has(file.path)) {
-				await this.app.vault.delete(file, true);
+				try {
+					await this.app.vault.delete(file, true);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					if (!/ENOENT|does not exist|not found/i.test(message)) {
+						throw error;
+					}
+					DebugLogger.warn('[QuickActionDataService] 删除过期快捷操作文件时文件已不存在，已忽略', {
+						path: file.path,
+						error: message,
+					});
+				}
 			}
 		}
 

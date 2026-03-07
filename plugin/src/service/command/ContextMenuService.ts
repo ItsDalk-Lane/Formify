@@ -1,6 +1,5 @@
 import { App, Notice, TFile, TAbstractFile, Menu, MenuItem } from "obsidian";
 import { FormConfig } from "src/model/FormConfig";
-import { ActionTrigger } from "src/model/ActionTrigger";
 import FormPlugin from "src/main";
 import { ServiceContainer } from "../ServiceContainer";
 
@@ -9,8 +8,8 @@ export interface ContextMenuItem {
     title: string;
     icon: string;
     callback: () => void;
-    /** 触发器子项（从属于同一表单） */
-    triggerItems?: ContextMenuItem[];
+    type: 'form' | 'trigger';
+    formPath?: string;
 }
 
 export class ContextMenuService {
@@ -109,8 +108,8 @@ export class ContextMenuService {
      * @param menu Obsidian菜单对象
      */
     private addFormsToContextMenu(menu: Menu): void {
-        // 获取所有启用了右键菜单的表单
-        const enabledForms = Array.from(this.contextMenuItems.values()).filter(
+        // 获取所有启用了右键菜单的菜单项
+        const enabledItems = Array.from(this.contextMenuItems.values()).filter(
             (item) => item.callback && item.title
         );
 
@@ -138,68 +137,46 @@ export class ContextMenuService {
             });
 
             // 按标题排序
-            enabledForms.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+            enabledItems.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
 
-            if (enabledForms.length > 0) {
+            if (enabledItems.length > 0) {
                 // 分隔线
                 submenu.addSeparator();
 
-                // 添加每个表单到子菜单
-                enabledForms.forEach((formItem) => {
-                    // 如果有触发器子项，显示为三级子菜单
-                    if (formItem.triggerItems && formItem.triggerItems.length > 0) {
-                        this.addFormMenuItemWithTriggers(submenu, formItem);
-                    } else {
-                        this.addFormMenuItem(submenu, formItem.id, formItem.title, formItem.icon, formItem.callback);
+                // 添加每个菜单项到子菜单
+                enabledItems.forEach((menuItem) => {
+                    if (menuItem.type === 'form' && menuItem.formPath) {
+                        this.addFormMenuItem(
+                            submenu,
+                            menuItem.formPath,
+                            menuItem.title,
+                            menuItem.icon,
+                            menuItem.callback
+                        );
+                        return;
                     }
+
+                    this.addTriggerMenuItem(submenu, menuItem);
                 });
             }
         });
     }
 
     /**
-     * 添加带触发器子项的表单菜单项
-     * 表单本身可点击，同时展开子菜单显示触发器
+     * 在指定子菜单中添加触发器菜单项
      */
-    private addFormMenuItemWithTriggers(
+    private addTriggerMenuItem(
         submenu: Menu,
-        formItem: ContextMenuItem
+        triggerItem: ContextMenuItem
     ): void {
         submenu.addItem((subItem) => {
-            subItem.setTitle(formItem.title)
-                .setIcon(formItem.icon)
+            subItem.setTitle(triggerItem.title)
+                .setIcon(triggerItem.icon)
                 .onClick(() => {
-                    formItem.callback();
+                    triggerItem.callback();
                 });
 
             this.markCompactMenuItem(subItem);
-
-            // 创建三级子菜单显示触发器
-            const triggerSubmenu = subItem.setSubmenu();
-
-            // 第一项：执行完整表单
-            triggerSubmenu.addItem((fullItem) => {
-                fullItem.setTitle(formItem.title)
-                    .setIcon("file-spreadsheet")
-                    .onClick(() => {
-                        formItem.callback();
-                    });
-                this.markCompactMenuItem(fullItem);
-            });
-
-            triggerSubmenu.addSeparator();
-
-            // 触发器子项
-            for (const triggerItem of formItem.triggerItems!) {
-                triggerSubmenu.addItem((tItem) => {
-                    tItem.setTitle(triggerItem.title)
-                        .setIcon(triggerItem.icon)
-                        .onClick(() => {
-                            triggerItem.callback();
-                        });
-                    this.markCompactMenuItem(tItem);
-                });
-            }
         });
     }
 
@@ -436,14 +413,14 @@ export class ContextMenuService {
             // 检查是否启用了右键菜单（表单级别）
             const formContextMenuEnabled = config.isContextMenuEnabled();
 
-            // 收集启用右键菜单的触发器
-            const triggerItems: ContextMenuItem[] = [];
             for (const trigger of config.actionTriggers) {
                 if (trigger.isContextMenuEnabled()) {
-                    triggerItems.push({
+                    this.contextMenuItems.set(`${file.path}:trigger:${trigger.id}`, {
                         id: `${file.path}:trigger:${trigger.id}`,
                         title: trigger.name,
                         icon: "zap",
+                        type: 'trigger',
+                        formPath: file.path,
                         callback: async () => {
                             const latestConfig = await this.readFormConfig(file.path);
                             const latestTrigger = latestConfig?.getActionTrigger(trigger.id);
@@ -458,8 +435,8 @@ export class ContextMenuService {
                 }
             }
 
-            // 如果表单本身和触发器都未启用右键菜单，跳过
-            if (!formContextMenuEnabled && triggerItems.length === 0) {
+            // 如果表单本身未启用右键菜单，跳过表单菜单项构建
+            if (!formContextMenuEnabled) {
                 return;
             }
 
@@ -468,10 +445,11 @@ export class ContextMenuService {
                 id: file.path,
                 title: file.basename,
                 icon: "file-spreadsheet",
+                type: 'form',
+                formPath: file.path,
                 callback: () => {
                     this.services?.formService.open(file, this.plugin.app);
-                },
-                triggerItems: triggerItems.length > 0 ? triggerItems : undefined,
+                }
             };
 
             // 添加到菜单项映射

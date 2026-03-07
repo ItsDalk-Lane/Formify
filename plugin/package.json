@@ -1,12 +1,13 @@
 {
 	"name": "obsidian-formify",
-	"version": "0.2.9.260305",
+	"version": "0.2.9.260307",
 	"description": "Create simple, one-action workflows — with ease.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "node esbuild.config.mjs production",
 		"build:local": "node scripts/build-and-sync.mjs",
+		"test:framework": "node ../scripts/formify-test-framework/run-all.mjs",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"lint": "eslint ."
 	},

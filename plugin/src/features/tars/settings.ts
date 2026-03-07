@@ -16,7 +16,6 @@ import { qwenVendor } from './providers/qwen'
 import { siliconFlowVendor } from './providers/siliconflow'
 import { zhipuVendor } from './providers/zhipu'
 import type { ModelCapabilityCache } from './providers/modelCapability'
-import type { ToolDefinition } from 'src/features/chat/types/tools'
 import type { SystemPromptsDataFile } from './system-prompts/types'
 import { type McpSettings, DEFAULT_MCP_SETTINGS } from './mcp/types'
 
@@ -73,12 +72,6 @@ export interface TarsSettings {
 	/** Tab 补全用户提示词模板（支持 {{rules}} 与 {{context}}） */
 	tabCompletionPromptTemplate: string
 
-	/** 全局工具配置（保留旧配置兼容） */
-	tools?: {
-		globalTools: ToolDefinition[]
-		executionMode: 'manual' | 'auto'
-		enabled: boolean
-	}
 	/** MCP 配置（外部 servers 由 mcp-servers/*.md 持久化，内置开关仍在 settings） */
 	mcp?: McpSettings
 	/** 模型能力探测缓存（用于推理能力判断） */
@@ -111,11 +104,6 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 	tabCompletionTimeout: 5000, // 默认 5 秒超时
 	tabCompletionProviderTag: '', // 默认为空，使用第一个可用的 provider
 	tabCompletionPromptTemplate: '{{rules}}\n\n{{context}}',
-	tools: {
-		globalTools: [],
-		executionMode: 'manual',
-		enabled: false
-	},
 	mcp: DEFAULT_MCP_SETTINGS,
 	modelCapabilityCache: {},
 }

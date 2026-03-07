@@ -5,7 +5,6 @@ import { FormActionType } from "src/model/enums/FormActionType";
 import { TargetFileType } from "src/model/enums/TargetFileType";
 import { TextInsertPosition } from "src/model/enums/TextInsertPosition";
 import { getFilePathCompatible } from "src/utils/getFilePathCompatible";
-import { Strings } from "src/utils/Strings";
 import CpsFormItem from "src/view/shared/CpsFormItem";
 import { FilePathFormItem } from "../common/FilePathFormItem";
 import InsertPositionSelect from "../common/InsertPositionSelect";
@@ -34,8 +33,6 @@ export function InsertTextSetting(props: {
 	const targetFilePath = getFilePathCompatible(action);
 	const isSpecifiedFile = action.targetFileType === TargetFileType.SPECIFIED_FILE;
 	const isMultipleFiles = action.targetFileType === TargetFileType.MULTIPLE_FILES;
-	const showFileTemplateSuggeest =
-		isSpecifiedFile && Strings.isNotBlank(targetFilePath);
 
 	return (
 		<>
@@ -105,7 +102,7 @@ export function InsertTextSetting(props: {
 					/>
 				</CpsFormItem>
 			)}
-			{showFileTemplateSuggeest && (
+			{isSpecifiedFile && (
 				<FilePathFormItem
 					label={localInstance.create_from_template}
 					value={action.newFileTemplate || ""}
