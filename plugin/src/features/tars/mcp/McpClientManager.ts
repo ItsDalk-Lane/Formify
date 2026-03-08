@@ -9,6 +9,8 @@ import { App } from 'obsidian';
 import {
 	BUILTIN_MEMORY_SERVER_ID,
 	BUILTIN_MEMORY_SERVER_NAME,
+	BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
+	BUILTIN_OBSIDIAN_SEARCH_SERVER_NAME,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
 	BUILTIN_VAULT_SERVER_ID,
@@ -18,6 +20,10 @@ import {
 	createMemoryBuiltinRuntime,
 	type MemoryBuiltinRuntime,
 } from 'src/builtin-mcp/memory-mcp-server';
+import {
+	createObsidianSearchBuiltinRuntime,
+	type ObsidianSearchBuiltinRuntime,
+} from 'src/builtin-mcp/obsidian-search-mcp-server';
 import {
 	createSequentialThinkingBuiltinRuntime,
 	type SequentialThinkingBuiltinRuntime,
@@ -46,6 +52,7 @@ import { DEFAULT_BUILTIN_MEMORY_FILE_PATH } from './types';
 type BuiltinRuntime =
 	| VaultBuiltinRuntime
 	| MemoryBuiltinRuntime
+	| ObsidianSearchBuiltinRuntime
 	| SequentialThinkingBuiltinRuntime;
 
 interface BuiltinDescriptor {
@@ -136,6 +143,16 @@ export class McpClientManager {
 						filePath: this.resolveMemoryFilePath(settings),
 					}),
 				initErrorLogMessage: '[MCP] 初始化内置 Memory MCP Server 失败',
+			},
+			{
+				serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
+				serverName: BUILTIN_OBSIDIAN_SEARCH_SERVER_NAME,
+				isEnabled: (settings) =>
+					this.isMcpEnabled(settings) &&
+					settings.builtinObsidianSearchEnabled !== false,
+				createRuntime: async (app) =>
+					await createObsidianSearchBuiltinRuntime(app),
+				initErrorLogMessage: '[MCP] 初始化内置 Obsidian Search MCP Server 失败',
 			},
 			{
 				serverId: BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,

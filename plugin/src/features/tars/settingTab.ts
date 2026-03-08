@@ -54,6 +54,8 @@ import {
 	DEFAULT_MCP_SETTINGS,
 	BUILTIN_MEMORY_SERVER_ID,
 	BUILTIN_MEMORY_SERVER_NAME,
+	BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
+	BUILTIN_OBSIDIAN_SEARCH_SERVER_NAME,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
 	BUILTIN_VAULT_SERVER_ID,
@@ -1346,6 +1348,13 @@ export class TarsSettingTab {
 			},
 			{
 				kind: 'builtin',
+				enabled: mcpSettings.builtinObsidianSearchEnabled !== false,
+				name: BUILTIN_OBSIDIAN_SEARCH_SERVER_NAME,
+				serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
+				transportLabel: 'IN-MEMORY',
+			},
+			{
+				kind: 'builtin',
 				enabled: mcpSettings.builtinSequentialThinkingEnabled !== false,
 				name: BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
 				serverId: BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
@@ -1408,6 +1417,9 @@ export class TarsSettingTab {
 							break
 						case BUILTIN_MEMORY_SERVER_ID:
 							this.settings.mcp.builtinMemoryEnabled = value
+							break
+						case BUILTIN_OBSIDIAN_SEARCH_SERVER_ID:
+							this.settings.mcp.builtinObsidianSearchEnabled = value
 							break
 						case BUILTIN_SEQUENTIAL_THINKING_SERVER_ID:
 							this.settings.mcp.builtinSequentialThinkingEnabled = value

@@ -2,11 +2,15 @@ import {
 	clonePlanSnapshot,
 	type PlanSnapshot,
 } from 'src/builtin-mcp/runtime/plan-state';
-import { BUILTIN_VAULT_SERVER_ID } from 'src/builtin-mcp/constants';
+import {
+	BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
+	BUILTIN_VAULT_SERVER_ID,
+} from 'src/builtin-mcp/constants';
 import { McpClientManager } from './McpClientManager';
 import type { McpSettings } from './types';
 
 const createVaultBuiltinRuntimeMock = jest.fn();
+const createObsidianSearchBuiltinRuntimeMock = jest.fn();
 
 jest.mock('src/builtin-mcp/vault-mcp-server', () => ({
 	createVaultBuiltinRuntime: (...args: unknown[]) =>
@@ -15,6 +19,11 @@ jest.mock('src/builtin-mcp/vault-mcp-server', () => ({
 
 jest.mock('src/builtin-mcp/memory-mcp-server', () => ({
 	createMemoryBuiltinRuntime: jest.fn(),
+}));
+
+jest.mock('src/builtin-mcp/obsidian-search-mcp-server', () => ({
+	createObsidianSearchBuiltinRuntime: (...args: unknown[]) =>
+		createObsidianSearchBuiltinRuntimeMock(...args),
 }));
 
 jest.mock('src/builtin-mcp/sequentialthinking-mcp-server', () => ({
@@ -70,6 +79,7 @@ describe('McpClientManager', () => {
 		servers: [],
 		builtinVaultEnabled: true,
 		builtinMemoryEnabled: false,
+		builtinObsidianSearchEnabled: false,
 		builtinSequentialThinkingEnabled: false,
 		maxToolCallLoops: 10,
 	};
@@ -94,6 +104,7 @@ describe('McpClientManager', () => {
 
 	beforeEach(() => {
 		createVaultBuiltinRuntimeMock.mockReset();
+		createObsidianSearchBuiltinRuntimeMock.mockReset();
 	});
 
 	it('should broadcast vault plan changes from runtime', async () => {
@@ -126,6 +137,58 @@ describe('McpClientManager', () => {
 
 		expect(mockRuntime.getCurrentSnapshot()).toEqual(planSnapshot);
 		expect(manager.getVaultPlanSnapshot()).toEqual(planSnapshot);
+
+		await manager.dispose();
+	});
+
+	it('should discover obsidian search builtin tools when enabled', async () => {
+		createObsidianSearchBuiltinRuntimeMock.mockResolvedValue({
+			serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
+			serverName: 'Obsidian Search',
+			client: {} as any,
+			callTool: jest.fn(),
+			listTools: jest.fn().mockResolvedValue([
+				{
+					name: 'quick_search',
+					description: 'quick search',
+					inputSchema: {},
+					serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
+				},
+			]),
+			close: jest.fn().mockResolvedValue(undefined),
+		});
+
+		const manager = new McpClientManager({} as any, {
+			...settings,
+			builtinVaultEnabled: false,
+			builtinObsidianSearchEnabled: true,
+		});
+		const tools = await manager.getToolsForServer(BUILTIN_OBSIDIAN_SEARCH_SERVER_ID);
+
+		expect(createObsidianSearchBuiltinRuntimeMock).toHaveBeenCalledTimes(1);
+		expect(tools).toEqual([
+			{
+				name: 'quick_search',
+				description: 'quick search',
+				inputSchema: {},
+				serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
+			},
+		]);
+		expect(manager.getState(BUILTIN_OBSIDIAN_SEARCH_SERVER_ID)?.status).toBe('running');
+
+		await manager.dispose();
+	});
+
+	it('should keep obsidian search builtin stopped when disabled', async () => {
+		const manager = new McpClientManager({} as any, {
+			...settings,
+			builtinVaultEnabled: false,
+		});
+		const tools = await manager.getToolsForServer(BUILTIN_OBSIDIAN_SEARCH_SERVER_ID);
+
+		expect(tools).toEqual([]);
+		expect(createObsidianSearchBuiltinRuntimeMock).not.toHaveBeenCalled();
+		expect(manager.getState(BUILTIN_OBSIDIAN_SEARCH_SERVER_ID)?.status).toBe('stopped');
 
 		await manager.dispose();
 	});

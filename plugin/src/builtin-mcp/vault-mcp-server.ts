@@ -21,7 +21,6 @@ import { registerFileTools } from './tools/file-tools';
 import { registerNavTools } from './tools/nav-tools';
 import { registerQueryTools } from './tools/query-tools';
 import { registerScriptTools } from './tools/script-tools';
-import { registerSearchTools } from './tools/search-tools';
 import { registerUtilTools } from './tools/util-tools';
 
 const DEFAULT_DELEGATE_AGENT_ID = 'builtin.echo';
@@ -88,7 +87,6 @@ export async function createVaultBuiltinRuntime(
 	registerFileTools(server, app, registry);
 	registerQueryTools(server, app, registry);
 	registerNavTools(server, app, registry);
-	registerSearchTools(server, app, registry);
 	registerScriptTools(server, app, registry, scriptRuntime);
 	registerUtilTools(server, registry, planState, agentRegistry);
 

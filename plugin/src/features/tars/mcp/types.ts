@@ -125,6 +125,11 @@ export interface McpSettings {
 	 */
 	builtinSequentialThinkingEnabled?: boolean
 	/**
+	 * 是否启用内置 Obsidian Search MCP Server
+	 * @default true
+	 */
+	builtinObsidianSearchEnabled?: boolean
+	/**
 	 * 内置 Memory MCP 的持久化文件路径（相对于 Vault）
 	 * @default "System/formify/mcp-memory.jsonl"
 	 */
@@ -153,6 +158,7 @@ export const DEFAULT_MCP_SETTINGS: McpSettings = {
 	builtinVaultEnabled: true,
 	builtinMemoryEnabled: true,
 	builtinSequentialThinkingEnabled: true,
+	builtinObsidianSearchEnabled: true,
 	builtinMemoryFilePath: DEFAULT_BUILTIN_MEMORY_FILE_PATH,
 	builtinSequentialThinkingDisableThoughtLogging: true,
 	maxToolCallLoops: 10,
