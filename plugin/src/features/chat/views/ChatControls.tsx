@@ -17,7 +17,11 @@ interface ChatControlsProps {
 	app: App;
 }
 
-export const ChatControls = ({ service, state, app }: ChatControlsProps) => {
+export const ChatControls = ({
+	service,
+	state,
+	app,
+}: ChatControlsProps) => {
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [historyItems, setHistoryItems] = useState<ChatHistoryEntry[]>([]);
 	const [showFileMenu, setShowFileMenu] = useState(false);

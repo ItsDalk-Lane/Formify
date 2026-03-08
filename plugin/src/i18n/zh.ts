@@ -763,6 +763,18 @@ export class Zh implements Local {
 	chat_trigger_settings_section = "编辑器触发设置";
 	chat_template_system_prompt_toggle = "模板系统提示词";
 	chat_template_system_prompt_toggle_desc = "启用后将当前提示词模板原样作为系统提示词；关闭或未选择模板时使用全局系统提示词。";
+	chat_plan_toggle = "任务计划";
+	chat_plan_empty_title = "当前会话还没有任务计划";
+	chat_plan_empty_desc = "AI 调用 write_plan 后会自动显示在这里。";
+	chat_plan_total = "总任务";
+	chat_plan_status_todo = "待处理";
+	chat_plan_status_in_progress = "进行中";
+	chat_plan_status_paused = "已暂停";
+	chat_plan_status_done = "已完成";
+	chat_plan_status_skipped = "已跳过";
+	chat_plan_acceptance_criteria = "验收标准";
+	chat_plan_no_acceptance_criteria = "暂无验收标准";
+	chat_plan_filtered_empty = "当前筛选下暂无任务";
 	// 快捷操作
 	selection_toolbar_ai_chat = "AI Chat";
 	selection_toolbar_more = "更多";

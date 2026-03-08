@@ -9,7 +9,12 @@ import {
 	BUILTIN_VAULT_SERVER_VERSION,
 } from './constants';
 import { AgentRegistry } from './runtime/agent-registry';
-import { PlanState } from './runtime/plan-state';
+import {
+	clonePlanSnapshot,
+	type PlanSnapshot,
+	type PlanStateListener,
+	PlanState,
+} from './runtime/plan-state';
 import { ScriptRuntime } from './runtime/script-runtime';
 import { BuiltinToolRegistry } from './runtime/tool-registry';
 import { registerFileTools } from './tools/file-tools';
@@ -36,6 +41,9 @@ export interface VaultBuiltinRuntime {
 	listTools: () => Promise<BuiltinToolInfo[]>;
 	close: () => Promise<void>;
 	resetState: () => void;
+	getPlanSnapshot: () => PlanSnapshot | null;
+	syncPlanSnapshot: (snapshot: PlanSnapshot | null) => PlanSnapshot | null;
+	onPlanChange: (listener: PlanStateListener) => () => void;
 }
 
 const extractTextResult = (result: {
@@ -128,6 +136,9 @@ export async function createVaultBuiltinRuntime(
 			scriptRuntime.reset();
 			planState.reset();
 		},
+		getPlanSnapshot: () => clonePlanSnapshot(planState.get()),
+		syncPlanSnapshot: (snapshot) => planState.restore(clonePlanSnapshot(snapshot)),
+		onPlanChange: (listener) => planState.subscribe(listener),
 	};
 }
 

@@ -33,12 +33,7 @@ export interface PlanUpdateInput {
 	tasks: PlanTaskInput[];
 }
 
-const statusOrder: Record<PlanTaskStatus, number> = {
-	done: 0,
-	skipped: 0,
-	in_progress: 1,
-	todo: 2,
-};
+export type PlanStateListener = (snapshot: PlanSnapshot | null) => void;
 
 const normalizeText = (value: unknown): string => String(value ?? '').trim();
 
@@ -72,20 +67,6 @@ const normalizeTask = (task: PlanTaskInput, index: number): PlanTask => {
 	};
 };
 
-const sortTasks = (tasks: PlanTask[]): PlanTask[] => {
-	return tasks
-		.map((task, index) => ({ task, index }))
-		.sort((a, b) => {
-			const rankA = statusOrder[a.task.status];
-			const rankB = statusOrder[b.task.status];
-			if (rankA === rankB) {
-				return a.index - b.index;
-			}
-			return rankA - rankB;
-		})
-		.map((item) => item.task);
-};
-
 const createSummary = (tasks: PlanTask[]): PlanSnapshot['summary'] => {
 	const summary = {
 		total: tasks.length,
@@ -105,11 +86,29 @@ const createSummary = (tasks: PlanTask[]): PlanSnapshot['summary'] => {
 	return summary;
 };
 
+export const clonePlanSnapshot = (
+	snapshot: PlanSnapshot | null
+): PlanSnapshot | null => {
+	if (!snapshot) {
+		return null;
+	}
+
+	return {
+		...snapshot,
+		tasks: snapshot.tasks.map((task) => ({
+			...task,
+			acceptance_criteria: [...task.acceptance_criteria],
+		})),
+		summary: { ...snapshot.summary },
+	};
+};
+
 export class PlanState {
 	private snapshot: PlanSnapshot | null = null;
+	private listeners = new Set<PlanStateListener>();
 
 	get(): PlanSnapshot | null {
-		return this.snapshot ? { ...this.snapshot, tasks: [...this.snapshot.tasks] } : null;
+		return clonePlanSnapshot(this.snapshot);
 	}
 
 	update(input: PlanUpdateInput): PlanSnapshot {
@@ -131,7 +130,7 @@ export class PlanState {
 			throw new Error('创建计划时 title 必填');
 		}
 
-		const nextTasks = sortTasks(normalizedTasks);
+		const nextTasks = normalizedTasks;
 		const description = normalizeText(input.description) || this.snapshot?.description;
 
 		this.snapshot = {
@@ -141,10 +140,44 @@ export class PlanState {
 			summary: createSummary(nextTasks),
 		};
 
-		return this.get() as PlanSnapshot;
+		const snapshot = this.get() as PlanSnapshot;
+		this.emit(snapshot);
+		return snapshot;
 	}
 
 	reset(): void {
 		this.snapshot = null;
+		this.emit(null);
+	}
+
+	restore(snapshot: PlanSnapshot | null): PlanSnapshot | null {
+		if (!snapshot) {
+			this.reset();
+			return null;
+		}
+
+		return this.update({
+			title: snapshot.title,
+			description: snapshot.description,
+			tasks: snapshot.tasks.map((task) => ({
+				name: task.name,
+				status: task.status,
+				acceptance_criteria: [...task.acceptance_criteria],
+				outcome: task.outcome,
+			})),
+		});
+	}
+
+	subscribe(listener: PlanStateListener): () => void {
+		this.listeners.add(listener);
+		return () => {
+			this.listeners.delete(listener);
+		};
+	}
+
+	private emit(snapshot: PlanSnapshot | null): void {
+		for (const listener of this.listeners) {
+			listener(clonePlanSnapshot(snapshot));
+		}
 	}
 }

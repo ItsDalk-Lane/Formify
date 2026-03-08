@@ -5,6 +5,7 @@ import FormPlugin from 'src/main';
 import { ObsidianAppContext } from 'src/context/obsidianAppContext';
 import { ChatService } from '../services/ChatService';
 import type { ChatState } from '../types/chat';
+import { ChatPlanPanel } from '../components/ChatPlanPanel';
 import { ChatMessages } from './ChatMessages';
 import { ChatControls } from './ChatControls';
 import { ChatInput } from './ChatInput';
@@ -177,7 +178,16 @@ const ChatApp = ({ service, mode, app }: ChatAppProps) => {
 			{session ? (
 				<>
 					<ChatMessages service={service} state={state} />
-					<ChatControls service={service} state={state} app={app} />
+					<ChatPlanPanel
+						sessionId={session.id}
+						plan={session.livePlan}
+						isGenerating={state.isGenerating}
+					/>
+					<ChatControls
+						service={service}
+						state={state}
+						app={app}
+					/>
 					<ChatInput service={service} state={state} app={app} />
 				</>
 			) : (

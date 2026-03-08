@@ -26,6 +26,10 @@ import {
 	createVaultBuiltinRuntime,
 	type VaultBuiltinRuntime,
 } from 'src/builtin-mcp/vault-mcp-server';
+import {
+	clonePlanSnapshot,
+	type PlanSnapshot,
+} from 'src/builtin-mcp/runtime/plan-state';
 import { DebugLogger } from 'src/utils/DebugLogger';
 import { McpHealthChecker } from './McpHealthChecker';
 import { McpProcessManager } from './McpProcessManager';
@@ -65,6 +69,9 @@ export class McpClientManager {
 	private disposed = false;
 	/** 状态变更监听器 */
 	private stateListeners: Array<(states: McpServerState[]) => void> = [];
+	private vaultPlanSnapshot: PlanSnapshot | null = null;
+	private vaultPlanListeners = new Set<(snapshot: PlanSnapshot | null) => void>();
+	private vaultPlanRuntimeUnsubscribe: (() => void) | null = null;
 
 	constructor(private readonly app: App, settings: McpSettings) {
 		this.settings = settings;
@@ -496,10 +503,45 @@ export class McpClientManager {
 		};
 	}
 
+	getVaultPlanSnapshot(): PlanSnapshot | null {
+		return clonePlanSnapshot(this.vaultPlanSnapshot);
+	}
+
+	onVaultPlanChange(
+		listener: (snapshot: PlanSnapshot | null) => void
+	): () => void {
+		this.vaultPlanListeners.add(listener);
+		listener(this.getVaultPlanSnapshot());
+		return () => {
+			this.vaultPlanListeners.delete(listener);
+		};
+	}
+
+	async syncVaultPlanSnapshot(snapshot: PlanSnapshot | null): Promise<void> {
+		this.setVaultPlanSnapshot(snapshot);
+		if (
+			!this.isMcpEnabled()
+			|| !this.isBuiltinServerEnabled(BUILTIN_VAULT_SERVER_ID)
+		) {
+			return;
+		}
+
+		const runtime = await this.ensureBuiltinRuntime(BUILTIN_VAULT_SERVER_ID);
+		if (!runtime) {
+			return;
+		}
+
+		const vaultRuntime = runtime as VaultBuiltinRuntime;
+		vaultRuntime.syncPlanSnapshot(snapshot);
+		this.setVaultPlanSnapshot(vaultRuntime.getPlanSnapshot());
+	}
+
 	/** 销毁所有资源 */
 	async dispose(): Promise<void> {
 		this.disposed = true;
 		this.stateListeners = [];
+		this.vaultPlanListeners.clear();
+		this.detachVaultPlanRuntime();
 		await Promise.allSettled([
 			this.processManager.dispose(),
 			this.closeAllBuiltinRuntimes(),
@@ -517,6 +559,37 @@ export class McpClientManager {
 				listener(mergedStates);
 			} catch (err) {
 				DebugLogger.error('[MCP] 状态监听器执行出错', err);
+			}
+		}
+	}
+
+	private attachVaultPlanRuntime(runtime: VaultBuiltinRuntime): void {
+		this.detachVaultPlanRuntime();
+		this.vaultPlanRuntimeUnsubscribe = runtime.onPlanChange((snapshot) => {
+			this.setVaultPlanSnapshot(snapshot);
+		});
+	}
+
+	private detachVaultPlanRuntime(): void {
+		this.vaultPlanRuntimeUnsubscribe?.();
+		this.vaultPlanRuntimeUnsubscribe = null;
+	}
+
+	private setVaultPlanSnapshot(snapshot: PlanSnapshot | null): void {
+		const nextSnapshot = clonePlanSnapshot(snapshot);
+		const previousKey = JSON.stringify(this.vaultPlanSnapshot);
+		const nextKey = JSON.stringify(nextSnapshot);
+
+		this.vaultPlanSnapshot = nextSnapshot;
+		if (previousKey === nextKey) {
+			return;
+		}
+
+		for (const listener of this.vaultPlanListeners) {
+			try {
+				listener(this.getVaultPlanSnapshot());
+			} catch (error) {
+				DebugLogger.error('[MCP] Vault 计划监听器执行出错', error);
 			}
 		}
 	}
@@ -714,6 +787,12 @@ export class McpClientManager {
 				}
 
 				this.builtinRuntimes.set(serverId, runtime);
+				if (serverId === BUILTIN_VAULT_SERVER_ID) {
+					const vaultRuntime = runtime as VaultBuiltinRuntime;
+					this.attachVaultPlanRuntime(vaultRuntime);
+					vaultRuntime.syncPlanSnapshot(this.vaultPlanSnapshot);
+					this.setVaultPlanSnapshot(vaultRuntime.getPlanSnapshot());
+				}
 
 				const tools = await runtime.listTools();
 				this.builtinStates.set(serverId, {
@@ -766,6 +845,9 @@ export class McpClientManager {
 
 		const runtime = this.builtinRuntimes.get(serverId) ?? null;
 		this.builtinRuntimes.delete(serverId);
+		if (serverId === BUILTIN_VAULT_SERVER_ID) {
+			this.detachVaultPlanRuntime();
+		}
 
 		const current = this.builtinStates.get(serverId) ?? {
 			serverId,

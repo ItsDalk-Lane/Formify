@@ -704,6 +704,18 @@ export interface Local {
 	chat_trigger_settings_section: string;
 	chat_template_system_prompt_toggle: string;
 	chat_template_system_prompt_toggle_desc: string;
+	chat_plan_toggle: string;
+	chat_plan_empty_title: string;
+	chat_plan_empty_desc: string;
+	chat_plan_total: string;
+	chat_plan_status_todo: string;
+	chat_plan_status_in_progress: string;
+	chat_plan_status_paused: string;
+	chat_plan_status_done: string;
+	chat_plan_status_skipped: string;
+	chat_plan_acceptance_criteria: string;
+	chat_plan_no_acceptance_criteria: string;
+	chat_plan_filtered_empty: string;
 	// AI Selection Toolbar
 	selection_toolbar_ai_chat: string;
 	selection_toolbar_more: string;

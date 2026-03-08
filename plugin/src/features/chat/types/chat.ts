@@ -1,4 +1,5 @@
 import { App, TFile, TFolder } from 'obsidian';
+import type { PlanSnapshot } from 'src/builtin-mcp/runtime/plan-state';
 import type { ToolCall } from './tools';
 import type { LayoutMode, MultiModelMode, ParallelResponseGroup } from './multiModel';
 
@@ -85,6 +86,7 @@ export interface ChatSession {
 	multiModelMode?: MultiModelMode;
 	activeCompareGroupId?: string;
 	layoutMode?: LayoutMode;
+	livePlan?: PlanSnapshot | null;
 }
 
 export type ChatOpenMode = 'sidebar' | 'left-sidebar' | 'tab' | 'window' | 'persistent-modal';

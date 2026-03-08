@@ -1,4 +1,9 @@
 import { App, TFile, TFolder, parseYaml, stringifyYaml } from 'obsidian';
+import {
+	clonePlanSnapshot,
+	type PlanSnapshot,
+	type PlanTaskStatus,
+} from 'src/builtin-mcp/runtime/plan-state';
 import type { ChatMessage, ChatRole, ChatSession, SelectedFile, SelectedFolder } from '../types/chat';
 import { ensureFolderExists, joinPath, sanitizeFileName } from '../utils/storage';
 import { MessageService } from './MessageService';
@@ -13,6 +18,12 @@ export interface ChatHistoryEntry {
 }
 
 const FRONTMATTER_DELIMITER = '---';
+const PLAN_PROGRESS_RANK: Record<PlanTaskStatus, number> = {
+	todo: 0,
+	in_progress: 1,
+	done: 2,
+	skipped: 2,
+};
 
 export class HistoryService {
 	private folderPath: string;
@@ -97,6 +108,164 @@ export class HistoryService {
 		return value === 'horizontal' || value === 'tabs' || value === 'vertical'
 			? value
 			: undefined;
+	}
+
+	private isPlanTaskStatus(value: unknown): value is PlanTaskStatus {
+		return (
+			value === 'todo'
+			|| value === 'in_progress'
+			|| value === 'done'
+			|| value === 'skipped'
+		);
+	}
+
+	private parsePlanSnapshot(value: unknown): PlanSnapshot | null {
+		if (!value || typeof value !== 'object') {
+			return null;
+		}
+
+		const candidate = value as Record<string, unknown>;
+		if (typeof candidate.title !== 'string' || !candidate.title.trim()) {
+			return null;
+		}
+
+		if (!Array.isArray(candidate.tasks) || !candidate.summary || typeof candidate.summary !== 'object') {
+			return null;
+		}
+
+		const tasks = candidate.tasks
+			.map((task) => {
+				if (!task || typeof task !== 'object') {
+					return null;
+				}
+
+				const item = task as Record<string, unknown>;
+				if (typeof item.name !== 'string' || !this.isPlanTaskStatus(item.status)) {
+					return null;
+				}
+
+				return {
+					name: item.name,
+					status: item.status,
+					acceptance_criteria: Array.isArray(item.acceptance_criteria)
+						? item.acceptance_criteria
+							.filter((criteria): criteria is string => typeof criteria === 'string')
+						: [],
+					...(typeof item.outcome === 'string' ? { outcome: item.outcome } : {}),
+				};
+			})
+			.filter((task): task is PlanSnapshot['tasks'][number] => task !== null);
+
+		const summary = candidate.summary as Record<string, unknown>;
+		const summaryValues = {
+			total: Number(summary.total),
+			todo: Number(summary.todo),
+			inProgress: Number(summary.inProgress),
+			done: Number(summary.done),
+			skipped: Number(summary.skipped),
+		};
+
+		if (Object.values(summaryValues).some((item) => !Number.isFinite(item))) {
+			return null;
+		}
+
+		return clonePlanSnapshot({
+			title: candidate.title.trim(),
+			...(typeof candidate.description === 'string' && candidate.description.trim()
+				? { description: candidate.description.trim() }
+				: {}),
+			tasks,
+			summary: summaryValues,
+		});
+	}
+
+	private extractLatestPlanSnapshot(messages: ChatMessage[]): PlanSnapshot | null {
+		for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+			const toolCalls = messages[messageIndex].toolCalls ?? [];
+			for (let toolIndex = toolCalls.length - 1; toolIndex >= 0; toolIndex -= 1) {
+				const call = toolCalls[toolIndex];
+				if (call.name !== 'write_plan' || typeof call.result !== 'string' || !call.result.trim()) {
+					continue;
+				}
+				try {
+					const parsed = JSON.parse(call.result);
+					const snapshot = this.parsePlanSnapshot(parsed);
+					if (snapshot) {
+						return snapshot;
+					}
+				} catch {
+					continue;
+				}
+			}
+		}
+
+		return null;
+	}
+
+	private arePlansComparable(
+		left: PlanSnapshot | null,
+		right: PlanSnapshot | null
+	): left is PlanSnapshot & {} {
+		if (!left || !right) {
+			return false;
+		}
+
+		if (left.title !== right.title || left.tasks.length !== right.tasks.length) {
+			return false;
+		}
+
+		return left.tasks.every(
+			(task, index) =>
+				task.name === right.tasks[index]?.name
+				&& task.acceptance_criteria.length === right.tasks[index]?.acceptance_criteria.length
+				&& task.acceptance_criteria.every(
+					(criteria, criteriaIndex) =>
+						criteria === right.tasks[index]?.acceptance_criteria[criteriaIndex]
+				)
+		);
+	}
+
+	private isPlanAhead(candidate: PlanSnapshot, baseline: PlanSnapshot): boolean {
+		let hasForwardProgress = false;
+
+		for (let index = 0; index < candidate.tasks.length; index += 1) {
+			const candidateRank = PLAN_PROGRESS_RANK[candidate.tasks[index].status];
+			const baselineRank = PLAN_PROGRESS_RANK[baseline.tasks[index].status];
+			if (candidateRank < baselineRank) {
+				return false;
+			}
+			if (candidateRank > baselineRank) {
+				hasForwardProgress = true;
+			}
+		}
+
+		return hasForwardProgress;
+	}
+
+	private resolveLivePlan(
+		persistedPlan: PlanSnapshot | null,
+		messagePlan: PlanSnapshot | null
+	): PlanSnapshot | null {
+		if (!persistedPlan) {
+			return messagePlan;
+		}
+		if (!messagePlan) {
+			return persistedPlan;
+		}
+
+		if (JSON.stringify(persistedPlan) === JSON.stringify(messagePlan)) {
+			return persistedPlan;
+		}
+
+		if (!this.arePlansComparable(persistedPlan, messagePlan)) {
+			return persistedPlan;
+		}
+
+		if (this.isPlanAhead(messagePlan, persistedPlan)) {
+			return clonePlanSnapshot(messagePlan);
+		}
+
+		return persistedPlan;
 	}
 
 	/**
@@ -232,7 +401,8 @@ export class HistoryService {
 					enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false,
 					multiModelMode: session.multiModelMode ?? 'single',
 					activeCompareGroupId: session.activeCompareGroupId,
-					layoutMode: session.layoutMode
+					layoutMode: session.layoutMode,
+					livePlan: clonePlanSnapshot(session.livePlan ?? null),
 				});
 				return session.filePath;
 			}
@@ -272,7 +442,8 @@ export class HistoryService {
 			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false,
 			multiModelMode: session.multiModelMode ?? 'single',
 			activeCompareGroupId: session.activeCompareGroupId,
-			layoutMode: session.layoutMode
+			layoutMode: session.layoutMode,
+			livePlan: clonePlanSnapshot(session.livePlan ?? null),
 		});
 
 		const body = session.messages.map((message) => this.messageService.serializeMessage(message)).join('\n\n');
@@ -301,6 +472,8 @@ ${body}
 			}
 
 			const messages = this.parseMessages(body);
+			const persistedPlan = this.parsePlanSnapshot(frontmatter.livePlan);
+			const messagePlan = this.extractLatestPlanSnapshot(messages);
 			const session: ChatSession = {
 				id: frontmatter.id as string,
 				title: (frontmatter.title as string) ?? file.basename,
@@ -314,6 +487,7 @@ ${body}
 				multiModelMode: this.parseMultiModelMode(frontmatter.multiModelMode),
 				activeCompareGroupId: this.parseOptionalString(frontmatter.activeCompareGroupId),
 				layoutMode: this.parseLayoutMode(frontmatter.layoutMode),
+				livePlan: this.resolveLivePlan(persistedPlan, messagePlan),
 				filePath: filePath // 设置文件路径
 			};
 			return session;
@@ -353,7 +527,8 @@ ${body}
 			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false,
 			multiModelMode: session.multiModelMode ?? 'single',
 			activeCompareGroupId: session.activeCompareGroupId,
-			layoutMode: session.layoutMode
+			layoutMode: session.layoutMode,
+			livePlan: clonePlanSnapshot(session.livePlan ?? null),
 		});
 
 		// 创建文件，只包含frontmatter，不包含任何消息
@@ -479,7 +654,8 @@ ${body}
 			enableTemplateAsSystemPrompt: session.enableTemplateAsSystemPrompt ?? false,
 			multiModelMode: session.multiModelMode ?? 'single',
 			activeCompareGroupId: session.activeCompareGroupId,
-			layoutMode: session.layoutMode
+			layoutMode: session.layoutMode,
+			livePlan: clonePlanSnapshot(session.livePlan ?? null),
 		});
 
 		// 序列化第一条消息，但不重复添加文件和文件夹信息（因为已经在消息内容中了）

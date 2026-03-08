@@ -779,6 +779,18 @@ export class ZhTw implements Local {
 	chat_trigger_settings_section = "編輯器觸發設定";
 	chat_template_system_prompt_toggle = "模板系統提示詞";
 	chat_template_system_prompt_toggle_desc = "啟用後將目前提示詞模板原樣作為系統提示詞；關閉或未選擇模板時使用全域系統提示詞。";
+	chat_plan_toggle = "任務計畫";
+	chat_plan_empty_title = "目前會話還沒有任務計畫";
+	chat_plan_empty_desc = "AI 呼叫 write_plan 後會自動顯示在這裡。";
+	chat_plan_total = "總任務";
+	chat_plan_status_todo = "待處理";
+	chat_plan_status_in_progress = "進行中";
+	chat_plan_status_paused = "已暫停";
+	chat_plan_status_done = "已完成";
+	chat_plan_status_skipped = "已跳過";
+	chat_plan_acceptance_criteria = "驗收標準";
+	chat_plan_no_acceptance_criteria = "暫無驗收標準";
+	chat_plan_filtered_empty = "目前篩選下暫無任務";
 	// 快捷操作
 	selection_toolbar_ai_chat = "AI Chat";
 	selection_toolbar_more = "更多";

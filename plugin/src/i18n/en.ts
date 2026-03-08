@@ -754,6 +754,18 @@ export class En implements Local {
 	chat_trigger_settings_section = "Editor Trigger Settings";
 	chat_template_system_prompt_toggle = "Template System Prompt";
 	chat_template_system_prompt_toggle_desc = "When enabled, use the selected prompt template as-is as the system prompt; otherwise use the global system prompt.";
+	chat_plan_toggle = "Task Plan";
+	chat_plan_empty_title = "No task plan for this chat yet";
+	chat_plan_empty_desc = "It will appear here automatically after the AI calls write_plan.";
+	chat_plan_total = "Total";
+	chat_plan_status_todo = "To Do";
+	chat_plan_status_in_progress = "In Progress";
+	chat_plan_status_paused = "Paused";
+	chat_plan_status_done = "Done";
+	chat_plan_status_skipped = "Skipped";
+	chat_plan_acceptance_criteria = "Acceptance Criteria";
+	chat_plan_no_acceptance_criteria = "No acceptance criteria yet";
+	chat_plan_filtered_empty = "No tasks in the current filter";
 	// Quick Actions
 	selection_toolbar_ai_chat = "AI Chat";
 	selection_toolbar_more = "More";
