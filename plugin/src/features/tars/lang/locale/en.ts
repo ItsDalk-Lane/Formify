@@ -280,4 +280,38 @@ export default {
 	'MCP server name required': 'Please enter server name',
 	'MCP command required': 'Please enter command',
 	'MCP url required': 'Please enter URL',
+	'Tool Call Agent': 'Tool Call Agent',
+	'Expose a single execute_task tool to the main model and let a dedicated sub-agent choose and run MCP tools.':
+		'Expose a single execute_task tool to the main model and let a dedicated sub-agent choose and run MCP tools.',
+	'Tool Agent model tag': 'Tool Agent model tag',
+	'Choose which configured provider tag is used by the tool execution sub-agent. Leave empty to fall back to legacy two-phase mode.':
+		'Choose which configured provider tag is used by the tool execution sub-agent. Leave empty to fall back to legacy two-phase mode.',
+	'Tool Agent unset (fallback to legacy two-phase)': 'Unset (fallback to legacy two-phase)',
+	'Tool Agent max tool calls': 'Tool Agent max tool calls',
+	'Maximum number of underlying tool calls inside one execute_task request.':
+		'Maximum number of underlying tool calls inside one execute_task request.',
+	'Tool Agent timeout (ms)': 'Tool Agent timeout (ms)',
+	'Abort the sub-agent request after this timeout.': 'Abort the sub-agent request after this timeout.',
+	'Allow shell in Tool Agent': 'Allow shell in Tool Agent',
+	'If disabled, call_shell is blocked inside execute_task.':
+		'If disabled, call_shell is blocked inside execute_task.',
+	'Allow script in Tool Agent': 'Allow script in Tool Agent',
+	'If disabled, execute_script is blocked inside execute_task.':
+		'If disabled, execute_script is blocked inside execute_task.',
+	'Intent Agent': 'Intent Agent',
+	'Classify each chat request before the main model runs and decide whether to answer directly, clarify, or delegate to tools.':
+		'Classify each chat request before the main model runs and decide whether to answer directly, clarify, or delegate to tools.',
+	'Intent Agent model tag': 'Intent Agent model tag',
+	'Choose which configured provider tag is used for intent recognition. Leave empty to use shortcut rules plus fallback inference only.':
+		'Choose which configured provider tag is used for intent recognition. Leave empty to use shortcut rules plus fallback inference only.',
+	'Intent Agent unset (rules and fallback only)': 'Unset (rules and fallback only)',
+	'Intent Agent shortcut rules': 'Intent Agent shortcut rules',
+	'Run deterministic shortcut rules before calling the intent model.':
+		'Run deterministic shortcut rules before calling the intent model.',
+	'Intent Agent timeout (ms)': 'Intent Agent timeout (ms)',
+	'Abort the intent recognition model request after this timeout.':
+		'Abort the intent recognition model request after this timeout.',
+	'Intent Agent confidence threshold': 'Intent Agent confidence threshold',
+	'Below this confidence, the request falls back to host clarification.':
+		'Below this confidence, the request falls back to host clarification.',
 }

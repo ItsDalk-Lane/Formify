@@ -199,6 +199,8 @@ export class Zh implements Local {
 	script_folder_for_form_placeholder = "form/scripts";
 	ai_data_folder = "AI数据总文件夹";
 	ai_data_folder_desc = "统一存储AI相关数据的总文件夹，包括提示词模板和聊天历史";
+	enable_test_hooks = "启用测试钩子";
+	enable_test_hooks_desc = "仅供自动测试使用。开启后会暴露 window.__formifyTestHooks，并启用测试专用交互钩子。";
 	prompt_template_folder = "AI提示词模板目录";
 	prompt_template_folder_desc = "AI动作使用内置模板时，将从该目录加载模板文件";
 	prompt_template_folder_placeholder = "form/prompts";

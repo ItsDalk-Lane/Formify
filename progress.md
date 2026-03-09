@@ -57,3 +57,75 @@
 | File | Purpose | Status |
 |------|---------|--------|
 | `docs/obsidian-plugin-analysis.md` | 本次源码分析结果 | passed |
+
+---
+
+## Session: 2026-03-09 Tool Call Agent 重构
+
+### Current Status
+- **Phase:** 1 - Architecture Analysis
+- **Started:** 2026-03-09
+- **Status:** in_progress
+
+### Actions Taken
+- 读取 `chatTwoPhaseToolController.ts`，确认两阶段控制器只在单次 `generateAssistantResponseForModel()` 中创建，并通过闭包维护动态工具集。
+- 读取 `McpClientManager.ts`，确认主模型当前只注入 Tool Search 三个工具，真实工具通过两阶段控制器二次放出。
+- 读取 `mcpToolCallHandler.ts` 与 `providers/claude.ts` / `providers/gemini.ts` / `providers/openAI.ts`，确认 provider 层的工具协议分为 OpenAI-compatible、Anthropic 原生与 Poe Responses 三条实现线。
+- 读取 `tool-library-seeds.ts`、`tool-library-manager.ts`、`tool-search-mcp-server.ts`，确认现有工具库是“seed + runtime schema + markdown frontmatter/body”三层结构，`find_tool` 为纯算法评分。
+- 读取 `vault-mcp-server.ts`、`memory-mcp-server.ts`、`obsidian-search-mcp-server.ts`、`sequentialthinking-mcp-server.ts` 及各工具注册文件，确认真实执行工具分布与 schema 来源。
+- 更新 `task_plan.md` / `findings.md`，把当前任务的分析结论落盘。
+
+### Pending
+- 补充最后的验收说明与剩余风险
+- 视需要补 Tool Agent 独立单测
+
+### Notes
+- 用户给出的部分源码路径已过期，后续实现必须以当前仓库真实路径为准。
+- `toolCalls` 历史兼容不是自动现成的，需要在新链路里显式维护。
+
+### Update: 2026-03-09 Tool Call Agent 实现推进
+
+#### Completed
+- 新建 `plugin/src/features/tool-agent/` 模块，包含 `ToolCallAgent`、`ToolSelector`、`SafetyChecker`、`ResultProcessor`、`ToolCallAgentPromptBuilder` 与 registry。
+- 按 server 拆分写入详细工具定义：Vault、Search、Memory、Sequential Thinking，以及 Tool Search fallback 元数据。
+- 在 `McpClientManager` 中加入 `execute_task` 路由，新增 `callActualTool()` 直通真实 MCP，保留原始工具执行链路不变。
+- 在 `ChatService` 中切换主模型注入逻辑：tool-agent 可用时只暴露 `execute_task`；不可用时继续走旧两阶段控制器。
+- 新增 Tool Agent 设置项与设置面板入口，支持启用开关、模型 tag、max tool calls、timeout、shell/script 默认约束。
+- 实现运行时 fallback：`execute_task` 失败时，在 `McpClientManager` 内部自动降级到旧的两阶段 MCP 子流程。
+
+#### Verification
+- `pnpm -C plugin build` 通过，说明 esbuild 构建链路未被本次改动打断。
+- 使用临时 TypeScript 5 做文件级筛查时，tool-agent / manager / coordinator 这批新增接缝未再出现新增错误。
+
+#### Known Gaps
+- 仓库本身存在大量历史 TypeScript 错误，导致无法给出“全仓 `tsc --noEmit` 通过”的结论。
+- 还未补 Tool Agent 独立单测；当前验证以静态检查 + 构建通过为主。
+
+---
+
+## Session: 2026-03-09 Ollama MCP 原生回退
+
+### Current Status
+- **Phase:** 1 - Discovery / Implementation
+- **Started:** 2026-03-09
+- **Status:** in_progress
+
+### Actions Taken
+- 读取 `plugin/src/features/tars/providers/ollama.ts`，确认当前 MCP 路径强制经过 `/v1` OpenAI-compatible 包装器。
+- 检查本地 `ollama` SDK 源码与 README，确认原生 `ollama.chat()` 已支持 `tools`、`tool_calls` 与 `tool_name`。
+- 记录回归根因与实施边界到 `task_plan.md` / `findings.md` / `progress.md`。
+
+### Pending
+- 无
+
+### Verification
+| Test | Expected | Actual | Status |
+|------|----------|--------|--------|
+| `node plugin/scripts/provider-regression.mjs --pr=23` | 历史 provider 回归 + 新增 Ollama 原生 MCP 回归全部通过 | 通过 | passed |
+| `npm run build`（`plugin/`） | 插件成功打包，无语法/构建错误 | 通过 | passed |
+
+### Outcome
+- `plugin/src/features/tars/providers/ollama.ts` 已不再依赖 `/v1` OpenAI-compatible MCP 包装器。
+- Ollama 在存在 `mcpTools + mcpCallTool` 时会直接走原生 `ollama.chat(... tools ...)`。
+- 工具结果已按原生协议回传：`role: 'tool'` + `tool_name`。
+- `plugin/src/types/ollama.d.ts` 与 `plugin/scripts/provider-regression.mjs` 已同步更新。

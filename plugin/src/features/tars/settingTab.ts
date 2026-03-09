@@ -46,7 +46,12 @@ import {
 	writeReasoningCapabilityCache
 } from './providers/modelCapability'
 import { SystemPromptManagerModal } from './system-prompts/SystemPromptManagerModal'
-import { availableVendors, DEFAULT_TARS_SETTINGS } from './settings'
+import {
+	availableVendors,
+	DEFAULT_TARS_SETTINGS,
+	DEFAULT_INTENT_AGENT_SETTINGS,
+	DEFAULT_TOOL_AGENT_SETTINGS,
+} from './settings'
 import type { TarsSettings } from './settings'
 import {
 	McpClientManager,
@@ -1170,6 +1175,10 @@ export class TarsSettingTab {
 	 */
 	private renderMcpSettings(containerEl: HTMLElement): void {
 		const mcpSettings = this.settings.mcp ?? DEFAULT_MCP_SETTINGS
+		const toolAgentSettings =
+			this.settings.toolAgent ?? DEFAULT_TOOL_AGENT_SETTINGS
+		const intentAgentSettings =
+			this.settings.intentAgent ?? DEFAULT_INTENT_AGENT_SETTINGS
 
 		// 标题行
 		const mcpHeaderSetting = new Setting(containerEl)
@@ -1295,6 +1304,245 @@ export class TarsSettingTab {
 				await this.saveSettings()
 			})
 		})
+
+		const toolAgentHeader = new Setting(mcpSection)
+			.setName(t('Tool Call Agent'))
+			.setDesc(t('Expose a single execute_task tool to the main model and let a dedicated sub-agent choose and run MCP tools.'))
+		toolAgentHeader.settingEl.style.borderTop = '1px solid var(--background-modifier-border)'
+		toolAgentHeader.settingEl.style.paddingTop = '8px'
+		toolAgentHeader.settingEl.style.marginTop = '4px'
+		toolAgentHeader.addToggle((toggle) =>
+			toggle
+				.setValue(toolAgentSettings.enabled ?? false)
+				.onChange(async (value) => {
+					this.settings.toolAgent = {
+						...DEFAULT_TOOL_AGENT_SETTINGS,
+						...(this.settings.toolAgent ?? {}),
+						enabled: value,
+					}
+					await this.saveSettings()
+				})
+		)
+
+		new Setting(mcpSection)
+			.setName(t('Tool Agent model tag'))
+			.setDesc(t('Choose which configured provider tag is used by the tool execution sub-agent. Leave empty to fall back to legacy two-phase mode.'))
+			.addDropdown((dropdown) => {
+				dropdown.addOption('', t('Tool Agent unset (fallback to legacy two-phase)'))
+				for (const provider of this.settings.providers) {
+					dropdown.addOption(provider.tag, `${provider.tag} · ${provider.vendor}`)
+				}
+				dropdown
+					.setValue(toolAgentSettings.modelTag ?? '')
+					.onChange(async (value) => {
+						this.settings.toolAgent = {
+							...DEFAULT_TOOL_AGENT_SETTINGS,
+							...(this.settings.toolAgent ?? {}),
+							modelTag: value,
+						}
+						await this.saveSettings()
+					})
+			})
+
+		new Setting(mcpSection)
+			.setName(t('Tool Agent max tool calls'))
+			.setDesc(t('Maximum number of underlying tool calls inside one execute_task request.'))
+			.addText((text) => {
+				text
+					.setPlaceholder('10')
+					.setValue(String(toolAgentSettings.defaultConstraints.maxToolCalls ?? 10))
+				text.inputEl.type = 'number'
+				text.inputEl.min = '1'
+				text.inputEl.style.width = '72px'
+				text.inputEl.addEventListener('change', async () => {
+					const raw = parseInt(text.inputEl.value, 10)
+					const value = Number.isFinite(raw) && raw >= 1 ? raw : 10
+					text.inputEl.value = String(value)
+					this.settings.toolAgent = {
+						...DEFAULT_TOOL_AGENT_SETTINGS,
+						...(this.settings.toolAgent ?? {}),
+						defaultConstraints: {
+							...DEFAULT_TOOL_AGENT_SETTINGS.defaultConstraints,
+							...(this.settings.toolAgent?.defaultConstraints ?? {}),
+							maxToolCalls: value,
+						},
+					}
+					await this.saveSettings()
+				})
+			})
+
+		new Setting(mcpSection)
+			.setName(t('Tool Agent timeout (ms)'))
+			.setDesc(t('Abort the sub-agent request after this timeout.'))
+			.addText((text) => {
+				text
+					.setPlaceholder('30000')
+					.setValue(String(toolAgentSettings.defaultConstraints.timeoutMs ?? 30000))
+				text.inputEl.type = 'number'
+				text.inputEl.min = '1000'
+				text.inputEl.style.width = '90px'
+				text.inputEl.addEventListener('change', async () => {
+					const raw = parseInt(text.inputEl.value, 10)
+					const value = Number.isFinite(raw) && raw >= 1000 ? raw : 30000
+					text.inputEl.value = String(value)
+					this.settings.toolAgent = {
+						...DEFAULT_TOOL_AGENT_SETTINGS,
+						...(this.settings.toolAgent ?? {}),
+						defaultConstraints: {
+							...DEFAULT_TOOL_AGENT_SETTINGS.defaultConstraints,
+							...(this.settings.toolAgent?.defaultConstraints ?? {}),
+							timeoutMs: value,
+						},
+					}
+					await this.saveSettings()
+				})
+			})
+
+		new Setting(mcpSection)
+			.setName(t('Allow shell in Tool Agent'))
+			.setDesc(t('If disabled, call_shell is blocked inside execute_task.'))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(toolAgentSettings.defaultConstraints.allowShell ?? false)
+					.onChange(async (value) => {
+						this.settings.toolAgent = {
+							...DEFAULT_TOOL_AGENT_SETTINGS,
+							...(this.settings.toolAgent ?? {}),
+							defaultConstraints: {
+								...DEFAULT_TOOL_AGENT_SETTINGS.defaultConstraints,
+								...(this.settings.toolAgent?.defaultConstraints ?? {}),
+								allowShell: value,
+							},
+						}
+						await this.saveSettings()
+					})
+			)
+
+		new Setting(mcpSection)
+			.setName(t('Allow script in Tool Agent'))
+			.setDesc(t('If disabled, execute_script is blocked inside execute_task.'))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(toolAgentSettings.defaultConstraints.allowScript ?? false)
+					.onChange(async (value) => {
+						this.settings.toolAgent = {
+							...DEFAULT_TOOL_AGENT_SETTINGS,
+							...(this.settings.toolAgent ?? {}),
+							defaultConstraints: {
+								...DEFAULT_TOOL_AGENT_SETTINGS.defaultConstraints,
+								...(this.settings.toolAgent?.defaultConstraints ?? {}),
+								allowScript: value,
+							},
+						}
+						await this.saveSettings()
+					})
+			)
+
+		const intentAgentHeader = new Setting(mcpSection)
+			.setName(t('Intent Agent'))
+			.setDesc(t('Classify each chat request before the main model runs and decide whether to answer directly, clarify, or delegate to tools.'))
+		intentAgentHeader.settingEl.style.borderTop = '1px solid var(--background-modifier-border)'
+		intentAgentHeader.settingEl.style.paddingTop = '8px'
+		intentAgentHeader.settingEl.style.marginTop = '4px'
+		intentAgentHeader.addToggle((toggle) =>
+			toggle
+				.setValue(intentAgentSettings.enabled ?? false)
+				.onChange(async (value) => {
+					this.settings.intentAgent = {
+						...DEFAULT_INTENT_AGENT_SETTINGS,
+						...(this.settings.intentAgent ?? {}),
+						enabled: value,
+					}
+					await this.saveSettings()
+				})
+		)
+
+		new Setting(mcpSection)
+			.setName(t('Intent Agent model tag'))
+			.setDesc(t('Choose which configured provider tag is used for intent recognition. Leave empty to use shortcut rules plus fallback inference only.'))
+			.addDropdown((dropdown) => {
+				dropdown.addOption('', t('Intent Agent unset (rules and fallback only)'))
+				for (const provider of this.settings.providers) {
+					dropdown.addOption(provider.tag, `${provider.tag} · ${provider.vendor}`)
+				}
+				dropdown
+					.setValue(intentAgentSettings.modelTag ?? '')
+					.onChange(async (value) => {
+						this.settings.intentAgent = {
+							...DEFAULT_INTENT_AGENT_SETTINGS,
+							...(this.settings.intentAgent ?? {}),
+							modelTag: value,
+						}
+						await this.saveSettings()
+					})
+			})
+
+		new Setting(mcpSection)
+			.setName(t('Intent Agent shortcut rules'))
+			.setDesc(t('Run deterministic shortcut rules before calling the intent model.'))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(intentAgentSettings.shortcutRulesEnabled ?? true)
+					.onChange(async (value) => {
+						this.settings.intentAgent = {
+							...DEFAULT_INTENT_AGENT_SETTINGS,
+							...(this.settings.intentAgent ?? {}),
+							shortcutRulesEnabled: value,
+						}
+						await this.saveSettings()
+					})
+			)
+
+		new Setting(mcpSection)
+			.setName(t('Intent Agent timeout (ms)'))
+			.setDesc(t('Abort the intent recognition model request after this timeout.'))
+			.addText((text) => {
+				text
+					.setPlaceholder('3000')
+					.setValue(String(intentAgentSettings.timeoutMs ?? 3000))
+				text.inputEl.type = 'number'
+				text.inputEl.min = '500'
+				text.inputEl.style.width = '90px'
+				text.inputEl.addEventListener('change', async () => {
+					const raw = parseInt(text.inputEl.value, 10)
+					const value = Number.isFinite(raw) && raw >= 500 ? raw : 3000
+					text.inputEl.value = String(value)
+					this.settings.intentAgent = {
+						...DEFAULT_INTENT_AGENT_SETTINGS,
+						...(this.settings.intentAgent ?? {}),
+						timeoutMs: value,
+					}
+					await this.saveSettings()
+				})
+			})
+
+		new Setting(mcpSection)
+			.setName(t('Intent Agent confidence threshold'))
+			.setDesc(t('Below this confidence, the request falls back to host clarification.'))
+			.addText((text) => {
+				text
+					.setPlaceholder('0.6')
+					.setValue(String(intentAgentSettings.confidenceThreshold ?? 0.6))
+				text.inputEl.type = 'number'
+				text.inputEl.min = '0'
+				text.inputEl.max = '1'
+				text.inputEl.step = '0.1'
+				text.inputEl.style.width = '90px'
+				text.inputEl.addEventListener('change', async () => {
+					const raw = Number.parseFloat(text.inputEl.value)
+					const value =
+						Number.isFinite(raw) && raw >= 0 && raw <= 1
+							? raw
+							: 0.6
+					text.inputEl.value = String(value)
+					this.settings.intentAgent = {
+						...DEFAULT_INTENT_AGENT_SETTINGS,
+						...(this.settings.intentAgent ?? {}),
+						confidenceThreshold: value,
+					}
+					await this.saveSettings()
+				})
+			})
 
 		// 添加服务器按钮事件
 		addServerBtn.addEventListener('click', (e) => {

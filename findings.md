@@ -59,3 +59,59 @@
 
 ### Output
 - 已生成分析文档：`/Users/study_superior/Desktop/Code/Formify/docs/obsidian-plugin-analysis.md`
+
+---
+
+## Session: 2026-03-09 Tool Call Agent 重构
+
+### Research Findings
+- 用户提示中的 `plugin/src/features/tars/chat/` 已过期；当前聊天主流程位于 `plugin/src/features/chat/services/ChatService.ts`。
+- `chatTwoPhaseToolController` 不由全局单例持有，而是在 `ChatService.generateAssistantResponseForModel()` 每次请求开始时临时创建，并通过 `providerOptions.mcpGetTools / mcpCallTool` 注入 provider 工具循环；请求结束后无显式销毁，生命周期随闭包结束。
+- `McpClientManager.getToolsForModelContext()` 当前只返回内置 Tool Search server 的 3 个工具，不返回 38 个真实执行工具；真实工具只有在两阶段控制器调用 `find_tool` 后，才通过 `mcpGetTools()` 动态追加到 provider 可见集合。
+- `McpClientManager.callTool()` 的调用分两类：
+  - 内置 server：`ensureBuiltinRuntime(serverId)` -> `runtime.callTool(toolName, args)` -> in-memory MCP client -> `registerTextTool` handler。
+  - 外部 server：`settings.mcp.servers` 找配置 -> `processManager.ensureConnected(config)` -> `McpClient.callTool()` -> JSON-RPC `tools/call`。
+- 当前工具定义存储是三层：
+  - `tool-library-seeds.ts`：人工维护摘要、场景、关键词、示例。
+  - runtime `listTools()` / `TOOL_SEARCH_TOOL_CATALOG`：提供 description + inputSchema。
+  - AI Data 目录下 Markdown：由 `ToolLibraryManager.bootstrapMissingFiles()` 生成，frontmatter 存 metadata，正文存补充说明。
+- `ToolLibraryManager` 的索引完全是内存索引：`keywordIndex`、`scenarioIndex`、`categoryIndex`、`serverIndex`。`find_tool` 的核心评分是 exact keyword *100 + partial keyword *80 + scenario *50，没有模型参与。
+- `delegate_to_agent` 只存在于 Vault server 的 util tools 中，底层是 `AgentRegistry`。当前 runtime 默认只注册 `builtin.echo`，返回 `{ id, task, status: 'ok' }`；没有更复杂的代理编排机制。
+- 外部 MCP 工具通过 `McpProcessManager` + `McpClient` 发现：连接后走 `tools/list` 拉回 schema，`getAvailableTools()` 会把外部工具与内置工具合并，且同名时“内置优先、外部跳过”。
+- provider 层并不统一：
+  - OpenAI / Gemini fallback / Ollama / OpenRouter / DeepSeek / Qwen / Azure / Grok / Zhipu / SiliconFlow / Kimi / QianFan / Doubao 主要走 `withOpenAIMcpToolCallSupport()`，使用 OpenAI `tools` / `tool_calls` 兼容格式。
+  - Claude 走 `withAnthropicMcpToolCallSupport()`，使用原生 `tool_use` / `tool_result` block。
+  - Poe 有独立 Responses API 工具循环实现，但工具执行最终仍复用 `executeMcpToolCalls()`。
+- 当前 `ChatMessage.toolCalls` 主要用于历史序列化/反序列化；运行时 MCP 工具结果更多是以内嵌标记 `{{FF_MCP_TOOL_START}}...` 存进 assistant content，再由 `MessageService` 转成 history callout。
+
+### Open Questions
+- 用户要求“41 个内置工具都写 ToolDefinition”，但新的 registry 目录结构只列了 Vault/Search/Memory/Thinking 4 组，共 38 个真实执行工具；是否将 Tool Search 3 个工具一并纳入 registry 作为 fallback 元数据，需要在实现时统一收口。
+- ToolCallAgent 使用哪个 provider model tag 需要新增设置项和 UI，同时要避免对 Tab Completion 与多模型对比造成副作用。
+
+### Implementation Outcome
+- 已将 Tool Search 的 3 个工具一并纳入 `registry/tool-search-tools.ts`，作为 fallback / 后备元数据保留，因此 registry 语义上覆盖了 41 个内置工具。
+- `McpClientManager.getToolsForModelContext()` 现在会在 tool-agent 可用时返回单一 `execute_task` 工具；否则继续返回旧的 Tool Search 三工具。
+- `McpClientManager.callToolWithContext()` 新增了上下文感知执行入口，供 `ChatService` 在不改 `callTool()` 原签名的前提下，把 hints / constraints / selectedText / activeFile 等注入 tool-agent。
+- `ChatService` 在 tool-agent 模式下不再创建 `chatTwoPhaseToolController`；旧控制器只在 fallback 或显式禁用 tool-agent 时启用。
+- 运行时 fallback 已落在 `McpClientManager`：如果 `ToolCallAgent.execute()` 抛错，则自动使用旧 Tool Search + `chatTwoPhaseToolController` 路径执行一次子代理流程。
+
+---
+
+## Session: 2026-03-09 Ollama MCP 原生回退
+
+### Research Findings
+- 当前仓库里的 Ollama 一旦启用 MCP，就不会再走原生 `ollama.chat()`，而是强制进入 `withOpenAIMcpToolCallSupport()`，把 baseURL 变成 `/v1` OpenAI-compatible 端点。
+- 本地安装的 `ollama` SDK 已明确支持原生 `tools`、`message.tool_calls`、以及工具结果消息里的 `tool_name` 字段，见 `plugin/node_modules/ollama/src/interfaces.ts` 与 README。
+- 也就是说，Ollama 不需要依赖 `/v1` 才能做工具调用；现有问题更像是仓库把原生稳定路径替换成了兼容层路径。
+- 原生 SDK 的 chat 协议与 OpenAI-compatible 协议不同：
+  - 请求里是 `tools?: Tool[]`
+  - 返回里是 `message.tool_calls?: ToolCall[]`
+  - 工具执行结果回传给模型时，消息包含 `role: 'tool'` 与 `tool_name`
+- 这意味着最小修复点应落在 `plugin/src/features/tars/providers/ollama.ts`，而不是 `mcpToolCallHandler.ts`。
+
+### Technical Decisions
+| Decision | Rationale |
+|----------|-----------|
+| 为 Ollama 单独实现原生 MCP 工具循环 | 保持其它 OpenAI-compatible provider 的现有逻辑不变 |
+| 未启用 MCP 时继续走旧的原生流式回复实现 | 避免把普通对话链路也一并重写 |
+| 更新 `plugin/src/types/ollama.d.ts` | 当前本地声明缺失 `tools` / `tool_calls` / `tool_name`，会降低后续维护可读性 |

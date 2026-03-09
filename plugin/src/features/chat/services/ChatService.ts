@@ -27,6 +27,21 @@ import type { MultiModelConfigService } from './MultiModelConfigService';
 import { filterMessagesForCompareModel } from '../utils/compareContext';
 import { buildEditedUserMessage, getEditableUserMessageContent } from '../utils/userMessageEditing';
 import { createChatTwoPhaseToolController } from 'src/features/tars/mcp/chatTwoPhaseToolController';
+import {
+	TOOL_AGENT_SERVER_ID,
+	TOOL_AGENT_TOOL_NAME,
+	type ToolAgentRequest,
+} from 'src/features/tool-agent';
+import {
+	ContextAssembler,
+	DEFAULT_INTENT_AGENT_SETTINGS,
+	IntentAgent,
+	IntentResultValidator,
+	type IntentResult,
+	type IntentTriggerSource,
+	type RequestContext,
+} from 'src/features/intent-agent';
+import { composeChatSystemPrompt } from 'src/service/PromptBuilder';
 
 type ChatSubscriber = (state: ChatState) => void;
 
@@ -38,6 +53,9 @@ export interface PreparedChatRequest {
 	originalUserInput: string;
 	isImageGenerationIntent: boolean;
 	isModelSupportImageGeneration: boolean;
+	triggerSource: IntentTriggerSource;
+	requestContext?: RequestContext;
+	intentResult?: IntentResult;
 }
 
 export interface GenerateAssistantOptions {
@@ -54,6 +72,11 @@ export interface GenerateAssistantOptions {
 const serializePlanSnapshot = (
 	snapshot: PlanSnapshot | null | undefined
 ): string => JSON.stringify(snapshot ?? null);
+
+const CONFIRM_INTENT_PATTERN =
+	/^(确认|确定|继续|继续执行|执行|是|好的|好|yes|y|confirm|proceed|run it|go ahead)[\s.!?。？！]*$/i;
+const CANCEL_INTENT_PATTERN =
+	/^(取消|停止|算了|不用了|否|不|no|n|cancel|stop|abort|never mind)[\s.!?。？！]*$/i;
 
 const isEphemeralContextMessage = (message: ChatMessage): boolean =>
 	Boolean(message.metadata?.isEphemeralContext);
@@ -132,6 +155,10 @@ export class ChatService {
 	private lastMcpNoticeAt = 0;
 	private vaultPlanUnsubscribe: (() => void) | null = null;
 	private pendingPlanSync: Promise<void> = Promise.resolve();
+	private readonly contextAssembler: ContextAssembler;
+	private readonly intentAgent: IntentAgent;
+	private readonly intentResultValidator: IntentResultValidator;
+	private pendingTriggerSource: IntentTriggerSource = 'chat_input';
 	// 跟踪当前活动文件的路径
 	private currentActiveFilePath: string | null = null;
 	// 跟踪在当前活动文件会话期间，用户手动移除的文件路径（仅在当前文件活跃期间有效）
@@ -141,6 +168,27 @@ export class ChatService {
 		this.fileContentService = new FileContentService(plugin.app);
 		this.messageService = new MessageService(plugin.app, this.fileContentService);
 		this.historyService = new HistoryService(plugin.app, getChatHistoryPath(plugin.settings.aiDataFolder));
+		this.contextAssembler = new ContextAssembler(plugin.app);
+		this.intentResultValidator = new IntentResultValidator();
+		this.intentAgent = new IntentAgent({
+			getSettings: () =>
+				this.plugin.settings.tars.settings.intentAgent
+				?? DEFAULT_INTENT_AGENT_SETTINGS,
+			resolveProviderByTag: (tag) => {
+				const provider = this.findProviderByTagExact(tag);
+				if (!provider) {
+					return null;
+				}
+				return {
+					tag: provider.tag,
+					vendorName: provider.vendor,
+					options: { ...provider.options },
+				};
+			},
+			getVendorByName: (vendorName) =>
+				availableVendors.find((vendor) => vendor.name === vendorName),
+			validator: this.intentResultValidator,
+		});
 	}
 
 	private get app() {
@@ -303,6 +351,7 @@ export class ChatService {
 			activeCompareGroupId: this.state.activeCompareGroupId,
 			layoutMode: this.state.layoutMode,
 			livePlan: null,
+			pendingIntentConfirmation: null,
 		};
 		this.state.activeSession = session;
 		this.state.contextNotes = [];
@@ -318,6 +367,7 @@ export class ChatService {
 		this.state.mcpSelectedServerIds = [];
 		this.state.activeCompareGroupId = undefined;
 		this.state.parallelResponses = undefined;
+		this.pendingTriggerSource = 'chat_input';
 		// 注意：不清空手动移除记录，这是插件级别的持久化数据
 		this.emitState();
 		this.queueSessionPlanSync(session);
@@ -373,9 +423,169 @@ export class ChatService {
 		this.emitState();
 	}
 
+	setNextTriggerSource(source: IntentTriggerSource) {
+		this.pendingTriggerSource = source;
+	}
+
 	clearSelectedText() {
 		this.state.selectedText = undefined;
 		this.emitState();
+	}
+
+	private consumePendingTriggerSource(): IntentTriggerSource {
+		const triggerSource = this.pendingTriggerSource;
+		this.pendingTriggerSource = 'chat_input';
+		return triggerSource;
+	}
+
+	private async recognizeIntentForPreparedRequest(
+		prepared: PreparedChatRequest
+	): Promise<{
+		requestContext: RequestContext;
+		intentResult: IntentResult;
+	}> {
+		const modelTag = this.state.selectedModelId ?? this.getDefaultProviderTag();
+		const requestContext = await this.contextAssembler.assemble({
+			userMessage: prepared.originalUserInput,
+			session: prepared.session,
+			latestUserMessage: prepared.userMessage,
+			triggerSource: prepared.triggerSource,
+			selectedFiles: prepared.currentSelectedFiles,
+			selectedFolders: prepared.currentSelectedFolders,
+			contextNotes: Array.from(
+				new Set([
+					...(prepared.session.contextNotes ?? []),
+					...this.state.contextNotes,
+				])
+			),
+			modelTag,
+			resolveProviderByTag: (tag) => this.resolveProviderByTag(tag ?? undefined),
+			resolveOllamaCapabilities: async (tag) =>
+				await this.getOllamaCapabilitiesForModel(tag),
+			activeFilePath:
+				this.currentActiveFilePath
+				?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path
+				?? prepared.currentSelectedFiles[0]?.path,
+		});
+
+		let intentResult: IntentResult;
+		try {
+			intentResult = await this.intentAgent.recognize(requestContext);
+		} catch (error) {
+			DebugLogger.warn('[IntentAgent] Falling back to validator inference', error);
+			intentResult = this.intentResultValidator.validate({}, requestContext);
+		}
+		const confidenceThreshold =
+			this.plugin.settings.tars.settings.intentAgent?.confidenceThreshold
+			?? DEFAULT_INTENT_AGENT_SETTINGS.confidenceThreshold;
+		if (
+			intentResult.classification.confidence < confidenceThreshold
+			&& intentResult.routing.executionMode !== 'clarify_first'
+		) {
+			intentResult = this.intentResultValidator.validate(
+				{
+					...intentResult,
+					routing: {
+						...intentResult.routing,
+						executionMode: 'clarify_first',
+					},
+				},
+				requestContext
+			);
+		}
+
+		prepared.userMessage.metadata = {
+			...(prepared.userMessage.metadata ?? {}),
+			triggerSource: prepared.triggerSource,
+			intentResult,
+		};
+		return {
+			requestContext,
+			intentResult,
+		};
+	}
+
+	private async handleIntentHostResponse(
+		prepared: PreparedChatRequest
+	): Promise<boolean> {
+		const intentResult = prepared.intentResult;
+		if (!intentResult) {
+			return false;
+		}
+
+		if (intentResult.routing.executionMode === 'clarify_first') {
+			await this.appendHostAssistantMessage(
+				prepared.session,
+				this.buildClarificationMessage(intentResult)
+			);
+			return true;
+		}
+
+		const isApproved = Boolean(
+			prepared.userMessage.metadata?.intentConfirmationApproved
+		);
+		if (
+			intentResult.routing.safetyFlags.requiresConfirmation
+			&& !isApproved
+		) {
+			prepared.session.pendingIntentConfirmation = {
+				userMessageId: prepared.userMessage.id,
+				normalizedRequest: intentResult.understanding.normalizedRequest,
+				createdAt: Date.now(),
+			};
+			await this.appendHostAssistantMessage(
+				prepared.session,
+				this.buildConfirmationMessage(intentResult)
+			);
+			return true;
+		}
+
+		prepared.session.pendingIntentConfirmation = null;
+		return false;
+	}
+
+	private async handlePendingIntentConfirmation(
+		prepared: PreparedChatRequest
+	): Promise<'none' | 'confirmed' | 'handled'> {
+		const pendingConfirmation = prepared.session.pendingIntentConfirmation;
+		if (!pendingConfirmation) {
+			return 'none';
+		}
+
+		const reply = prepared.originalUserInput.trim();
+		prepared.userMessage.metadata = {
+			...(prepared.userMessage.metadata ?? {}),
+			hiddenFromModel: true,
+		};
+
+		if (CONFIRM_INTENT_PATTERN.test(reply)) {
+			const targetMessage = prepared.session.messages.find(
+				(message) => message.id === pendingConfirmation.userMessageId
+			);
+			if (targetMessage) {
+				targetMessage.metadata = {
+					...(targetMessage.metadata ?? {}),
+					intentConfirmationApproved: true,
+				};
+			}
+			prepared.session.pendingIntentConfirmation = null;
+			return 'confirmed';
+		}
+
+		if (CANCEL_INTENT_PATTERN.test(reply)) {
+			prepared.session.pendingIntentConfirmation = null;
+			await this.appendHostAssistantMessage(
+				prepared.session,
+				'已取消这次执行。你可以修改需求后再发一次。'
+			);
+			return 'handled';
+		}
+
+		await this.appendHostAssistantMessage(
+			prepared.session,
+			'这个请求还在等待确认。请回复“确认”继续，或回复“取消”终止。'
+		);
+		return 'handled';
 	}
 
 	// 历史保存控制方法
@@ -878,6 +1088,7 @@ export class ChatService {
 		this.syncSessionMultiModelState(session);
 		session.selectedFiles = [...this.state.selectedFiles];
 		session.selectedFolders = [...this.state.selectedFolders];
+		const triggerSource = this.consumePendingTriggerSource();
 
 		const selectedPromptTemplate = this.state.selectedPromptTemplate;
 		const useTemplateAsSystemPrompt =
@@ -929,7 +1140,8 @@ export class ChatService {
 			metadata: {
 				taskUserInput: originalUserInput,
 				taskTemplate,
-				selectedText: this.state.selectedText
+				selectedText: this.state.selectedText,
+				triggerSource,
 			}
 		});
 
@@ -988,7 +1200,8 @@ export class ChatService {
 			currentSelectedFolders,
 			originalUserInput,
 			isImageGenerationIntent,
-			isModelSupportImageGeneration
+			isModelSupportImageGeneration,
+			triggerSource,
 		};
 	}
 
@@ -999,7 +1212,22 @@ export class ChatService {
 		if (!prepared) {
 			return;
 		}
+		const confirmationState =
+			await this.handlePendingIntentConfirmation(prepared);
+		if (confirmationState === 'handled') {
+			return;
+		}
 		await this.ensurePlanSyncReady();
+		if (confirmationState !== 'confirmed') {
+			const recognizedIntent =
+				await this.recognizeIntentForPreparedRequest(prepared);
+			prepared.requestContext = recognizedIntent.requestContext;
+			prepared.intentResult = recognizedIntent.intentResult;
+
+			if (await this.handleIntentHostResponse(prepared)) {
+				return;
+			}
+		}
 
 		if (this.state.multiModelMode === 'compare') {
 			if (!this.multiModelService) {
@@ -1159,8 +1387,12 @@ export class ChatService {
 		// 更新消息内容
 		const editedMessage = buildEditedUserMessage(message, content);
 		message.content = editedMessage.content;
-		message.metadata = editedMessage.metadata;
+		const nextMetadata = { ...(editedMessage.metadata ?? {}) };
+		delete nextMetadata.intentResult;
+		delete nextMetadata.intentConfirmationApproved;
+		message.metadata = nextMetadata;
 		message.timestamp = Date.now();
+		session.pendingIntentConfirmation = null;
 
 		// 删除这条消息之后的所有消息（包括AI回复）
 		session.messages = session.messages.slice(0, messageIndex + 1);
@@ -1832,6 +2064,11 @@ export class ChatService {
 		let enableReasoning = this.state.enableReasoningToggle && providerEnableReasoning;
 		let enableThinking = this.state.enableReasoningToggle && providerEnableThinking;
 		const enableWebSearch = this.state.enableWebSearchToggle && providerEnableWebSearch;
+		const latestIntentResult = this.getLatestIntentResult(session);
+		const allowToolUse =
+			!latestIntentResult
+			|| latestIntentResult.routing.executionMode === 'tool_assisted'
+			|| latestIntentResult.routing.executionMode === 'plan_then_execute';
 		const providerOptions: Record<string, unknown> = {
 			...providerOptionsRaw,
 			enableReasoning,
@@ -1845,17 +2082,34 @@ export class ChatService {
 
 		const mcpManager = this.plugin.featureCoordinator.getMcpClientManager();
 		const mcpMode = this.state.mcpToolMode;
-		if (mcpManager && mcpMode !== 'disabled') {
+		if (mcpManager && mcpMode !== 'disabled' && allowToolUse) {
 			try {
 				const allMcpTools = await mcpManager.getToolsForModelContext();
-				const mcpTools = mcpMode === 'manual'
-					? allMcpTools.filter((tool) => this.state.mcpSelectedServerIds.includes(tool.serverId))
-					: allMcpTools;
+				const isToolAgentMode = allMcpTools.some(
+					(tool) => tool.serverId === TOOL_AGENT_SERVER_ID
+				);
+				const allowedServerIds =
+					mcpMode === 'manual' ? [...this.state.mcpSelectedServerIds] : undefined;
+				const hasManualAllowedServerIds =
+					Array.isArray(allowedServerIds) && allowedServerIds.length > 0;
+				const mcpTools = isToolAgentMode
+					? (
+						mcpMode === 'manual'
+							? (hasManualAllowedServerIds ? allMcpTools : [])
+							: allMcpTools
+					)
+					: (
+						mcpMode === 'manual'
+							? allMcpTools.filter((tool) =>
+								this.state.mcpSelectedServerIds.includes(tool.serverId)
+							)
+							: allMcpTools
+					);
 				let guardedPlanSnapshot = this.hasLivePlan(session)
 					? clonePlanSnapshot(session.livePlan ?? null)
 					: null;
 				if (mcpTools.length > 0) {
-					const baseMcpCallTool = async (
+					const baseActualMcpCallTool = async (
 						serverId: string,
 						name: string,
 						args: Record<string, unknown>
@@ -1875,7 +2129,7 @@ export class ChatService {
 							}
 						}
 
-						const result = await mcpManager.callTool(serverId, name, args);
+						const result = await mcpManager.callActualTool(serverId, name, args);
 						if (shouldRefreshGuardedPlan) {
 							const nextGuardedPlan =
 								this.parsePlanSnapshotFromWritePlanResult(result);
@@ -1886,21 +2140,54 @@ export class ChatService {
 						return result;
 					};
 					providerOptions.mcpTools = mcpTools;
-					const toolController = createChatTwoPhaseToolController({
-						manager: mcpManager,
-						callTool: baseMcpCallTool,
-						initialTools: mcpTools,
-						latestUserRequest: this.getLatestVisibleUserMessageContent(session),
-						allowedServerIds:
-							mcpMode === 'manual'
-								? [...this.state.mcpSelectedServerIds]
-								: undefined,
-					});
-					providerOptions.mcpGetTools = toolController.getCurrentTools;
-					providerOptions.mcpCallTool = toolController.callTool;
+					if (isToolAgentMode) {
+						providerOptions.mcpCallTool = async (
+							serverId: string,
+							name: string,
+							args: Record<string, unknown>
+						) => {
+							if (
+								serverId === TOOL_AGENT_SERVER_ID
+								&& name === TOOL_AGENT_TOOL_NAME
+							) {
+								return await mcpManager.callToolWithContext(
+									serverId,
+									name,
+									args,
+									this.buildToolAgentRequestContext(
+										session,
+										allowedServerIds,
+										baseActualMcpCallTool
+									)
+								);
+							}
+
+							return await baseActualMcpCallTool(serverId, name, args);
+						};
+					} else {
+						const toolController = createChatTwoPhaseToolController({
+							manager: mcpManager,
+							callTool: baseActualMcpCallTool,
+							initialTools: mcpTools,
+							latestUserRequest: this.getLatestVisibleUserMessageContent(session),
+							allowedServerIds,
+						});
+						providerOptions.mcpGetTools = toolController.getCurrentTools;
+						providerOptions.mcpCallTool = toolController.callTool;
+					}
 					const maxLoops = mcpManager.getSettings().maxToolCallLoops;
-					if (typeof maxLoops === 'number' && maxLoops > 0) {
-						providerOptions.mcpMaxToolCallLoops = maxLoops;
+					const intentMaxLoops =
+						latestIntentResult?.routing.constraints.maxToolCalls;
+					const resolvedMaxLoops =
+						typeof intentMaxLoops === 'number' && intentMaxLoops > 0
+							? (
+								typeof maxLoops === 'number' && maxLoops > 0
+									? Math.min(maxLoops, intentMaxLoops)
+									: intentMaxLoops
+							)
+							: maxLoops;
+					if (typeof resolvedMaxLoops === 'number' && resolvedMaxLoops > 0) {
+						providerOptions.mcpMaxToolCallLoops = resolvedMaxLoops;
 					}
 				} else {
 					const hasEnabledMcpServer = mcpManager.getSettings().servers.some((server) => server.enabled);
@@ -2155,6 +2442,11 @@ export class ChatService {
 	}
 
 	private getLatestVisibleUserMessageContent(session: ChatSession): string {
+		const latestMessage = this.getLatestVisibleUserMessage(session);
+		return latestMessage?.content.trim() ?? '';
+	}
+
+	private getLatestVisibleUserMessage(session: ChatSession): ChatMessage | null {
 		for (let index = session.messages.length - 1; index >= 0; index -= 1) {
 			const message = session.messages[index];
 			if (message.role !== 'user') {
@@ -2165,10 +2457,187 @@ export class ChatService {
 			}
 			const content = message.content.trim();
 			if (content) {
-				return content;
+				return message;
 			}
 		}
-		return '';
+		return null;
+	}
+
+	private getLatestIntentResult(session: ChatSession): IntentResult | null {
+		const latestUserMessage = this.getLatestVisibleUserMessage(session);
+		const intentResult = latestUserMessage?.metadata?.intentResult;
+		return this.isIntentResult(intentResult) ? intentResult : null;
+	}
+
+	private buildToolAgentRequestContext(
+		session: ChatSession,
+		allowedServerIds: string[] | undefined,
+		callTool: NonNullable<NonNullable<ToolAgentRequest['runtime']>['callTool']>
+	): Omit<ToolAgentRequest, 'task'> {
+		const latestUserMessage = this.getLatestVisibleUserMessage(session);
+		const latestMetadata = latestUserMessage?.metadata ?? {};
+		const intentResult = this.getLatestIntentResult(session);
+		const activeFilePath =
+			this.currentActiveFilePath
+			?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path
+			?? session.selectedFiles?.[0]?.path;
+		const selectedText =
+			typeof latestMetadata.selectedText === 'string'
+				? latestMetadata.selectedText
+				: undefined;
+		const hintedServerIds = this.mergeLikelyServerIds(
+			allowedServerIds,
+			intentResult?.routing.toolHints?.likelyServerIds
+		);
+		const relevantPaths = Array.from(
+			new Set(
+				[
+					...(session.selectedFiles ?? []).map((file) => file.path),
+					...(session.selectedFolders ?? []).map((folder) => folder.path),
+					...(intentResult?.understanding.target.paths ?? []),
+					activeFilePath,
+				].filter((value): value is string => typeof value === 'string' && value.length > 0)
+			)
+		);
+		const toolAgentDefaults = this.plugin.settings.tars.settings.toolAgent;
+		const maxToolCalls =
+			intentResult?.routing.constraints.maxToolCalls
+			?? toolAgentDefaults?.defaultConstraints.maxToolCalls
+			?? this.plugin.settings.tars.settings.mcp?.maxToolCallLoops
+			?? 10;
+
+		return {
+			...(
+				hintedServerIds.length > 0
+				|| Boolean(intentResult?.routing.toolHints?.suggestedTools?.length)
+				|| Boolean(intentResult?.routing.toolHints?.domain)
+				? {
+					hints: {
+						...(hintedServerIds.length > 0
+							? { likelyServerIds: hintedServerIds }
+							: {}),
+						...(intentResult?.routing.toolHints?.suggestedTools?.length
+							? {
+								suggestedTools:
+									intentResult.routing.toolHints.suggestedTools,
+							}
+							: {}),
+						...(intentResult?.routing.toolHints?.domain
+							? { domain: intentResult.routing.toolHints.domain }
+							: {}),
+						...(intentResult?.routing.toolHints?.intentType
+							? { intentType: intentResult.routing.toolHints.intentType }
+							: {}),
+						...(intentResult?.routing.toolHints?.complexity
+							? { complexity: intentResult.routing.toolHints.complexity }
+							: {}),
+					},
+				}
+				: {}),
+			constraints: {
+				readOnly: intentResult?.routing.constraints.readOnly,
+				allowShell: intentResult?.routing.constraints.allowShell,
+				allowScript: intentResult?.routing.constraints.allowScript,
+				maxToolCalls,
+			},
+			context: {
+				...(activeFilePath ? { activeFilePath } : {}),
+				...(selectedText
+					? { selectedText }
+					: {}),
+				...(relevantPaths.length > 0 ? { relevantPaths } : {}),
+			},
+			runtime: {
+				callTool,
+			},
+		};
+	}
+
+	private mergeLikelyServerIds(
+		allowedServerIds: string[] | undefined,
+		intentServerIds: string[] | undefined
+	): string[] {
+		const normalizedAllowed = Array.from(new Set(allowedServerIds ?? []));
+		const normalizedIntent = Array.from(new Set(intentServerIds ?? []));
+		if (normalizedAllowed.length === 0) {
+			return normalizedIntent;
+		}
+		if (normalizedIntent.length === 0) {
+			return normalizedAllowed;
+		}
+		const intersection = normalizedIntent.filter((serverId) =>
+			normalizedAllowed.includes(serverId)
+		);
+		return intersection.length > 0 ? intersection : normalizedAllowed;
+	}
+
+	private isIntentResult(value: unknown): value is IntentResult {
+		const record = value as Record<string, unknown> | null | undefined;
+		return Boolean(
+			record
+			&& typeof record === 'object'
+			&& record.classification
+			&& record.routing
+			&& record.understanding
+		);
+	}
+
+	private buildClarificationMessage(intentResult: IntentResult): string {
+		const clarification = intentResult.routing.clarification;
+		if (!clarification) {
+			return '这个请求还缺少一个关键细节。请补充后我再继续。';
+		}
+
+		const questions = clarification.questions.map((item, index) => {
+			const options =
+				item.options && item.options.length > 0
+					? ` 可选：${item.options.join(' / ')}。`
+					: '';
+			return `${index + 1}. ${item.question}${options} 默认：${item.defaultAssumption}`;
+		});
+
+		return [
+			clarification.reason,
+			...questions,
+			'补充后我再继续执行。',
+		].join('\n');
+	}
+
+	private buildConfirmationMessage(intentResult: IntentResult): string {
+		const scopeText = intentResult.routing.safetyFlags.affectsMultipleFiles
+			? '这个操作可能影响多个文件。'
+			: '这个操作会执行写入或其他不可逆步骤。';
+		return [
+			scopeText,
+			`准备执行：${intentResult.understanding.normalizedRequest}`,
+			'回复“确认”继续，回复“取消”终止。',
+		].join('\n');
+	}
+
+	private async appendHostAssistantMessage(
+		session: ChatSession,
+		content: string
+	): Promise<ChatMessage> {
+		const message = this.messageService.createMessage('assistant', content);
+		session.messages.push(message);
+		session.updatedAt = Date.now();
+		this.emitState();
+
+		if (this.state.shouldSaveHistory && session.filePath) {
+			try {
+				await this.historyService.appendMessageToFile(session.filePath, message);
+			} catch (error) {
+				console.error('[ChatService] 追加宿主消息失败:', error);
+			}
+		} else if (this.state.shouldSaveHistory) {
+			try {
+				await this.saveActiveSession();
+			} catch (error) {
+				console.error('[ChatService] 保存宿主消息失败:', error);
+			}
+		}
+
+		return message;
 	}
 
 	/**
@@ -2244,6 +2713,7 @@ export class ChatService {
 		const contextNotes = [...(session.contextNotes ?? []), ...this.state.contextNotes];
 		const selectedFiles = session.selectedFiles ?? [];
 		const selectedFolders = session.selectedFolders ?? [];
+		const latestIntentResult = this.getLatestIntentResult(session);
 		
 		// 文件内容读取选项
 		const fileContentOptions = {
@@ -2260,13 +2730,13 @@ export class ChatService {
 		};
 		
 		// 使用会话中存储的系统提示词，而不是重新计算
-		let effectiveSystemPrompt: string | undefined = systemPrompt ?? session.systemPrompt;
+		let effectiveSystemPrompt = systemPrompt ?? session.systemPrompt;
 		const activePlanGuidance = this.buildLivePlanGuidance(session.livePlan);
-		if (activePlanGuidance) {
-			effectiveSystemPrompt = effectiveSystemPrompt
-				? `${effectiveSystemPrompt}\n\n${activePlanGuidance}`
-				: activePlanGuidance;
-		}
+		effectiveSystemPrompt = composeChatSystemPrompt({
+			configuredSystemPrompt: effectiveSystemPrompt,
+			promptAugmentation: latestIntentResult?.routing.promptAugmentation,
+			livePlanGuidance: activePlanGuidance,
+		});
 		const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
 
 		// 从 Tars 全局设置读取内链解析配置

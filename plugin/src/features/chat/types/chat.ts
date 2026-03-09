@@ -69,6 +69,12 @@ export interface ChatMessage {
 	parallelGroupId?: string;
 }
 
+export interface PendingIntentConfirmation {
+	userMessageId: string;
+	normalizedRequest: string;
+	createdAt: number;
+}
+
 export interface ChatSession {
 	id: string;
 	title: string;
@@ -87,6 +93,7 @@ export interface ChatSession {
 	activeCompareGroupId?: string;
 	layoutMode?: LayoutMode;
 	livePlan?: PlanSnapshot | null;
+	pendingIntentConfirmation?: PendingIntentConfirmation | null;
 }
 
 export type ChatOpenMode = 'sidebar' | 'left-sidebar' | 'tab' | 'window' | 'persistent-modal';

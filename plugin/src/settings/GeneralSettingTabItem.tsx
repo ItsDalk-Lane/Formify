@@ -132,8 +132,8 @@ export function GeneralSettingTabItem(props: { plugin: FormPlugin }) {
 			});
 
 		new Setting(el)
-			.setName("Enable test hooks")
-			.setDesc("仅供自动测试使用。开启后会暴露 window.__formifyTestHooks，并启用测试专用交互钩子。")
+			.setName(localInstance.enable_test_hooks)
+			.setDesc(localInstance.enable_test_hooks_desc)
 			.addToggle((cb) => {
 				cb.setValue(settingsValue.testing?.enableTestHooks ?? false);
 				cb.onChange((v) => {

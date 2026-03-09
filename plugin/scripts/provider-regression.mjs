@@ -1519,6 +1519,139 @@ const runPR22 = async () => {
 	)
 }
 
+const runPR23 = () => {
+	const ollamaPath = path.resolve(ROOT, 'src/features/tars/providers/ollama.ts')
+	let capturedHost = null
+	const capturedRequests = []
+	const streamQueue = []
+
+	class MockOllama {
+		constructor(options = {}) {
+			capturedHost = options.host ?? null
+		}
+
+		async chat(request) {
+			capturedRequests.push(JSON.parse(JSON.stringify(request)))
+			return streamQueue.shift() ?? (async function* () {})()
+		}
+
+		abort() {}
+	}
+
+	const ollamaModuleMocks = {
+		'ollama/browser': {
+			Ollama: MockOllama
+		},
+		obsidian: {},
+		'tars/lang/helper': { t: (text) => text },
+		'.': {},
+		'../mcp/mcpToolCallHandler': {
+			resolveCurrentMcpTools: async (tools) => tools,
+			toOpenAITools: (tools) => tools,
+			executeMcpToolCalls: async (toolCalls, mcpTools, mcpCallTool) => {
+				const toolCall = toolCalls[0]
+				const parsedArgs = JSON.parse(toolCall.function.arguments)
+				const result = await mcpCallTool(mcpTools[0].serverId, toolCall.function.name, parsedArgs)
+				return [{
+					role: 'tool',
+					tool_call_id: toolCall.id,
+					name: toolCall.function.name,
+					content: result
+				}]
+			}
+		},
+		'./errors': {
+			normalizeProviderError: (error) => error
+		},
+		'./utils': {
+			arrayBufferToBase64: () => 'ZmFrZQ==',
+			getMimeTypeFromFilename: () => 'image/png',
+			buildReasoningBlockStart: () => '',
+			buildReasoningBlockEnd: () => ''
+		}
+	}
+
+	const { ollamaVendor } = loadTsModule(ollamaPath, ollamaModuleMocks)
+
+	const makeStream = (parts) => (async function* () {
+		for (const part of parts) {
+			yield part
+		}
+	})()
+
+	streamQueue.push(makeStream([
+		{ message: { content: '先查一下' } },
+		{
+			message: {
+				content: '',
+				tool_calls: [{
+					function: {
+						name: 'list_directory',
+						arguments: { folder_name_or_path: 'Inbox' }
+					}
+				}]
+			}
+		}
+	]))
+	streamQueue.push(makeStream([
+		{ message: { content: '最终总结' } }
+	]))
+
+	const sendRequest = ollamaVendor.sendRequestFunc({
+		apiKey: '',
+		baseURL: 'http://127.0.0.1:11434',
+		model: 'llama3.1',
+		parameters: {},
+		enableReasoning: false,
+		mcpTools: [{
+			name: 'list_directory',
+			description: 'list files',
+			inputSchema: { type: 'object', properties: {} },
+			serverId: 'mock-server'
+		}],
+		mcpCallTool: async (_serverId, _toolName, args) =>
+			args.folder_name_or_path === 'Inbox' ? 'tool-result' : 'unexpected'
+	})
+
+	return (async () => {
+		let output = ''
+		for await (const chunk of sendRequest(
+			[{ role: 'user', content: 'summarize inbox' }],
+			new AbortController(),
+			async () => new ArrayBuffer(0)
+		)) {
+			output += chunk
+		}
+
+		assert(
+			capturedHost === 'http://127.0.0.1:11434',
+			'PR23-1: Ollama MCP path should keep the native host and not rewrite to /v1'
+		)
+		assert(
+			Array.isArray(capturedRequests[0]?.tools) && capturedRequests[0].tools.length === 1,
+			'PR23-2: first native Ollama MCP request should include tools'
+		)
+		assert(
+			output.includes('先查一下'),
+			'PR23-3: native Ollama MCP path should stream assistant text before tool execution'
+		)
+		assert(
+			output.includes('{{FF_MCP_TOOL_START}}:list_directory:tool-result{{FF_MCP_TOOL_END}}:'),
+			'PR23-4: native Ollama MCP path should execute tools and emit MCP tool markers'
+		)
+		assert(
+			output.includes('最终总结'),
+			'PR23-5: native Ollama MCP path should continue with the second round response after tool execution'
+		)
+		const secondRoundMessages = capturedRequests[1]?.messages ?? []
+		const toolMessage = secondRoundMessages.find((message) => message.role === 'tool')
+		assert(
+			toolMessage?.tool_name === 'list_directory' && toolMessage?.content === 'tool-result',
+			'PR23-6: second native Ollama request should feed tool results back with role=tool and tool_name'
+		)
+	})()
+}
+
 const main = async () => {
 	const pr = parseArgs()
 	if (pr >= 1) {
@@ -1586,6 +1719,9 @@ const main = async () => {
 	}
 	if (pr >= 22) {
 		await runPR22()
+	}
+	if (pr >= 23) {
+		await runPR23()
 	}
 
 	console.log(`provider-regression: PR-${pr} checks passed`)

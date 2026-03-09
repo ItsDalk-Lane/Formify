@@ -18,6 +18,18 @@ import { zhipuVendor } from './providers/zhipu'
 import type { ModelCapabilityCache } from './providers/modelCapability'
 import type { SystemPromptsDataFile } from './system-prompts/types'
 import { type McpSettings, DEFAULT_MCP_SETTINGS } from './mcp/types'
+import {
+	type ToolAgentSettings,
+	DEFAULT_TOOL_AGENT_SETTINGS,
+} from '../tool-agent'
+import {
+	type IntentAgentSettings,
+	DEFAULT_INTENT_AGENT_SETTINGS,
+} from '../intent-agent'
+export { DEFAULT_TOOL_AGENT_SETTINGS }
+export type { ToolAgentSettings }
+export { DEFAULT_INTENT_AGENT_SETTINGS }
+export type { IntentAgentSettings }
 
 export const APP_FOLDER = 'Tars'
 
@@ -74,6 +86,10 @@ export interface TarsSettings {
 
 	/** MCP 配置（外部 servers 由 mcp-servers/*.md 持久化，内置开关仍在 settings） */
 	mcp?: McpSettings
+	/** Tool call agent configuration */
+	toolAgent?: ToolAgentSettings
+	/** Intent recognition agent configuration */
+	intentAgent?: IntentAgentSettings
 	/** 模型能力探测缓存（用于推理能力判断） */
 	modelCapabilityCache?: ModelCapabilityCache
 }
@@ -105,6 +121,8 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 	tabCompletionProviderTag: '', // 默认为空，使用第一个可用的 provider
 	tabCompletionPromptTemplate: '{{rules}}\n\n{{context}}',
 	mcp: DEFAULT_MCP_SETTINGS,
+	toolAgent: DEFAULT_TOOL_AGENT_SETTINGS,
+	intentAgent: DEFAULT_INTENT_AGENT_SETTINGS,
 	modelCapabilityCache: {},
 }
 

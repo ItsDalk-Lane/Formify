@@ -44,6 +44,22 @@ import {
 	createVaultBuiltinRuntime,
 	type VaultBuiltinRuntime,
 } from 'src/builtin-mcp/vault-mcp-server';
+import type {
+	Message as ProviderMessage,
+	ResolveEmbedAsBinary,
+	Vendor,
+} from 'src/features/tars/providers';
+import {
+	DEFAULT_TOOL_AGENT_SETTINGS,
+	TOOL_AGENT_SERVER_ID,
+	TOOL_AGENT_TOOL_NAME,
+	ToolCallAgent,
+	type ToolAgentProviderResolverResult,
+	type ToolAgentRequest,
+	type ToolAgentRuntimeTool,
+	type ToolAgentSettings,
+	type ToolExecutionStep,
+} from 'src/features/tool-agent';
 import {
 	clonePlanSnapshot,
 	type PlanSnapshot,
@@ -76,6 +92,15 @@ interface BuiltinDescriptor {
 	initErrorLogMessage: string;
 }
 
+interface McpClientManagerOptions {
+	getToolAgentSettings?: () => ToolAgentSettings;
+	resolveToolAgentProviderByTag?: (
+		tag: string
+	) => ToolAgentProviderResolverResult | null;
+	getVendorByName?: (vendorName: string) => Vendor | undefined;
+	getProtectedPathPrefixes?: () => string[];
+}
+
 const EXTERNAL_CONNECT_RETRY_COOLDOWN_MS = 15_000;
 
 export class McpClientManager {
@@ -92,17 +117,20 @@ export class McpClientManager {
 	private vaultPlanSnapshot: PlanSnapshot | null = null;
 	private vaultPlanListeners = new Set<(snapshot: PlanSnapshot | null) => void>();
 	private vaultPlanRuntimeUnsubscribe: (() => void) | null = null;
+	private toolCallAgent: ToolCallAgent | null = null;
 
 	constructor(
 		private readonly app: App,
 		settings: McpSettings,
-		private readonly toolLibraryManager: ToolLibraryManager | null = null
+		private readonly toolLibraryManager: ToolLibraryManager | null = null,
+		private readonly options: McpClientManagerOptions = {}
 	) {
 		this.settings = settings;
 		this.processManager = new McpProcessManager(
 			(states) => this.notifyStateChange(states)
 		);
 		this.healthChecker = new McpHealthChecker(this.processManager);
+		this.toolCallAgent = this.createToolCallAgent();
 
 		for (const descriptor of this.getBuiltinDescriptors()) {
 			this.builtinStates.set(descriptor.serverId, {
@@ -263,6 +291,7 @@ export class McpClientManager {
 			)
 		);
 		this.settings = settings;
+		this.toolCallAgent = this.createToolCallAgent();
 
 		const newEnabled = this.isMcpEnabled(settings);
 		const newEnabledBuiltinIds = new Set(
@@ -403,6 +432,9 @@ export class McpClientManager {
 	 */
 	async getToolsForModelContext(): Promise<McpToolDefinition[]> {
 		if (!this.isMcpEnabled()) return [];
+		if (this.isToolAgentEnabled()) {
+			return [this.getToolAgentToolDefinition()];
+		}
 		if (!this.isBuiltinServerEnabled(BUILTIN_TOOL_SEARCH_SERVER_ID)) {
 			return [];
 		}
@@ -446,6 +478,54 @@ export class McpClientManager {
 		toolName: string,
 		args: Record<string, unknown>
 	): Promise<string> {
+		return await this.callToolWithContext(serverId, toolName, args);
+	}
+
+	async callToolWithContext(
+		serverId: string,
+		toolName: string,
+		args: Record<string, unknown>,
+		requestContext?: Omit<ToolAgentRequest, 'task'>
+	): Promise<string> {
+		if (!this.isMcpEnabled()) {
+			throw new Error('MCP 功能未启用');
+		}
+
+		if (serverId === TOOL_AGENT_SERVER_ID && toolName === TOOL_AGENT_TOOL_NAME) {
+			if (!this.isToolAgentEnabled() || !this.toolCallAgent) {
+				throw new Error('Tool agent is not available');
+			}
+
+			const task =
+				typeof args.task === 'string' ? args.task.trim() : '';
+			if (!task) {
+				throw new Error('execute_task requires a non-empty task');
+			}
+
+			try {
+				const response = await this.toolCallAgent.execute({
+					task,
+					...requestContext,
+				});
+				return JSON.stringify(response);
+			} catch (error) {
+				DebugLogger.error('[MCP] Tool agent execution failed, trying legacy fallback', error);
+				return await this.executeTaskWithLegacyTwoPhase(
+					task,
+					requestContext,
+					error
+				);
+			}
+		}
+
+		return await this.callActualTool(serverId, toolName, args);
+	}
+
+	async callActualTool(
+		serverId: string,
+		toolName: string,
+		args: Record<string, unknown>
+	): Promise<string> {
 		if (!this.isMcpEnabled()) {
 			throw new Error('MCP 功能未启用');
 		}
@@ -473,6 +553,25 @@ export class McpClientManager {
 		// 懒启动
 		const client = await this.processManager.ensureConnected(config);
 		return await client.callTool(toolName, args);
+	}
+
+	isToolAgentEnabled(): boolean {
+		if (!this.toolCallAgent) {
+			return false;
+		}
+
+		const settings =
+			this.options.getToolAgentSettings?.()
+			?? DEFAULT_TOOL_AGENT_SETTINGS;
+		if (!this.toolCallAgent.isEnabled()) {
+			return false;
+		}
+		if (!settings.modelTag.trim()) {
+			return false;
+		}
+		return (
+			this.options.resolveToolAgentProviderByTag?.(settings.modelTag) ?? null
+		) !== null;
 	}
 
 	/** 手动连接指定服务器 */
@@ -788,6 +887,286 @@ export class McpClientManager {
 		return mappedTools;
 	}
 
+	private createToolCallAgent(): ToolCallAgent | null {
+		if (
+			!this.options.getToolAgentSettings
+			|| !this.options.resolveToolAgentProviderByTag
+			|| !this.options.getVendorByName
+		) {
+			return null;
+		}
+
+		return new ToolCallAgent({
+			getSettings: () =>
+				this.options.getToolAgentSettings?.()
+				?? DEFAULT_TOOL_AGENT_SETTINGS,
+			resolveProviderByTag: (tag) =>
+				this.options.resolveToolAgentProviderByTag?.(tag) ?? null,
+			getVendorByName: (vendorName) =>
+				this.options.getVendorByName?.(vendorName),
+			callTool: async (serverId, toolName, args) =>
+				await this.callActualTool(serverId, toolName, args),
+			getAvailableTools: async (): Promise<ToolAgentRuntimeTool[]> =>
+				await this.getAvailableToolsWithLazyStart(),
+			protectedPathPrefixes: this.options.getProtectedPathPrefixes?.() ?? [],
+		});
+	}
+
+	private getToolAgentToolDefinition(): McpToolDefinition {
+		return {
+			name: TOOL_AGENT_TOOL_NAME,
+			description:
+				'Use this tool when you need Vault access, search, memory operations, or any multi-step MCP task. Describe the task in natural language and the tool agent will choose and execute the right tools.',
+			inputSchema: {
+				type: 'object',
+				properties: {
+					task: {
+						type: 'string',
+						description: 'Natural-language task description for the tool execution agent.',
+					},
+				},
+				required: ['task'],
+			},
+			serverId: TOOL_AGENT_SERVER_ID,
+		};
+	}
+
+	private async executeTaskWithLegacyTwoPhase(
+		task: string,
+		requestContext?: Omit<ToolAgentRequest, 'task'>,
+		cause?: unknown
+	): Promise<string> {
+		if (!this.isBuiltinServerEnabled(BUILTIN_TOOL_SEARCH_SERVER_ID)) {
+			throw cause instanceof Error ? cause : new Error(String(cause ?? 'Tool agent failed'));
+		}
+
+		const settings =
+			this.options.getToolAgentSettings?.()
+			?? DEFAULT_TOOL_AGENT_SETTINGS;
+		const providerConfig = settings.modelTag.trim()
+			? this.options.resolveToolAgentProviderByTag?.(settings.modelTag) ?? null
+			: null;
+		const vendor = providerConfig
+			? this.options.getVendorByName?.(providerConfig.vendorName)
+			: undefined;
+		if (!providerConfig || !vendor) {
+			throw cause instanceof Error ? cause : new Error(String(cause ?? 'Tool agent failed'));
+		}
+
+		const toolSearchTools = (await this.getToolsForServer(BUILTIN_TOOL_SEARCH_SERVER_ID))
+			.map((tool) => ({
+				name: tool.name,
+				description: tool.description,
+				inputSchema: tool.inputSchema,
+				serverId: tool.serverId,
+			}));
+		if (toolSearchTools.length === 0) {
+			throw cause instanceof Error ? cause : new Error(String(cause ?? 'Tool agent failed'));
+		}
+
+		const trace: ToolExecutionStep[] = [];
+		const startedAt = Date.now();
+		const actualToolCall =
+			requestContext?.runtime?.callTool
+			?? (async (serverId: string, toolName: string, args: Record<string, unknown>) =>
+				await this.callActualTool(serverId, toolName, args));
+		const tracedActualToolCall = async (
+			serverId: string,
+			toolName: string,
+			args: Record<string, unknown>
+		): Promise<string> => {
+			const stepStartedAt = Date.now();
+			try {
+				const result = await actualToolCall(serverId, toolName, args);
+				trace.push({
+					stepIndex: trace.length + 1,
+					toolName,
+					serverId,
+					arguments: args,
+					result,
+					status: 'success',
+					durationMs: Date.now() - stepStartedAt,
+				});
+				return result;
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				trace.push({
+					stepIndex: trace.length + 1,
+					toolName,
+					serverId,
+					arguments: args,
+					result: message,
+					status: 'failed',
+					error: message,
+					durationMs: Date.now() - stepStartedAt,
+				});
+				throw error;
+			}
+		};
+
+		const { createChatTwoPhaseToolController } = await import('./chatTwoPhaseToolController');
+		const toolController = createChatTwoPhaseToolController({
+			manager: this,
+			callTool: tracedActualToolCall,
+			initialTools: toolSearchTools,
+			latestUserRequest: task,
+			allowedServerIds: requestContext?.hints?.likelyServerIds,
+		});
+		const tracedControllerCall = async (
+			serverId: string,
+			toolName: string,
+			args: Record<string, unknown>
+		): Promise<string> => {
+			const stepStartedAt = Date.now();
+			try {
+				const result = await toolController.callTool(serverId, toolName, args);
+				trace.push({
+					stepIndex: trace.length + 1,
+					toolName,
+					serverId,
+					arguments: args,
+					result,
+					status: 'success',
+					durationMs: Date.now() - stepStartedAt,
+				});
+				return result;
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				trace.push({
+					stepIndex: trace.length + 1,
+					toolName,
+					serverId,
+					arguments: args,
+					result: message,
+					status: 'failed',
+					error: message,
+					durationMs: Date.now() - stepStartedAt,
+				});
+				throw error;
+			}
+		};
+
+		const sendRequest = vendor.sendRequestFunc({
+			...providerConfig.options,
+			mcpTools: toolSearchTools,
+			mcpGetTools: toolController.getCurrentTools,
+			mcpCallTool: tracedControllerCall,
+			mcpMaxToolCallLoops: this.settings.maxToolCallLoops ?? 10,
+		});
+		const controller = new AbortController();
+		const timeoutMs =
+			requestContext?.constraints?.timeoutMs
+			?? settings.defaultConstraints.timeoutMs;
+		const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs);
+		const messages: ProviderMessage[] = [
+			{
+				role: 'system',
+				content:
+					'You are a legacy MCP execution fallback agent. Use the available tools to complete the task. Return JSON only in the format {"status":"success|partial|failed|needs_clarification","summary":"...","data":...,"clarificationNeeded":"..."} and do not explain the fallback.',
+			},
+			{
+				role: 'user',
+				content: this.buildLegacyToolAgentUserPrompt(task, requestContext),
+			},
+		];
+
+		try {
+			let content = '';
+			const resolveEmbed: ResolveEmbedAsBinary = async () => new ArrayBuffer(0);
+			for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
+				content += chunk;
+			}
+			return this.normalizeToolAgentResponsePayload(content, trace, Date.now() - startedAt);
+		} finally {
+			globalThis.clearTimeout(timeoutId);
+		}
+	}
+
+	private buildLegacyToolAgentUserPrompt(
+		task: string,
+		requestContext?: Omit<ToolAgentRequest, 'task'>
+	): string {
+		return [
+			`Task: ${task}`,
+			requestContext?.hints?.likelyServerIds?.length
+				? `Allowed servers: ${requestContext.hints.likelyServerIds.join(', ')}`
+				: '',
+			requestContext?.context?.activeFilePath
+				? `Active file: ${requestContext.context.activeFilePath}`
+				: '',
+			requestContext?.context?.selectedText
+				? `Selected text:\n${requestContext.context.selectedText}`
+				: '',
+			requestContext?.context?.relevantPaths?.length
+				? `Relevant paths: ${requestContext.context.relevantPaths.join(', ')}`
+				: '',
+		]
+			.filter(Boolean)
+			.join('\n\n');
+	}
+
+	private normalizeToolAgentResponsePayload(
+		content: string,
+		trace: ToolExecutionStep[],
+		durationMs: number
+	): string {
+		const trimmed = content.trim();
+		const firstBrace = trimmed.indexOf('{');
+		const lastBrace = trimmed.lastIndexOf('}');
+		const candidates = [
+			trimmed,
+			firstBrace >= 0 && lastBrace > firstBrace
+				? trimmed.slice(firstBrace, lastBrace + 1)
+				: '',
+		].filter(Boolean);
+
+		for (const candidate of candidates) {
+			try {
+				const parsed = JSON.parse(candidate) as Record<string, unknown>;
+				const status =
+					parsed.status === 'success'
+					|| parsed.status === 'partial'
+					|| parsed.status === 'failed'
+					|| parsed.status === 'needs_clarification'
+						? parsed.status
+						: 'success';
+				return JSON.stringify({
+					status,
+					summary:
+						typeof parsed.summary === 'string' && parsed.summary.trim()
+							? parsed.summary.trim()
+							: trimmed || 'Legacy tool fallback completed.',
+					...(Object.prototype.hasOwnProperty.call(parsed, 'data')
+						? { data: parsed.data }
+						: {}),
+					...(typeof parsed.clarificationNeeded === 'string'
+						&& parsed.clarificationNeeded.trim()
+						? { clarificationNeeded: parsed.clarificationNeeded.trim() }
+						: {}),
+					trace,
+					metrics: {
+						toolCallCount: trace.length,
+						totalTokens: 0,
+						durationMs,
+					},
+				});
+			} catch {
+				continue;
+			}
+		}
+
+		return JSON.stringify({
+			status: 'success',
+			summary: trimmed || 'Legacy tool fallback completed.',
+			trace,
+			metrics: {
+				toolCallCount: trace.length,
+				totalTokens: 0,
+				durationMs,
+			},
+		});
+	}
+
 	private getBuiltinStateSnapshot(serverId: string): McpServerState {
 		const current = this.builtinStates.get(serverId) ?? {
 			serverId,
@@ -956,7 +1335,9 @@ export class McpClientManager {
 		if (!runtime) return;
 
 		try {
-			runtime.resetState?.();
+			if ('resetState' in runtime && typeof runtime.resetState === 'function') {
+				runtime.resetState();
+			}
 			await runtime.close();
 			this.builtinStates.set(serverId, {
 				...current,

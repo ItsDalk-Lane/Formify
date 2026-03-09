@@ -26,11 +26,30 @@ declare module "ollama/browser" {
 	// Structured Output Format 类型
 	type StructuredOutputFormat = 'json' | JSONSchema
 
-	// Ollama 消息接口（支持图像）
+	interface ToolCall {
+		function: {
+			name: string
+			arguments: Record<string, unknown>
+		}
+	}
+
+	interface Tool {
+		type: 'function'
+		function: {
+			name?: string
+			description?: string
+			type?: string
+			parameters?: JSONSchema
+		}
+	}
+
+	// Ollama 消息接口（支持图像与原生工具调用）
 	interface OllamaMessage {
-		role: 'user' | 'assistant' | 'system'
+		role: 'user' | 'assistant' | 'system' | 'tool'
 		content: string
 		images?: string[] // base64 字符串数组，不包含 data URL 前缀
+		tool_calls?: ToolCall[]
+		tool_name?: string
 	}
 
 	type ChatParams = {
@@ -39,19 +58,22 @@ declare module "ollama/browser" {
 		stream?: boolean
 		think?: boolean | ThinkLevel
 		format?: StructuredOutputFormat // 支持结构化输出
+		tools?: Tool[]
 		[key: string]: unknown
 	}
 
-	type ChatResponsePart = {
+	type ChatResponse = {
 		message: {
 			content: string
 			thinking?: string
+			tool_calls?: ToolCall[]
 		}
 	}
 
 	export class Ollama {
 		constructor(options?: { host?: string })
-		chat(params: ChatParams): AsyncIterable<ChatResponsePart>
+		chat(params: ChatParams & { stream: true }): Promise<AsyncIterable<ChatResponse>>
+		chat(params: ChatParams & { stream?: false }): Promise<ChatResponse>
 		abort(): void
 	}
 }

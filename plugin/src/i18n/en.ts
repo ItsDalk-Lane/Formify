@@ -198,6 +198,8 @@ export class En implements Local {
 	script_folder_for_form_placeholder = "form/scripts";
 	ai_data_folder = "AI Data Folder";
 	ai_data_folder_desc = "The root folder for AI-related data, including prompt templates and chat history";
+	enable_test_hooks = "Enable test hooks";
+	enable_test_hooks_desc = "For automated tests only. When enabled, Formify exposes window.__formifyTestHooks and turns on test-only interaction hooks.";
 	prompt_template_folder = "AI Prompt Template Directory";
 	prompt_template_folder_desc = "AI actions will load template files from this directory when using built-in templates";
 	prompt_template_folder_placeholder = "form/prompts";

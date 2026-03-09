@@ -924,6 +924,9 @@ export class ChatFeatureManager {
 		// 符号触发：传递完整文本（不包括 frontmatter）
 		// 选中文本触发：传递选中的文本
 		const initialSelection = triggerSource === 'symbol' ? (fullText || selection) : selection;
+		this.service.setNextTriggerSource(
+			triggerSource === 'symbol' ? 'at_trigger' : 'selection_toolbar'
+		);
 
 		// 创建并打开模态框
 		const modal = new ChatModal(
@@ -1303,33 +1306,49 @@ export class ChatFeatureManager {
 			name: '打开 AI Chat',
 			callback: () => {
 				const openMode = this.plugin.settings.chat.openMode;
+				this.service.setNextTriggerSource('command_palette');
 				this.activateChatView(openMode);
 			}
 		});
 		this.plugin.addCommand({
 			id: 'form-chat-open-sidebar',
 			name: '在侧边栏打开 AI Chat',
-			callback: () => this.activateChatView('sidebar')
+			callback: () => {
+				this.service.setNextTriggerSource('command_palette');
+				void this.activateChatView('sidebar');
+			}
 		});
 		this.plugin.addCommand({
 			id: 'form-chat-open-left-sidebar',
 			name: '在左侧边栏打开 AI Chat',
-			callback: () => this.activateChatView('left-sidebar')
+			callback: () => {
+				this.service.setNextTriggerSource('command_palette');
+				void this.activateChatView('left-sidebar');
+			}
 		});
 		this.plugin.addCommand({
 			id: 'form-chat-open-tab',
 			name: '在新标签中打开 AI Chat',
-			callback: () => this.activateChatView('tab')
+			callback: () => {
+				this.service.setNextTriggerSource('command_palette');
+				void this.activateChatView('tab');
+			}
 		});
 		this.plugin.addCommand({
 			id: 'form-chat-open-window',
 			name: '在新窗口打开 AI Chat',
-			callback: () => this.activateChatView('window')
+			callback: () => {
+				this.service.setNextTriggerSource('command_palette');
+				void this.activateChatView('window');
+			}
 		});
 		this.plugin.addCommand({
 			id: 'form-chat-open-persistent-modal',
 			name: '在持久化模态框中打开 AI Chat',
-			callback: () => this.openChatInPersistentModal()
+			callback: () => {
+				this.service.setNextTriggerSource('command_palette');
+				this.openChatInPersistentModal();
+			}
 		});
 		this.plugin.addCommand({
 			id: 'form-chat-new-conversation',
@@ -1360,6 +1379,7 @@ export class ChatFeatureManager {
 		if (shouldShowRibbon) {
 			this.ribbonEl = this.plugin.addRibbonIcon('message-circle', 'AI Chat', () => {
 				const openMode = this.plugin.settings.chat.openMode;
+				this.service.setNextTriggerSource('chat_input');
 				this.activateChatView(openMode);
 			});
 			this.ribbonEl?.addClass('chat-ribbon-icon');
@@ -1385,6 +1405,7 @@ export class ChatFeatureManager {
 		if (show) {
 			this.ribbonEl = this.plugin.addRibbonIcon('message-circle', 'AI Chat', () => {
 				const openMode = this.plugin.settings.chat.openMode;
+				this.service.setNextTriggerSource('chat_input');
 				this.activateChatView(openMode);
 			});
 			this.ribbonEl?.addClass('chat-ribbon-icon');

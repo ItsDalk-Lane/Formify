@@ -1,9 +1,13 @@
 import type FormPlugin from 'src/main';
 import type { PluginSettings } from 'src/settings/PluginSettings';
 import { ToolLibraryManager } from 'src/builtin-mcp/tool-library-manager';
-import { TarsFeatureManager } from './tars';
+import {
+	TarsFeatureManager,
+	availableVendors,
+} from './tars';
 import { ChatFeatureManager } from './chat';
 import { McpClientManager, DEFAULT_MCP_SETTINGS } from './tars/mcp';
+import { DEFAULT_TOOL_AGENT_SETTINGS } from './tool-agent';
 
 export class FeatureCoordinator {
     private tarsFeatureManager: TarsFeatureManager | null = null;
@@ -51,7 +55,32 @@ export class FeatureCoordinator {
             this.mcpClientManager = new McpClientManager(
                 this.plugin.app,
                 mcpSettings,
-                this.toolLibraryManager
+                this.toolLibraryManager,
+                {
+                    getToolAgentSettings: () =>
+                        this.plugin.settings.tars.settings.toolAgent
+                        ?? DEFAULT_TOOL_AGENT_SETTINGS,
+                    resolveToolAgentProviderByTag: (tag) => {
+                        const provider = this.plugin.settings.tars.settings.providers.find(
+                            (item) => item.tag === tag
+                        );
+                        if (!provider) {
+                            return null;
+                        }
+                        return {
+                            tag: provider.tag,
+                            vendorName: provider.vendor,
+                            options: { ...provider.options },
+                        };
+                    },
+                    getVendorByName: (vendorName) =>
+                        availableVendors.find((vendor) => vendor.name === vendorName),
+                    getProtectedPathPrefixes: () =>
+                        [
+                            this.plugin.settings.aiDataFolder,
+                            this.plugin.settings.formFolder,
+                        ].filter(Boolean),
+                }
             );
         } else {
             this.mcpClientManager.updateSettings(mcpSettings);
