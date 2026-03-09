@@ -471,6 +471,24 @@ export function toClaudeTools(mcpTools: McpToolDefinitionForProvider[]): Array<{
 	}))
 }
 
+export async function resolveCurrentMcpTools(
+	mcpTools: BaseOptions['mcpTools'],
+	mcpGetTools?: BaseOptions['mcpGetTools'],
+): Promise<McpToolDefinitionForProvider[]> {
+	if (typeof mcpGetTools === 'function') {
+		try {
+			const nextTools = await mcpGetTools()
+			if (Array.isArray(nextTools) && nextTools.length > 0) {
+				return nextTools
+			}
+		} catch (error) {
+			DebugLogger.warn('[MCP] 读取动态工具集失败，回退静态工具集', error)
+		}
+	}
+
+	return Array.isArray(mcpTools) ? mcpTools : []
+}
+
 /**
  * 查找 MCP 工具对应的 serverId
  */
@@ -1109,8 +1127,10 @@ export function withOpenAIMcpToolCallSupport(
 	mcpOptions?: OpenAIMcpSupportOptions,
 ): (settings: BaseOptions) => SendRequest {
 	return (settings: BaseOptions): SendRequest => {
-		const { mcpTools, mcpCallTool } = settings
-		if (!mcpTools?.length || !mcpCallTool) {
+		const hasStaticTools = Array.isArray(settings.mcpTools) && settings.mcpTools.length > 0
+		const hasDynamicTools = typeof settings.mcpGetTools === 'function'
+		const { mcpTools, mcpCallTool, mcpGetTools } = settings
+		if ((!hasStaticTools && !hasDynamicTools) || !mcpCallTool) {
 			return originalFactory(settings)
 		}
 
@@ -1173,7 +1193,7 @@ export function withOpenAIMcpToolCallSupport(
 					})
 				}
 
-				const tools = toOpenAITools(mcpTools)
+				const initialMcpTools = await resolveCurrentMcpTools(mcpTools, mcpGetTools)
 				const rawThinkingType = (settings as { thinkingType?: unknown }).thinkingType
 				const hasThinkingTypeEnabled =
 					typeof rawThinkingType === 'string' && rawThinkingType.toLowerCase() !== 'disabled'
@@ -1184,7 +1204,7 @@ export function withOpenAIMcpToolCallSupport(
 				const preferNonStreamingToolLoop = mcpOptions?.preferNonStreamingToolLoop === true
 
 				DebugLogger.debug(
-					`[MCP] 工具调用循环启动: ${mcpTools.length} 个工具可用, model=${model}, ` +
+					`[MCP] 工具调用循环启动: ${initialMcpTools.length} 个工具可用, model=${model}, ` +
 					`maxLoops=${maxToolCallLoops}, enableReasoning=${enableReasoning}, ` +
 					`preferNonStreamingToolLoop=${preferNonStreamingToolLoop}, ` +
 					`apiParams=${JSON.stringify(Object.keys(apiParams))}`,
@@ -1200,13 +1220,16 @@ export function withOpenAIMcpToolCallSupport(
 						if (controller.signal.aborted) return
 
 						DebugLogger.debug(`[MCP] 工具调用循环 #${loop + 1}`)
+						const currentMcpTools = await resolveCurrentMcpTools(mcpTools, mcpGetTools)
 
 						if (preferNonStreamingToolLoop) {
 							const completion = await client.chat.completions.create(
 								{
 									model: model as string,
 									messages: loopMessages as OpenAI.ChatCompletionMessageParam[],
-									tools,
+									...(currentMcpTools.length > 0
+										? { tools: toOpenAITools(currentMcpTools) }
+										: {}),
 									...apiParamsForToolLoop,
 								},
 								{ signal: controller.signal },
@@ -1253,7 +1276,7 @@ export function withOpenAIMcpToolCallSupport(
 
 							const toolResults: ToolLoopMessage[] = []
 							for (const call of toolCalls) {
-								const singleResults = await executeMcpToolCalls([call], mcpTools, mcpCallTool)
+								const singleResults = await executeMcpToolCalls([call], currentMcpTools, mcpCallTool)
 								toolResults.push(...singleResults)
 
 								const resultContent = typeof singleResults[0]?.content === 'string'
@@ -1275,7 +1298,9 @@ export function withOpenAIMcpToolCallSupport(
 							{
 								model: model as string,
 								messages: loopMessages as OpenAI.ChatCompletionMessageParam[],
-								tools,
+								...(currentMcpTools.length > 0
+									? { tools: toOpenAITools(currentMcpTools) }
+									: {}),
 								stream: true,
 								...apiParamsForToolLoop,
 							},
@@ -1420,7 +1445,7 @@ export function withOpenAIMcpToolCallSupport(
 
 					const toolResults: ToolLoopMessage[] = []
 					for (const call of toolCalls) {
-						const singleResults = await executeMcpToolCalls([call], mcpTools, mcpCallTool)
+						const singleResults = await executeMcpToolCalls([call], currentMcpTools, mcpCallTool)
 						toolResults.push(...singleResults)
 
 						// 将工具调用结果注入流式输出，使聊天界面实时展示

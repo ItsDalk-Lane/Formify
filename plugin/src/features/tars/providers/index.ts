@@ -57,6 +57,8 @@ export interface BaseOptions {
 	enableWebSearch?: boolean
 	/** MCP 工具定义列表（可选，由 McpClientManager 注入） */
 	mcpTools?: McpToolDefinitionForProvider[]
+	/** MCP 当前工具集解析器（可选，支持按轮次动态刷新工具集） */
+	mcpGetTools?: McpGetToolsFnForProvider
 	/** MCP 工具调用回调（可选，由 McpClientManager 注入） */
 	mcpCallTool?: McpCallToolFnForProvider
 	/** MCP 工具调用循环最大次数（可选，默认 10） */
@@ -77,6 +79,9 @@ export type McpCallToolFnForProvider = (
 	toolName: string,
 	args: Record<string, unknown>,
 ) => Promise<string>
+
+/** MCP 当前工具集解析函数（Provider 使用） */
+export type McpGetToolsFnForProvider = () => Promise<McpToolDefinitionForProvider[]>
 
 export interface ProviderSettings {
 	tag: string

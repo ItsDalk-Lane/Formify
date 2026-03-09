@@ -10,7 +10,7 @@ import {
 } from './utils'
 import { normalizeProviderError } from './errors'
 import { withRetry } from './retry'
-import { toClaudeTools, findToolServerId } from '../mcp/mcpToolCallHandler'
+import { toClaudeTools, findToolServerId, resolveCurrentMcpTools } from '../mcp/mcpToolCallHandler'
 
 export interface ClaudeOptions extends BaseOptions {
 	max_tokens: number
@@ -180,8 +180,11 @@ function withAnthropicMcpToolCallSupport(
 ): (settings: ClaudeOptions) => SendRequest {
 	return (settings: ClaudeOptions): SendRequest => {
 		const mcpTools = settings.mcpTools as McpToolDefinitionForProvider[] | undefined
+		const mcpGetTools = settings.mcpGetTools
 		const mcpCallTool = settings.mcpCallTool as McpCallToolFnForProvider | undefined
-		if (!mcpTools?.length || !mcpCallTool) {
+		const hasStaticTools = Array.isArray(mcpTools) && mcpTools.length > 0
+		const hasDynamicTools = typeof mcpGetTools === 'function'
+		if ((!hasStaticTools && !hasDynamicTools) || !mcpCallTool) {
 			return originalFactory(settings)
 		}
 
@@ -208,7 +211,6 @@ function withAnthropicMcpToolCallSupport(
 				}
 
 				const client = new Anthropic({ apiKey, baseURL, fetch: globalThis.fetch, dangerouslyAllowBrowser: true })
-				const claudeTools = toClaudeTools(mcpTools)
 
 				const [systemMsg, nonSystemMsgs] =
 					messages[0]?.role === 'system' ? [messages[0], messages.slice(1)] : [null, messages]
@@ -219,6 +221,8 @@ function withAnthropicMcpToolCallSupport(
 
 				for (let loop = 0; loop < CLAUDE_MAX_TOOL_LOOPS; loop++) {
 					if (controller.signal.aborted) return
+					const currentMcpTools = await resolveCurrentMcpTools(mcpTools, mcpGetTools)
+					const claudeTools = toClaudeTools(currentMcpTools)
 
 					const stream = await client.messages.create(
 						{
@@ -307,7 +311,7 @@ function withAnthropicMcpToolCallSupport(
 					const toolUseBlocks = validBlocks.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
 
 					for (const toolBlock of toolUseBlocks) {
-						const serverId = findToolServerId(toolBlock.name, mcpTools)
+						const serverId = findToolServerId(toolBlock.name, currentMcpTools)
 						let resultText: string
 						if (!serverId) {
 							resultText = `错误: 未找到工具 "${toolBlock.name}"`
@@ -391,4 +395,3 @@ export const claudeVendor: Vendor = {
 	websiteToObtainKey: 'https://console.anthropic.com',
 	capabilities: ['Text Generation', 'Web Search', 'Reasoning', 'Image Vision', 'PDF Vision']
 }
-

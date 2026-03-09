@@ -61,7 +61,7 @@ export default class FormPlugin extends Plugin {
 		await this.services.formIntegrationService.initialize(this);
 		await this.services.contextMenuService.initialize(this, this.services);
 		this.featureCoordinator.initializeTars(this.settings);
-		this.featureCoordinator.initializeMcp(this.settings);
+		await this.featureCoordinator.initializeMcp(this.settings);
 		this.testHooks.initialize();
 
 		this.app.workspace.onLayoutReady(async () => {
@@ -201,7 +201,7 @@ export default class FormPlugin extends Plugin {
 		await this.services.formScriptService.refresh(this.settings.scriptFolder);
 		await this.services.formIntegrationService.initialize(this, true);
 		this.services.contextMenuService.refreshContextMenuItems();
-		this.featureCoordinator.refresh(this.settings);
+		await this.featureCoordinator.refresh(this.settings);
 		this.testHooks.syncWindowBinding();
 	}
 

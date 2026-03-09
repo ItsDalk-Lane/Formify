@@ -1,5 +1,6 @@
 import type FormPlugin from 'src/main';
 import type { PluginSettings } from 'src/settings/PluginSettings';
+import { ToolLibraryManager } from 'src/builtin-mcp/tool-library-manager';
 import { TarsFeatureManager } from './tars';
 import { ChatFeatureManager } from './chat';
 import { McpClientManager, DEFAULT_MCP_SETTINGS } from './tars/mcp';
@@ -8,6 +9,7 @@ export class FeatureCoordinator {
     private tarsFeatureManager: TarsFeatureManager | null = null;
     private chatFeatureManager: ChatFeatureManager | null = null;
     private mcpClientManager: McpClientManager | null = null;
+    private toolLibraryManager: ToolLibraryManager | null = null;
 
     constructor(private plugin: FormPlugin) {}
 
@@ -33,21 +35,35 @@ export class FeatureCoordinator {
     }
 
     /** 初始化 MCP 功能 */
-    initializeMcp(settings: PluginSettings) {
+    async initializeMcp(settings: PluginSettings) {
+        if (!this.toolLibraryManager) {
+            this.toolLibraryManager = new ToolLibraryManager({
+                app: this.plugin.app,
+                aiDataFolder: settings.aiDataFolder,
+            });
+            await this.toolLibraryManager.initialize();
+        } else {
+            await this.toolLibraryManager.updateAiDataFolder(settings.aiDataFolder);
+        }
+
         const mcpSettings = settings.tars.settings.mcp ?? DEFAULT_MCP_SETTINGS;
         if (!this.mcpClientManager) {
-            this.mcpClientManager = new McpClientManager(this.plugin.app, mcpSettings);
+            this.mcpClientManager = new McpClientManager(
+                this.plugin.app,
+                mcpSettings,
+                this.toolLibraryManager
+            );
         } else {
             this.mcpClientManager.updateSettings(mcpSettings);
         }
     }
 
-    refresh(settings: PluginSettings) {
+    async refresh(settings: PluginSettings) {
         this.initializeTars(settings);
         if (this.chatFeatureManager) {
             this.initializeChat(settings);
         }
-        this.initializeMcp(settings);
+        await this.initializeMcp(settings);
     }
 
     getChatFeatureManager() {
@@ -57,6 +73,10 @@ export class FeatureCoordinator {
     /** 获取 MCP 客户端管理器 */
     getMcpClientManager(): McpClientManager | null {
         return this.mcpClientManager;
+    }
+
+    getToolLibraryManager(): ToolLibraryManager | null {
+        return this.toolLibraryManager;
     }
 
     /**
@@ -71,6 +91,8 @@ export class FeatureCoordinator {
     dispose() {
         this.mcpClientManager?.dispose();
         this.mcpClientManager = null;
+        this.toolLibraryManager?.dispose();
+        this.toolLibraryManager = null;
         this.tarsFeatureManager?.dispose();
         this.tarsFeatureManager = null;
         this.chatFeatureManager?.dispose();

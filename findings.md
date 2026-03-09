@@ -40,3 +40,22 @@
 - `/Users/study_superior/Desktop/Code/Formify/plugin/src/view/edit/setting/action/CpsFormAction.tsx`
 - `/Users/study_superior/Desktop/Code/Formify/plugin/src/component/dialog/Dialog2.tsx`
 - `/Users/study_superior/Desktop/Code/Formify/plugin/src/component/filter/menu/FilterDropdown.tsx`
+
+---
+
+## Session: 2026-03-09 Obsidian 插件结构分析
+
+### Research Findings
+- AI 能力主要分布在 `features/chat`、`features/tars`、`builtin-mcp` 三层，而不是单一聊天模块。
+- 内置 MCP server 默认启用 5 个：Vault、Memory、Obsidian Search、Tool Search、Sequential Thinking，总计注册 41 个工具。
+- 聊天层不会把所有工具直接注入模型；`McpClientManager.getToolsForModelContext()` 只暴露 Tool Search 的 3 个工具，再由 `chatTwoPhaseToolController` 动态放出候选真实工具。
+- 仓库中没有精确名为 `Conversation`、`ModelConfig`、`Tool` 的核心业务接口；实际等价类型分别是：
+  - `Conversation` -> `ChatSession`
+  - `ModelConfig` -> `ProviderSettings` / `BaseOptions` / `Vendor`
+  - `Tool` -> `ToolCall` / `McpToolInfo` / `McpToolDefinitionForProvider`
+- 历史记录不是 JSON，而是 Markdown 文件 + YAML frontmatter；消息正文带有标题、模型标签、推理块、工具调用块、附件标签。
+- 模型选择的真实粒度是“provider 实例标签 (`ProviderSettings.tag`)”，不是 vendor 名。多模型对比也是按 `tag` 组合。
+- 模型列表来源既有静态 `vendor.models`，也有远程拉取和自由文本输入，因此“支持哪些模型”不能只看硬编码数组。
+
+### Output
+- 已生成分析文档：`/Users/study_superior/Desktop/Code/Formify/docs/obsidian-plugin-analysis.md`

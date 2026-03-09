@@ -13,6 +13,8 @@ import {
 	BUILTIN_OBSIDIAN_SEARCH_SERVER_NAME,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
+	BUILTIN_TOOL_SEARCH_SERVER_ID,
+	BUILTIN_TOOL_SEARCH_SERVER_NAME,
 	BUILTIN_VAULT_SERVER_ID,
 	BUILTIN_VAULT_SERVER_NAME,
 } from 'src/builtin-mcp/constants';
@@ -24,6 +26,16 @@ import {
 	createObsidianSearchBuiltinRuntime,
 	type ObsidianSearchBuiltinRuntime,
 } from 'src/builtin-mcp/obsidian-search-mcp-server';
+import {
+	createToolSearchBuiltinRuntime,
+	type ToolSearchBuiltinRuntime,
+} from 'src/builtin-mcp/tool-search-mcp-server';
+import { ToolLibraryManager } from 'src/builtin-mcp/tool-library-manager';
+import type {
+	ToolLibraryEntry,
+	ToolLibrarySearchOptions,
+	ToolLibrarySearchResult,
+} from 'src/builtin-mcp/tool-library-types';
 import {
 	createSequentialThinkingBuiltinRuntime,
 	type SequentialThinkingBuiltinRuntime,
@@ -53,6 +65,7 @@ type BuiltinRuntime =
 	| VaultBuiltinRuntime
 	| MemoryBuiltinRuntime
 	| ObsidianSearchBuiltinRuntime
+	| ToolSearchBuiltinRuntime
 	| SequentialThinkingBuiltinRuntime;
 
 interface BuiltinDescriptor {
@@ -80,7 +93,11 @@ export class McpClientManager {
 	private vaultPlanListeners = new Set<(snapshot: PlanSnapshot | null) => void>();
 	private vaultPlanRuntimeUnsubscribe: (() => void) | null = null;
 
-	constructor(private readonly app: App, settings: McpSettings) {
+	constructor(
+		private readonly app: App,
+		settings: McpSettings,
+		private readonly toolLibraryManager: ToolLibraryManager | null = null
+	) {
 		this.settings = settings;
 		this.processManager = new McpProcessManager(
 			(states) => this.notifyStateChange(states)
@@ -153,6 +170,24 @@ export class McpClientManager {
 				createRuntime: async (app) =>
 					await createObsidianSearchBuiltinRuntime(app),
 				initErrorLogMessage: '[MCP] 初始化内置 Obsidian Search MCP Server 失败',
+			},
+			{
+				serverId: BUILTIN_TOOL_SEARCH_SERVER_ID,
+				serverName: BUILTIN_TOOL_SEARCH_SERVER_NAME,
+				isEnabled: (settings) =>
+					this.isMcpEnabled(settings) &&
+					settings.builtinToolSearchEnabled !== false,
+				createRuntime: async (app) => {
+					if (!this.toolLibraryManager) {
+						throw new Error('ToolLibraryManager 未初始化');
+					}
+					await this.toolLibraryManager.initialize();
+					return await createToolSearchBuiltinRuntime(
+						app,
+						this.toolLibraryManager
+					);
+				},
+				initErrorLogMessage: '[MCP] 初始化内置 Tool Search MCP Server 失败',
 			},
 			{
 				serverId: BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
@@ -358,6 +393,47 @@ export class McpClientManager {
 		await Promise.allSettled(tasks);
 
 		return await this.getAvailableTools();
+	}
+
+	/**
+	 * 获取注入到模型上下文中的 MCP 工具定义。
+	 *
+	 * 当前只暴露 Tool Search 内置服务的 3 个工具，避免把全部内置工具描述
+	 * 直接塞进模型上下文。
+	 */
+	async getToolsForModelContext(): Promise<McpToolDefinition[]> {
+		if (!this.isMcpEnabled()) return [];
+		if (!this.isBuiltinServerEnabled(BUILTIN_TOOL_SEARCH_SERVER_ID)) {
+			return [];
+		}
+
+		const tools = await this.getToolsForServer(BUILTIN_TOOL_SEARCH_SERVER_ID);
+		return tools.map((tool) => ({
+			name: tool.name,
+			description: tool.description,
+			inputSchema: tool.inputSchema,
+			serverId: tool.serverId,
+		}));
+	}
+
+	async searchToolLibrary(
+		options: ToolLibrarySearchOptions
+	): Promise<ToolLibrarySearchResult[]> {
+		if (!this.toolLibraryManager) {
+			return [];
+		}
+
+		await this.toolLibraryManager.initialize();
+		return await this.toolLibraryManager.searchTools(options);
+	}
+
+	async getToolLibraryEntry(name: string): Promise<ToolLibraryEntry | null> {
+		if (!this.toolLibraryManager) {
+			return null;
+		}
+
+		await this.toolLibraryManager.initialize();
+		return await this.toolLibraryManager.getEntry(name);
 	}
 
 	/**

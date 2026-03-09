@@ -4,6 +4,7 @@ import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import {
 	executeMcpToolCalls,
+	resolveCurrentMcpTools,
 	type OpenAIToolCall
 } from '../mcp/mcpToolCallHandler'
 import { normalizeProviderError } from './errors'
@@ -944,6 +945,7 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 				enableReasoning = false,
 				enableWebSearch = false,
 				mcpTools,
+				mcpGetTools,
 				mcpCallTool,
 				mcpMaxToolCallLoops,
 				...remains
@@ -952,15 +954,22 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 			if (!model) throw new Error(t('Model is required'))
 
 			const hasMcpToolRuntime =
-				Array.isArray(mcpTools)
-				&& mcpTools.length > 0
+				(
+					(Array.isArray(mcpTools) && mcpTools.length > 0)
+					|| typeof mcpGetTools === 'function'
+				)
 				&& typeof mcpCallTool === 'function'
 
+			const getCurrentMcpTools = async () =>
+				hasMcpToolRuntime
+					? await resolveCurrentMcpTools(mcpTools, mcpGetTools)
+					: []
+
 			const responseBaseParams = poeMapResponsesParams(remains as Record<string, unknown>)
-			const toolCandidates = mergeResponseTools(
+			let toolCandidates = mergeResponseTools(
 				responseBaseParams.tools,
 				enableWebSearch,
-				hasMcpToolRuntime ? mcpTools : undefined
+				hasMcpToolRuntime ? await getCurrentMcpTools() : undefined
 			)
 			delete responseBaseParams.tools
 
@@ -1161,7 +1170,7 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 						return
 					}
 
-					if (!hasMcpToolRuntime || !Array.isArray(mcpTools) || typeof mcpCallTool !== 'function') {
+					if (!hasMcpToolRuntime || typeof mcpCallTool !== 'function') {
 						throw new Error('Poe Responses 返回了 function_call，但未配置 MCP 工具执行器。')
 					}
 					if (loop >= maxToolCallLoops) {
@@ -1171,7 +1180,13 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 						throw new Error('Poe Responses 缺少 response.id，无法继续工具循环。')
 					}
 
-					const executed = await executePoeMcpToolCalls(functionCalls, mcpTools, mcpCallTool)
+					const activeMcpTools = await getCurrentMcpTools()
+					const executed = await executePoeMcpToolCalls(functionCalls, activeMcpTools, mcpCallTool)
+					toolCandidates = mergeResponseTools(
+						responseBaseParams.tools,
+						enableWebSearch,
+						hasMcpToolRuntime ? await getCurrentMcpTools() : undefined
+					)
 					for (const marker of executed.markers) {
 						yield `{{FF_MCP_TOOL_START}}:${marker.toolName}:${marker.content}{{FF_MCP_TOOL_END}}:`
 					}
@@ -1397,7 +1412,7 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 						return
 					}
 
-					if (!hasMcpToolRuntime || !Array.isArray(mcpTools) || typeof mcpCallTool !== 'function') {
+					if (!hasMcpToolRuntime || typeof mcpCallTool !== 'function') {
 						throw new Error('Poe Responses 返回了 function_call，但未配置 MCP 工具执行器。')
 					}
 					if (loop >= maxToolCallLoops) {
@@ -1407,7 +1422,13 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 						throw new Error('Poe Responses 缺少 response.id，无法继续工具循环。')
 					}
 
-					const executed = await executePoeMcpToolCalls(functionCalls, mcpTools, mcpCallTool)
+					const activeMcpTools = await getCurrentMcpTools()
+					const executed = await executePoeMcpToolCalls(functionCalls, activeMcpTools, mcpCallTool)
+					toolCandidates = mergeResponseTools(
+						responseBaseParams.tools,
+						enableWebSearch,
+						hasMcpToolRuntime ? await getCurrentMcpTools() : undefined
+					)
 					for (const marker of executed.markers) {
 						yield `{{FF_MCP_TOOL_START}}:${marker.toolName}:${marker.content}{{FF_MCP_TOOL_END}}:`
 					}
@@ -1562,7 +1583,7 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 						return
 					}
 
-					if (!hasMcpToolRuntime || !Array.isArray(mcpTools) || typeof mcpCallTool !== 'function') {
+					if (!hasMcpToolRuntime || typeof mcpCallTool !== 'function') {
 						throw new Error('Poe Responses 返回了 function_call，但未配置 MCP 工具执行器。')
 					}
 					if (loop >= maxToolCallLoops) {
@@ -1572,7 +1593,13 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 						throw new Error('Poe Responses 缺少 response.id，无法继续工具循环。')
 					}
 
-					const executed = await executePoeMcpToolCalls(functionCalls, mcpTools, mcpCallTool)
+					const activeMcpTools = await getCurrentMcpTools()
+					const executed = await executePoeMcpToolCalls(functionCalls, activeMcpTools, mcpCallTool)
+					toolCandidates = mergeResponseTools(
+						responseBaseParams.tools,
+						enableWebSearch,
+						hasMcpToolRuntime ? await getCurrentMcpTools() : undefined
+					)
 					for (const marker of executed.markers) {
 						yield `{{FF_MCP_TOOL_START}}:${marker.toolName}:${marker.content}{{FF_MCP_TOOL_END}}:`
 					}
@@ -1589,16 +1616,6 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 
 			// 纯 Chat Completions MCP 工具循环（流式输出，支持工具调用 delta 累积）
 			const runPureChatCompletionsMcpLoop = async function* (prebuiltMessages?: any[]) {
-				// 将 MCP 工具转换为 Chat Completions 标准格式
-				const chatTools = mcpTools!.map((tool) => ({
-					type: 'function' as const,
-					function: {
-						name: tool.name,
-						description: tool.description || '',
-						parameters: tool.inputSchema as Record<string, unknown>
-					}
-				}))
-
 				const loopMessages: any[] = prebuiltMessages
 					? [...prebuiltMessages]
 					: [...await Promise.all(messages.map((msg) => formatMsg(msg, resolveEmbedAsBinary)))]
@@ -1791,6 +1808,15 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 
 				for (let loop = 0; loop < maxToolCallLoops; loop++) {
 					if (controller.signal.aborted) return
+					const activeMcpTools = await getCurrentMcpTools()
+					const chatTools = activeMcpTools.map((tool) => ({
+						type: 'function' as const,
+						function: {
+							name: tool.name,
+							description: tool.description || '',
+							parameters: tool.inputSchema as Record<string, unknown>
+						}
+					}))
 
 					// 使用 streamOneChatRound 流式请求，逐 token yield 文本，同时累积工具调用
 					const gen = streamOneChatRound(loopMessages, chatTools)
@@ -1818,7 +1844,12 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 					})
 
 					// 执行工具调用
-					const results = await executeMcpToolCalls(toolCalls, mcpTools!, mcpCallTool!)
+					const results = await executeMcpToolCalls(toolCalls, activeMcpTools, mcpCallTool!)
+					toolCandidates = mergeResponseTools(
+						responseBaseParams.tools,
+						enableWebSearch,
+						hasMcpToolRuntime ? await getCurrentMcpTools() : undefined
+					)
 
 					// 将工具结果加入历史，并 yield MCP 标记
 					for (const result of results) {
@@ -1965,7 +1996,13 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 				// 使用纯累积式输入：将完整对话历史（原始 input + 所有 function_call + function_call_output）
 				// 作为 input 发送，让服务端重新构建上下文。
 				// 续轮优先携带 reasoning；若遇到兼容性错误，自动降级到无 reasoning 后重试当前轮次。
-				const executed = await executePoeMcpToolCalls(firstFunctionCalls, mcpTools!, mcpCallTool!)
+				const firstRoundMcpTools = await getCurrentMcpTools()
+				const executed = await executePoeMcpToolCalls(firstFunctionCalls, firstRoundMcpTools, mcpCallTool!)
+				toolCandidates = mergeResponseTools(
+					responseBaseParams.tools,
+					enableWebSearch,
+					hasMcpToolRuntime ? await getCurrentMcpTools() : undefined
+				)
 				for (const marker of executed.markers) {
 					yield `{{FF_MCP_TOOL_START}}:${marker.toolName}:${marker.content}{{FF_MCP_TOOL_END}}:`
 				}
@@ -2123,7 +2160,13 @@ const sendRequestFunc = (settings: PoeOptions): SendRequest =>
 					const continuationCalls = extractResponseFunctionCalls(completedResponse)
 					if (continuationCalls.length === 0) return
 
-					const continuationExecuted = await executePoeMcpToolCalls(continuationCalls, mcpTools!, mcpCallTool!)
+					const continuationMcpTools = await getCurrentMcpTools()
+					const continuationExecuted = await executePoeMcpToolCalls(continuationCalls, continuationMcpTools, mcpCallTool!)
+					toolCandidates = mergeResponseTools(
+						responseBaseParams.tools,
+						enableWebSearch,
+						hasMcpToolRuntime ? await getCurrentMcpTools() : undefined
+					)
 					for (const marker of continuationExecuted.markers) {
 						yield `{{FF_MCP_TOOL_START}}:${marker.toolName}:${marker.content}{{FF_MCP_TOOL_END}}:`
 					}

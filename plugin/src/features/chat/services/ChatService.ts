@@ -26,6 +26,7 @@ import type { MultiModelChatService } from './MultiModelChatService';
 import type { MultiModelConfigService } from './MultiModelConfigService';
 import { filterMessagesForCompareModel } from '../utils/compareContext';
 import { buildEditedUserMessage, getEditableUserMessageContent } from '../utils/userMessageEditing';
+import { createChatTwoPhaseToolController } from 'src/features/tars/mcp/chatTwoPhaseToolController';
 
 type ChatSubscriber = (state: ChatState) => void;
 
@@ -1846,7 +1847,7 @@ export class ChatService {
 		const mcpMode = this.state.mcpToolMode;
 		if (mcpManager && mcpMode !== 'disabled') {
 			try {
-				const allMcpTools = await mcpManager.getAvailableToolsWithLazyStart();
+				const allMcpTools = await mcpManager.getToolsForModelContext();
 				const mcpTools = mcpMode === 'manual'
 					? allMcpTools.filter((tool) => this.state.mcpSelectedServerIds.includes(tool.serverId))
 					: allMcpTools;
@@ -1854,8 +1855,7 @@ export class ChatService {
 					? clonePlanSnapshot(session.livePlan ?? null)
 					: null;
 				if (mcpTools.length > 0) {
-					providerOptions.mcpTools = mcpTools;
-					providerOptions.mcpCallTool = async (
+					const baseMcpCallTool = async (
 						serverId: string,
 						name: string,
 						args: Record<string, unknown>
@@ -1885,6 +1885,19 @@ export class ChatService {
 						}
 						return result;
 					};
+					providerOptions.mcpTools = mcpTools;
+					const toolController = createChatTwoPhaseToolController({
+						manager: mcpManager,
+						callTool: baseMcpCallTool,
+						initialTools: mcpTools,
+						latestUserRequest: this.getLatestVisibleUserMessageContent(session),
+						allowedServerIds:
+							mcpMode === 'manual'
+								? [...this.state.mcpSelectedServerIds]
+								: undefined,
+					});
+					providerOptions.mcpGetTools = toolController.getCurrentTools;
+					providerOptions.mcpCallTool = toolController.callTool;
 					const maxLoops = mcpManager.getSettings().maxToolCallLoops;
 					if (typeof maxLoops === 'number' && maxLoops > 0) {
 						providerOptions.mcpMaxToolCallLoops = maxLoops;
@@ -2139,6 +2152,23 @@ export class ChatService {
 
 	private getModelDisplayName(provider: ProviderSettings): string {
 		return provider.options.model || provider.tag;
+	}
+
+	private getLatestVisibleUserMessageContent(session: ChatSession): string {
+		for (let index = session.messages.length - 1; index >= 0; index -= 1) {
+			const message = session.messages[index];
+			if (message.role !== 'user') {
+				continue;
+			}
+			if (message.metadata?.hiddenFromModel || isEphemeralContextMessage(message)) {
+				continue;
+			}
+			const content = message.content.trim();
+			if (content) {
+				return content;
+			}
+		}
+		return '';
 	}
 
 	/**

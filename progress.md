@@ -35,3 +35,25 @@
 | 仅靠静态代码分析无法命中真实根因 | 改为使用 Obsidian CLI 在运行态中复现和观察 |
 | `obsidian eval` 的 Promise 返回值不会直接打印 | 改为使用同步查询或先写入 `window` 再读取 |
 | 多标签页/模态框导致截图可能落在错误视图 | 切回目标 leaf，并用 active leaf 选择器和 CDP 坐标进行验证 |
+
+---
+
+## Session: 2026-03-09
+
+### Current Status
+- **Phase:** 插件结构分析与文档生成
+- **Started:** 2026-03-09
+- **Status:** complete
+
+### Actions Taken
+- 读取 `plugin/src/main.ts`、`FeatureCoordinator.ts`，确认 AI Chat、Tars、MCP 的启动顺序与入口。
+- 读取 `builtin-mcp` 下各 server 与工具注册文件，统计出 5 个默认启用的内置 server 与 41 个注册工具。
+- 读取 `chat/types`、`tars/providers/index.ts`、`tars/settings.ts`，提取消息、会话、模型配置相关核心类型。
+- 读取 `ChatService`、`PromptBuilder`、`HistoryService`、`MultiModelChatService`，梳理从用户输入到模型调用再到历史落盘的主流程。
+- 读取 `settingTab.ts` 与 `SettingsManager.ts`，确认模型列表来源、API Key 存储方案、多模型对比组与配置持久化方式。
+- 写入输出文档 `docs/obsidian-plugin-analysis.md`。
+
+### Deliverables
+| File | Purpose | Status |
+|------|---------|--------|
+| `docs/obsidian-plugin-analysis.md` | 本次源码分析结果 | passed |

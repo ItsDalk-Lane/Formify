@@ -6,6 +6,7 @@ export const AI_QUICK_ACTIONS_SUBFOLDER = 'quick-actions';
 export const AI_SYSTEM_PROMPTS_SUBFOLDER = 'system-prompts';
 export const AI_MCP_SERVERS_SUBFOLDER = 'mcp-servers';
 export const AI_MULTI_MODEL_SUBFOLDER = 'multi-model';
+export const AI_TOOL_LIBRARY_SUBFOLDER = 'tool-library';
 
 const MIGRATION_SUFFIX = '-migrated';
 
@@ -101,6 +102,10 @@ export const getMultiModelConfigPath = (aiDataFolder: string): string => {
 	return normalizePath(`${trimTrailingSlash(aiDataFolder)}/${AI_MULTI_MODEL_SUBFOLDER}`);
 };
 
+export const getToolLibraryPath = (aiDataFolder: string): string => {
+	return normalizePath(`${trimTrailingSlash(aiDataFolder)}/${AI_TOOL_LIBRARY_SUBFOLDER}`);
+};
+
 export const ensureAIDataFolders = async (app: App, aiDataFolder: string): Promise<void> => {
 	const root = normalizePath(trimTrailingSlash(aiDataFolder));
 	await ensureFolderPath(app, root);
@@ -110,6 +115,7 @@ export const ensureAIDataFolders = async (app: App, aiDataFolder: string): Promi
 	await ensureFolderPath(app, getSystemPromptsPath(root));
 	await ensureFolderPath(app, getMcpServersPath(root));
 	await ensureFolderPath(app, getMultiModelConfigPath(root));
+	await ensureFolderPath(app, getToolLibraryPath(root));
 };
 
 export const canDeriveAIDataFolderFromLegacy = (

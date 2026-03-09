@@ -16,6 +16,7 @@ export const TarsSettingTabItem = ({ plugin }: Props) => {
 		const panel = new TarsSettingTab(plugin.app, {
 			getSettings: () => plugin.settings.tars.settings,
 			getChatSettings: () => plugin.settings.chat,
+			getAiDataFolder: () => plugin.settings.aiDataFolder,
 			getPromptTemplateFolder: () => getPromptTemplatePath(plugin.settings.aiDataFolder),
 			saveSettings: async () => {
 				await plugin.saveSettings();

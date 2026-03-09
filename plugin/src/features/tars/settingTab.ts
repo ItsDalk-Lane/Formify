@@ -58,6 +58,8 @@ import {
 	BUILTIN_OBSIDIAN_SEARCH_SERVER_NAME,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
+	BUILTIN_TOOL_SEARCH_SERVER_ID,
+	BUILTIN_TOOL_SEARCH_SERVER_NAME,
 	BUILTIN_VAULT_SERVER_ID,
 	BUILTIN_VAULT_SERVER_NAME
 } from './mcp'
@@ -68,6 +70,7 @@ import { localInstance } from '../../i18n/locals'
 export interface TarsSettingsContext {
 	getSettings: () => TarsSettings
 	getChatSettings: () => ChatSettings
+	getAiDataFolder: () => string
 	getPromptTemplateFolder: () => string
 	saveSettings: () => Promise<void>
 	updateChatSettings: (partial: Partial<ChatSettings>) => Promise<void>
@@ -1355,6 +1358,13 @@ export class TarsSettingTab {
 			},
 			{
 				kind: 'builtin',
+				enabled: mcpSettings.builtinToolSearchEnabled !== false,
+				name: BUILTIN_TOOL_SEARCH_SERVER_NAME,
+				serverId: BUILTIN_TOOL_SEARCH_SERVER_ID,
+				transportLabel: 'IN-MEMORY',
+			},
+			{
+				kind: 'builtin',
 				enabled: mcpSettings.builtinSequentialThinkingEnabled !== false,
 				name: BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
 				serverId: BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
@@ -1420,6 +1430,9 @@ export class TarsSettingTab {
 							break
 						case BUILTIN_OBSIDIAN_SEARCH_SERVER_ID:
 							this.settings.mcp.builtinObsidianSearchEnabled = value
+							break
+						case BUILTIN_TOOL_SEARCH_SERVER_ID:
+							this.settings.mcp.builtinToolSearchEnabled = value
 							break
 						case BUILTIN_SEQUENTIAL_THINKING_SERVER_ID:
 							this.settings.mcp.builtinSequentialThinkingEnabled = value
