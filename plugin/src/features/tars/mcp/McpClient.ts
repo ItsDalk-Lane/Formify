@@ -6,6 +6,7 @@
  */
 
 import { Notice } from 'obsidian'
+import { serializeMcpToolResult } from 'src/builtin-mcp/runtime/tool-result'
 import { DebugLogger } from 'src/utils/DebugLogger'
 import type { McpServerConfig, McpServerStatus, McpToolInfo } from './types'
 import type { ITransport, JsonRpcMessage, JsonRpcResponse } from './transport/ITransport'
@@ -162,22 +163,16 @@ export class McpClient {
 					name,
 					arguments: args,
 				}) as {
-					content: Array<{ type: string; text?: string }>
+					content: Array<{ type: string; text?: string; [key: string]: unknown }>
 					isError?: boolean
 				}
-
-				// 合并所有 text 类型的 content
-				const textParts = (result.content ?? [])
-					.filter((c) => c.type === 'text' && c.text)
-					.map((c) => c.text as string)
-
-				const text = textParts.join('\n')
+				const text = serializeMcpToolResult(result)
 
 				if (result.isError) {
 					// MCP 协议层面的 isError 标记：工具执行本身返回了错误信息
 					// 这属于业务级反馈，直接返回错误文本给调用方（AI 可据此推理）
 					DebugLogger.warn(`[MCP] 工具返回业务错误: ${name}: ${text.slice(0, 200)}`)
-					return `[工具执行错误] ${text}`
+					return text
 				}
 
 				DebugLogger.debug(`[MCP] 工具调用完成: ${name}, 返回 ${text.length} 字符`)

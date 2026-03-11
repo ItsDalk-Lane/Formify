@@ -4,6 +4,12 @@ import type { McpServerStatus } from 'src/features/tars/mcp/types';
 import {
 	BUILTIN_CORE_TOOLS_SERVER_ID,
 	BUILTIN_CORE_TOOLS_SERVER_NAME,
+	BUILTIN_FILESYSTEM_SERVER_ID,
+	BUILTIN_FILESYSTEM_SERVER_NAME,
+	BUILTIN_FETCH_SERVER_ID,
+	BUILTIN_FETCH_SERVER_NAME,
+	BUILTIN_TIME_SERVER_ID,
+	BUILTIN_TIME_SERVER_NAME,
 	BUILTIN_MEMORY_SERVER_ID,
 	BUILTIN_MEMORY_SERVER_NAME,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
@@ -111,6 +117,24 @@ export const getBuiltinToolEntries = (
 		serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 		name: BUILTIN_CORE_TOOLS_SERVER_NAME,
 		enabled: mcpSettings.builtinCoreToolsEnabled !== false,
+		transportLabel,
+	},
+	{
+		serverId: BUILTIN_FILESYSTEM_SERVER_ID,
+		name: BUILTIN_FILESYSTEM_SERVER_NAME,
+		enabled: mcpSettings.builtinFilesystemEnabled !== false,
+		transportLabel,
+	},
+	{
+		serverId: BUILTIN_FETCH_SERVER_ID,
+		name: BUILTIN_FETCH_SERVER_NAME,
+		enabled: mcpSettings.builtinFetchEnabled !== false,
+		transportLabel,
+	},
+	{
+		serverId: BUILTIN_TIME_SERVER_ID,
+		name: BUILTIN_TIME_SERVER_NAME,
+		enabled: mcpSettings.builtinTimeEnabled !== false,
 		transportLabel,
 	},
 	{

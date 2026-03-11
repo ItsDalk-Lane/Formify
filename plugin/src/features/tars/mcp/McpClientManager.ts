@@ -9,6 +9,12 @@ import { App } from 'obsidian';
 import {
 	BUILTIN_CORE_TOOLS_SERVER_ID,
 	BUILTIN_CORE_TOOLS_SERVER_NAME,
+	BUILTIN_FILESYSTEM_SERVER_ID,
+	BUILTIN_FILESYSTEM_SERVER_NAME,
+	BUILTIN_FETCH_SERVER_ID,
+	BUILTIN_FETCH_SERVER_NAME,
+	BUILTIN_TIME_SERVER_ID,
+	BUILTIN_TIME_SERVER_NAME,
 	BUILTIN_MEMORY_SERVER_ID,
 	BUILTIN_MEMORY_SERVER_NAME,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
@@ -19,6 +25,14 @@ import {
 	type CoreToolsBuiltinRuntime,
 } from 'src/builtin-mcp/core-tools-mcp-server';
 import {
+	createFilesystemBuiltinRuntime,
+	type FilesystemBuiltinRuntime,
+} from 'src/builtin-mcp/filesystem-mcp-server';
+import {
+	createFetchBuiltinRuntime,
+	type FetchBuiltinRuntime,
+} from 'src/builtin-mcp/fetch-mcp-server';
+import {
 	createMemoryBuiltinRuntime,
 	type MemoryBuiltinRuntime,
 } from 'src/builtin-mcp/memory-mcp-server';
@@ -26,6 +40,10 @@ import {
 	createSequentialThinkingBuiltinRuntime,
 	type SequentialThinkingBuiltinRuntime,
 } from 'src/builtin-mcp/sequentialthinking-mcp-server';
+import {
+	createTimeBuiltinRuntime,
+	type TimeBuiltinRuntime,
+} from 'src/builtin-mcp/time-mcp-server';
 import {
 	clonePlanSnapshot,
 	type PlanSnapshot,
@@ -45,6 +63,9 @@ import { DEFAULT_BUILTIN_MEMORY_FILE_PATH } from './types';
 
 type BuiltinRuntime =
 	| CoreToolsBuiltinRuntime
+	| FilesystemBuiltinRuntime
+	| FetchBuiltinRuntime
+	| TimeBuiltinRuntime
 	| MemoryBuiltinRuntime
 	| SequentialThinkingBuiltinRuntime;
 
@@ -128,6 +149,30 @@ export class McpClientManager {
 					this.isMcpEnabled(settings) && settings.builtinCoreToolsEnabled !== false,
 				createRuntime: async (app) => await createCoreToolsBuiltinRuntime(app),
 				initErrorLogMessage: '[MCP] 初始化内置基础工具 MCP Server 失败',
+			},
+			{
+				serverId: BUILTIN_FILESYSTEM_SERVER_ID,
+				serverName: BUILTIN_FILESYSTEM_SERVER_NAME,
+				isEnabled: (settings) =>
+					this.isMcpEnabled(settings) && settings.builtinFilesystemEnabled !== false,
+				createRuntime: async (app) => await createFilesystemBuiltinRuntime(app),
+				initErrorLogMessage: '[MCP] 初始化内置 Filesystem MCP Server 失败',
+			},
+			{
+				serverId: BUILTIN_FETCH_SERVER_ID,
+				serverName: BUILTIN_FETCH_SERVER_NAME,
+				isEnabled: (settings) =>
+					this.isMcpEnabled(settings) && settings.builtinFetchEnabled !== false,
+				createRuntime: async (app) => await createFetchBuiltinRuntime(app),
+				initErrorLogMessage: '[MCP] 初始化内置 Fetch MCP Server 失败',
+			},
+			{
+				serverId: BUILTIN_TIME_SERVER_ID,
+				serverName: BUILTIN_TIME_SERVER_NAME,
+				isEnabled: (settings) =>
+					this.isMcpEnabled(settings) && settings.builtinTimeEnabled !== false,
+				createRuntime: async (app) => await createTimeBuiltinRuntime(app),
+				initErrorLogMessage: '[MCP] 初始化内置 Time MCP Server 失败',
 			},
 			{
 				serverId: BUILTIN_MEMORY_SERVER_ID,

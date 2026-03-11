@@ -9,6 +9,7 @@ import {
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_VERSION,
 } from './constants';
+import { serializeMcpToolResult } from './runtime/tool-result';
 
 export interface SequentialThinkingBuiltinSettings {
 	disableThoughtLogging: boolean;
@@ -223,20 +224,6 @@ const sequentialThinkingInputSchema = z.object({
 		.describe('是否需要追加更多思考'),
 });
 
-const extractTextResult = (result: {
-	content: Array<{ type: string; text?: string }>;
-	isError?: boolean;
-}): string => {
-	const text = (result.content ?? [])
-		.filter((item) => item.type === 'text' && typeof item.text === 'string')
-		.map((item) => item.text as string)
-		.join('\n');
-	if (result.isError) {
-		return `[工具执行错误] ${text}`;
-	}
-	return text;
-};
-
 export async function createSequentialThinkingBuiltinRuntime(
 	_app: App,
 	settings: SequentialThinkingBuiltinSettings
@@ -287,7 +274,7 @@ export async function createSequentialThinkingBuiltinRuntime(
 				name,
 				arguments: args,
 			});
-			return extractTextResult({
+			return serializeMcpToolResult({
 				content: result.content,
 				isError: result.isError,
 			});

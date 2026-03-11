@@ -54,6 +54,9 @@ describe('chatSettingsHelpers', () => {
 		const entries = getBuiltinToolEntries(
 			{
 				builtinCoreToolsEnabled: true,
+				builtinFilesystemEnabled: true,
+				builtinFetchEnabled: false,
+				builtinTimeEnabled: true,
 				builtinMemoryEnabled: false,
 				builtinSequentialThinkingEnabled: true,
 				servers: [],
@@ -62,15 +65,24 @@ describe('chatSettingsHelpers', () => {
 			'IN-MEMORY'
 		);
 
-		expect(entries).toHaveLength(3);
+		expect(entries).toHaveLength(6);
 		expect(entries[0]).toMatchObject({
 			enabled: true,
 			transportLabel: 'IN-MEMORY',
 		});
 		expect(entries[1]).toMatchObject({
-			enabled: false,
+			enabled: true,
 		});
 		expect(entries[2]).toMatchObject({
+			enabled: false,
+		});
+		expect(entries[3]).toMatchObject({
+			enabled: true,
+		});
+		expect(entries[4]).toMatchObject({
+			enabled: false,
+		});
+		expect(entries[5]).toMatchObject({
 			enabled: true,
 		});
 	});

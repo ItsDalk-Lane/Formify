@@ -4,6 +4,9 @@ import {
 } from 'src/builtin-mcp/runtime/plan-state';
 import {
 	BUILTIN_CORE_TOOLS_SERVER_ID,
+	BUILTIN_FILESYSTEM_SERVER_ID,
+	BUILTIN_FETCH_SERVER_ID,
+	BUILTIN_TIME_SERVER_ID,
 	BUILTIN_MEMORY_SERVER_ID,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
 } from 'src/builtin-mcp/constants';
@@ -15,6 +18,39 @@ const createCoreToolsBuiltinRuntimeMock = jest.fn();
 jest.mock('src/builtin-mcp/core-tools-mcp-server', () => ({
 	createCoreToolsBuiltinRuntime: (...args: unknown[]) =>
 		createCoreToolsBuiltinRuntimeMock(...args),
+}));
+
+jest.mock('src/builtin-mcp/filesystem-mcp-server', () => ({
+	createFilesystemBuiltinRuntime: jest.fn().mockResolvedValue({
+		serverId: BUILTIN_FILESYSTEM_SERVER_ID,
+		serverName: '内置 Filesystem 工具',
+		client: {} as any,
+		callTool: jest.fn(),
+		listTools: jest.fn().mockResolvedValue([]),
+		close: jest.fn().mockResolvedValue(undefined),
+	}),
+}));
+
+jest.mock('src/builtin-mcp/fetch-mcp-server', () => ({
+	createFetchBuiltinRuntime: jest.fn().mockResolvedValue({
+		serverId: BUILTIN_FETCH_SERVER_ID,
+		serverName: '内置 Fetch 工具',
+		client: {} as any,
+		callTool: jest.fn(),
+		listTools: jest.fn().mockResolvedValue([]),
+		close: jest.fn().mockResolvedValue(undefined),
+	}),
+}));
+
+jest.mock('src/builtin-mcp/time-mcp-server', () => ({
+	createTimeBuiltinRuntime: jest.fn().mockResolvedValue({
+		serverId: BUILTIN_TIME_SERVER_ID,
+		serverName: '内置 Time 工具',
+		client: {} as any,
+		callTool: jest.fn(),
+		listTools: jest.fn().mockResolvedValue([]),
+		close: jest.fn().mockResolvedValue(undefined),
+	}),
 }));
 
 jest.mock('src/builtin-mcp/memory-mcp-server', () => ({
@@ -93,6 +129,9 @@ describe('McpClientManager', () => {
 	const settings: McpSettings = {
 		servers: [],
 		builtinCoreToolsEnabled: true,
+		builtinFilesystemEnabled: false,
+		builtinFetchEnabled: false,
+		builtinTimeEnabled: false,
 		builtinMemoryEnabled: false,
 		builtinSequentialThinkingEnabled: false,
 		maxToolCallLoops: 10,
@@ -195,18 +234,24 @@ describe('McpClientManager', () => {
 		await manager.dispose();
 	});
 
-	it('should expose only core-tools, memory and sequential-thinking as builtin server summaries', async () => {
+	it('should expose all enabled builtin server summaries in the configured order', async () => {
 		const mockRuntime = createMockCoreToolsRuntime();
 		createCoreToolsBuiltinRuntimeMock.mockResolvedValue(mockRuntime.runtime);
 
 		const manager = new McpClientManager({} as any, {
 			...settings,
+			builtinFilesystemEnabled: true,
+			builtinFetchEnabled: true,
+			builtinTimeEnabled: true,
 			builtinMemoryEnabled: true,
 			builtinSequentialThinkingEnabled: true,
 		});
 
 		expect(manager.getEnabledServerSummaries()).toEqual([
 			{ id: BUILTIN_CORE_TOOLS_SERVER_ID, name: '内置基础工具' },
+			{ id: BUILTIN_FILESYSTEM_SERVER_ID, name: '内置 Filesystem 工具' },
+			{ id: BUILTIN_FETCH_SERVER_ID, name: '内置 Fetch 工具' },
+			{ id: BUILTIN_TIME_SERVER_ID, name: '内置 Time 工具' },
 			{ id: BUILTIN_MEMORY_SERVER_ID, name: '内置 Memory 工具' },
 			{
 				id: BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,

@@ -16,6 +16,7 @@ import {
 	ensureParentFolderExists,
 	normalizeVaultPath,
 } from './tools/helpers';
+import { serializeMcpToolResult } from './runtime/tool-result';
 
 export interface MemoryBuiltinSettings {
 	filePath: string;
@@ -411,20 +412,6 @@ const openNodesSchema = z.object({
 	names: z.array(z.string()).describe('要读取的实体名称数组'),
 });
 
-const extractTextResult = (result: {
-	content: Array<{ type: string; text?: string }>;
-	isError?: boolean;
-}): string => {
-	const text = (result.content ?? [])
-		.filter((item) => item.type === 'text' && typeof item.text === 'string')
-		.map((item) => item.text as string)
-		.join('\n');
-	if (result.isError) {
-		return `[工具执行错误] ${text}`;
-	}
-	return text;
-};
-
 function registerMemoryTools(
 	server: McpServer,
 	registry: BuiltinToolRegistry,
@@ -573,7 +560,7 @@ export async function createMemoryBuiltinRuntime(
 				name,
 				arguments: args,
 			});
-			return extractTextResult({
+			return serializeMcpToolResult({
 				content: result.content,
 				isError: result.isError,
 			});

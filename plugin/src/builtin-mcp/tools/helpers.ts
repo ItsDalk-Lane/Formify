@@ -21,6 +21,16 @@ export const assertVaultPath = (path: string, fieldName = 'path'): void => {
 	}
 };
 
+export const assertVaultPathOrRoot = (
+	path: string,
+	fieldName = 'path'
+): void => {
+	if (!path) {
+		return;
+	}
+	assertVaultPath(path, fieldName);
+};
+
 export const ensureFolderExists = async (
 	app: App,
 	folderPath: string

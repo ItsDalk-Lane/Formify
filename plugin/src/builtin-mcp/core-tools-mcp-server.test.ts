@@ -1,14 +1,12 @@
 import { createCoreToolsBuiltinRuntime } from './core-tools-mcp-server';
 
 describe('createCoreToolsBuiltinRuntime', () => {
-	it('should list only the 5 core tools', async () => {
+	it('should list only the 3 core tools', async () => {
 		const runtime = await createCoreToolsBuiltinRuntime({} as any);
 
 		const tools = await runtime.listTools();
 
 		expect(tools.map((tool) => tool.name)).toEqual([
-			'open_file',
-			'get_first_link_path',
 			'execute_script',
 			'call_shell',
 			'write_plan',

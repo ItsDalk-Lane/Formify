@@ -14,9 +14,9 @@ import {
 	type PlanStateListener,
 	PlanState,
 } from './runtime/plan-state';
+import { serializeMcpToolResult } from './runtime/tool-result';
 import { ScriptRuntime } from './runtime/script-runtime';
 import { BuiltinToolRegistry } from './runtime/tool-registry';
-import { registerNavTools } from './tools/nav-tools';
 import { registerPlanTools } from './tools/plan-tools';
 import { registerScriptTools } from './tools/script-tools';
 
@@ -40,20 +40,6 @@ export interface CoreToolsBuiltinRuntime {
 	onPlanChange: (listener: PlanStateListener) => () => void;
 }
 
-const extractTextResult = (result: {
-	content: Array<{ type: string; text?: string }>;
-	isError?: boolean;
-}): string => {
-	const text = (result.content ?? [])
-		.filter((item) => item.type === 'text' && typeof item.text === 'string')
-		.map((item) => item.text as string)
-		.join('\n');
-	if (result.isError) {
-		return `[工具执行错误] ${text}`;
-	}
-	return text;
-};
-
 export async function createCoreToolsBuiltinRuntime(
 	app: App
 ): Promise<CoreToolsBuiltinRuntime> {
@@ -72,7 +58,6 @@ export async function createCoreToolsBuiltinRuntime(
 			(moment as unknown as (...innerArgs: unknown[]) => unknown)(...args),
 	});
 
-	registerNavTools(server, app, registry);
 	registerScriptTools(server, app, registry, scriptRuntime);
 	registerPlanTools(server, registry, planState);
 
@@ -100,7 +85,7 @@ export async function createCoreToolsBuiltinRuntime(
 				name,
 				arguments: args,
 			});
-			return extractTextResult({
+			return serializeMcpToolResult({
 				content: result.content,
 				isError: result.isError,
 			});

@@ -115,6 +115,21 @@ export interface McpSettings {
 	 */
 	builtinCoreToolsEnabled?: boolean
 	/**
+	 * 是否启用内置 Filesystem MCP Server
+	 * @default true
+	 */
+	builtinFilesystemEnabled?: boolean
+	/**
+	 * 是否启用内置 Fetch MCP Server
+	 * @default true
+	 */
+	builtinFetchEnabled?: boolean
+	/**
+	 * 是否启用内置 Time MCP Server
+	 * @default true
+	 */
+	builtinTimeEnabled?: boolean
+	/**
 	 * 是否启用内置 Memory MCP Server
 	 * @default true
 	 */
@@ -151,6 +166,9 @@ export interface McpSettings {
 export const DEFAULT_MCP_SETTINGS: McpSettings = {
 	servers: [],
 	builtinCoreToolsEnabled: true,
+	builtinFilesystemEnabled: true,
+	builtinFetchEnabled: true,
+	builtinTimeEnabled: true,
 	builtinMemoryEnabled: true,
 	builtinSequentialThinkingEnabled: true,
 	builtinMemoryFilePath: DEFAULT_BUILTIN_MEMORY_FILE_PATH,

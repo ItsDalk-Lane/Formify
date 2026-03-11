@@ -8,6 +8,9 @@ import { ToggleSwitch } from 'src/component/toggle-switch/ToggleSwitch';
 import { localInstance } from 'src/i18n/locals';
 import {
 	BUILTIN_CORE_TOOLS_SERVER_ID,
+	BUILTIN_FILESYSTEM_SERVER_ID,
+	BUILTIN_FETCH_SERVER_ID,
+	BUILTIN_TIME_SERVER_ID,
 	BUILTIN_MEMORY_SERVER_ID,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
 	DEFAULT_MCP_SETTINGS,
@@ -72,6 +75,15 @@ const updateBuiltinMcpEnabled = (
 	switch (serverId) {
 		case BUILTIN_CORE_TOOLS_SERVER_ID:
 			nextMcpSettings.builtinCoreToolsEnabled = enabled;
+			break;
+		case BUILTIN_FILESYSTEM_SERVER_ID:
+			nextMcpSettings.builtinFilesystemEnabled = enabled;
+			break;
+		case BUILTIN_FETCH_SERVER_ID:
+			nextMcpSettings.builtinFetchEnabled = enabled;
+			break;
+		case BUILTIN_TIME_SERVER_ID:
+			nextMcpSettings.builtinTimeEnabled = enabled;
 			break;
 		case BUILTIN_MEMORY_SERVER_ID:
 			nextMcpSettings.builtinMemoryEnabled = enabled;
