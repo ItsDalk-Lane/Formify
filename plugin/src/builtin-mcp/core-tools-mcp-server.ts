@@ -3,12 +3,11 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { App, moment } from 'obsidian';
 import {
-	BUILTIN_VAULT_CLIENT_NAME,
-	BUILTIN_VAULT_SERVER_ID,
-	BUILTIN_VAULT_SERVER_NAME,
-	BUILTIN_VAULT_SERVER_VERSION,
+	BUILTIN_CORE_TOOLS_CLIENT_NAME,
+	BUILTIN_CORE_TOOLS_SERVER_ID,
+	BUILTIN_CORE_TOOLS_SERVER_NAME,
+	BUILTIN_CORE_TOOLS_SERVER_VERSION,
 } from './constants';
-import { AgentRegistry } from './runtime/agent-registry';
 import {
 	clonePlanSnapshot,
 	type PlanSnapshot,
@@ -17,13 +16,9 @@ import {
 } from './runtime/plan-state';
 import { ScriptRuntime } from './runtime/script-runtime';
 import { BuiltinToolRegistry } from './runtime/tool-registry';
-import { registerFileTools } from './tools/file-tools';
 import { registerNavTools } from './tools/nav-tools';
-import { registerQueryTools } from './tools/query-tools';
+import { registerPlanTools } from './tools/plan-tools';
 import { registerScriptTools } from './tools/script-tools';
-import { registerUtilTools } from './tools/util-tools';
-
-const DEFAULT_DELEGATE_AGENT_ID = 'builtin.echo';
 
 export interface BuiltinToolInfo {
 	name: string;
@@ -32,7 +27,7 @@ export interface BuiltinToolInfo {
 	serverId: string;
 }
 
-export interface VaultBuiltinRuntime {
+export interface CoreToolsBuiltinRuntime {
 	serverId: string;
 	serverName: string;
 	client: Client;
@@ -59,41 +54,32 @@ const extractTextResult = (result: {
 	return text;
 };
 
-export async function createVaultBuiltinRuntime(
+export async function createCoreToolsBuiltinRuntime(
 	app: App
-): Promise<VaultBuiltinRuntime> {
+): Promise<CoreToolsBuiltinRuntime> {
 	const server = new McpServer({
-		name: BUILTIN_VAULT_SERVER_NAME,
-		version: BUILTIN_VAULT_SERVER_VERSION,
+		name: BUILTIN_CORE_TOOLS_SERVER_NAME,
+		version: BUILTIN_CORE_TOOLS_SERVER_VERSION,
 	});
 
 	const registry = new BuiltinToolRegistry();
 	const planState = new PlanState();
-	const agentRegistry = new AgentRegistry();
-	agentRegistry.register(DEFAULT_DELEGATE_AGENT_ID, async (task, context) => {
-		return {
-			id: context.id,
-			task,
-			status: 'ok',
-		};
-	});
 	const scriptRuntime = new ScriptRuntime({
 		callTool: async (toolName: string, args: Record<string, unknown>) => {
 			return await registry.call(toolName, args);
 		},
-		momentFactory: (...args: unknown[]) => (moment as unknown as (...innerArgs: unknown[]) => unknown)(...args),
+		momentFactory: (...args: unknown[]) =>
+			(moment as unknown as (...innerArgs: unknown[]) => unknown)(...args),
 	});
 
-	registerFileTools(server, app, registry);
-	registerQueryTools(server, app, registry);
 	registerNavTools(server, app, registry);
 	registerScriptTools(server, app, registry, scriptRuntime);
-	registerUtilTools(server, registry, planState, agentRegistry);
+	registerPlanTools(server, registry, planState);
 
 	const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
 	const client = new Client({
-		name: BUILTIN_VAULT_CLIENT_NAME,
-		version: BUILTIN_VAULT_SERVER_VERSION,
+		name: BUILTIN_CORE_TOOLS_CLIENT_NAME,
+		version: BUILTIN_CORE_TOOLS_SERVER_VERSION,
 	});
 
 	await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -101,14 +87,13 @@ export async function createVaultBuiltinRuntime(
 	const close = async (): Promise<void> => {
 		scriptRuntime.reset();
 		planState.reset();
-		agentRegistry.clear();
 		registry.clear();
 		await Promise.allSettled([client.close(), server.close()]);
 	};
 
 	return {
-		serverId: BUILTIN_VAULT_SERVER_ID,
-		serverName: BUILTIN_VAULT_SERVER_NAME,
+		serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
+		serverName: BUILTIN_CORE_TOOLS_SERVER_NAME,
 		client,
 		callTool: async (name: string, args: Record<string, unknown>) => {
 			const result = await client.callTool({
@@ -126,7 +111,7 @@ export async function createVaultBuiltinRuntime(
 				name: tool.name,
 				description: tool.description ?? '',
 				inputSchema: tool.inputSchema,
-				serverId: BUILTIN_VAULT_SERVER_ID,
+				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 			}));
 		},
 		close,
@@ -140,7 +125,7 @@ export async function createVaultBuiltinRuntime(
 	};
 }
 
-export async function createVaultBuiltinClient(app: App): Promise<Client> {
-	const runtime = await createVaultBuiltinRuntime(app);
+export async function createCoreToolsBuiltinClient(app: App): Promise<Client> {
+	const runtime = await createCoreToolsBuiltinRuntime(app);
 	return runtime.client;
 }

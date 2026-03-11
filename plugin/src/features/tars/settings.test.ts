@@ -82,6 +82,20 @@ describe('tool execution settings', () => {
 		expect('intentAgent' in (cloned as any)).toBe(false);
 	});
 
+	it('migrates legacy vault/search builtin flags into core tools settings', () => {
+		const cloned = cloneTarsSettings({
+			mcp: {
+				servers: [],
+				builtinVaultEnabled: false,
+				builtinObsidianSearchEnabled: true,
+			} as any,
+		} as any);
+
+		expect(cloned.mcp?.builtinCoreToolsEnabled).toBe(false);
+		expect('builtinVaultEnabled' in ((cloned.mcp ?? {}) as any)).toBe(false);
+		expect('builtinObsidianSearchEnabled' in ((cloned.mcp ?? {}) as any)).toBe(false);
+	});
+
 	it('falls back to defaults when no values are configured', () => {
 		expect(resolveToolExecutionSettings(undefined)).toEqual(
 			DEFAULT_TOOL_EXECUTION_SETTINGS

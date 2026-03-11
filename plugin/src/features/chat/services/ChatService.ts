@@ -1,5 +1,5 @@
 import { MarkdownView, Notice, requestUrl, TFile, TFolder, normalizePath } from 'obsidian';
-import { BUILTIN_VAULT_SERVER_ID } from 'src/builtin-mcp/constants';
+import { BUILTIN_CORE_TOOLS_SERVER_ID } from 'src/builtin-mcp/constants';
 import FormPlugin from 'src/main';
 import {
 	clonePlanSnapshot,
@@ -152,7 +152,7 @@ export class ChatService {
 	private controller: AbortController | null = null;
 	private ollamaCapabilityCache = new Map<string, { reasoning: boolean; checkedAt: number; warned?: boolean }>();
 	private lastMcpNoticeAt = 0;
-	private vaultPlanUnsubscribe: (() => void) | null = null;
+	private livePlanUnsubscribe: (() => void) | null = null;
 	private pendingPlanSync: Promise<void> = Promise.resolve();
 	private chatSettingsModal: ChatSettingsModal | null = null;
 	private pendingTriggerSource: ChatTriggerSource = 'chat_input';
@@ -171,14 +171,14 @@ export class ChatService {
 		return this.plugin.app;
 	}
 
-	private bindVaultPlanStateSync(): void {
-		this.vaultPlanUnsubscribe?.();
+	private bindLivePlanStateSync(): void {
+		this.livePlanUnsubscribe?.();
 		const manager = this.plugin.featureCoordinator.getMcpClientManager();
 		if (!manager) {
 			return;
 		}
 
-		this.vaultPlanUnsubscribe = manager.onVaultPlanChange((snapshot) => {
+		this.livePlanUnsubscribe = manager.onLivePlanChange((snapshot) => {
 			const session = this.state.activeSession;
 			if (!session) {
 				return;
@@ -220,7 +220,7 @@ export class ChatService {
 				if (!manager) {
 					return;
 				}
-				await manager.syncVaultPlanSnapshot(
+				await manager.syncLivePlanSnapshot(
 					clonePlanSnapshot(session?.livePlan ?? null)
 				);
 			})
@@ -249,7 +249,7 @@ export class ChatService {
 		if (!this.state.activeSession) {
 			this.createNewSession();
 		}
-		this.bindVaultPlanStateSync();
+		this.bindLivePlanStateSync();
 		this.queueSessionPlanSync(this.state.activeSession);
 		this.emitState();
 	}
@@ -1374,8 +1374,8 @@ export class ChatService {
 		this.multiModelService?.stopAllGeneration();
 		this.controller?.abort();
 		this.controller = null;
-		this.vaultPlanUnsubscribe?.();
-		this.vaultPlanUnsubscribe = null;
+		this.livePlanUnsubscribe?.();
+		this.livePlanUnsubscribe = null;
 	}
 
 	private emitState() {
@@ -1917,7 +1917,7 @@ export class ChatService {
 						let shouldRefreshGuardedPlan = false;
 						if (
 							guardedPlanSnapshot
-							&& serverId === BUILTIN_VAULT_SERVER_ID
+							&& serverId === BUILTIN_CORE_TOOLS_SERVER_ID
 							&& name === 'write_plan'
 						) {
 							shouldRefreshGuardedPlan = true;

@@ -2,14 +2,12 @@ import type { Local } from 'src/i18n/local';
 import type { ProviderSettings } from 'src/features/tars/providers';
 import type { McpServerStatus } from 'src/features/tars/mcp/types';
 import {
+	BUILTIN_CORE_TOOLS_SERVER_ID,
+	BUILTIN_CORE_TOOLS_SERVER_NAME,
 	BUILTIN_MEMORY_SERVER_ID,
 	BUILTIN_MEMORY_SERVER_NAME,
-	BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
-	BUILTIN_OBSIDIAN_SEARCH_SERVER_NAME,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
-	BUILTIN_VAULT_SERVER_ID,
-	BUILTIN_VAULT_SERVER_NAME,
 	type McpSettings,
 } from 'src/features/tars/mcp';
 import type { ChatOpenMode } from '../types/chat';
@@ -110,21 +108,15 @@ export const getBuiltinToolEntries = (
 	transportLabel: string
 ): BuiltinToolEntry[] => [
 	{
-		serverId: BUILTIN_VAULT_SERVER_ID,
-		name: BUILTIN_VAULT_SERVER_NAME,
-		enabled: mcpSettings.builtinVaultEnabled !== false,
+		serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
+		name: BUILTIN_CORE_TOOLS_SERVER_NAME,
+		enabled: mcpSettings.builtinCoreToolsEnabled !== false,
 		transportLabel,
 	},
 	{
 		serverId: BUILTIN_MEMORY_SERVER_ID,
 		name: BUILTIN_MEMORY_SERVER_NAME,
 		enabled: mcpSettings.builtinMemoryEnabled !== false,
-		transportLabel,
-	},
-	{
-		serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
-		name: BUILTIN_OBSIDIAN_SEARCH_SERVER_NAME,
-		enabled: mcpSettings.builtinObsidianSearchEnabled !== false,
 		transportLabel,
 	},
 	{

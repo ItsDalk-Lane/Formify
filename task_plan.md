@@ -1,5 +1,28 @@
 # Task Plan: 修复执行条件弹窗下拉菜单点击无效
 
+## Session: 2026-03-11 移除 Search/Vault MCP 并重组内置工具
+
+### Goal
+移除内置 Obsidian Search MCP 与 Vault MCP，收敛为单一 `core-tools` 内置工具组，并保持 `write_plan` 的 live plan 同步能力。
+
+### Current Phase
+Phase 4
+
+### Phases
+- [x] 梳理现有内置 MCP runtime、工具注册、设置和 Chat live plan 依赖
+- [x] 新增 `core-tools` runtime，仅保留 `write_plan` / `execute_script` / `get_first_link_path` / `open_file` / `call_shell`
+- [x] 移除 Vault/Search runtime 与对应 query/search/file/util 实现
+- [x] 改造 `McpClientManager`、Chat 设置 UI、live plan 同步接口与兼容迁移
+- [x] 补充针对性单测并完成构建/测试框架验证
+- **Status:** complete
+
+### Decisions
+| Decision | Rationale |
+|----------|-----------|
+| `write_plan` 保持原名，不新增 `weite_plan` 别名 | 用户已确认 `weite_plan` 是现有 `write_plan` |
+| 5 个保留工具聚合为一个新的内置服务 `__builtin__:core-tools` | 保持当前“按 server 管理工具”的 UI 和调用模型，改动最小 |
+| 新 `builtinCoreToolsEnabled` 继承旧 `builtinVaultEnabled` | 新工具组本质上是 Vault 中保留下来的能力，旧 Search 开关不再有意义 |
+
 ## Goal
 在 Obsidian 运行态中稳定复现“执行条件”弹窗的下拉菜单点击无效问题，定位真实根因并完成最小修复。
 

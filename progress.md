@@ -1,5 +1,28 @@
 # Progress Log
 
+## Session: 2026-03-11 移除 Search/Vault MCP 并重组内置工具
+
+### Current Status
+- **Phase:** 4 - Implementation / Verification
+- **Started:** 2026-03-11
+- **Status:** complete
+
+### Actions Taken
+- 新增 `plugin/src/builtin-mcp/core-tools-mcp-server.ts` 和 `plugin/src/builtin-mcp/tools/plan-tools.ts`，收敛新的 5 个内置工具。
+- 删除旧 Vault/Search runtime，以及只被它们使用的 file/query/search/util/tool engine 代码。
+- 将 `McpClientManager` 的内置 descriptor 改为 `core-tools + memory + sequential thinking`，并把计划同步接口改为 `getLivePlanSnapshot` / `onLivePlanChange` / `syncLivePlanSnapshot`。
+- 改造 `ChatService`、`ChatSettingsModal`、`chatSettingsHelpers` 与相关测试，使 UI 和调用链不再出现 Vault / Obsidian Search。
+- 在 `features/tars/settings.ts` 和 `SettingsManager.ts` 中加入旧字段迁移与清理逻辑。
+- 新增 `core-tools-mcp-server.test.ts`，更新 `McpClientManager.test.ts`、`ChatService.plan.test.ts`、`chatSettingsHelpers.test.ts`、`settings.test.ts`。
+
+### Verification
+| Test | Expected | Actual | Status |
+|------|----------|--------|--------|
+| `cd plugin && npm run build` | 删除大量旧文件后仍能成功打包 | 通过 | passed |
+| `cd plugin && npm run lint` | 运行 ESLint 检查 | 当前环境缺少 `eslint` 可执行文件，脚本未启动 | blocked |
+| `cd plugin && npm run test:framework` | 现有测试框架/构建同步链路不被本次改动打断 | 通过 | passed |
+| `git diff --check` | patch 无尾随空白、冲突标记等问题 | 通过 | passed |
+
 ## Session: 2026-03-07
 
 ### Current Status

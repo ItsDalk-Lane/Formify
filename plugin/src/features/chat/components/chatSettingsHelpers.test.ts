@@ -53,9 +53,8 @@ describe('chatSettingsHelpers', () => {
 	it('builds builtin tool entries from MCP settings flags', () => {
 		const entries = getBuiltinToolEntries(
 			{
-				builtinVaultEnabled: true,
+				builtinCoreToolsEnabled: true,
 				builtinMemoryEnabled: false,
-				builtinObsidianSearchEnabled: true,
 				builtinSequentialThinkingEnabled: true,
 				servers: [],
 				maxToolCallLoops: 10,
@@ -63,7 +62,7 @@ describe('chatSettingsHelpers', () => {
 			'IN-MEMORY'
 		);
 
-		expect(entries).toHaveLength(4);
+		expect(entries).toHaveLength(3);
 		expect(entries[0]).toMatchObject({
 			enabled: true,
 			transportLabel: 'IN-MEMORY',
@@ -71,7 +70,7 @@ describe('chatSettingsHelpers', () => {
 		expect(entries[1]).toMatchObject({
 			enabled: false,
 		});
-		expect(entries[3]).toMatchObject({
+		expect(entries[2]).toMatchObject({
 			enabled: true,
 		});
 	});

@@ -1,5 +1,21 @@
 # Findings & Decisions
 
+## Session: 2026-03-11 移除 Search/Vault MCP 并重组内置工具
+
+### Research Findings
+- 当前内置 MCP 的分组粒度完全是“server 级”，`ChatSettingsModal`、`McpModeSelector`、`McpClientManager` 都没有“单工具级”启停模型。
+- `write_plan` 当前并不只是 Vault 工具之一；它还驱动 `McpClientManager` 的计划快照、`ChatService` 的 live plan 面板和历史 frontmatter 持久化。
+- 要移除 Vault MCP，必须同步替换这组接口的语义，否则仓库里会残留大量 `VaultPlan` 命名和 serverId 绑定。
+- `builtin-mcp/query-engine/*`、`search-engine/*`、`file-tools.ts`、`query-tools.ts`、`obsidian-search-tools.ts`、`util-tools.ts` 都只被旧 Vault/Search runtime 使用，删除后不会影响其他模块。
+- 现有设置加载链路通过 `cloneTarsSettings()` 统一归一化，因此旧 `builtinVaultEnabled` -> 新 `builtinCoreToolsEnabled` 的迁移，放在 `features/tars/settings.ts` 最稳妥。
+
+### Technical Decisions
+| Decision | Rationale |
+|----------|-----------|
+| 新增 `core-tools-mcp-server.ts`，而不是继续复用 `vault-mcp-server.ts` 改名不改义 | 直接消除“已删除 Vault MCP，但代码仍叫 vault”的语义残留 |
+| 将 live plan 同步 API 统一改为 `get/on/syncLivePlan*` | 避免继续把计划状态与已删除的 Vault server 强耦合 |
+| 旧字段清理同时放在 `cloneTarsSettings()` 与 `SettingsManager.save()` | 既兼容加载旧配置，也避免下次保存时把废弃字段写回 data.json |
+
 ## Requirements
 - 用户明确要求按照 `/Users/study_superior/Desktop/Code/Formify/docs/Obsidian CLI.md` 文档，直接在 Obsidian 运行态里复现并修复问题。
 - 问题场景是动作配置中的“执行条件”弹窗，点击“添加条件”展开菜单后，所有菜单项都无响应。

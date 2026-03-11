@@ -7,7 +7,7 @@ class MockMcpClientManager {
 	private snapshot: PlanSnapshot | null = null;
 	private listeners = new Set<(snapshot: PlanSnapshot | null) => void>();
 
-	onVaultPlanChange(listener: (snapshot: PlanSnapshot | null) => void): () => void {
+	onLivePlanChange(listener: (snapshot: PlanSnapshot | null) => void): () => void {
 		this.listeners.add(listener);
 		listener(this.snapshot);
 		return () => {
@@ -15,7 +15,7 @@ class MockMcpClientManager {
 		};
 	}
 
-	async syncVaultPlanSnapshot(snapshot: PlanSnapshot | null): Promise<void> {
+	async syncLivePlanSnapshot(snapshot: PlanSnapshot | null): Promise<void> {
 		this.snapshot = snapshot ? JSON.parse(JSON.stringify(snapshot)) : null;
 		for (const listener of this.listeners) {
 			listener(this.snapshot ? JSON.parse(JSON.stringify(this.snapshot)) : null);
@@ -96,7 +96,7 @@ describe('ChatService live plan sync', () => {
 		const service = new ChatService(createPlugin(manager));
 		service.initialize();
 
-		await manager.syncVaultPlanSnapshot(planSnapshot);
+		await manager.syncLivePlanSnapshot(planSnapshot);
 		expect(service.getActiveSession()?.livePlan).toEqual(planSnapshot);
 
 		service.createNewSession();
@@ -111,7 +111,7 @@ describe('ChatService live plan sync', () => {
 		const service = new ChatService(createPlugin(manager));
 		service.initialize();
 
-		await manager.syncVaultPlanSnapshot(planSnapshot);
+		await manager.syncLivePlanSnapshot(planSnapshot);
 		const savedState = service.saveSessionState();
 
 		service.createNewSession();
@@ -128,7 +128,7 @@ describe('ChatService live plan sync', () => {
 		const service = new ChatService(createPlugin(manager));
 		service.initialize();
 
-		await manager.syncVaultPlanSnapshot(planSnapshot);
+		await manager.syncLivePlanSnapshot(planSnapshot);
 
 		const historySession: ChatSession = {
 			id: 'history-1',
@@ -169,7 +169,7 @@ describe('ChatService live plan sync', () => {
 			.spyOn(HistoryService.prototype, 'updateSessionFrontmatter')
 			.mockResolvedValue(undefined);
 
-		await manager.syncVaultPlanSnapshot(planSnapshot);
+		await manager.syncLivePlanSnapshot(planSnapshot);
 		await flushAsync();
 
 		expect(updateFrontmatterSpy).toHaveBeenCalledWith('history.md', {

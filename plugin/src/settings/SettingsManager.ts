@@ -305,6 +305,13 @@ export class SettingsManager {
                 nextTarsSettings.mcp = nextMcpSettings;
                 changed = true;
             }
+            for (const legacyBuiltinField of ['builtinVaultEnabled', 'builtinObsidianSearchEnabled'] as const) {
+                if (Object.prototype.hasOwnProperty.call(nextMcpSettings, legacyBuiltinField)) {
+                    delete nextMcpSettings[legacyBuiltinField];
+                    nextTarsSettings.mcp = nextMcpSettings;
+                    changed = true;
+                }
+            }
         }
 
         if (changed) {
@@ -474,6 +481,8 @@ export class SettingsManager {
             ...DEFAULT_MCP_SETTINGS,
             ...(settings.tars.settings.mcp ?? {}),
         };
+        delete (runtimeMcpSettings as Record<string, unknown>).builtinVaultEnabled;
+        delete (runtimeMcpSettings as Record<string, unknown>).builtinObsidianSearchEnabled;
         const normalizedMcpServers = await mcpServerService.syncServers(
             normalizedAiDataFolder,
             runtimeMcpSettings.servers ?? []
@@ -488,6 +497,8 @@ export class SettingsManager {
             ...((mergedTarsSettings as any).mcp ?? {}),
         } as Record<string, unknown>;
         delete mergedMcpSettings.servers;
+        delete mergedMcpSettings.builtinVaultEnabled;
+        delete mergedMcpSettings.builtinObsidianSearchEnabled;
         (mergedTarsSettings as any).mcp = mergedMcpSettings;
 
         const settingsToPersist = {

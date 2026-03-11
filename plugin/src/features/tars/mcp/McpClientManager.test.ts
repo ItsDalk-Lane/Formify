@@ -3,34 +3,43 @@ import {
 	type PlanSnapshot,
 } from 'src/builtin-mcp/runtime/plan-state';
 import {
-	BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
-	BUILTIN_VAULT_SERVER_ID,
+	BUILTIN_CORE_TOOLS_SERVER_ID,
+	BUILTIN_MEMORY_SERVER_ID,
+	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
 } from 'src/builtin-mcp/constants';
 import { McpClientManager } from './McpClientManager';
 import type { McpSettings } from './types';
 
-const createVaultBuiltinRuntimeMock = jest.fn();
-const createObsidianSearchBuiltinRuntimeMock = jest.fn();
+const createCoreToolsBuiltinRuntimeMock = jest.fn();
 
-jest.mock('src/builtin-mcp/vault-mcp-server', () => ({
-	createVaultBuiltinRuntime: (...args: unknown[]) =>
-		createVaultBuiltinRuntimeMock(...args),
+jest.mock('src/builtin-mcp/core-tools-mcp-server', () => ({
+	createCoreToolsBuiltinRuntime: (...args: unknown[]) =>
+		createCoreToolsBuiltinRuntimeMock(...args),
 }));
 
 jest.mock('src/builtin-mcp/memory-mcp-server', () => ({
-	createMemoryBuiltinRuntime: jest.fn(),
-}));
-
-jest.mock('src/builtin-mcp/obsidian-search-mcp-server', () => ({
-	createObsidianSearchBuiltinRuntime: (...args: unknown[]) =>
-		createObsidianSearchBuiltinRuntimeMock(...args),
+	createMemoryBuiltinRuntime: jest.fn().mockResolvedValue({
+		serverId: BUILTIN_MEMORY_SERVER_ID,
+		serverName: 'Memory MCP',
+		client: {} as any,
+		callTool: jest.fn(),
+		listTools: jest.fn().mockResolvedValue([]),
+		close: jest.fn().mockResolvedValue(undefined),
+	}),
 }));
 
 jest.mock('src/builtin-mcp/sequentialthinking-mcp-server', () => ({
-	createSequentialThinkingBuiltinRuntime: jest.fn(),
+	createSequentialThinkingBuiltinRuntime: jest.fn().mockResolvedValue({
+		serverId: BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
+		serverName: 'Sequential Thinking MCP',
+		client: {} as any,
+		callTool: jest.fn(),
+		listTools: jest.fn().mockResolvedValue([]),
+		close: jest.fn().mockResolvedValue(undefined),
+	}),
 }));
 
-function createMockVaultRuntime() {
+function createMockCoreToolsRuntime() {
 	let currentSnapshot: PlanSnapshot | null = null;
 	const listeners = new Set<(snapshot: PlanSnapshot | null) => void>();
 
@@ -43,8 +52,8 @@ function createMockVaultRuntime() {
 
 	return {
 		runtime: {
-			serverId: BUILTIN_VAULT_SERVER_ID,
-			serverName: 'Vault MCP',
+			serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
+			serverName: '内置基础工具',
 			client: {} as any,
 			callTool: jest.fn(),
 			listTools: jest.fn().mockResolvedValue([
@@ -52,7 +61,13 @@ function createMockVaultRuntime() {
 					name: 'write_plan',
 					description: 'create or update plan',
 					inputSchema: {},
-					serverId: BUILTIN_VAULT_SERVER_ID,
+					serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
+				},
+				{
+					name: 'execute_script',
+					description: 'execute script',
+					inputSchema: {},
+					serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 				},
 			]),
 			close: jest.fn().mockResolvedValue(undefined),
@@ -77,9 +92,8 @@ function createMockVaultRuntime() {
 describe('McpClientManager', () => {
 	const settings: McpSettings = {
 		servers: [],
-		builtinVaultEnabled: true,
+		builtinCoreToolsEnabled: true,
 		builtinMemoryEnabled: false,
-		builtinObsidianSearchEnabled: false,
 		builtinSequentialThinkingEnabled: false,
 		maxToolCallLoops: 10,
 	};
@@ -103,19 +117,18 @@ describe('McpClientManager', () => {
 	};
 
 	beforeEach(() => {
-		createVaultBuiltinRuntimeMock.mockReset();
-		createObsidianSearchBuiltinRuntimeMock.mockReset();
+		createCoreToolsBuiltinRuntimeMock.mockReset();
 	});
 
-	it('should broadcast vault plan changes from runtime', async () => {
-		const mockRuntime = createMockVaultRuntime();
-		createVaultBuiltinRuntimeMock.mockResolvedValue(mockRuntime.runtime);
+	it('should broadcast live plan changes from core tools runtime', async () => {
+		const mockRuntime = createMockCoreToolsRuntime();
+		createCoreToolsBuiltinRuntimeMock.mockResolvedValue(mockRuntime.runtime);
 
 		const manager = new McpClientManager({} as any, settings);
-		await manager.getToolsForServer(BUILTIN_VAULT_SERVER_ID);
+		await manager.getToolsForServer(BUILTIN_CORE_TOOLS_SERVER_ID);
 
 		const received: Array<PlanSnapshot | null> = [];
-		const unsubscribe = manager.onVaultPlanChange((snapshot) => {
+		const unsubscribe = manager.onLivePlanChange((snapshot) => {
 			received.push(snapshot);
 		});
 
@@ -127,106 +140,107 @@ describe('McpClientManager', () => {
 		await manager.dispose();
 	});
 
-	it('should sync session plan snapshot into vault runtime', async () => {
-		const mockRuntime = createMockVaultRuntime();
-		createVaultBuiltinRuntimeMock.mockResolvedValue(mockRuntime.runtime);
+	it('should sync session plan snapshot into core tools runtime', async () => {
+		const mockRuntime = createMockCoreToolsRuntime();
+		createCoreToolsBuiltinRuntimeMock.mockResolvedValue(mockRuntime.runtime);
 
 		const manager = new McpClientManager({} as any, settings);
-		await manager.getToolsForServer(BUILTIN_VAULT_SERVER_ID);
-		await manager.syncVaultPlanSnapshot(planSnapshot);
+		await manager.getToolsForServer(BUILTIN_CORE_TOOLS_SERVER_ID);
+		await manager.syncLivePlanSnapshot(planSnapshot);
 
 		expect(mockRuntime.getCurrentSnapshot()).toEqual(planSnapshot);
-		expect(manager.getVaultPlanSnapshot()).toEqual(planSnapshot);
+		expect(manager.getLivePlanSnapshot()).toEqual(planSnapshot);
 
 		await manager.dispose();
 	});
 
-	it('should discover obsidian search builtin tools when enabled', async () => {
-		createObsidianSearchBuiltinRuntimeMock.mockResolvedValue({
-			serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
-			serverName: 'Obsidian Search',
-			client: {} as any,
-			callTool: jest.fn(),
-			listTools: jest.fn().mockResolvedValue([
-				{
-					name: 'quick_search',
-					description: 'quick search',
-					inputSchema: {},
-					serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
-				},
-			]),
-			close: jest.fn().mockResolvedValue(undefined),
-		});
+	it('should discover core tools builtin tools when enabled', async () => {
+		const mockRuntime = createMockCoreToolsRuntime();
+		createCoreToolsBuiltinRuntimeMock.mockResolvedValue(mockRuntime.runtime);
 
-		const manager = new McpClientManager({} as any, {
-			...settings,
-			builtinVaultEnabled: false,
-			builtinObsidianSearchEnabled: true,
-		});
-		const tools = await manager.getToolsForServer(BUILTIN_OBSIDIAN_SEARCH_SERVER_ID);
+		const manager = new McpClientManager({} as any, settings);
+		const tools = await manager.getToolsForServer(BUILTIN_CORE_TOOLS_SERVER_ID);
 
-		expect(createObsidianSearchBuiltinRuntimeMock).toHaveBeenCalledTimes(1);
+		expect(createCoreToolsBuiltinRuntimeMock).toHaveBeenCalledTimes(1);
 		expect(tools).toEqual([
 			{
-				name: 'quick_search',
-				description: 'quick search',
+				name: 'write_plan',
+				description: 'create or update plan',
 				inputSchema: {},
-				serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
+				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
+			},
+			{
+				name: 'execute_script',
+				description: 'execute script',
+				inputSchema: {},
+				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 			},
 		]);
-		expect(manager.getState(BUILTIN_OBSIDIAN_SEARCH_SERVER_ID)?.status).toBe('running');
+		expect(manager.getState(BUILTIN_CORE_TOOLS_SERVER_ID)?.status).toBe('running');
 
 		await manager.dispose();
 	});
 
-	it('should keep obsidian search builtin stopped when disabled', async () => {
+	it('should keep core tools builtin stopped when disabled', async () => {
 		const manager = new McpClientManager({} as any, {
 			...settings,
-			builtinVaultEnabled: false,
+			builtinCoreToolsEnabled: false,
 		});
-		const tools = await manager.getToolsForServer(BUILTIN_OBSIDIAN_SEARCH_SERVER_ID);
+		const tools = await manager.getToolsForServer(BUILTIN_CORE_TOOLS_SERVER_ID);
 
 		expect(tools).toEqual([]);
-		expect(createObsidianSearchBuiltinRuntimeMock).not.toHaveBeenCalled();
-		expect(manager.getState(BUILTIN_OBSIDIAN_SEARCH_SERVER_ID)?.status).toBe('stopped');
+		expect(createCoreToolsBuiltinRuntimeMock).not.toHaveBeenCalled();
+		expect(manager.getState(BUILTIN_CORE_TOOLS_SERVER_ID)?.status).toBe('stopped');
 
 		await manager.dispose();
 	});
 
-	it('should expose direct execution tools to the model context', async () => {
-		createObsidianSearchBuiltinRuntimeMock.mockResolvedValue({
-			serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
-			serverName: 'Obsidian Search',
-			client: {} as any,
-			callTool: jest.fn(),
-			listTools: jest.fn().mockResolvedValue([
-				{
-					name: 'quick_search',
-					description: 'quick search',
-					inputSchema: {},
-					serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
-				},
-			]),
-			close: jest.fn().mockResolvedValue(undefined),
-		});
+	it('should expose only core-tools, memory and sequential-thinking as builtin server summaries', async () => {
+		const mockRuntime = createMockCoreToolsRuntime();
+		createCoreToolsBuiltinRuntimeMock.mockResolvedValue(mockRuntime.runtime);
 
 		const manager = new McpClientManager({} as any, {
 			...settings,
-			builtinVaultEnabled: false,
-			builtinObsidianSearchEnabled: true,
+			builtinMemoryEnabled: true,
+			builtinSequentialThinkingEnabled: true,
 		});
+
+		expect(manager.getEnabledServerSummaries()).toEqual([
+			{ id: BUILTIN_CORE_TOOLS_SERVER_ID, name: '内置基础工具' },
+			{ id: BUILTIN_MEMORY_SERVER_ID, name: '内置 Memory 工具' },
+			{
+				id: BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
+				name: '内置 Sequential Thinking 工具',
+			},
+		]);
+
+		await manager.dispose();
+	});
+
+	it('should expose core tools to the model context without removed search or vault tools', async () => {
+		const mockRuntime = createMockCoreToolsRuntime();
+		createCoreToolsBuiltinRuntimeMock.mockResolvedValue(mockRuntime.runtime);
+
+		const manager = new McpClientManager({} as any, settings);
 		const tools = await manager.getToolsForModelContext();
 
 		expect(tools).toEqual([
 			{
-				name: 'quick_search',
-				description: 'quick search',
+				name: 'write_plan',
+				description: 'create or update plan',
 				inputSchema: {},
-				serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
+				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
+			},
+			{
+				name: 'execute_script',
+				description: 'execute script',
+				inputSchema: {},
+				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 			},
 		]);
+		expect(tools.some((tool) => tool.name === 'quick_search')).toBe(false);
+		expect(tools.some((tool) => tool.name === 'read_file')).toBe(false);
 
 		await manager.dispose();
 	});
-
 });

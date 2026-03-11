@@ -143,6 +143,28 @@ export const availableVendors: Vendor[] = [
 
 const cloneDeep = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 
+const normalizeMcpSettings = (
+	settings?: McpSettings | Record<string, unknown> | null
+): McpSettings => {
+	const raw = (settings ?? {}) as Record<string, unknown>
+	const normalized: McpSettings = {
+		...cloneDeep(DEFAULT_MCP_SETTINGS),
+		...(raw as Partial<McpSettings>),
+	}
+
+	if (
+		typeof normalized.builtinCoreToolsEnabled !== 'boolean'
+		&& typeof raw.builtinVaultEnabled === 'boolean'
+	) {
+		normalized.builtinCoreToolsEnabled = raw.builtinVaultEnabled
+	}
+
+	delete (normalized as Record<string, unknown>).builtinVaultEnabled
+	delete (normalized as Record<string, unknown>).builtinObsidianSearchEnabled
+
+	return normalized
+}
+
 const resolvePositiveInteger = (
 	...candidates: Array<number | undefined | null>
 ): number | undefined => {
@@ -181,9 +203,7 @@ export const syncToolExecutionSettings = (
 
 	settings.toolExecution = cloneDeep(next)
 
-	if (!settings.mcp) {
-		settings.mcp = cloneDeep(DEFAULT_MCP_SETTINGS)
-	}
+	settings.mcp = normalizeMcpSettings(settings.mcp)
 	settings.mcp.maxToolCallLoops = next.maxToolCalls
 	delete (settings as TarsSettings & Record<string, unknown>).toolAgent
 	delete (settings as TarsSettings & Record<string, unknown>).intentAgent
@@ -202,6 +222,7 @@ export const cloneTarsSettings = (override?: Partial<TarsSettings>): TarsSetting
 	delete clonedOverride.toolAgent
 	delete clonedOverride.intentAgent
 	const merged = Object.assign(clonedDefaults, clonedOverride) as TarsSettings
+	merged.mcp = normalizeMcpSettings(merged.mcp as McpSettings | Record<string, unknown> | undefined)
 	syncToolExecutionSettings(merged)
 	return merged
 }

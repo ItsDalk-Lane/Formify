@@ -7,31 +7,25 @@
 
 import { App } from 'obsidian';
 import {
+	BUILTIN_CORE_TOOLS_SERVER_ID,
+	BUILTIN_CORE_TOOLS_SERVER_NAME,
 	BUILTIN_MEMORY_SERVER_ID,
 	BUILTIN_MEMORY_SERVER_NAME,
-	BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
-	BUILTIN_OBSIDIAN_SEARCH_SERVER_NAME,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
-	BUILTIN_VAULT_SERVER_ID,
-	BUILTIN_VAULT_SERVER_NAME,
 } from 'src/builtin-mcp/constants';
+import {
+	createCoreToolsBuiltinRuntime,
+	type CoreToolsBuiltinRuntime,
+} from 'src/builtin-mcp/core-tools-mcp-server';
 import {
 	createMemoryBuiltinRuntime,
 	type MemoryBuiltinRuntime,
 } from 'src/builtin-mcp/memory-mcp-server';
 import {
-	createObsidianSearchBuiltinRuntime,
-	type ObsidianSearchBuiltinRuntime,
-} from 'src/builtin-mcp/obsidian-search-mcp-server';
-import {
 	createSequentialThinkingBuiltinRuntime,
 	type SequentialThinkingBuiltinRuntime,
 } from 'src/builtin-mcp/sequentialthinking-mcp-server';
-import {
-	createVaultBuiltinRuntime,
-	type VaultBuiltinRuntime,
-} from 'src/builtin-mcp/vault-mcp-server';
 import {
 	clonePlanSnapshot,
 	type PlanSnapshot,
@@ -50,9 +44,8 @@ import type {
 import { DEFAULT_BUILTIN_MEMORY_FILE_PATH } from './types';
 
 type BuiltinRuntime =
-	| VaultBuiltinRuntime
+	| CoreToolsBuiltinRuntime
 	| MemoryBuiltinRuntime
-	| ObsidianSearchBuiltinRuntime
 	| SequentialThinkingBuiltinRuntime;
 
 interface BuiltinDescriptor {
@@ -76,9 +69,9 @@ export class McpClientManager {
 	private disposed = false;
 	/** 状态变更监听器 */
 	private stateListeners: Array<(states: McpServerState[]) => void> = [];
-	private vaultPlanSnapshot: PlanSnapshot | null = null;
-	private vaultPlanListeners = new Set<(snapshot: PlanSnapshot | null) => void>();
-	private vaultPlanRuntimeUnsubscribe: (() => void) | null = null;
+	private livePlanSnapshot: PlanSnapshot | null = null;
+	private livePlanListeners = new Set<(snapshot: PlanSnapshot | null) => void>();
+	private livePlanRuntimeUnsubscribe: (() => void) | null = null;
 
 	constructor(
 		private readonly app: App,
@@ -129,12 +122,12 @@ export class McpClientManager {
 	private getBuiltinDescriptors(): BuiltinDescriptor[] {
 		return [
 			{
-				serverId: BUILTIN_VAULT_SERVER_ID,
-				serverName: BUILTIN_VAULT_SERVER_NAME,
+				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
+				serverName: BUILTIN_CORE_TOOLS_SERVER_NAME,
 				isEnabled: (settings) =>
-					this.isMcpEnabled(settings) && settings.builtinVaultEnabled !== false,
-				createRuntime: async (app) => await createVaultBuiltinRuntime(app),
-				initErrorLogMessage: '[MCP] 初始化内置 Vault MCP Server 失败',
+					this.isMcpEnabled(settings) && settings.builtinCoreToolsEnabled !== false,
+				createRuntime: async (app) => await createCoreToolsBuiltinRuntime(app),
+				initErrorLogMessage: '[MCP] 初始化内置基础工具 MCP Server 失败',
 			},
 			{
 				serverId: BUILTIN_MEMORY_SERVER_ID,
@@ -146,16 +139,6 @@ export class McpClientManager {
 						filePath: this.resolveMemoryFilePath(settings),
 					}),
 				initErrorLogMessage: '[MCP] 初始化内置 Memory MCP Server 失败',
-			},
-			{
-				serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
-				serverName: BUILTIN_OBSIDIAN_SEARCH_SERVER_NAME,
-				isEnabled: (settings) =>
-					this.isMcpEnabled(settings) &&
-					settings.builtinObsidianSearchEnabled !== false,
-				createRuntime: async (app) =>
-					await createObsidianSearchBuiltinRuntime(app),
-				initErrorLogMessage: '[MCP] 初始化内置 Obsidian Search MCP Server 失败',
 			},
 			{
 				serverId: BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
@@ -539,45 +522,45 @@ export class McpClientManager {
 		};
 	}
 
-	getVaultPlanSnapshot(): PlanSnapshot | null {
-		return clonePlanSnapshot(this.vaultPlanSnapshot);
+	getLivePlanSnapshot(): PlanSnapshot | null {
+		return clonePlanSnapshot(this.livePlanSnapshot);
 	}
 
-	onVaultPlanChange(
+	onLivePlanChange(
 		listener: (snapshot: PlanSnapshot | null) => void
 	): () => void {
-		this.vaultPlanListeners.add(listener);
-		listener(this.getVaultPlanSnapshot());
+		this.livePlanListeners.add(listener);
+		listener(this.getLivePlanSnapshot());
 		return () => {
-			this.vaultPlanListeners.delete(listener);
+			this.livePlanListeners.delete(listener);
 		};
 	}
 
-	async syncVaultPlanSnapshot(snapshot: PlanSnapshot | null): Promise<void> {
-		this.setVaultPlanSnapshot(snapshot);
+	async syncLivePlanSnapshot(snapshot: PlanSnapshot | null): Promise<void> {
+		this.setLivePlanSnapshot(snapshot);
 		if (
 			!this.isMcpEnabled()
-			|| !this.isBuiltinServerEnabled(BUILTIN_VAULT_SERVER_ID)
+			|| !this.isBuiltinServerEnabled(BUILTIN_CORE_TOOLS_SERVER_ID)
 		) {
 			return;
 		}
 
-		const runtime = await this.ensureBuiltinRuntime(BUILTIN_VAULT_SERVER_ID);
+		const runtime = await this.ensureBuiltinRuntime(BUILTIN_CORE_TOOLS_SERVER_ID);
 		if (!runtime) {
 			return;
 		}
 
-		const vaultRuntime = runtime as VaultBuiltinRuntime;
-		vaultRuntime.syncPlanSnapshot(snapshot);
-		this.setVaultPlanSnapshot(vaultRuntime.getPlanSnapshot());
+		const coreToolsRuntime = runtime as CoreToolsBuiltinRuntime;
+		coreToolsRuntime.syncPlanSnapshot(snapshot);
+		this.setLivePlanSnapshot(coreToolsRuntime.getPlanSnapshot());
 	}
 
 	/** 销毁所有资源 */
 	async dispose(): Promise<void> {
 		this.disposed = true;
 		this.stateListeners = [];
-		this.vaultPlanListeners.clear();
-		this.detachVaultPlanRuntime();
+		this.livePlanListeners.clear();
+		this.detachLivePlanRuntime();
 		await Promise.allSettled([
 			this.processManager.dispose(),
 			this.closeAllBuiltinRuntimes(),
@@ -599,33 +582,33 @@ export class McpClientManager {
 		}
 	}
 
-	private attachVaultPlanRuntime(runtime: VaultBuiltinRuntime): void {
-		this.detachVaultPlanRuntime();
-		this.vaultPlanRuntimeUnsubscribe = runtime.onPlanChange((snapshot) => {
-			this.setVaultPlanSnapshot(snapshot);
+	private attachLivePlanRuntime(runtime: CoreToolsBuiltinRuntime): void {
+		this.detachLivePlanRuntime();
+		this.livePlanRuntimeUnsubscribe = runtime.onPlanChange((snapshot) => {
+			this.setLivePlanSnapshot(snapshot);
 		});
 	}
 
-	private detachVaultPlanRuntime(): void {
-		this.vaultPlanRuntimeUnsubscribe?.();
-		this.vaultPlanRuntimeUnsubscribe = null;
+	private detachLivePlanRuntime(): void {
+		this.livePlanRuntimeUnsubscribe?.();
+		this.livePlanRuntimeUnsubscribe = null;
 	}
 
-	private setVaultPlanSnapshot(snapshot: PlanSnapshot | null): void {
+	private setLivePlanSnapshot(snapshot: PlanSnapshot | null): void {
 		const nextSnapshot = clonePlanSnapshot(snapshot);
-		const previousKey = JSON.stringify(this.vaultPlanSnapshot);
+		const previousKey = JSON.stringify(this.livePlanSnapshot);
 		const nextKey = JSON.stringify(nextSnapshot);
 
-		this.vaultPlanSnapshot = nextSnapshot;
+		this.livePlanSnapshot = nextSnapshot;
 		if (previousKey === nextKey) {
 			return;
 		}
 
-		for (const listener of this.vaultPlanListeners) {
+		for (const listener of this.livePlanListeners) {
 			try {
-				listener(this.getVaultPlanSnapshot());
+				listener(this.getLivePlanSnapshot());
 			} catch (error) {
-				DebugLogger.error('[MCP] Vault 计划监听器执行出错', error);
+				DebugLogger.error('[MCP] Live Plan 监听器执行出错', error);
 			}
 		}
 	}
@@ -823,11 +806,11 @@ export class McpClientManager {
 				}
 
 				this.builtinRuntimes.set(serverId, runtime);
-				if (serverId === BUILTIN_VAULT_SERVER_ID) {
-					const vaultRuntime = runtime as VaultBuiltinRuntime;
-					this.attachVaultPlanRuntime(vaultRuntime);
-					vaultRuntime.syncPlanSnapshot(this.vaultPlanSnapshot);
-					this.setVaultPlanSnapshot(vaultRuntime.getPlanSnapshot());
+				if (serverId === BUILTIN_CORE_TOOLS_SERVER_ID) {
+					const coreToolsRuntime = runtime as CoreToolsBuiltinRuntime;
+					this.attachLivePlanRuntime(coreToolsRuntime);
+					coreToolsRuntime.syncPlanSnapshot(this.livePlanSnapshot);
+					this.setLivePlanSnapshot(coreToolsRuntime.getPlanSnapshot());
 				}
 
 				const tools = await runtime.listTools();
@@ -881,8 +864,8 @@ export class McpClientManager {
 
 		const runtime = this.builtinRuntimes.get(serverId) ?? null;
 		this.builtinRuntimes.delete(serverId);
-		if (serverId === BUILTIN_VAULT_SERVER_ID) {
-			this.detachVaultPlanRuntime();
+		if (serverId === BUILTIN_CORE_TOOLS_SERVER_ID) {
+			this.detachLivePlanRuntime();
 		}
 
 		const current = this.builtinStates.get(serverId) ?? {

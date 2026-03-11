@@ -7,10 +7,9 @@ import { Tab, type TabItem } from 'src/component/tab/Tab';
 import { ToggleSwitch } from 'src/component/toggle-switch/ToggleSwitch';
 import { localInstance } from 'src/i18n/locals';
 import {
+	BUILTIN_CORE_TOOLS_SERVER_ID,
 	BUILTIN_MEMORY_SERVER_ID,
-	BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
-	BUILTIN_VAULT_SERVER_ID,
 	DEFAULT_MCP_SETTINGS,
 	McpConfigImporter,
 	type McpServerConfig,
@@ -71,14 +70,11 @@ const updateBuiltinMcpEnabled = (
 ): McpSettings => {
 	const nextMcpSettings = cloneValue(mcpSettings);
 	switch (serverId) {
-		case BUILTIN_VAULT_SERVER_ID:
-			nextMcpSettings.builtinVaultEnabled = enabled;
+		case BUILTIN_CORE_TOOLS_SERVER_ID:
+			nextMcpSettings.builtinCoreToolsEnabled = enabled;
 			break;
 		case BUILTIN_MEMORY_SERVER_ID:
 			nextMcpSettings.builtinMemoryEnabled = enabled;
-			break;
-		case BUILTIN_OBSIDIAN_SEARCH_SERVER_ID:
-			nextMcpSettings.builtinObsidianSearchEnabled = enabled;
 			break;
 		case BUILTIN_SEQUENTIAL_THINKING_SERVER_ID:
 			nextMcpSettings.builtinSequentialThinkingEnabled = enabled;
