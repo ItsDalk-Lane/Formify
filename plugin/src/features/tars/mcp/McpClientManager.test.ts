@@ -6,11 +6,6 @@ import {
 	BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
 	BUILTIN_VAULT_SERVER_ID,
 } from 'src/builtin-mcp/constants';
-import {
-	DEFAULT_TOOL_AGENT_SETTINGS,
-	TOOL_AGENT_SERVER_ID,
-	TOOL_AGENT_TOOL_NAME,
-} from 'src/features/tool-agent';
 import { McpClientManager } from './McpClientManager';
 import type { McpSettings } from './types';
 
@@ -198,7 +193,7 @@ describe('McpClientManager', () => {
 		await manager.dispose();
 	});
 
-	it('should expose direct execution tools to the model context when tool agent is disabled', async () => {
+	it('should expose direct execution tools to the model context', async () => {
 		createObsidianSearchBuiltinRuntimeMock.mockResolvedValue({
 			serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
 			serverName: 'Obsidian Search',
@@ -234,49 +229,4 @@ describe('McpClientManager', () => {
 		await manager.dispose();
 	});
 
-	it('should expose execute_task only when tool agent is enabled', async () => {
-		const manager = new McpClientManager(
-			{} as any,
-			{
-				...settings,
-				builtinVaultEnabled: false,
-				builtinObsidianSearchEnabled: true,
-			},
-			{
-				getToolAgentSettings: () => ({
-					...DEFAULT_TOOL_AGENT_SETTINGS,
-					enabled: true,
-					modelTag: 'tool-agent-model',
-				}),
-				resolveToolAgentProviderByTag: (tag) =>
-					tag === 'tool-agent-model'
-						? {
-							tag,
-							vendorName: 'Mock Vendor',
-							options: {} as any,
-						}
-						: null,
-				getVendorByName: () => ({
-					name: 'Mock Vendor',
-					defaultOptions: {} as any,
-					sendRequestFunc: jest.fn() as any,
-					models: [],
-					websiteToObtainKey: '',
-					capabilities: [],
-				}),
-			}
-		);
-		const tools = await manager.getToolsForModelContext();
-
-		expect(tools).toEqual([
-			{
-				name: TOOL_AGENT_TOOL_NAME,
-				description: expect.stringContaining('tool execution sub-agent'),
-				inputSchema: expect.any(Object),
-				serverId: TOOL_AGENT_SERVER_ID,
-			},
-		]);
-
-		await manager.dispose();
-	});
 });

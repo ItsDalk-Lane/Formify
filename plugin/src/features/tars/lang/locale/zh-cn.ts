@@ -276,32 +276,4 @@ export default {
 	'MCP server name required': '请输入服务器名称',
 	'MCP command required': '请输入启动命令',
 	'MCP url required': '请输入 URL',
-	'Tool Call Agent': '工具调用子代理',
-	'Expose a single execute_task tool to the main model and let a dedicated sub-agent choose and run MCP tools.':
-		'向主模型只暴露一个 execute_task 工具，并让专用子代理选择和执行 MCP 工具。',
-	'Tool Agent model tag': '工具子代理模型标签',
-	'Choose which configured provider tag is used by the tool execution sub-agent.':
-		'选择工具执行子代理使用的 provider tag。',
-	'Tool Agent unset': '未选择',
-	'Tool Agent max tool calls': '工具子代理最大工具调用次数',
-	'Maximum number of underlying tool calls inside one execute_task request.':
-		'单次 execute_task 请求内部允许的底层工具调用上限。',
-	'Tool Agent timeout (ms)': '工具子代理超时（毫秒）',
-	'Abort the sub-agent request after this timeout.': '超过该时间后终止子代理请求。',
-	'Allow shell in Tool Agent': '允许工具子代理使用 shell',
-	'If disabled, call_shell is blocked inside execute_task.':
-		'关闭后，execute_task 内部会拦截 call_shell。',
-	'Allow script in Tool Agent': '允许工具子代理执行脚本',
-	'If disabled, execute_script is blocked inside execute_task.':
-		'关闭后，execute_task 内部会拦截 execute_script。',
-	'Intent Agent': '意图识别代理',
-	'Classify each chat request before the main model runs and decide whether to answer directly, clarify, or delegate to tools.':
-		'在主模型运行前先对每条聊天请求做意图分类，再决定直接回答、先澄清，还是委托给工具。',
-	'Intent Agent model tag': '意图识别代理模型标签',
-	'Choose which configured provider tag is used for prompt-driven intent recognition.':
-		'选择用于提示词驱动意图识别的 provider tag。',
-	'Intent Agent unset': '未选择',
-	'Intent Agent timeout (ms)': '意图识别超时（毫秒）',
-	'Abort the intent recognition model request after this timeout.':
-		'超过该时间后终止意图识别模型请求。',
 }

@@ -2,12 +2,9 @@ import type FormPlugin from 'src/main';
 import type { PluginSettings } from 'src/settings/PluginSettings';
 import {
 	TarsFeatureManager,
-	availableVendors,
 } from './tars';
 import { ChatFeatureManager } from './chat';
 import { McpClientManager, DEFAULT_MCP_SETTINGS } from './tars/mcp';
-import { DEFAULT_TOOL_AGENT_SETTINGS } from './tool-agent';
-import { resolveToolExecutionSettings } from './tars/settings';
 
 export class FeatureCoordinator {
     private tarsFeatureManager: TarsFeatureManager | null = null;
@@ -43,43 +40,7 @@ export class FeatureCoordinator {
         if (!this.mcpClientManager) {
             this.mcpClientManager = new McpClientManager(
                 this.plugin.app,
-                mcpSettings,
-                {
-                    getToolAgentSettings: () =>
-                        ({
-                            ...(this.plugin.settings.tars.settings.toolAgent
-                                ?? DEFAULT_TOOL_AGENT_SETTINGS),
-                            defaultConstraints: {
-                                ...(
-                                    this.plugin.settings.tars.settings.toolAgent?.defaultConstraints
-                                    ?? DEFAULT_TOOL_AGENT_SETTINGS.defaultConstraints
-                                ),
-                                ...resolveToolExecutionSettings(this.plugin.settings.tars.settings),
-                            },
-                        }),
-                    getToolExecutionSettings: () =>
-                        resolveToolExecutionSettings(this.plugin.settings.tars.settings),
-                    resolveToolAgentProviderByTag: (tag) => {
-                        const provider = this.plugin.settings.tars.settings.providers.find(
-                            (item) => item.tag === tag
-                        );
-                        if (!provider) {
-                            return null;
-                        }
-                        return {
-                            tag: provider.tag,
-                            vendorName: provider.vendor,
-                            options: { ...provider.options },
-                        };
-                    },
-                    getVendorByName: (vendorName) =>
-                        availableVendors.find((vendor) => vendor.name === vendorName),
-                    getProtectedPathPrefixes: () =>
-                        [
-                            this.plugin.settings.aiDataFolder,
-                            this.plugin.settings.formFolder,
-                        ].filter(Boolean),
-                }
+                mcpSettings
             );
         } else {
             this.mcpClientManager.updateSettings(mcpSettings);

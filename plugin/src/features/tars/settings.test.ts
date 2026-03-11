@@ -1,49 +1,44 @@
 import {
 	DEFAULT_TOOL_EXECUTION_SETTINGS,
+	cloneTarsSettings,
 	resolveToolExecutionSettings,
 	syncToolExecutionSettings,
 } from './settings';
 
 describe('tool execution settings', () => {
-	it('resolves shared settings from legacy MCP and tool agent fields', () => {
+	it('resolves shared settings from toolExecution and MCP fields', () => {
 		const resolved = resolveToolExecutionSettings({
 			mcp: {
 				servers: [],
 				maxToolCallLoops: 14,
 			},
-			toolAgent: {
-				modelTag: '',
-				enabled: false,
-				defaultConstraints: {
-					maxToolCalls: 9,
-					timeoutMs: 42000,
-					allowShell: false,
-					allowScript: false,
-				},
+			toolExecution: {
+				maxToolCalls: 9,
+				timeoutMs: 42000,
 			},
 		} as any);
 
 		expect(resolved).toEqual({
-			maxToolCalls: 14,
+			maxToolCalls: 9,
 			timeoutMs: 42000,
 		});
 	});
 
-	it('syncs shared settings back into legacy fields', () => {
+	it('syncs shared settings back into toolExecution and MCP fields while removing legacy agent config', () => {
 		const settings = {
 			mcp: {
 				servers: [],
 				maxToolCallLoops: 3,
 			},
+			toolExecution: {
+				maxToolCalls: 7,
+				timeoutMs: 9000,
+			},
 			toolAgent: {
-				modelTag: '',
-				enabled: true,
-				defaultConstraints: {
-					maxToolCalls: 7,
-					timeoutMs: 9000,
-					allowShell: true,
-					allowScript: false,
-				},
+				modelTag: 'legacy-tool',
+			},
+			intentAgent: {
+				modelTag: 'legacy-intent',
 			},
 		} as any;
 
@@ -61,12 +56,30 @@ describe('tool execution settings', () => {
 			timeoutMs: 55000,
 		});
 		expect(settings.mcp.maxToolCallLoops).toBe(18);
-		expect(settings.toolAgent.defaultConstraints).toMatchObject({
-			maxToolCalls: 18,
-			timeoutMs: 55000,
-			allowShell: true,
-			allowScript: false,
+		expect('toolAgent' in settings).toBe(false);
+		expect('intentAgent' in settings).toBe(false);
+	});
+
+	it('drops legacy sub-agent fields when cloning settings', () => {
+		const cloned = cloneTarsSettings({
+			toolExecution: {
+				maxToolCalls: 12,
+				timeoutMs: 34000,
+			},
+			toolAgent: {
+				modelTag: 'legacy-tool',
+			},
+			intentAgent: {
+				modelTag: 'legacy-intent',
+			},
+		} as any);
+
+		expect(cloned.toolExecution).toEqual({
+			maxToolCalls: 12,
+			timeoutMs: 34000,
 		});
+		expect('toolAgent' in (cloned as any)).toBe(false);
+		expect('intentAgent' in (cloned as any)).toBe(false);
 	});
 
 	it('falls back to defaults when no values are configured', () => {

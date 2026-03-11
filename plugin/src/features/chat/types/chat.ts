@@ -1,6 +1,5 @@
 import { App, TFile, TFolder } from 'obsidian';
 import type { PlanSnapshot } from 'src/builtin-mcp/runtime/plan-state';
-import type { ClarificationQuestion, IntentTriggerSource } from 'src/features/intent-agent';
 import type { ToolCall } from './tools';
 import type { LayoutMode, MultiModelMode, ParallelResponseGroup } from './multiModel';
 
@@ -70,25 +69,6 @@ export interface ChatMessage {
 	parallelGroupId?: string;
 }
 
-export interface PendingIntentConfirmation {
-	userMessageId: string;
-	normalizedRequest: string;
-	createdAt: number;
-}
-
-export interface PendingIntentClarification {
-	originalUserMessage: string;
-	normalizedRequest: string;
-	reason: string;
-	questions: ClarificationQuestion[];
-	createdAt: number;
-	triggerSource: IntentTriggerSource;
-	activeFilePath?: string;
-	selectedText?: string;
-	selectedFiles?: SelectedFile[];
-	selectedFolders?: SelectedFolder[];
-}
-
 export interface ChatSession {
 	id: string;
 	title: string;
@@ -107,8 +87,6 @@ export interface ChatSession {
 	activeCompareGroupId?: string;
 	layoutMode?: LayoutMode;
 	livePlan?: PlanSnapshot | null;
-	pendingIntentConfirmation?: PendingIntentConfirmation | null;
-	pendingIntentClarification?: PendingIntentClarification | null;
 }
 
 export type ChatOpenMode = 'sidebar' | 'left-sidebar' | 'tab' | 'window' | 'persistent-modal';

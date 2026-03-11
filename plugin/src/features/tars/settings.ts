@@ -18,18 +18,6 @@ import { zhipuVendor } from './providers/zhipu'
 import type { ModelCapabilityCache } from './providers/modelCapability'
 import type { SystemPromptsDataFile } from './system-prompts/types'
 import { type McpSettings, DEFAULT_MCP_SETTINGS } from './mcp/types'
-import {
-	type ToolAgentSettings,
-	DEFAULT_TOOL_AGENT_SETTINGS,
-} from '../tool-agent'
-import {
-	type IntentAgentSettings,
-	DEFAULT_INTENT_AGENT_SETTINGS,
-} from '../intent-agent'
-export { DEFAULT_TOOL_AGENT_SETTINGS }
-export type { ToolAgentSettings }
-export { DEFAULT_INTENT_AGENT_SETTINGS }
-export type { IntentAgentSettings }
 
 export const APP_FOLDER = 'Tars'
 
@@ -98,10 +86,6 @@ export interface TarsSettings {
 	mcp?: McpSettings
 	/** 共享工具调用配置 */
 	toolExecution?: ToolExecutionSettings
-	/** Tool call agent configuration */
-	toolAgent?: ToolAgentSettings
-	/** Intent recognition agent configuration */
-	intentAgent?: IntentAgentSettings
 	/** 模型能力探测缓存（用于推理能力判断） */
 	modelCapabilityCache?: ModelCapabilityCache
 }
@@ -134,8 +118,6 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 	tabCompletionPromptTemplate: '{{rules}}\n\n{{context}}',
 	mcp: DEFAULT_MCP_SETTINGS,
 	toolExecution: DEFAULT_TOOL_EXECUTION_SETTINGS,
-	toolAgent: DEFAULT_TOOL_AGENT_SETTINGS,
-	intentAgent: DEFAULT_INTENT_AGENT_SETTINGS,
 	modelCapabilityCache: {},
 }
 
@@ -176,16 +158,14 @@ export const resolveToolExecutionSettings = (
 	settings?: Partial<TarsSettings> | null
 ): ToolExecutionSettings => ({
 	maxToolCalls:
-		resolvePositiveInteger(
+	resolvePositiveInteger(
 			settings?.toolExecution?.maxToolCalls,
 			settings?.mcp?.maxToolCallLoops,
-			settings?.toolAgent?.defaultConstraints?.maxToolCalls,
 			DEFAULT_TOOL_EXECUTION_SETTINGS.maxToolCalls
 		) ?? DEFAULT_TOOL_EXECUTION_SETTINGS.maxToolCalls,
 	timeoutMs:
 		resolvePositiveInteger(
 			settings?.toolExecution?.timeoutMs,
-			settings?.toolAgent?.defaultConstraints?.timeoutMs,
 			DEFAULT_TOOL_EXECUTION_SETTINGS.timeoutMs
 		) ?? DEFAULT_TOOL_EXECUTION_SETTINGS.timeoutMs,
 })
@@ -205,16 +185,8 @@ export const syncToolExecutionSettings = (
 		settings.mcp = cloneDeep(DEFAULT_MCP_SETTINGS)
 	}
 	settings.mcp.maxToolCallLoops = next.maxToolCalls
-
-	if (!settings.toolAgent) {
-		settings.toolAgent = cloneDeep(DEFAULT_TOOL_AGENT_SETTINGS)
-	}
-	settings.toolAgent.defaultConstraints = {
-		...DEFAULT_TOOL_AGENT_SETTINGS.defaultConstraints,
-		...(settings.toolAgent.defaultConstraints ?? {}),
-		maxToolCalls: next.maxToolCalls,
-		timeoutMs: next.timeoutMs,
-	}
+	delete (settings as TarsSettings & Record<string, unknown>).toolAgent
+	delete (settings as TarsSettings & Record<string, unknown>).intentAgent
 
 	return next
 }
@@ -227,6 +199,8 @@ export const cloneTarsSettings = (override?: Partial<TarsSettings>): TarsSetting
 	}
 	const clonedOverride = cloneDeep(override) as Record<string, unknown>
 	delete clonedOverride.promptTemplates
+	delete clonedOverride.toolAgent
+	delete clonedOverride.intentAgent
 	const merged = Object.assign(clonedDefaults, clonedOverride) as TarsSettings
 	syncToolExecutionSettings(merged)
 	return merged

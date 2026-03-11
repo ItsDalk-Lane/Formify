@@ -32,18 +32,6 @@ import {
 	createVaultBuiltinRuntime,
 	type VaultBuiltinRuntime,
 } from 'src/builtin-mcp/vault-mcp-server';
-import type { Vendor } from 'src/features/tars/providers';
-import {
-	DEFAULT_TOOL_AGENT_SETTINGS,
-	TOOL_AGENT_SERVER_ID,
-	TOOL_AGENT_TOOL_NAME,
-	ToolCallAgent,
-	type ToolAgentProviderResolverResult,
-	type ToolAgentRequest,
-	type ToolAgentRuntimeTool,
-	type ToolAgentSettings,
-} from 'src/features/tool-agent';
-import type { ToolExecutionSettings } from 'src/features/tars/settings';
 import {
 	clonePlanSnapshot,
 	type PlanSnapshot,
@@ -75,16 +63,6 @@ interface BuiltinDescriptor {
 	initErrorLogMessage: string;
 }
 
-interface McpClientManagerOptions {
-	getToolAgentSettings?: () => ToolAgentSettings;
-	getToolExecutionSettings?: () => ToolExecutionSettings;
-	resolveToolAgentProviderByTag?: (
-		tag: string
-	) => ToolAgentProviderResolverResult | null;
-	getVendorByName?: (vendorName: string) => Vendor | undefined;
-	getProtectedPathPrefixes?: () => string[];
-}
-
 const EXTERNAL_CONNECT_RETRY_COOLDOWN_MS = 15_000;
 
 export class McpClientManager {
@@ -101,19 +79,16 @@ export class McpClientManager {
 	private vaultPlanSnapshot: PlanSnapshot | null = null;
 	private vaultPlanListeners = new Set<(snapshot: PlanSnapshot | null) => void>();
 	private vaultPlanRuntimeUnsubscribe: (() => void) | null = null;
-	private toolCallAgent: ToolCallAgent | null = null;
 
 	constructor(
 		private readonly app: App,
 		settings: McpSettings,
-		private readonly options: McpClientManagerOptions = {}
 	) {
 		this.settings = settings;
 		this.processManager = new McpProcessManager(
 			(states) => this.notifyStateChange(states)
 		);
 		this.healthChecker = new McpHealthChecker(this.processManager);
-		this.toolCallAgent = this.createToolCallAgent();
 
 		for (const descriptor of this.getBuiltinDescriptors()) {
 			this.builtinStates.set(descriptor.serverId, {
@@ -256,7 +231,6 @@ export class McpClientManager {
 			)
 		);
 		this.settings = settings;
-		this.toolCallAgent = this.createToolCallAgent();
 
 		const newEnabled = this.isMcpEnabled(settings);
 		const newEnabledBuiltinIds = new Set(
@@ -389,25 +363,11 @@ export class McpClientManager {
 		return await this.getAvailableTools();
 	}
 
-	private async getExecutionToolsWithLazyStart(): Promise<ToolAgentRuntimeTool[]> {
-		return (await this.getAvailableToolsWithLazyStart())
-			.map((tool) => ({
-				name: tool.name,
-				description: tool.description,
-				inputSchema: tool.inputSchema,
-				serverId: tool.serverId,
-			}));
-	}
-
 	/**
 	 * 获取注入到模型上下文中的 MCP 工具定义。
 	 */
 	async getToolsForModelContext(): Promise<McpToolDefinition[]> {
 		if (!this.isMcpEnabled()) return [];
-		if (this.isToolAgentEnabled()) {
-			return [this.getToolAgentToolDefinition()];
-		}
-
 		return await this.getAvailableToolsWithLazyStart();
 	}
 
@@ -421,42 +381,6 @@ export class McpClientManager {
 		toolName: string,
 		args: Record<string, unknown>
 	): Promise<string> {
-		return await this.callToolWithContext(serverId, toolName, args);
-	}
-
-	async callToolWithContext(
-		serverId: string,
-		toolName: string,
-		args: Record<string, unknown>,
-		requestContext?: Omit<ToolAgentRequest, 'task'>
-	): Promise<string> {
-		if (!this.isMcpEnabled()) {
-			throw new Error('MCP 功能未启用');
-		}
-
-		if (serverId === TOOL_AGENT_SERVER_ID && toolName === TOOL_AGENT_TOOL_NAME) {
-			if (!this.isToolAgentEnabled() || !this.toolCallAgent) {
-				throw new Error('Tool agent is not available');
-			}
-
-			const task =
-				typeof args.task === 'string' ? args.task.trim() : '';
-			if (!task) {
-				throw new Error('execute_task requires a non-empty task');
-			}
-
-			try {
-				const response = await this.toolCallAgent.execute({
-					task,
-					...requestContext,
-				});
-				return JSON.stringify(response);
-			} catch (error) {
-				DebugLogger.error('[MCP] Tool agent execution failed', error);
-				throw error;
-			}
-		}
-
 		return await this.callActualTool(serverId, toolName, args);
 	}
 
@@ -492,25 +416,6 @@ export class McpClientManager {
 		// 懒启动
 		const client = await this.processManager.ensureConnected(config);
 		return await client.callTool(toolName, args);
-	}
-
-	isToolAgentEnabled(): boolean {
-		if (!this.toolCallAgent) {
-			return false;
-		}
-
-		const settings =
-			this.options.getToolAgentSettings?.()
-			?? DEFAULT_TOOL_AGENT_SETTINGS;
-		if (!this.toolCallAgent.isEnabled()) {
-			return false;
-		}
-		if (!settings.modelTag.trim()) {
-			return false;
-		}
-		return (
-			this.options.resolveToolAgentProviderByTag?.(settings.modelTag) ?? null
-		) !== null;
 	}
 
 	/** 手动连接指定服务器 */
@@ -824,50 +729,6 @@ export class McpClientManager {
 		}
 
 		return mappedTools;
-	}
-
-	private createToolCallAgent(): ToolCallAgent | null {
-		if (
-			!this.options.getToolAgentSettings
-			|| !this.options.resolveToolAgentProviderByTag
-			|| !this.options.getVendorByName
-		) {
-			return null;
-		}
-
-		return new ToolCallAgent({
-			getSettings: () =>
-				this.options.getToolAgentSettings?.()
-				?? DEFAULT_TOOL_AGENT_SETTINGS,
-			resolveProviderByTag: (tag) =>
-				this.options.resolveToolAgentProviderByTag?.(tag) ?? null,
-			getVendorByName: (vendorName) =>
-				this.options.getVendorByName?.(vendorName),
-			callTool: async (serverId, toolName, args) =>
-				await this.callActualTool(serverId, toolName, args),
-			getAvailableTools: async (): Promise<ToolAgentRuntimeTool[]> =>
-				await this.getExecutionToolsWithLazyStart(),
-			protectedPathPrefixes: this.options.getProtectedPathPrefixes?.() ?? [],
-		});
-	}
-
-	private getToolAgentToolDefinition(): McpToolDefinition {
-		return {
-			name: TOOL_AGENT_TOOL_NAME,
-			description:
-				'Use this tool when you need Vault access, search, memory operations, or any multi-step MCP task. Describe the task in natural language and the tool execution sub-agent will use the available MCP tools for you.',
-			inputSchema: {
-				type: 'object',
-				properties: {
-					task: {
-						type: 'string',
-						description: 'Natural-language task description for the tool execution agent.',
-					},
-				},
-				required: ['task'],
-			},
-			serverId: TOOL_AGENT_SERVER_ID,
-		};
 	}
 
 	private getBuiltinStateSnapshot(serverId: string): McpServerState {

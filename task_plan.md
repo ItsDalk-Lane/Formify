@@ -239,3 +239,35 @@ Phase 5
 | `intent-agent` 不再输出 validator 修正后的富规则结构 | 目标是让模型直接给出最终 routing 决策，避免再回落到本地推断 |
 | `tool-agent` 直接接收允许工具全集，不再做 registry 打分预选 | 工具选择逻辑迁回模型理解，避免继续本地解析任务语义 |
 | Tool Search 与本地工具说明库一起移除 | 用户明确要求连 `FeatureCoordinator` 中的装配、本地说明文件和相关设置一起下掉 |
+
+---
+
+## Session: 2026-03-11 移除 Intent / Tool 子代理及其配置
+
+### Goal
+删除 `intent-agent`、`tool-agent`、`sub-agent` 运行时与设置入口，让聊天请求直接进入主聊天链路，并把 MCP 工具重新直接暴露给主模型。
+
+### Current Phase
+Phase 3
+
+### Phases
+- [x] 复核运行时、设置、UI、i18n 和测试中的子代理入口
+- [x] 删除子代理模块、设置项、聊天分支与 MCP `execute_task` 包装
+- [x] 更新兼容清理逻辑与相关测试，并完成构建验证
+- [x] 交付说明
+- **Status:** complete
+
+### Decisions
+| Decision | Rationale |
+|----------|-----------|
+| legacy `toolAgent` / `intentAgent` 仅保留“读取不报错，保存时清理” | 用户要求兼容旧配置，但不再保留这些字段作为运行时来源 |
+| `ChatService.sendMessage()` 直接走既有主聊天发送链路 | 用户明确要求移除意图识别、澄清、确认等子代理分支 |
+| `McpClientManager.getToolsForModelContext()` 直接返回真实 MCP 工具集合 | 用户明确要求取消 `execute_task` 包装与子代理宿主拦截 |
+| 不引入替代性的 shell/script 宿主限制 | 用户明确要求一起移除 `allowShell` / `allowScript` 这层配置与执行宿主 |
+
+### Errors Encountered
+| Error | Resolution |
+|-------|------------|
+| `npm run test -- --runInBand ...` 不可用，`plugin/package.json` 没有 `test` script | 改为使用 `npm run build` 做可执行构建验证，并补充定向静态检查 |
+| `npx tsc --noEmit` 失败于 `zod` / `@types/d3-dispatch` 等第三方声明 | 记录为仓库既有 TypeScript 4.7 兼容性问题，不作为本次改动回归阻塞 |
+| 当前环境缺少可直接运行的本地 ESLint 可执行文件，`npm exec` 默认拉起 ESLint 10 又与 `.eslintrc` 不兼容 | 记录为环境/基础设施问题，不把 lint 作为本次门禁 |

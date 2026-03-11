@@ -27,9 +27,7 @@ import { ChatService } from './ChatService';
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
 import { DEFAULT_MCP_SETTINGS } from 'src/features/tars/mcp';
 import {
-	DEFAULT_INTENT_AGENT_SETTINGS,
 	DEFAULT_TOOL_EXECUTION_SETTINGS,
-	DEFAULT_TOOL_AGENT_SETTINGS,
 } from 'src/features/tars/settings';
 
 const createPlugin = () =>
@@ -71,10 +69,19 @@ const createPlugin = () =>
 						...DEFAULT_TOOL_EXECUTION_SETTINGS,
 					},
 					toolAgent: {
-						...DEFAULT_TOOL_AGENT_SETTINGS,
+						modelTag: 'legacy-tool',
+						enabled: true,
+						defaultConstraints: {
+							maxToolCalls: 3,
+							timeoutMs: 4000,
+							allowShell: true,
+							allowScript: false,
+						},
 					},
 					intentAgent: {
-						...DEFAULT_INTENT_AGENT_SETTINGS,
+						modelTag: 'legacy-intent',
+						enabled: true,
+						timeoutMs: 3000,
 					},
 				},
 			},
@@ -134,7 +141,7 @@ describe('ChatService settings integration', () => {
 		expect(service.getChatSettingsSnapshot().autosaveChat).toBe(true);
 	});
 
-	it('keeps shared tool execution settings authoritative when persisting tool agent settings', async () => {
+	it('cleans legacy sub-agent fields when persisting MCP settings', async () => {
 		const plugin = createPlugin();
 		plugin.settings.tars.settings.toolExecution = {
 			maxToolCalls: 22,
@@ -142,25 +149,17 @@ describe('ChatService settings integration', () => {
 		};
 		const service = new ChatService(plugin);
 
-		await service.persistToolAgentSettings({
-			...plugin.settings.tars.settings.toolAgent,
-			defaultConstraints: {
-				...plugin.settings.tars.settings.toolAgent.defaultConstraints,
-				maxToolCalls: 3,
-				timeoutMs: 4000,
-				allowShell: true,
-			},
+		await service.persistMcpSettings({
+			...plugin.settings.tars.settings.mcp,
+			maxToolCallLoops: 5,
 		});
 
 		expect(plugin.settings.tars.settings.toolExecution).toEqual({
 			maxToolCalls: 22,
 			timeoutMs: 61000,
 		});
-		expect(plugin.settings.tars.settings.toolAgent.defaultConstraints).toMatchObject({
-			maxToolCalls: 22,
-			timeoutMs: 61000,
-			allowShell: true,
-		});
 		expect(plugin.settings.tars.settings.mcp.maxToolCallLoops).toBe(22);
+		expect('toolAgent' in plugin.settings.tars.settings).toBe(false);
+		expect('intentAgent' in plugin.settings.tars.settings).toBe(false);
 	});
 });

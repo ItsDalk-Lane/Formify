@@ -265,3 +265,33 @@
 
 ### Notes
 - 仓库级 `npx tsc -p tsconfig.json --noEmit` 的第三方声明兼容性问题仍是已知背景噪音；本次没有新增与本地改动相关的构建或测试失败。
+
+---
+
+## Session: 2026-03-11 移除 Intent / Tool 子代理及其配置
+
+### Current Status
+- **Phase:** 3 - Verification / Delivery
+- **Started:** 2026-03-11
+- **Status:** in_progress
+
+### Actions Taken
+- 删除 `plugin/src/features/intent-agent/`、`plugin/src/features/tool-agent/`、`plugin/src/features/sub-agent/` 及其导出与测试文件。
+- 更新 `plugin/src/features/chat/services/ChatService.ts`，移除意图识别、澄清、确认、`intentResult` 元数据与子代理请求上下文注入，保留主聊天链路与图片意图检测。
+- 更新 `plugin/src/features/tars/mcp/McpClientManager.ts`，删除 `execute_task`、`callToolWithContext()`、tool-agent 实例化与相关分支，让模型上下文始终拿到真实 MCP 工具。
+- 更新 `plugin/src/features/tars/settings.ts`、`FeatureCoordinator.ts`、`ChatSettingsModal.tsx`、聊天设置 helper、`chat.ts`、多语言文件与 Tars locale，移除子代理设置入口并在保存时清理 legacy `toolAgent` / `intentAgent`。
+- 重写 `settings.test.ts`、`ChatService.settings.test.ts`，裁剪 `ChatService.plan.test.ts`、`chatSettingsHelpers.test.ts`、`McpClientManager.test.ts`，把断言收敛到共享 `toolExecution`、legacy 清理与直接 MCP 工具暴露。
+- 使用 `rg` 做仓库级排查，确认源码里不再存在 `intent-agent` / `tool-agent` / `sub-agent` 运行时引用；剩余命中仅为规划文档和刻意保留的 legacy 测试样例。
+
+### Verification
+| Test | Expected | Actual | Status |
+|------|----------|--------|--------|
+| `npm run build` (`plugin/`) | 子代理删除后仍可成功打包 | 通过 | passed |
+| `npm run test:framework` (`plugin/`) | 现有集成框架的 build + sync + reload 流程不被本次改动打断 | 退出码 0 | passed |
+| `npx tsc --noEmit` (`plugin/`) | 作为仓库级类型检查 | 失败于 `zod` / `@types/d3-dispatch` 等第三方声明与 TS 4.7 的兼容性问题 | blocked |
+| `npm exec -- eslint ...` (`plugin/`) | 定向 lint 本次改动文件 | 默认拉起 ESLint 10，仓库仍为 `.eslintrc` 旧配置，无法执行 | blocked |
+| `npm exec --package=eslint@8.57.1 -- eslint ...` (`plugin/`) | 用兼容版本补跑定向 lint | 因当前环境缺少与 `@typescript-eslint` 对应的本地 `eslint` 依赖解析而失败 | blocked |
+
+### Notes
+- 本次可执行验证以 `npm run build` 为主，因为仓库没有可直接跑新增 Jest 测试文件的独立脚本入口。
+- `toolAgent` / `intentAgent` 在测试中仍作为 legacy 输入样例保留，用于验证保存时清理行为。

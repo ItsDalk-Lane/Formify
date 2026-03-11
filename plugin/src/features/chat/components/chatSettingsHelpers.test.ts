@@ -4,7 +4,6 @@ import {
 	getMcpStatusColor,
 	getMcpStatusText,
 	getOpenModeAutoOpenDescription,
-	getSubAgentStatusText,
 } from './chatSettingsHelpers';
 
 describe('chatSettingsHelpers', () => {
@@ -21,8 +20,6 @@ describe('chatSettingsHelpers', () => {
 		mcp_status_stopping: '停止中',
 		mcp_status_stopped: '已停止',
 		mcp_status_error: '错误',
-		sub_agents_status_enabled: '已启用',
-		sub_agents_status_disabled: '已禁用',
 	} as const;
 
 	it('formats provider option labels as tag and vendor', () => {
@@ -77,10 +74,5 @@ describe('chatSettingsHelpers', () => {
 		expect(entries[3]).toMatchObject({
 			enabled: true,
 		});
-	});
-
-	it('maps sub-agent enabled state to localized text', () => {
-		expect(getSubAgentStatusText(true, locale)).toBe('已启用');
-		expect(getSubAgentStatusText(false, locale)).toBe('已禁用');
 	});
 });

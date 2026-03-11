@@ -1,7 +1,7 @@
 import { App, Modal, Notice } from 'obsidian';
 import { StrictMode, useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { ArrowLeft, Pencil, Plus, Trash2, Wrench } from 'lucide-react';
+import { Pencil, Plus, Trash2, Wrench } from 'lucide-react';
 import { ObsidianAppContext } from 'src/context/obsidianAppContext';
 import { Tab, type TabItem } from 'src/component/tab/Tab';
 import { ToggleSwitch } from 'src/component/toggle-switch/ToggleSwitch';
@@ -23,14 +23,6 @@ import {
 	McpServerEditModal,
 } from 'src/features/tars/mcp/McpConfigModals';
 import { SystemPromptManagerPanel } from 'src/features/tars/system-prompts/SystemPromptManagerModal';
-import {
-	DEFAULT_INTENT_AGENT_SETTINGS,
-	type IntentAgentSettings,
-} from 'src/features/intent-agent';
-import {
-	DEFAULT_TOOL_AGENT_SETTINGS,
-	type ToolAgentSettings,
-} from 'src/features/tool-agent';
 import type { TarsSettings } from 'src/features/tars/settings';
 import type { ChatOpenMode, ChatSettings } from '../types/chat';
 import type { ChatService } from '../services/ChatService';
@@ -40,7 +32,6 @@ import {
 	getMcpStatusColor,
 	getMcpStatusText,
 	getOpenModeAutoOpenDescription,
-	getSubAgentStatusText,
 	type BuiltinToolEntry,
 } from './chatSettingsHelpers';
 import './ChatSettingsModal.css';
@@ -49,10 +40,7 @@ type ChatSettingsTabId =
 	| 'ai-chat'
 	| 'system-prompts'
 	| 'mcp-servers'
-	| 'tools'
-	| 'sub-agents';
-
-type SubAgentId = 'tool-call' | 'intent';
+	| 'tools';
 
 interface ChatSettingsModalProps {
 	app: App;
@@ -147,7 +135,6 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 	const [mcpStates, setMcpStates] = useState<McpServerState[]>(() =>
 		service.getMcpClientManager()?.getAllStates() ?? []
 	);
-	const [selectedSubAgentId, setSelectedSubAgentId] = useState<SubAgentId | null>(null);
 
 	const providers = tarsSettings.providers ?? service.getProviders();
 	const providerOptions = useMemo(
@@ -165,24 +152,6 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 			servers: cloneValue(tarsSettings.mcp?.servers ?? []),
 		}),
 		[tarsSettings.mcp]
-	);
-	const toolAgentSettings = useMemo<ToolAgentSettings>(
-		() => ({
-			...DEFAULT_TOOL_AGENT_SETTINGS,
-			...(tarsSettings.toolAgent ?? {}),
-			defaultConstraints: {
-				...DEFAULT_TOOL_AGENT_SETTINGS.defaultConstraints,
-				...(tarsSettings.toolAgent?.defaultConstraints ?? {}),
-			},
-		}),
-		[tarsSettings.toolAgent]
-	);
-	const intentAgentSettings = useMemo<IntentAgentSettings>(
-		() => ({
-			...DEFAULT_INTENT_AGENT_SETTINGS,
-			...(tarsSettings.intentAgent ?? {}),
-		}),
-		[tarsSettings.intentAgent]
 	);
 
 	const reloadSnapshots = useCallback(() => {
@@ -250,42 +219,6 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 
 		try {
 			await service.persistMcpSettings(nextMcpSettings);
-			reloadSnapshots();
-			return true;
-		} catch {
-			setTarsSettings(previousTarsSettings);
-			reloadSnapshots();
-			return false;
-		}
-	}, [reloadSnapshots, service, tarsSettings]);
-
-	const persistToolAgentSettings = useCallback(async (nextToolAgentSettings: ToolAgentSettings): Promise<boolean> => {
-		const previousTarsSettings = tarsSettings;
-		setTarsSettings((current) => ({
-			...current,
-			toolAgent: cloneValue(nextToolAgentSettings),
-		}));
-
-		try {
-			await service.persistToolAgentSettings(nextToolAgentSettings);
-			reloadSnapshots();
-			return true;
-		} catch {
-			setTarsSettings(previousTarsSettings);
-			reloadSnapshots();
-			return false;
-		}
-	}, [reloadSnapshots, service, tarsSettings]);
-
-	const persistIntentAgentSettings = useCallback(async (nextIntentAgentSettings: IntentAgentSettings): Promise<boolean> => {
-		const previousTarsSettings = tarsSettings;
-		setTarsSettings((current) => ({
-			...current,
-			intentAgent: cloneValue(nextIntentAgentSettings),
-		}));
-
-		try {
-			await service.persistIntentAgentSettings(nextIntentAgentSettings);
 			reloadSnapshots();
 			return true;
 		} catch {
@@ -405,12 +338,6 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 		});
 	}, [mcpSettings, persistMcpSettings]);
 
-	const handleTabChange = useCallback((tabId: string) => {
-		if (tabId !== 'sub-agents') {
-			setSelectedSubAgentId(null);
-		}
-	}, []);
-
 	const builtinToolEntries = useMemo(
 		() => getBuiltinToolEntries(mcpSettings, localInstance.mcp_settings_transport_in_memory),
 		[mcpSettings]
@@ -422,23 +349,6 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 	const mcpStateMap = useMemo(
 		() => new Map(mcpStates.map((state) => [state.serverId, state])),
 		[mcpStates]
-	);
-	const subAgentEntries = useMemo(
-		() => [
-			{
-				id: 'tool-call' as const,
-				title: localInstance.sub_agents_tool_call_title,
-				description: localInstance.sub_agents_tool_call_desc,
-				enabled: toolAgentSettings.enabled ?? false,
-			},
-			{
-				id: 'intent' as const,
-				title: localInstance.sub_agents_intent_title,
-				description: localInstance.sub_agents_intent_desc,
-				enabled: intentAgentSettings.enabled ?? false,
-			},
-		],
-		[intentAgentSettings.enabled, toolAgentSettings.enabled]
 	);
 
 	const aiChatTab = (
@@ -794,281 +704,14 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 		</section>
 	);
 
-	const toolAgentDetail = (
-		<div className="chat-settings-subsection">
-			<div className="chat-settings-subsection__header">
-				<div>
-					<div className="chat-settings-subsection__title">
-						{localInstance.sub_agents_tool_call_title}
-					</div>
-					<div className="chat-settings-field__desc">
-						{localInstance.sub_agents_tool_call_desc}
-					</div>
-				</div>
-				<ToggleSwitch
-					checked={toolAgentSettings.enabled ?? false}
-					onChange={(checked) => {
-						void persistToolAgentSettings({
-							...toolAgentSettings,
-							enabled: checked,
-						});
-					}}
-					ariaLabel={localInstance.sub_agents_tool_call_title}
-				/>
-			</div>
-
-			<div className="chat-settings-fields">
-				<label className="chat-settings-field">
-					<span className="chat-settings-field__title">
-						{localInstance.sub_agents_tool_model}
-					</span>
-					<span className="chat-settings-field__desc">
-						{localInstance.sub_agents_tool_model_desc}
-					</span>
-					<select
-						className="chat-settings-input"
-						value={toolAgentSettings.modelTag ?? ''}
-						disabled={providers.length === 0}
-						onChange={(event) => {
-							void persistToolAgentSettings({
-								...toolAgentSettings,
-								modelTag: event.target.value,
-							});
-						}}
-					>
-						<option value="">
-							{providers.length > 0
-								? localInstance.sub_agents_tool_model_unset
-								: localInstance.sub_agents_no_providers}
-						</option>
-						{providerOptions.map((option) => (
-							<option key={option.value} value={option.value}>
-								{option.label}
-							</option>
-						))}
-					</select>
-				</label>
-
-				<div className="chat-settings-switch">
-					<div>
-						<div className="chat-settings-field__title">
-							{localInstance.sub_agents_tool_allow_shell}
-						</div>
-						<div className="chat-settings-field__desc">
-							{localInstance.sub_agents_tool_allow_shell_desc}
-						</div>
-					</div>
-					<ToggleSwitch
-						checked={toolAgentSettings.defaultConstraints.allowShell ?? false}
-						onChange={(checked) => {
-							void persistToolAgentSettings({
-								...toolAgentSettings,
-								defaultConstraints: {
-									...toolAgentSettings.defaultConstraints,
-									allowShell: checked,
-								},
-							});
-						}}
-						ariaLabel={localInstance.sub_agents_tool_allow_shell}
-					/>
-				</div>
-
-				<div className="chat-settings-switch">
-					<div>
-						<div className="chat-settings-field__title">
-							{localInstance.sub_agents_tool_allow_script}
-						</div>
-						<div className="chat-settings-field__desc">
-							{localInstance.sub_agents_tool_allow_script_desc}
-						</div>
-					</div>
-					<ToggleSwitch
-						checked={toolAgentSettings.defaultConstraints.allowScript ?? false}
-						onChange={(checked) => {
-							void persistToolAgentSettings({
-								...toolAgentSettings,
-								defaultConstraints: {
-									...toolAgentSettings.defaultConstraints,
-									allowScript: checked,
-								},
-							});
-						}}
-						ariaLabel={localInstance.sub_agents_tool_allow_script}
-					/>
-				</div>
-			</div>
-		</div>
-	);
-
-	const intentAgentDetail = (
-		<div className="chat-settings-subsection">
-			<div className="chat-settings-subsection__header">
-				<div>
-					<div className="chat-settings-subsection__title">
-						{localInstance.sub_agents_intent_title}
-					</div>
-					<div className="chat-settings-field__desc">
-						{localInstance.sub_agents_intent_desc}
-					</div>
-				</div>
-				<ToggleSwitch
-					checked={intentAgentSettings.enabled ?? false}
-					onChange={(checked) => {
-						void persistIntentAgentSettings({
-							...intentAgentSettings,
-							enabled: checked,
-						});
-					}}
-					ariaLabel={localInstance.sub_agents_intent_title}
-				/>
-			</div>
-
-			<div className="chat-settings-fields">
-				<label className="chat-settings-field">
-					<span className="chat-settings-field__title">
-						{localInstance.sub_agents_intent_model}
-					</span>
-					<span className="chat-settings-field__desc">
-						{localInstance.sub_agents_intent_model_desc}
-					</span>
-					<select
-						className="chat-settings-input"
-						value={intentAgentSettings.modelTag ?? ''}
-						disabled={providers.length === 0}
-						onChange={(event) => {
-							void persistIntentAgentSettings({
-								...intentAgentSettings,
-								modelTag: event.target.value,
-							});
-						}}
-					>
-						<option value="">
-							{providers.length > 0
-								? localInstance.sub_agents_intent_model_unset
-								: localInstance.sub_agents_no_providers}
-						</option>
-						{providerOptions.map((option) => (
-							<option key={option.value} value={option.value}>
-								{option.label}
-							</option>
-						))}
-					</select>
-				</label>
-
-				<label className="chat-settings-field">
-					<span className="chat-settings-field__title">
-						{localInstance.sub_agents_intent_timeout}
-					</span>
-					<span className="chat-settings-field__desc">
-						{localInstance.sub_agents_intent_timeout_desc}
-					</span>
-					<input
-						className="chat-settings-input"
-						type="number"
-						min={500}
-						value={intentAgentSettings.timeoutMs ?? 3000}
-						onChange={(event) => {
-							const nextValue = Number.parseInt(event.target.value, 10);
-							if (Number.isFinite(nextValue) && nextValue >= 500) {
-								void persistIntentAgentSettings({
-									...intentAgentSettings,
-									timeoutMs: nextValue,
-								});
-							}
-						}}
-					/>
-				</label>
-			</div>
-		</div>
-	);
-
-	const subAgentsTab = (
-		<section className="chat-settings-panel">
-			{selectedSubAgentId === null ? (
-				<div className="chat-settings-list">
-					{subAgentEntries.map((entry) => (
-						<div key={entry.id} className="chat-settings-server-card">
-							<div className="chat-settings-server-card__header">
-								<div className="chat-settings-server-card__title-row">
-									<span className="chat-settings-server-card__title">
-										{entry.title}
-									</span>
-									<span
-										className="chat-settings-server-card__status-dot"
-										style={{
-											backgroundColor: entry.enabled
-												? 'var(--color-green)'
-												: 'var(--text-muted)',
-										}}
-									/>
-								</div>
-								<div className="chat-settings-server-card__actions">
-									<ToggleSwitch
-										checked={entry.enabled}
-										onChange={(checked) => {
-											if (entry.id === 'tool-call') {
-												void persistToolAgentSettings({
-													...toolAgentSettings,
-													enabled: checked,
-												});
-												return;
-											}
-											void persistIntentAgentSettings({
-												...intentAgentSettings,
-												enabled: checked,
-											});
-										}}
-										ariaLabel={entry.title}
-									/>
-									<button
-										type="button"
-										className="chat-settings-toolbar__button chat-settings-card-button"
-										onClick={() => {
-											setSelectedSubAgentId(entry.id);
-										}}
-									>
-										<Pencil size={16} />
-										<span>{localInstance.chat_settings_configure}</span>
-									</button>
-								</div>
-							</div>
-							<div className="chat-settings-server-card__desc">
-								{getSubAgentStatusText(entry.enabled, localInstance)}
-								{' · '}
-								{entry.description}
-							</div>
-						</div>
-					))}
-				</div>
-			) : (
-				<div className="chat-settings-fields">
-					<div className="chat-settings-detail-header">
-						<button
-							type="button"
-							className="chat-settings-toolbar__button chat-settings-back-button"
-							onClick={() => {
-								setSelectedSubAgentId(null);
-							}}
-						>
-							<ArrowLeft size={16} />
-							<span>{localInstance.chat_settings_back_to_sub_agents}</span>
-						</button>
-					</div>
-					{selectedSubAgentId === 'tool-call' ? toolAgentDetail : intentAgentDetail}
-				</div>
-			)}
-		</section>
-	);
-
 	const tabItems = useMemo<TabItem[]>(
 		() => [
 			{ id: 'ai-chat', title: localInstance.tab_ai_chat, content: aiChatTab },
 			{ id: 'system-prompts', title: localInstance.tab_system_prompts, content: systemPromptTab },
 			{ id: 'mcp-servers', title: localInstance.tab_mcp_servers, content: mcpTab },
 			{ id: 'tools', title: localInstance.tab_tools, content: toolsTab },
-			{ id: 'sub-agents', title: localInstance.tab_sub_agents, content: subAgentsTab },
 		],
-		[aiChatTab, mcpTab, subAgentsTab, systemPromptTab, toolsTab]
+		[aiChatTab, mcpTab, systemPromptTab, toolsTab]
 	);
 
 	return (
@@ -1076,7 +719,6 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 			<Tab
 				items={tabItems}
 				defaultValue={DEFAULT_CHAT_SETTINGS_TAB_ID}
-				onChange={handleTabChange}
 				className="chat-settings-modal-tabs"
 			/>
 		</div>

@@ -34,12 +34,6 @@ type McpStatusLocale = Pick<
 	| 'mcp_status_error'
 >;
 
-type SubAgentStatusLocale = Pick<
-	Local,
-	| 'sub_agents_status_enabled'
-	| 'sub_agents_status_disabled'
->;
-
 export interface BuiltinToolEntry {
 	serverId: string;
 	name: string;
@@ -140,8 +134,3 @@ export const getBuiltinToolEntries = (
 		transportLabel,
 	},
 ];
-
-export const getSubAgentStatusText = (
-	enabled: boolean,
-	local: SubAgentStatusLocale
-): string => (enabled ? local.sub_agents_status_enabled : local.sub_agents_status_disabled);
