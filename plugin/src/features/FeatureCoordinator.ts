@@ -1,6 +1,5 @@
 import type FormPlugin from 'src/main';
 import type { PluginSettings } from 'src/settings/PluginSettings';
-import { ToolLibraryManager } from 'src/builtin-mcp/tool-library-manager';
 import {
 	TarsFeatureManager,
 	availableVendors,
@@ -14,7 +13,6 @@ export class FeatureCoordinator {
     private tarsFeatureManager: TarsFeatureManager | null = null;
     private chatFeatureManager: ChatFeatureManager | null = null;
     private mcpClientManager: McpClientManager | null = null;
-    private toolLibraryManager: ToolLibraryManager | null = null;
 
     constructor(private plugin: FormPlugin) {}
 
@@ -41,22 +39,11 @@ export class FeatureCoordinator {
 
     /** 初始化 MCP 功能 */
     async initializeMcp(settings: PluginSettings) {
-        if (!this.toolLibraryManager) {
-            this.toolLibraryManager = new ToolLibraryManager({
-                app: this.plugin.app,
-                aiDataFolder: settings.aiDataFolder,
-            });
-            await this.toolLibraryManager.initialize();
-        } else {
-            await this.toolLibraryManager.updateAiDataFolder(settings.aiDataFolder);
-        }
-
         const mcpSettings = settings.tars.settings.mcp ?? DEFAULT_MCP_SETTINGS;
         if (!this.mcpClientManager) {
             this.mcpClientManager = new McpClientManager(
                 this.plugin.app,
                 mcpSettings,
-                this.toolLibraryManager,
                 {
                     getToolAgentSettings: () =>
                         ({
@@ -116,10 +103,6 @@ export class FeatureCoordinator {
         return this.mcpClientManager;
     }
 
-    getToolLibraryManager(): ToolLibraryManager | null {
-        return this.toolLibraryManager;
-    }
-
     /**
      * 刷新快捷操作缓存
      */
@@ -132,8 +115,6 @@ export class FeatureCoordinator {
     dispose() {
         this.mcpClientManager?.dispose();
         this.mcpClientManager = null;
-        this.toolLibraryManager?.dispose();
-        this.toolLibraryManager = null;
         this.tarsFeatureManager?.dispose();
         this.tarsFeatureManager = null;
         this.chatFeatureManager?.dispose();

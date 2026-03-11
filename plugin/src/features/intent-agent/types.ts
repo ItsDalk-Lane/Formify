@@ -1,4 +1,5 @@
 import type { BaseOptions } from 'src/features/tars/providers';
+import type { McpToolMode } from 'src/features/chat/types/chat';
 
 export type IntentTriggerSource =
 	| 'chat_input'
@@ -66,77 +67,16 @@ export type ExecutionMode =
 	| 'plan_then_execute'
 	| 'clarify_first';
 
+export type IntentRequestRelation =
+	| 'standalone'
+	| 'clarification_answer'
+	| 'request_update';
+
 export interface ConversationSummary {
 	role: 'user' | 'assistant';
 	summary: string;
 	hadToolCalls: boolean;
 	toolNames?: string[];
-}
-
-export type MessageAction =
-	| 'summarize'
-	| 'analyze'
-	| 'search'
-	| 'read'
-	| 'compare'
-	| 'modify'
-	| 'generate'
-	| 'continue'
-	| 'remember';
-
-export type MessageTargetReferenceType =
-	| 'explicit_path'
-	| 'wiki_link'
-	| 'natural_folder'
-	| 'natural_file'
-	| 'active_file'
-	| 'selected_text'
-	| 'parent_folder'
-	| 'time_alias';
-
-export type MessageTargetKind =
-	| 'file'
-	| 'folder'
-	| 'active_file'
-	| 'selected_text'
-	| 'none';
-
-export interface MessageTargetReference {
-	raw: string;
-	type: MessageTargetReferenceType;
-	normalized: string;
-	preferredKind: MessageTargetKind;
-}
-
-export interface MessagePathResolution {
-	referenceRaw: string;
-	referenceType: MessageTargetReferenceType;
-	preferredKind: Extract<MessageTargetKind, 'file' | 'folder'> | 'none';
-	status: 'unique' | 'ambiguous' | 'missing';
-	candidates: string[];
-	reason?: string;
-}
-
-export interface ResolvedMessageTarget {
-	path: string;
-	kind: Extract<MessageTargetKind, 'file' | 'folder'>;
-}
-
-export interface MessageAnalysis {
-	normalizedActions: MessageAction[];
-	primaryAction?: MessageAction;
-	preparatoryActions: MessageAction[];
-	isCompound: boolean;
-	references: MessageTargetReference[];
-	pathResolutions: MessagePathResolution[];
-	resolvedTargets: ResolvedMessageTarget[];
-	resolvedSpecialTarget?: Extract<MessageTargetKind, 'active_file' | 'selected_text'>;
-	preferredTarget: MessageTargetKind;
-	targetStatus: 'none' | 'special' | 'unique' | 'ambiguous' | 'missing';
-	hasClearAction: boolean;
-	hasUniqueResolvedTarget: boolean;
-	ambiguityReasons: string[];
-	summary: string;
 }
 
 export interface ClarificationQuestion {
@@ -181,10 +121,15 @@ export interface RequestContext {
 			todo: number;
 		};
 	};
-	messageAnalysis: MessageAnalysis;
 	pendingClarificationContext?: PendingClarificationContext;
 	hasCustomSystemPrompt: boolean;
 	currentModelCapabilities?: string[];
+	toolEnvironment?: {
+		mcpToolMode: McpToolMode;
+		toolAgentEnabled: boolean;
+		hasAnyAvailableTool: boolean;
+		enabledServerIds?: string[];
+	};
 }
 
 export interface IntentResult {
@@ -211,6 +156,7 @@ export interface IntentResult {
 	};
 	routing: {
 		executionMode: ExecutionMode;
+		requestRelation?: IntentRequestRelation;
 		toolHints?: {
 			likelyServerIds: string[];
 			suggestedTools?: string[];
@@ -244,24 +190,16 @@ export interface IntentResult {
 	};
 }
 
-export interface IntentValidationOptions {
-	confidenceThreshold?: number;
-}
-
 export interface IntentAgentSettings {
 	modelTag: string;
 	enabled: boolean;
-	shortcutRulesEnabled: boolean;
 	timeoutMs: number;
-	confidenceThreshold: number;
 }
 
 export const DEFAULT_INTENT_AGENT_SETTINGS: IntentAgentSettings = {
 	modelTag: '',
 	enabled: false,
-	shortcutRulesEnabled: true,
 	timeoutMs: 3000,
-	confidenceThreshold: 0.6,
 };
 
 export interface IntentAgentProviderResolverResult {

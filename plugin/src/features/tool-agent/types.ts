@@ -1,8 +1,3 @@
-import type {
-	JSONSchema,
-	ToolDefinition,
-	ToolSelectionResult,
-} from './registry/types';
 import type { BaseOptions } from 'src/features/tars/providers';
 
 export const TOOL_AGENT_SERVER_ID = '__builtin__:tool-agent';
@@ -10,13 +5,6 @@ export const TOOL_AGENT_TOOL_NAME = 'execute_task';
 
 export interface ToolAgentRequest {
 	task: string;
-	hints?: {
-		likelyServerIds?: string[];
-		suggestedTools?: string[];
-		domain?: string;
-		intentType?: string;
-		complexity?: 'simple' | 'moderate' | 'complex';
-	};
 	constraints?: {
 		readOnly?: boolean;
 		maxToolCalls?: number;
@@ -28,6 +16,11 @@ export interface ToolAgentRequest {
 		activeFilePath?: string;
 		selectedText?: string;
 		relevantPaths?: string[];
+		recentConversation?: Array<{
+			role: 'user' | 'assistant';
+			summary: string;
+		}>;
+		normalizedIntent?: string;
 	};
 	/**
 	 * Internal-only runtime hooks used by the host integration layer.
@@ -81,21 +74,15 @@ export interface SafetyCheckResult {
 }
 
 export interface ToolAgentModelContext {
-	tool: ToolDefinition;
-	enhancedDescription: string;
-	inputSchema: JSONSchema;
+	name: string;
+	serverId: string;
+	description: string;
+	inputSchema: Record<string, unknown>;
 }
 
 export interface ToolAgentPromptInput {
 	request: ToolAgentRequest;
-	selectedTools: ToolSelectionResult[];
-	externalTools?: Array<{
-		name: string;
-		serverId: string;
-		description: string;
-		inputSchema: Record<string, unknown>;
-		relevanceScore: number;
-	}>;
+	tools: ToolAgentModelContext[];
 }
 
 export interface ToolAgentPrompt {

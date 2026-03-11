@@ -831,8 +831,8 @@ export class Zh implements Local {
 	sub_agents_tool_call_title = "Tool Call Agent";
 	sub_agents_tool_call_desc = "向主模型暴露一个 execute_task 工具，并让专用子代理选择和执行 MCP 工具";
 	sub_agents_tool_model = "模型";
-	sub_agents_tool_model_desc = "选择工具执行子代理使用的已配置 Provider 标签。留空时回退到传统模式。";
-	sub_agents_tool_model_unset = "留空（回退到传统模式）";
+	sub_agents_tool_model_desc = "选择工具执行子代理使用的已配置 Provider 标签。";
+	sub_agents_tool_model_unset = "未选择";
 	sub_agents_tool_max_tool_calls = "最大工具调用次数";
 	sub_agents_tool_max_tool_calls_desc = "单次 execute_task 请求内允许的底层工具调用最大次数";
 	sub_agents_tool_timeout = "超时时间（毫秒）";
@@ -844,14 +844,10 @@ export class Zh implements Local {
 	sub_agents_intent_title = "Intent Agent";
 	sub_agents_intent_desc = "在主模型运行前先对聊天请求进行分类，并决定直接回答、澄清，还是委派给工具";
 	sub_agents_intent_model = "模型";
-	sub_agents_intent_model_desc = "选择用于意图识别的已配置 Provider 标签。留空时仅使用快捷规则。";
-	sub_agents_intent_model_unset = "留空（仅使用快捷规则）";
-	sub_agents_intent_shortcut_rules = "快捷规则";
-	sub_agents_intent_shortcut_rules_desc = "在调用意图模型前先运行确定性的快捷规则";
+	sub_agents_intent_model_desc = "选择用于提示词驱动意图识别的已配置 Provider 标签。";
+	sub_agents_intent_model_unset = "未选择";
 	sub_agents_intent_timeout = "超时时间（毫秒）";
 	sub_agents_intent_timeout_desc = "超过该时间后中止意图识别模型请求";
-	sub_agents_intent_confidence_threshold = "置信度阈值";
-	sub_agents_intent_confidence_threshold_desc = "低于该阈值时，请求将回退到宿主澄清流程";
 	sub_agents_status_enabled = "已启用";
 	sub_agents_status_disabled = "已禁用";
 	sub_agents_no_providers = "尚未配置 Provider";

@@ -59,7 +59,6 @@ describe('chatSettingsHelpers', () => {
 				builtinVaultEnabled: true,
 				builtinMemoryEnabled: false,
 				builtinObsidianSearchEnabled: true,
-				builtinToolSearchEnabled: false,
 				builtinSequentialThinkingEnabled: true,
 				servers: [],
 				maxToolCallLoops: 10,
@@ -67,19 +66,16 @@ describe('chatSettingsHelpers', () => {
 			'IN-MEMORY'
 		);
 
-		expect(entries).toHaveLength(5);
+		expect(entries).toHaveLength(4);
 		expect(entries[0]).toMatchObject({
-			name: 'Vault',
 			enabled: true,
 			transportLabel: 'IN-MEMORY',
 		});
 		expect(entries[1]).toMatchObject({
-			name: 'Memory',
 			enabled: false,
 		});
 		expect(entries[3]).toMatchObject({
-			name: 'Tool Search',
-			enabled: false,
+			enabled: true,
 		});
 	});
 

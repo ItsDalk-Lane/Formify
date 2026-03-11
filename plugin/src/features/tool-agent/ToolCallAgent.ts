@@ -1,10 +1,13 @@
-import type { Vendor, Message, ResolveEmbedAsBinary, SendRequest } from 'src/features/tars/providers';
-import { parseContentBlocks } from 'src/features/chat/utils/markdown';
-import { ToolCallAgentPromptBuilder } from './ToolCallAgentPromptBuilder';
+import {
+	SubAgentRunner,
+	extractStructuredTextContent,
+	parseJsonResponseFromContent,
+	type ResolvedSubAgentProvider,
+} from 'src/features/sub-agent';
+import type { Vendor } from 'src/features/tars/providers';
 import { ResultProcessor } from './result-processor';
-import { ToolRegistry, toolRegistry } from './registry';
 import { SafetyChecker } from './safety-checker';
-import { ToolSelector } from './tool-selector';
+import { ToolCallAgentPromptBuilder } from './ToolCallAgentPromptBuilder';
 import type { ToolAgentSettings as ToolAgentSettingsConfig } from './types';
 import type {
 	ToolAgentProviderResolverResult,
@@ -15,11 +18,10 @@ import type {
 } from './types';
 
 export interface ToolCallAgentDependencies {
-	registry?: ToolRegistry;
-	selector?: ToolSelector;
 	safetyChecker?: SafetyChecker;
 	resultProcessor?: ResultProcessor;
 	promptBuilder?: ToolCallAgentPromptBuilder;
+	runner?: SubAgentRunner;
 	getSettings: () => ToolAgentSettingsConfig;
 	resolveProviderByTag: (tag: string) => ToolAgentProviderResolverResult | null;
 	getVendorByName: (vendorName: string) => Vendor | undefined;
@@ -28,22 +30,22 @@ export interface ToolCallAgentDependencies {
 	protectedPathPrefixes?: string[];
 }
 
-const jsonFencePattern = /```json\s*([\s\S]*?)```/i;
-
 export class ToolCallAgent {
-	private readonly registry: ToolRegistry;
-	private readonly selector: ToolSelector;
 	private readonly safetyChecker: SafetyChecker;
 	private readonly resultProcessor: ResultProcessor;
 	private readonly promptBuilder: ToolCallAgentPromptBuilder;
+	private readonly runner: SubAgentRunner;
 
 	constructor(private readonly dependencies: ToolCallAgentDependencies) {
-		this.registry = dependencies.registry ?? toolRegistry;
-		this.selector = dependencies.selector ?? new ToolSelector(this.registry);
 		this.safetyChecker =
 			dependencies.safetyChecker ?? new SafetyChecker(dependencies.protectedPathPrefixes ?? []);
 		this.resultProcessor = dependencies.resultProcessor ?? new ResultProcessor();
 		this.promptBuilder = dependencies.promptBuilder ?? new ToolCallAgentPromptBuilder();
+		this.runner = dependencies.runner ?? new SubAgentRunner({
+			resolveProviderByTag: (tag) =>
+				this.dependencies.resolveProviderByTag(tag) as ResolvedSubAgentProvider | null,
+			getVendorByName: (vendorName) => this.dependencies.getVendorByName(vendorName),
+		});
 	}
 
 	isEnabled(): boolean {
@@ -63,51 +65,26 @@ export class ToolCallAgent {
 		};
 
 		const trace: ToolExecutionStep[] = [];
-		const selectedTools = this.selector.selectTools(request.task, request.hints);
 		const availableTools = await this.dependencies.getAvailableTools();
-		const externalTools = this.selector.selectExternalTools(
-			request.task,
-			availableTools.filter((tool) => !this.registry.getToolByName(tool.name)),
-			request.hints
-		);
-
 		const prompt = this.promptBuilder.build({
 			request: {
 				...request,
 				constraints: mergedConstraints,
 			},
-			selectedTools,
-			externalTools,
+			tools: availableTools.map((tool) => ({
+				name: tool.name,
+				serverId: tool.serverId,
+				description: tool.description,
+				inputSchema: tool.inputSchema,
+			})),
 		});
 
-		const providerConfig = this.dependencies.resolveProviderByTag(settings.modelTag);
-		if (!providerConfig) {
-			throw new Error(`Tool agent model tag is not configured or not found: ${settings.modelTag}`);
-		}
-
-		const vendor = this.dependencies.getVendorByName(providerConfig.vendorName);
-		if (!vendor) {
-			throw new Error(`Tool agent vendor not found: ${providerConfig.vendorName}`);
-		}
-
-		const modelTools = [
-			...selectedTools.map(({ tool }) => ({
-				name: tool.name,
-				description: prompt.modelTools.find((item) => item.tool.name === tool.name)?.enhancedDescription ?? tool.summary,
-				inputSchema: tool.inputSchema,
-				serverId: tool.serverId,
-			})),
-			...externalTools.map((tool) => ({
-				name: tool.name,
-				description: prompt.modelTools.find((item) => item.tool.name === tool.name)?.enhancedDescription ?? tool.description,
-				inputSchema: tool.inputSchema,
-				serverId: tool.serverId,
-			})),
-		];
-
-		const sendRequest = vendor.sendRequestFunc({
-			...providerConfig.options,
-			mcpTools: modelTools,
+		const result = await this.runner.run({
+			modelTag: settings.modelTag,
+			timeoutMs: mergedConstraints.timeoutMs,
+			systemPrompt: prompt.systemPrompt,
+			userPrompt: prompt.userPrompt,
+			mcpTools: prompt.modelTools,
 			mcpCallTool: async (serverId, toolName, args) =>
 				await this.executeOneToolCall(
 					serverId,
@@ -121,36 +98,19 @@ export class ToolCallAgent {
 			mcpMaxToolCallLoops: mergedConstraints.maxToolCalls,
 		});
 
-		const controller = new AbortController();
-		const timeoutId = globalThis.setTimeout(() => controller.abort(), mergedConstraints.timeoutMs);
-		const messages: Message[] = [
-			{ role: 'system', content: prompt.systemPrompt },
-			{ role: 'user', content: prompt.userPrompt },
-		];
-
-		try {
-			let content = '';
-			const resolveEmbed: ResolveEmbedAsBinary = async () => new ArrayBuffer(0);
-			for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
-				content += chunk;
-			}
-
-			const parsed = this.parseAgentResponse(content);
-			return {
-				status: parsed.status,
-				summary: parsed.summary,
-				...(parsed.data !== undefined ? { data: parsed.data } : {}),
-				trace,
-				...(parsed.clarificationNeeded ? { clarificationNeeded: parsed.clarificationNeeded } : {}),
-				metrics: {
-					toolCallCount: trace.length,
-					totalTokens: 0,
-					durationMs: Date.now() - startedAt,
-				},
-			};
-		} finally {
-			globalThis.clearTimeout(timeoutId);
-		}
+		const parsed = this.parseAgentResponse(result.content);
+		return {
+			status: parsed.status,
+			summary: parsed.summary,
+			...(parsed.data !== undefined ? { data: parsed.data } : {}),
+			trace,
+			...(parsed.clarificationNeeded ? { clarificationNeeded: parsed.clarificationNeeded } : {}),
+			metrics: {
+				toolCallCount: trace.length,
+				totalTokens: 0,
+				durationMs: Date.now() - startedAt,
+			},
+		};
 	}
 
 	private async executeOneToolCall(
@@ -206,7 +166,7 @@ export class ToolCallAgent {
 			const errorMessage = error instanceof Error ? error.message : String(error);
 			const result = JSON.stringify({
 				error: errorMessage,
-				suggestion: 'Check arguments, pick a narrower tool, or ask for clarification.',
+				suggestion: 'Check arguments, choose a more precise tool, or ask for clarification.',
 			});
 			trace.push({
 				stepIndex,
@@ -228,53 +188,31 @@ export class ToolCallAgent {
 		data?: unknown;
 		clarificationNeeded?: string;
 	} {
-		const textOnly = parseContentBlocks(content)
-			.filter((block) => block.type === 'text')
-			.map((block) => block.content)
-			.join('')
-			.trim();
+		const textOnly = extractStructuredTextContent(content);
 
-		const fenced = textOnly.match(jsonFencePattern)?.[1]?.trim();
-		const candidates = [fenced, textOnly, this.extractJsonObject(textOnly)].filter(
-			(value): value is string => typeof value === 'string' && value.trim().length > 0
-		);
-
-		for (const candidate of candidates) {
-			try {
-				const parsed = JSON.parse(candidate) as Record<string, unknown>;
-				const status = this.normalizeStatus(parsed.status);
-				const summary =
-					typeof parsed.summary === 'string' && parsed.summary.trim()
-						? parsed.summary.trim()
-						: textOnly || 'Tool agent completed without a structured summary.';
-				const clarificationNeeded =
-					typeof parsed.clarificationNeeded === 'string' && parsed.clarificationNeeded.trim()
-						? parsed.clarificationNeeded.trim()
-						: undefined;
-				return {
-					status,
-					summary,
-					...(Object.prototype.hasOwnProperty.call(parsed, 'data') ? { data: parsed.data } : {}),
-					...(clarificationNeeded ? { clarificationNeeded } : {}),
-				};
-			} catch {
-				continue;
-			}
+		try {
+			const parsed = parseJsonResponseFromContent(content) as Record<string, unknown>;
+			const status = this.normalizeStatus(parsed.status);
+			const summary =
+				typeof parsed.summary === 'string' && parsed.summary.trim()
+					? parsed.summary.trim()
+					: textOnly || 'Tool agent completed without a structured summary.';
+			const clarificationNeeded =
+				typeof parsed.clarificationNeeded === 'string' && parsed.clarificationNeeded.trim()
+					? parsed.clarificationNeeded.trim()
+					: undefined;
+			return {
+				status,
+				summary,
+				...(Object.prototype.hasOwnProperty.call(parsed, 'data') ? { data: parsed.data } : {}),
+				...(clarificationNeeded ? { clarificationNeeded } : {}),
+			};
+		} catch {
+			return {
+				status: 'success',
+				summary: textOnly || 'Tool agent completed without a structured JSON payload.',
+			};
 		}
-
-		return {
-			status: 'success',
-			summary: textOnly || 'Tool agent completed without a structured JSON payload.',
-		};
-	}
-
-	private extractJsonObject(content: string): string | null {
-		const first = content.indexOf('{');
-		const last = content.lastIndexOf('}');
-		if (first === -1 || last === -1 || last <= first) {
-			return null;
-		}
-		return content.slice(first, last + 1);
 	}
 
 	private normalizeStatus(value: unknown): ToolAgentResponse['status'] {

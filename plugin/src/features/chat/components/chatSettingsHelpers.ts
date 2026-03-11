@@ -8,8 +8,6 @@ import {
 	BUILTIN_OBSIDIAN_SEARCH_SERVER_NAME,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
-	BUILTIN_TOOL_SEARCH_SERVER_ID,
-	BUILTIN_TOOL_SEARCH_SERVER_NAME,
 	BUILTIN_VAULT_SERVER_ID,
 	BUILTIN_VAULT_SERVER_NAME,
 	type McpSettings,
@@ -133,12 +131,6 @@ export const getBuiltinToolEntries = (
 		serverId: BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
 		name: BUILTIN_OBSIDIAN_SEARCH_SERVER_NAME,
 		enabled: mcpSettings.builtinObsidianSearchEnabled !== false,
-		transportLabel,
-	},
-	{
-		serverId: BUILTIN_TOOL_SEARCH_SERVER_ID,
-		name: BUILTIN_TOOL_SEARCH_SERVER_NAME,
-		enabled: mcpSettings.builtinToolSearchEnabled !== false,
 		transportLabel,
 	},
 	{

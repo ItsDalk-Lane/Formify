@@ -41,7 +41,6 @@ import type { MultiModelChatService } from './MultiModelChatService';
 import type { MultiModelConfigService } from './MultiModelConfigService';
 import { filterMessagesForCompareModel } from '../utils/compareContext';
 import { buildEditedUserMessage, getEditableUserMessageContent } from '../utils/userMessageEditing';
-import { createChatTwoPhaseToolController } from 'src/features/tars/mcp/chatTwoPhaseToolController';
 import {
 	TOOL_AGENT_SERVER_ID,
 	TOOL_AGENT_TOOL_NAME,
@@ -52,7 +51,6 @@ import {
 	ContextAssembler,
 	DEFAULT_INTENT_AGENT_SETTINGS,
 	IntentAgent,
-	IntentResultValidator,
 	type IntentAgentSettings,
 	type IntentResult,
 	type IntentTriggerSource,
@@ -98,8 +96,6 @@ const CONFIRM_INTENT_PATTERN =
 	/^(确认|确定|继续|继续执行|执行|是|好的|好|yes|y|confirm|proceed|run it|go ahead)[\s.!?。？！]*$/i;
 const CANCEL_INTENT_PATTERN =
 	/^(取消|停止|算了|不用了|否|不|no|n|cancel|stop|abort|never mind)[\s.!?。？！]*$/i;
-const SUPPLEMENTAL_FOLLOW_UP_PATTERN =
-	/^(补充(?:说明)?|改成|改为|换成|换为|改用|用这个|就用这个|就这个|那就用)\s*[：:\s]/i;
 
 const isEphemeralContextMessage = (message: ChatMessage): boolean =>
 	Boolean(message.metadata?.isEphemeralContext);
@@ -180,7 +176,6 @@ export class ChatService {
 	private pendingPlanSync: Promise<void> = Promise.resolve();
 	private readonly contextAssembler: ContextAssembler;
 	private readonly intentAgent: IntentAgent;
-	private readonly intentResultValidator: IntentResultValidator;
 	private chatSettingsModal: ChatSettingsModal | null = null;
 	private pendingTriggerSource: IntentTriggerSource = 'chat_input';
 	// 跟踪当前活动文件的路径
@@ -193,7 +188,6 @@ export class ChatService {
 		this.messageService = new MessageService(plugin.app, this.fileContentService);
 		this.historyService = new HistoryService(plugin.app, getChatHistoryPath(plugin.settings.aiDataFolder));
 		this.contextAssembler = new ContextAssembler(plugin.app);
-		this.intentResultValidator = new IntentResultValidator();
 		this.intentAgent = new IntentAgent({
 			getSettings: () =>
 				this.plugin.settings.tars.settings.intentAgent
@@ -211,7 +205,6 @@ export class ChatService {
 			},
 			getVendorByName: (vendorName) =>
 				availableVendors.find((vendor) => vendor.name === vendorName),
-			validator: this.intentResultValidator,
 		});
 	}
 
@@ -467,10 +460,11 @@ export class ChatService {
 		prepared: PreparedChatRequest
 	): Promise<{
 		requestContext: RequestContext;
-		intentResult: IntentResult;
+		intentResult: IntentResult | null;
 	}> {
 		const modelTag = this.state.selectedModelId ?? this.getDefaultProviderTag();
 		const pendingClarification = prepared.pendingClarificationContext;
+		const mcpManager = this.plugin.featureCoordinator.getMcpClientManager();
 		const requestContext = await this.contextAssembler.assemble({
 			userMessage: prepared.intentRecognitionInput,
 			session: prepared.session,
@@ -503,28 +497,42 @@ export class ChatService {
 					currentReply: prepared.originalUserInput,
 				}
 				: undefined,
+			toolEnvironment: mcpManager
+				? {
+					mcpToolMode: this.state.mcpToolMode,
+					toolAgentEnabled: mcpManager.isToolAgentEnabled(),
+					hasAnyAvailableTool: mcpManager.getEnabledServerSummaries().length > 0,
+					enabledServerIds: mcpManager.getEnabledServerSummaries().map((server) => server.id),
+				}
+				: {
+					mcpToolMode: this.state.mcpToolMode,
+					toolAgentEnabled: false,
+					hasAnyAvailableTool: false,
+				},
 		});
 
-		let intentResult: IntentResult;
 		try {
-			intentResult = await this.intentAgent.recognize(requestContext);
+			const intentResult = await this.intentAgent.recognize(requestContext);
+			prepared.userMessage.metadata = {
+				...(prepared.userMessage.metadata ?? {}),
+				triggerSource: prepared.triggerSource,
+				intentResult,
+			};
+			return {
+				requestContext,
+				intentResult,
+			};
 		} catch (error) {
-			DebugLogger.warn('[IntentAgent] Falling back to validator inference', error);
-			intentResult = this.intentResultValidator.validate({}, requestContext, {
-				confidenceThreshold:
-					this.plugin.settings.tars.settings.intentAgent?.confidenceThreshold
-					?? DEFAULT_INTENT_AGENT_SETTINGS.confidenceThreshold,
-			});
+			DebugLogger.warn('[IntentAgent] Intent recognition skipped for this turn', error);
 		}
 
 		prepared.userMessage.metadata = {
 			...(prepared.userMessage.metadata ?? {}),
 			triggerSource: prepared.triggerSource,
-			intentResult,
 		};
 		return {
 			requestContext,
-			intentResult,
+			intentResult: null,
 		};
 	}
 
@@ -576,106 +584,7 @@ export class ChatService {
 	private preparePendingIntentClarification(prepared: PreparedChatRequest): void {
 		const pendingClarification = prepared.session.pendingIntentClarification;
 		prepared.intentRecognitionInput = prepared.originalUserInput;
-		prepared.pendingClarificationContext = null;
-		if (!pendingClarification) {
-			this.prepareImplicitIntentFollowUp(prepared);
-			return;
-		}
-
-		const currentSelectedText =
-			typeof prepared.userMessage.metadata?.selectedText === 'string'
-				? prepared.userMessage.metadata.selectedText
-				: undefined;
-		const analysis = this.contextAssembler.analyzeMessage(
-			this.buildMessageAnalysisInput(
-				prepared.originalUserInput,
-				prepared.currentSelectedFiles,
-				prepared.currentSelectedFolders,
-				currentSelectedText
-			)
-		);
-
-		const isNewIndependentRequest =
-			analysis.hasClearAction
-			&& (analysis.hasUniqueResolvedTarget || analysis.primaryAction === 'search');
-
-		if (isNewIndependentRequest) {
-			prepared.session.pendingIntentClarification = null;
-			return;
-		}
-
-		prepared.pendingClarificationContext = pendingClarification;
-		prepared.intentRecognitionInput = `${pendingClarification.originalUserMessage}\n\n补充说明：${prepared.originalUserInput}`;
-	}
-
-	private prepareImplicitIntentFollowUp(prepared: PreparedChatRequest): void {
-		if (!SUPPLEMENTAL_FOLLOW_UP_PATTERN.test(prepared.originalUserInput.trim())) {
-			return;
-		}
-
-		const currentSelectedText =
-			typeof prepared.userMessage.metadata?.selectedText === 'string'
-				? prepared.userMessage.metadata.selectedText
-				: undefined;
-		const analysis = this.contextAssembler.analyzeMessage(
-			this.buildMessageAnalysisInput(
-				prepared.originalUserInput,
-				prepared.currentSelectedFiles,
-				prepared.currentSelectedFolders,
-				currentSelectedText
-			)
-		);
-		const hasTargetSignal =
-			analysis.hasUniqueResolvedTarget
-			|| analysis.references.length > 0
-			|| analysis.resolvedTargets.length > 0;
-		if (analysis.hasClearAction || !hasTargetSignal) {
-			return;
-		}
-
-		const previousUserMessage = this.getPreviousVisibleUserMessage(
-			prepared.session,
-			prepared.userMessage.id
-		);
-		if (!previousUserMessage) {
-			return;
-		}
-
-		const previousIntent = previousUserMessage.metadata?.intentResult;
-		if (!this.isIntentResult(previousIntent)) {
-			return;
-		}
-
-		const previousOriginalUserMessage =
-			this.getTaskUserInput(previousUserMessage) ?? previousUserMessage.content.trim();
-		if (!previousOriginalUserMessage) {
-			return;
-		}
-
-		const previousTriggerSource = this.readIntentTriggerSource(
-			previousUserMessage.metadata?.triggerSource
-		);
-		const previousSelectedText =
-			typeof previousUserMessage.metadata?.selectedText === 'string'
-				? previousUserMessage.metadata.selectedText
-				: undefined;
-
-		prepared.pendingClarificationContext = {
-			originalUserMessage: previousOriginalUserMessage,
-			normalizedRequest: previousIntent.understanding.normalizedRequest,
-			reason: 'follow_up_target_update',
-			questions: [],
-			createdAt: Date.now(),
-			triggerSource: previousTriggerSource ?? prepared.triggerSource,
-			activeFilePath:
-				this.currentActiveFilePath
-				?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path
-				?? prepared.currentSelectedFiles[0]?.path,
-			selectedText: previousSelectedText ?? currentSelectedText,
-			selectedFiles: [...prepared.currentSelectedFiles],
-			selectedFolders: [...prepared.currentSelectedFolders],
-		};
-		prepared.intentRecognitionInput = `${previousOriginalUserMessage}\n\n补充说明：${prepared.originalUserInput}`;
+		prepared.pendingClarificationContext = pendingClarification ?? null;
 	}
 
 	private buildPendingIntentClarification(
@@ -2320,41 +2229,29 @@ export class ChatService {
 						return result;
 					};
 					providerOptions.mcpTools = mcpTools;
-					if (isToolAgentMode) {
-						providerOptions.mcpCallTool = async (
-							serverId: string,
-							name: string,
-							args: Record<string, unknown>
-						) => {
-							if (
-								serverId === TOOL_AGENT_SERVER_ID
-								&& name === TOOL_AGENT_TOOL_NAME
-							) {
-								return await mcpManager.callToolWithContext(
-									serverId,
-									name,
-									args,
-									this.buildToolAgentRequestContext(
-										session,
-										allowedServerIds,
-										baseActualMcpCallTool
-									)
-								);
-							}
+					providerOptions.mcpCallTool = async (
+						serverId: string,
+						name: string,
+						args: Record<string, unknown>
+					) => {
+						if (
+							isToolAgentMode
+							&& serverId === TOOL_AGENT_SERVER_ID
+							&& name === TOOL_AGENT_TOOL_NAME
+						) {
+							return await mcpManager.callToolWithContext(
+								serverId,
+								name,
+								args,
+								this.buildToolAgentRequestContext(
+									session,
+									baseActualMcpCallTool
+								)
+							);
+						}
 
-							return await baseActualMcpCallTool(serverId, name, args);
-						};
-					} else {
-						const toolController = createChatTwoPhaseToolController({
-							manager: mcpManager,
-							callTool: baseActualMcpCallTool,
-							initialTools: mcpTools,
-							latestUserRequest: this.getLatestVisibleUserMessageContent(session),
-							allowedServerIds,
-						});
-						providerOptions.mcpGetTools = toolController.getCurrentTools;
-						providerOptions.mcpCallTool = toolController.callTool;
-					}
+						return await baseActualMcpCallTool(serverId, name, args);
+					};
 					const maxLoops = resolveToolExecutionSettings(this.plugin.settings.tars.settings).maxToolCalls;
 					const intentMaxLoops =
 						latestIntentResult?.routing.constraints.maxToolCalls;
@@ -2675,46 +2572,6 @@ export class ChatService {
 		return this.isIntentResult(intentResult) ? intentResult : null;
 	}
 
-	private buildMessageAnalysisInput(
-		userMessage: string,
-		selectedFiles: SelectedFile[],
-		selectedFolders: SelectedFolder[],
-		selectedText?: string
-	): Parameters<ContextAssembler['analyzeMessage']>[0] {
-		return {
-			userMessage,
-			activeFilePath:
-				this.currentActiveFilePath
-				?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path
-				?? selectedFiles[0]?.path,
-			selectedText,
-			selectedFiles: selectedFiles.map((file) => file.path),
-			selectedFolders: selectedFolders.map((folder) => folder.path),
-		};
-	}
-
-	private getTaskUserInput(message: ChatMessage): string | null {
-		const taskUserInput = message.metadata?.taskUserInput;
-		if (typeof taskUserInput === 'string' && taskUserInput.trim().length > 0) {
-			return taskUserInput.trim();
-		}
-		const editable = getEditableUserMessageContent(message).trim();
-		return editable.length > 0 ? editable : null;
-	}
-
-	private readIntentTriggerSource(value: unknown): IntentTriggerSource | null {
-		switch (value) {
-			case 'chat_input':
-			case 'selection_toolbar':
-			case 'at_trigger':
-			case 'quick_action':
-			case 'command_palette':
-				return value;
-			default:
-				return null;
-		}
-	}
-
 	private buildResolvedSelectionContext(
 		session: ChatSession,
 		intentResult: IntentResult | null
@@ -2809,7 +2666,6 @@ export class ChatService {
 
 	private buildToolAgentRequestContext(
 		session: ChatSession,
-		allowedServerIds: string[] | undefined,
 		callTool: NonNullable<NonNullable<ToolAgentRequest['runtime']>['callTool']>
 	): Omit<ToolAgentRequest, 'task'> {
 		const latestUserMessage = this.getLatestVisibleUserMessage(session);
@@ -2823,10 +2679,6 @@ export class ChatService {
 			typeof latestMetadata.selectedText === 'string'
 				? latestMetadata.selectedText
 				: undefined;
-		const hintedServerIds = this.mergeLikelyServerIds(
-			allowedServerIds,
-			intentResult?.routing.toolHints?.likelyServerIds
-		);
 		const relevantPaths = Array.from(
 			new Set(
 				[
@@ -2846,33 +2698,6 @@ export class ChatService {
 			?? 10;
 
 		return {
-			...(
-				hintedServerIds.length > 0
-				|| Boolean(intentResult?.routing.toolHints?.suggestedTools?.length)
-				|| Boolean(intentResult?.routing.toolHints?.domain)
-				? {
-					hints: {
-						...(hintedServerIds.length > 0
-							? { likelyServerIds: hintedServerIds }
-							: {}),
-						...(intentResult?.routing.toolHints?.suggestedTools?.length
-							? {
-								suggestedTools:
-									intentResult.routing.toolHints.suggestedTools,
-							}
-							: {}),
-						...(intentResult?.routing.toolHints?.domain
-							? { domain: intentResult.routing.toolHints.domain }
-							: {}),
-						...(intentResult?.routing.toolHints?.intentType
-							? { intentType: intentResult.routing.toolHints.intentType }
-							: {}),
-						...(intentResult?.routing.toolHints?.complexity
-							? { complexity: intentResult.routing.toolHints.complexity }
-							: {}),
-					},
-				}
-				: {}),
 			constraints: {
 				readOnly: intentResult?.routing.constraints.readOnly,
 				allowShell: intentResult?.routing.constraints.allowShell,
@@ -2885,29 +2710,28 @@ export class ChatService {
 					? { selectedText }
 					: {}),
 				...(relevantPaths.length > 0 ? { relevantPaths } : {}),
+				...(intentResult?.understanding.normalizedRequest
+					? { normalizedIntent: intentResult.understanding.normalizedRequest }
+					: {}),
+				...(latestUserMessage
+					? {
+						recentConversation: session.messages
+							.filter((message) =>
+								(message.role === 'user' || message.role === 'assistant')
+								&& !message.metadata?.hiddenFromModel
+							)
+							.slice(-4)
+							.map((message) => ({
+								role: message.role === 'assistant' ? 'assistant' : 'user',
+								summary: message.content.replace(/\s+/g, ' ').trim().slice(0, 160),
+							})),
+					}
+					: {}),
 			},
 			runtime: {
 				callTool,
 			},
 		};
-	}
-
-	private mergeLikelyServerIds(
-		allowedServerIds: string[] | undefined,
-		intentServerIds: string[] | undefined
-	): string[] {
-		const normalizedAllowed = Array.from(new Set(allowedServerIds ?? []));
-		const normalizedIntent = Array.from(new Set(intentServerIds ?? []));
-		if (normalizedAllowed.length === 0) {
-			return normalizedIntent;
-		}
-		if (normalizedIntent.length === 0) {
-			return normalizedAllowed;
-		}
-		const intersection = normalizedIntent.filter((serverId) =>
-			normalizedAllowed.includes(serverId)
-		);
-		return intersection.length > 0 ? intersection : normalizedAllowed;
 	}
 
 	private isIntentResult(value: unknown): value is IntentResult {

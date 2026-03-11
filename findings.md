@@ -193,3 +193,35 @@
 - `settingTab.ts` 的“高级”分组新增了两项共享设置：工具调用最大次数、工具调用超时时间。
 - `ChatSettingsModal.tsx` 已移除 `MCP 服务器` 页的最大循环次数输入，以及 `Tool Call Agent` 详情页里的最大工具调用次数 / 超时时间输入。
 - 运行时默认读取统一收敛到 `resolveToolExecutionSettings()`；旧配置会在 clone/save 路径中自动同步。
+
+---
+
+## Session: 2026-03-11 提示词驱动统一子代理重构
+
+### Research Findings
+- `IntentAgent` 与 `ToolCallAgent` 当前已经共享了最底层的 provider 调用模式，但仍各自保留了一层本地业务推断：
+  - `intent-agent`: `ShortcutRules`、`TriggerSourceRules`、`MessageSemanticAnalyzer`、`IntentResultValidator`
+  - `tool-agent`: `ToolSelector`、registry 元数据增强、`executeTaskWithLegacyTwoPhase()` fallback
+- `ChatService` 里仍有两段本地意图推断：
+  - `preparePendingIntentClarification()` 通过 `contextAssembler.analyzeMessage()` 判断当前输入是不是“新独立请求”
+  - `prepareImplicitIntentFollowUp()` 通过 `SUPPLEMENTAL_FOLLOW_UP_PATTERN` 和 `analyzeMessage()` 判断“补充说明/改成...”
+- `buildToolAgentRequestContext()` 当前严重依赖 `intentResult.routing.toolHints` 与 `understanding.target.paths`，意味着只删 `ToolSelector` 不够，必须同步削减 `IntentResult` 结构。
+- `McpClientManager` 当前在 tool-agent 失败时仍会自动回退 `executeTaskWithLegacyTwoPhase()`，而该链路会再次依赖 `find_tool` 与 `chatTwoPhaseToolController`。
+- `FeatureCoordinator` 仍会初始化 `ToolLibraryManager` 并传给 `McpClientManager`，这使 Tool Search 相关运行时仍是聊天主链路的一部分。
+- `ChatSettingsModal` 当前暴露了 `intentAgent.shortcutRulesEnabled` 和 `confidenceThreshold`，这些设置是旧硬编码设计的直接投影，必须随运行时一起移除。
+
+### Implementation Direction
+- 新增共享 `SubAgentRunner`，让 “模型调用 + JSON 解析 + 可选工具循环” 变成统一底座。
+- `ContextAssembler` 改成只收集上下文事实，不再做用户语义解析；由 intent prompt 直接理解这些事实。
+- 意图子代理新增 `requestRelation` 一类字段，用模型结果取代本地“新请求 / 澄清回答 / 需求补充”判断。
+- 工具调用子代理改为真实工具全集直通，保留 `SafetyChecker` 与 `ResultProcessor` 作为唯一非提示词约束。
+- Tool Search 与 `ToolLibraryManager` 一并移除，避免继续保留本地工具说明文件、Tool Search server 与相关设置开关。
+
+### Implementation Outcome
+- 新增 `plugin/src/features/sub-agent/SubAgentRunner.ts` 与配套类型，统一了 provider 解析、超时/abort、可选工具注入和 JSON 响应解析。
+- `IntentAgent` 现已改为纯提示词驱动：`ContextAssembler` 只收集上下文快照，`IntentAgentPromptBuilder` 直接描述规则，`IntentAgent` 只做最薄的 schema 正规化。
+- `ToolCallAgent` 现已改为真实工具集合直通，删除 `ToolSelector`、registry 预选与 legacy two-phase fallback，仅保留 `SafetyChecker` 和 `ResultProcessor` 作为宿主侧约束。
+- `ChatService` 已移除基于 `messageAnalysis` / 正则的本地补充说明判断，改为把 pending clarification 与上下文交给 intent 模型，并消费 `requestRelation` 决定请求合并方式。
+- `McpClientManager` 已彻底移除 Tool Search：不再注册内置 Tool Search server，也不再保留 `searchToolLibrary()` / `getToolLibraryEntry()` 这类工具库查询接口。
+- 设置与文案已同步收口：删除 `intentAgent.shortcutRulesEnabled`、`confidenceThreshold` 及对应中英繁文案，工具执行子代理“留空回退传统模式”的描述也已移除。
+- `FeatureCoordinator` 已不再初始化 `ToolLibraryManager`；`AIPathManager` 也不再创建 `tool-library` 目录，设置页的内置工具列表同步减少为 4 个 builtin server。

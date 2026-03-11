@@ -13,8 +13,6 @@ import {
 	BUILTIN_OBSIDIAN_SEARCH_SERVER_NAME,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
-	BUILTIN_TOOL_SEARCH_SERVER_ID,
-	BUILTIN_TOOL_SEARCH_SERVER_NAME,
 	BUILTIN_VAULT_SERVER_ID,
 	BUILTIN_VAULT_SERVER_NAME,
 } from 'src/builtin-mcp/constants';
@@ -27,16 +25,6 @@ import {
 	type ObsidianSearchBuiltinRuntime,
 } from 'src/builtin-mcp/obsidian-search-mcp-server';
 import {
-	createToolSearchBuiltinRuntime,
-	type ToolSearchBuiltinRuntime,
-} from 'src/builtin-mcp/tool-search-mcp-server';
-import { ToolLibraryManager } from 'src/builtin-mcp/tool-library-manager';
-import type {
-	ToolLibraryEntry,
-	ToolLibrarySearchOptions,
-	ToolLibrarySearchResult,
-} from 'src/builtin-mcp/tool-library-types';
-import {
 	createSequentialThinkingBuiltinRuntime,
 	type SequentialThinkingBuiltinRuntime,
 } from 'src/builtin-mcp/sequentialthinking-mcp-server';
@@ -44,11 +32,7 @@ import {
 	createVaultBuiltinRuntime,
 	type VaultBuiltinRuntime,
 } from 'src/builtin-mcp/vault-mcp-server';
-import type {
-	Message as ProviderMessage,
-	ResolveEmbedAsBinary,
-	Vendor,
-} from 'src/features/tars/providers';
+import type { Vendor } from 'src/features/tars/providers';
 import {
 	DEFAULT_TOOL_AGENT_SETTINGS,
 	TOOL_AGENT_SERVER_ID,
@@ -58,7 +42,6 @@ import {
 	type ToolAgentRequest,
 	type ToolAgentRuntimeTool,
 	type ToolAgentSettings,
-	type ToolExecutionStep,
 } from 'src/features/tool-agent';
 import type { ToolExecutionSettings } from 'src/features/tars/settings';
 import {
@@ -82,7 +65,6 @@ type BuiltinRuntime =
 	| VaultBuiltinRuntime
 	| MemoryBuiltinRuntime
 	| ObsidianSearchBuiltinRuntime
-	| ToolSearchBuiltinRuntime
 	| SequentialThinkingBuiltinRuntime;
 
 interface BuiltinDescriptor {
@@ -124,7 +106,6 @@ export class McpClientManager {
 	constructor(
 		private readonly app: App,
 		settings: McpSettings,
-		private readonly toolLibraryManager: ToolLibraryManager | null = null,
 		private readonly options: McpClientManagerOptions = {}
 	) {
 		this.settings = settings;
@@ -200,24 +181,6 @@ export class McpClientManager {
 				createRuntime: async (app) =>
 					await createObsidianSearchBuiltinRuntime(app),
 				initErrorLogMessage: '[MCP] 初始化内置 Obsidian Search MCP Server 失败',
-			},
-			{
-				serverId: BUILTIN_TOOL_SEARCH_SERVER_ID,
-				serverName: BUILTIN_TOOL_SEARCH_SERVER_NAME,
-				isEnabled: (settings) =>
-					this.isMcpEnabled(settings) &&
-					settings.builtinToolSearchEnabled !== false,
-				createRuntime: async (app) => {
-					if (!this.toolLibraryManager) {
-						throw new Error('ToolLibraryManager 未初始化');
-					}
-					await this.toolLibraryManager.initialize();
-					return await createToolSearchBuiltinRuntime(
-						app,
-						this.toolLibraryManager
-					);
-				},
-				initErrorLogMessage: '[MCP] 初始化内置 Tool Search MCP Server 失败',
 			},
 			{
 				serverId: BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
@@ -426,48 +389,26 @@ export class McpClientManager {
 		return await this.getAvailableTools();
 	}
 
+	private async getExecutionToolsWithLazyStart(): Promise<ToolAgentRuntimeTool[]> {
+		return (await this.getAvailableToolsWithLazyStart())
+			.map((tool) => ({
+				name: tool.name,
+				description: tool.description,
+				inputSchema: tool.inputSchema,
+				serverId: tool.serverId,
+			}));
+	}
+
 	/**
 	 * 获取注入到模型上下文中的 MCP 工具定义。
-	 *
-	 * 当前只暴露 Tool Search 内置服务的 3 个工具，避免把全部内置工具描述
-	 * 直接塞进模型上下文。
 	 */
 	async getToolsForModelContext(): Promise<McpToolDefinition[]> {
 		if (!this.isMcpEnabled()) return [];
 		if (this.isToolAgentEnabled()) {
 			return [this.getToolAgentToolDefinition()];
 		}
-		if (!this.isBuiltinServerEnabled(BUILTIN_TOOL_SEARCH_SERVER_ID)) {
-			return [];
-		}
 
-		const tools = await this.getToolsForServer(BUILTIN_TOOL_SEARCH_SERVER_ID);
-		return tools.map((tool) => ({
-			name: tool.name,
-			description: tool.description,
-			inputSchema: tool.inputSchema,
-			serverId: tool.serverId,
-		}));
-	}
-
-	async searchToolLibrary(
-		options: ToolLibrarySearchOptions
-	): Promise<ToolLibrarySearchResult[]> {
-		if (!this.toolLibraryManager) {
-			return [];
-		}
-
-		await this.toolLibraryManager.initialize();
-		return await this.toolLibraryManager.searchTools(options);
-	}
-
-	async getToolLibraryEntry(name: string): Promise<ToolLibraryEntry | null> {
-		if (!this.toolLibraryManager) {
-			return null;
-		}
-
-		await this.toolLibraryManager.initialize();
-		return await this.toolLibraryManager.getEntry(name);
+		return await this.getAvailableToolsWithLazyStart();
 	}
 
 	/**
@@ -511,12 +452,8 @@ export class McpClientManager {
 				});
 				return JSON.stringify(response);
 			} catch (error) {
-				DebugLogger.error('[MCP] Tool agent execution failed, trying legacy fallback', error);
-				return await this.executeTaskWithLegacyTwoPhase(
-					task,
-					requestContext,
-					error
-				);
+				DebugLogger.error('[MCP] Tool agent execution failed', error);
+				throw error;
 			}
 		}
 
@@ -909,7 +846,7 @@ export class McpClientManager {
 			callTool: async (serverId, toolName, args) =>
 				await this.callActualTool(serverId, toolName, args),
 			getAvailableTools: async (): Promise<ToolAgentRuntimeTool[]> =>
-				await this.getAvailableToolsWithLazyStart(),
+				await this.getExecutionToolsWithLazyStart(),
 			protectedPathPrefixes: this.options.getProtectedPathPrefixes?.() ?? [],
 		});
 	}
@@ -918,7 +855,7 @@ export class McpClientManager {
 		return {
 			name: TOOL_AGENT_TOOL_NAME,
 			description:
-				'Use this tool when you need Vault access, search, memory operations, or any multi-step MCP task. Describe the task in natural language and the tool agent will choose and execute the right tools.',
+				'Use this tool when you need Vault access, search, memory operations, or any multi-step MCP task. Describe the task in natural language and the tool execution sub-agent will use the available MCP tools for you.',
 			inputSchema: {
 				type: 'object',
 				properties: {
@@ -931,247 +868,6 @@ export class McpClientManager {
 			},
 			serverId: TOOL_AGENT_SERVER_ID,
 		};
-	}
-
-	private async executeTaskWithLegacyTwoPhase(
-		task: string,
-		requestContext?: Omit<ToolAgentRequest, 'task'>,
-		cause?: unknown
-	): Promise<string> {
-		if (!this.isBuiltinServerEnabled(BUILTIN_TOOL_SEARCH_SERVER_ID)) {
-			throw cause instanceof Error ? cause : new Error(String(cause ?? 'Tool agent failed'));
-		}
-
-		const settings =
-			this.options.getToolAgentSettings?.()
-			?? DEFAULT_TOOL_AGENT_SETTINGS;
-		const providerConfig = settings.modelTag.trim()
-			? this.options.resolveToolAgentProviderByTag?.(settings.modelTag) ?? null
-			: null;
-		const vendor = providerConfig
-			? this.options.getVendorByName?.(providerConfig.vendorName)
-			: undefined;
-		if (!providerConfig || !vendor) {
-			throw cause instanceof Error ? cause : new Error(String(cause ?? 'Tool agent failed'));
-		}
-
-		const toolSearchTools = (await this.getToolsForServer(BUILTIN_TOOL_SEARCH_SERVER_ID))
-			.map((tool) => ({
-				name: tool.name,
-				description: tool.description,
-				inputSchema: tool.inputSchema,
-				serverId: tool.serverId,
-			}));
-		if (toolSearchTools.length === 0) {
-			throw cause instanceof Error ? cause : new Error(String(cause ?? 'Tool agent failed'));
-		}
-
-		const trace: ToolExecutionStep[] = [];
-		const startedAt = Date.now();
-		const actualToolCall =
-			requestContext?.runtime?.callTool
-			?? (async (serverId: string, toolName: string, args: Record<string, unknown>) =>
-				await this.callActualTool(serverId, toolName, args));
-		const tracedActualToolCall = async (
-			serverId: string,
-			toolName: string,
-			args: Record<string, unknown>
-		): Promise<string> => {
-			const stepStartedAt = Date.now();
-			try {
-				const result = await actualToolCall(serverId, toolName, args);
-				trace.push({
-					stepIndex: trace.length + 1,
-					toolName,
-					serverId,
-					arguments: args,
-					result,
-					status: 'success',
-					durationMs: Date.now() - stepStartedAt,
-				});
-				return result;
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				trace.push({
-					stepIndex: trace.length + 1,
-					toolName,
-					serverId,
-					arguments: args,
-					result: message,
-					status: 'failed',
-					error: message,
-					durationMs: Date.now() - stepStartedAt,
-				});
-				throw error;
-			}
-		};
-
-		const { createChatTwoPhaseToolController } = await import('./chatTwoPhaseToolController');
-		const toolController = createChatTwoPhaseToolController({
-			manager: this,
-			callTool: tracedActualToolCall,
-			initialTools: toolSearchTools,
-			latestUserRequest: task,
-			allowedServerIds: requestContext?.hints?.likelyServerIds,
-		});
-		const tracedControllerCall = async (
-			serverId: string,
-			toolName: string,
-			args: Record<string, unknown>
-		): Promise<string> => {
-			const stepStartedAt = Date.now();
-			try {
-				const result = await toolController.callTool(serverId, toolName, args);
-				trace.push({
-					stepIndex: trace.length + 1,
-					toolName,
-					serverId,
-					arguments: args,
-					result,
-					status: 'success',
-					durationMs: Date.now() - stepStartedAt,
-				});
-				return result;
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				trace.push({
-					stepIndex: trace.length + 1,
-					toolName,
-					serverId,
-					arguments: args,
-					result: message,
-					status: 'failed',
-					error: message,
-					durationMs: Date.now() - stepStartedAt,
-				});
-				throw error;
-			}
-		};
-
-		const sharedToolExecutionSettings = this.options.getToolExecutionSettings?.();
-		const sendRequest = vendor.sendRequestFunc({
-			...providerConfig.options,
-			mcpTools: toolSearchTools,
-			mcpGetTools: toolController.getCurrentTools,
-			mcpCallTool: tracedControllerCall,
-			mcpMaxToolCallLoops:
-				sharedToolExecutionSettings?.maxToolCalls
-				?? this.settings.maxToolCallLoops
-				?? 10,
-		});
-		const controller = new AbortController();
-		const timeoutMs =
-			requestContext?.constraints?.timeoutMs
-			?? sharedToolExecutionSettings?.timeoutMs
-			?? settings.defaultConstraints.timeoutMs;
-		const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs);
-		const messages: ProviderMessage[] = [
-			{
-				role: 'system',
-				content:
-					'You are a legacy MCP execution fallback agent. Use the available tools to complete the task. Return JSON only in the format {"status":"success|partial|failed|needs_clarification","summary":"...","data":...,"clarificationNeeded":"..."} and do not explain the fallback.',
-			},
-			{
-				role: 'user',
-				content: this.buildLegacyToolAgentUserPrompt(task, requestContext),
-			},
-		];
-
-		try {
-			let content = '';
-			const resolveEmbed: ResolveEmbedAsBinary = async () => new ArrayBuffer(0);
-			for await (const chunk of sendRequest(messages, controller, resolveEmbed)) {
-				content += chunk;
-			}
-			return this.normalizeToolAgentResponsePayload(content, trace, Date.now() - startedAt);
-		} finally {
-			globalThis.clearTimeout(timeoutId);
-		}
-	}
-
-	private buildLegacyToolAgentUserPrompt(
-		task: string,
-		requestContext?: Omit<ToolAgentRequest, 'task'>
-	): string {
-		return [
-			`Task: ${task}`,
-			requestContext?.hints?.likelyServerIds?.length
-				? `Allowed servers: ${requestContext.hints.likelyServerIds.join(', ')}`
-				: '',
-			requestContext?.context?.activeFilePath
-				? `Active file: ${requestContext.context.activeFilePath}`
-				: '',
-			requestContext?.context?.selectedText
-				? `Selected text:\n${requestContext.context.selectedText}`
-				: '',
-			requestContext?.context?.relevantPaths?.length
-				? `Relevant paths: ${requestContext.context.relevantPaths.join(', ')}`
-				: '',
-		]
-			.filter(Boolean)
-			.join('\n\n');
-	}
-
-	private normalizeToolAgentResponsePayload(
-		content: string,
-		trace: ToolExecutionStep[],
-		durationMs: number
-	): string {
-		const trimmed = content.trim();
-		const firstBrace = trimmed.indexOf('{');
-		const lastBrace = trimmed.lastIndexOf('}');
-		const candidates = [
-			trimmed,
-			firstBrace >= 0 && lastBrace > firstBrace
-				? trimmed.slice(firstBrace, lastBrace + 1)
-				: '',
-		].filter(Boolean);
-
-		for (const candidate of candidates) {
-			try {
-				const parsed = JSON.parse(candidate) as Record<string, unknown>;
-				const status =
-					parsed.status === 'success'
-					|| parsed.status === 'partial'
-					|| parsed.status === 'failed'
-					|| parsed.status === 'needs_clarification'
-						? parsed.status
-						: 'success';
-				return JSON.stringify({
-					status,
-					summary:
-						typeof parsed.summary === 'string' && parsed.summary.trim()
-							? parsed.summary.trim()
-							: trimmed || 'Legacy tool fallback completed.',
-					...(Object.prototype.hasOwnProperty.call(parsed, 'data')
-						? { data: parsed.data }
-						: {}),
-					...(typeof parsed.clarificationNeeded === 'string'
-						&& parsed.clarificationNeeded.trim()
-						? { clarificationNeeded: parsed.clarificationNeeded.trim() }
-						: {}),
-					trace,
-					metrics: {
-						toolCallCount: trace.length,
-						totalTokens: 0,
-						durationMs,
-					},
-				});
-			} catch {
-				continue;
-			}
-		}
-
-		return JSON.stringify({
-			status: 'success',
-			summary: trimmed || 'Legacy tool fallback completed.',
-			trace,
-			metrics: {
-				toolCallCount: trace.length,
-				totalTokens: 0,
-				durationMs,
-			},
-		});
 	}
 
 	private getBuiltinStateSnapshot(serverId: string): McpServerState {

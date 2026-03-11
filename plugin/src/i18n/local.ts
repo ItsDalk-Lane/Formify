@@ -787,12 +787,8 @@ export interface Local {
 	sub_agents_intent_model: string;
 	sub_agents_intent_model_desc: string;
 	sub_agents_intent_model_unset: string;
-	sub_agents_intent_shortcut_rules: string;
-	sub_agents_intent_shortcut_rules_desc: string;
 	sub_agents_intent_timeout: string;
 	sub_agents_intent_timeout_desc: string;
-	sub_agents_intent_confidence_threshold: string;
-	sub_agents_intent_confidence_threshold_desc: string;
 	sub_agents_status_enabled: string;
 	sub_agents_status_disabled: string;
 	sub_agents_no_providers: string;

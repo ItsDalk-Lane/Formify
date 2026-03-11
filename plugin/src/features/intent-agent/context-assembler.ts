@@ -1,23 +1,20 @@
 import { MarkdownView, TFile } from 'obsidian';
-import {
-	BUILTIN_MEMORY_SERVER_ID,
-	BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
-	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
-	BUILTIN_VAULT_SERVER_ID,
-} from 'src/builtin-mcp/constants';
 import type { App } from 'obsidian';
 import { getEnabledCapabilities } from 'src/features/tars/providers/utils';
 import { availableVendors } from 'src/features/tars/settings';
 import type { ProviderSettings } from 'src/features/tars/providers';
-import type { ChatMessage, ChatSession, SelectedFile, SelectedFolder } from 'src/features/chat/types/chat';
+import type {
+	ChatMessage,
+	ChatSession,
+	SelectedFile,
+	SelectedFolder,
+} from 'src/features/chat/types/chat';
 import type {
 	ConversationSummary,
-	IntentDomain,
 	IntentTriggerSource,
 	PendingClarificationContext,
 	RequestContext,
 } from './types';
-import { MessageSemanticAnalyzer } from './message-analysis';
 
 interface AssembleRequest {
 	userMessage: string;
@@ -37,6 +34,7 @@ interface AssembleRequest {
 	activeFilePath?: string;
 	selectedTextOverride?: string;
 	pendingClarificationContext?: PendingClarificationContext;
+	toolEnvironment?: RequestContext['toolEnvironment'];
 }
 
 const summarizeMessage = (message: ChatMessage): ConversationSummary => {
@@ -62,28 +60,8 @@ const normalizeTags = (rawTags: unknown): string[] => {
 	return [];
 };
 
-const domainToDefaultServerIds = (domain: IntentDomain): string[] => {
-	switch (domain) {
-		case 'vault_read':
-		case 'vault_write':
-			return [BUILTIN_VAULT_SERVER_ID];
-		case 'vault_search':
-			return [BUILTIN_OBSIDIAN_SEARCH_SERVER_ID, BUILTIN_VAULT_SERVER_ID];
-		case 'knowledge_mgmt':
-			return [BUILTIN_MEMORY_SERVER_ID];
-		case 'reasoning':
-			return [BUILTIN_SEQUENTIAL_THINKING_SERVER_ID];
-		default:
-			return [];
-	}
-};
-
 export class ContextAssembler {
-	private readonly messageAnalyzer: MessageSemanticAnalyzer;
-
-	constructor(private readonly app: App) {
-		this.messageAnalyzer = new MessageSemanticAnalyzer(app);
-	}
+	constructor(private readonly app: App) {}
 
 	async assemble(input: AssembleRequest): Promise<RequestContext> {
 		const latestMetadata = input.latestUserMessage.metadata ?? {};
@@ -91,8 +69,8 @@ export class ContextAssembler {
 			typeof input.selectedTextOverride === 'string'
 				? input.selectedTextOverride
 				: typeof latestMetadata.selectedText === 'string'
-				? latestMetadata.selectedText
-				: undefined;
+					? latestMetadata.selectedText
+					: undefined;
 		const provider = input.resolveProviderByTag(input.modelTag ?? undefined);
 		const vendor = provider
 			? availableVendors.find((item) => item.name === provider.vendor)
@@ -149,21 +127,11 @@ export class ContextAssembler {
 			}
 			: undefined;
 
-		const triggerSource =
-			this.normalizeTriggerSource(input.triggerSource, selectedText, activeFilePath);
-		const messageAnalysis = this.messageAnalyzer.analyze({
-			userMessage: input.userMessage,
-			activeFilePath,
-			selectedText,
-			selectedFiles: input.selectedFiles.map((file) => file.path),
-			selectedFolders: input.selectedFolders.map((folder) => folder.path),
-		});
-
 		return {
 			userMessage: input.userMessage,
 			hasImages: (input.latestUserMessage.images?.length ?? 0) > 0,
 			imageCount: input.latestUserMessage.images?.length ?? 0,
-			triggerSource,
+			triggerSource: input.triggerSource,
 			...(activeFilePath ? { activeFilePath } : {}),
 			...(activeFileMeta ? { activeFileMeta } : {}),
 			...(selectedText ? { selectedText } : {}),
@@ -177,27 +145,13 @@ export class ContextAssembler {
 			...(input.contextNotes.length > 0 ? { contextNotes: [...input.contextNotes] } : {}),
 			...(recentConversation.length > 0 ? { recentConversation } : {}),
 			...(livePlan ? { livePlan } : {}),
-			messageAnalysis,
 			...(input.pendingClarificationContext
 				? { pendingClarificationContext: input.pendingClarificationContext }
 				: {}),
 			hasCustomSystemPrompt: Boolean(input.session.enableTemplateAsSystemPrompt || input.session.systemPrompt),
 			...(currentModelCapabilities.length > 0 ? { currentModelCapabilities } : {}),
+			...(input.toolEnvironment ? { toolEnvironment: input.toolEnvironment } : {}),
 		};
-	}
-
-	analyzeMessage(input: {
-		userMessage: string;
-		activeFilePath?: string;
-		selectedText?: string;
-		selectedFiles?: string[];
-		selectedFolders?: string[];
-	}) {
-		return this.messageAnalyzer.analyze(input);
-	}
-
-	getDefaultServerIdsForDomain(domain: IntentDomain): string[] {
-		return domainToDefaultServerIds(domain);
 	}
 
 	private buildActiveFileMeta(file: TFile): RequestContext['activeFileMeta'] {
@@ -210,19 +164,5 @@ export class ContextAssembler {
 			tags: normalizeTags(frontmatter?.tags),
 			properties: frontmatter ? { ...frontmatter } : {},
 		};
-	}
-
-	private normalizeTriggerSource(
-		triggerSource: IntentTriggerSource,
-		selectedText: string | undefined,
-		activeFilePath: string | undefined
-	): IntentTriggerSource {
-		if (triggerSource === 'chat_input' && selectedText) {
-			return 'selection_toolbar';
-		}
-		if (triggerSource === 'chat_input' && activeFilePath && selectedText && selectedText.length > 200) {
-			return 'at_trigger';
-		}
-		return triggerSource;
 	}
 }

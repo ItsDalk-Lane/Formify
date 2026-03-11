@@ -234,3 +234,34 @@
 
 ### Notes
 - 仓库中未发现可直接运行新增 Jest 测试文件的 package script 或配置文件，因此本次没有单独执行 `settings.test.ts` / `ChatService.settings.test.ts`。
+
+---
+
+## Session: 2026-03-11 提示词驱动统一子代理重构
+
+### Current Status
+- **Phase:** 5 - Verification / Delivery
+- **Started:** 2026-03-11
+- **Status:** complete
+
+### Actions Taken
+- 复核 `IntentAgent`、`ToolCallAgent`、`ChatService`、`McpClientManager`、`FeatureCoordinator` 与设置页，确认旧链路的硬编码入口与依赖关系。
+- 明确本次范围：只保留安全层，不保留 legacy fallback，UI 保持双入口。
+- 把本次任务写回 `task_plan.md` / `findings.md` / `progress.md`，开始按阶段执行。
+- 新增共享 `SubAgentRunner` 与配套类型，统一子代理模型调用、工具注入、超时控制和 JSON 解析。
+- 重写 `intent-agent` 类型、上下文组装、提示词与运行时，删除 `ShortcutRules`、`TriggerSourceRules`、`IntentResultValidator`、`message-analysis` 及其测试。
+- 重写 `tool-agent` 类型、提示词与运行时，删除 `ToolSelector`、registry 预选与 legacy two-phase fallback 相关文件。
+- 更新 `ChatService` 与 `McpClientManager`，移除本地 follow-up/clarification 语义判断，改为模型返回的 `requestRelation` 和 `executionMode` 驱动，并收口聊天主链路的工具暴露策略。
+- 清理 `ChatSettingsModal`、`local.ts`、`en.ts`、`zh.ts`、`zhTw.ts` 及 `features/tars/lang/locale/*` 中残留的 shortcut/fallback 配置与旧文案。
+- 补充并改写了 `IntentAgent.test.ts`、`ToolCallAgent.test.ts`、`McpClientManager.test.ts`，覆盖共享底座接入后的核心行为。
+- 进一步移除了 `FeatureCoordinator` 对 `ToolLibraryManager` 的装配，删除 Tool Search builtin server、本地工具说明库文件与相关测试，并从 MCP 设置/UI 中去掉对应开关与目录创建逻辑。
+
+### Verification
+| Test | Expected | Actual | Status |
+|------|----------|--------|--------|
+| `git diff --check` | patch 无格式性问题 | 通过 | passed |
+| `npm run build` (`plugin/`) | 构建通过 | 通过 | passed |
+| `npm run test:framework` (`plugin/`) | 现有框架测试流程不被本次重构打断 | 退出码 0，包含 build + sync 流程 | passed |
+
+### Notes
+- 仓库级 `npx tsc -p tsconfig.json --noEmit` 的第三方声明兼容性问题仍是已知背景噪音；本次没有新增与本地改动相关的构建或测试失败。

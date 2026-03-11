@@ -10,7 +10,6 @@ import {
 	BUILTIN_MEMORY_SERVER_ID,
 	BUILTIN_OBSIDIAN_SEARCH_SERVER_ID,
 	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
-	BUILTIN_TOOL_SEARCH_SERVER_ID,
 	BUILTIN_VAULT_SERVER_ID,
 	DEFAULT_MCP_SETTINGS,
 	McpConfigImporter,
@@ -92,9 +91,6 @@ const updateBuiltinMcpEnabled = (
 			break;
 		case BUILTIN_OBSIDIAN_SEARCH_SERVER_ID:
 			nextMcpSettings.builtinObsidianSearchEnabled = enabled;
-			break;
-		case BUILTIN_TOOL_SEARCH_SERVER_ID:
-			nextMcpSettings.builtinToolSearchEnabled = enabled;
 			break;
 		case BUILTIN_SEQUENTIAL_THINKING_SERVER_ID:
 			nextMcpSettings.builtinSequentialThinkingEnabled = enabled;
@@ -959,78 +955,29 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 					</select>
 				</label>
 
-				<div className="chat-settings-switch">
-					<div>
-						<div className="chat-settings-field__title">
-							{localInstance.sub_agents_intent_shortcut_rules}
-						</div>
-						<div className="chat-settings-field__desc">
-							{localInstance.sub_agents_intent_shortcut_rules_desc}
-						</div>
-					</div>
-					<ToggleSwitch
-						checked={intentAgentSettings.shortcutRulesEnabled ?? true}
-						onChange={(checked) => {
-							void persistIntentAgentSettings({
-								...intentAgentSettings,
-								shortcutRulesEnabled: checked,
-							});
+				<label className="chat-settings-field">
+					<span className="chat-settings-field__title">
+						{localInstance.sub_agents_intent_timeout}
+					</span>
+					<span className="chat-settings-field__desc">
+						{localInstance.sub_agents_intent_timeout_desc}
+					</span>
+					<input
+						className="chat-settings-input"
+						type="number"
+						min={500}
+						value={intentAgentSettings.timeoutMs ?? 3000}
+						onChange={(event) => {
+							const nextValue = Number.parseInt(event.target.value, 10);
+							if (Number.isFinite(nextValue) && nextValue >= 500) {
+								void persistIntentAgentSettings({
+									...intentAgentSettings,
+									timeoutMs: nextValue,
+								});
+							}
 						}}
-						ariaLabel={localInstance.sub_agents_intent_shortcut_rules}
 					/>
-				</div>
-
-				<div className="chat-settings-grid">
-					<label className="chat-settings-field">
-						<span className="chat-settings-field__title">
-							{localInstance.sub_agents_intent_timeout}
-						</span>
-						<span className="chat-settings-field__desc">
-							{localInstance.sub_agents_intent_timeout_desc}
-						</span>
-						<input
-							className="chat-settings-input"
-							type="number"
-							min={500}
-							value={intentAgentSettings.timeoutMs ?? 3000}
-							onChange={(event) => {
-								const nextValue = Number.parseInt(event.target.value, 10);
-								if (Number.isFinite(nextValue) && nextValue >= 500) {
-									void persistIntentAgentSettings({
-										...intentAgentSettings,
-										timeoutMs: nextValue,
-									});
-								}
-							}}
-						/>
-					</label>
-
-					<label className="chat-settings-field">
-						<span className="chat-settings-field__title">
-							{localInstance.sub_agents_intent_confidence_threshold}
-						</span>
-						<span className="chat-settings-field__desc">
-							{localInstance.sub_agents_intent_confidence_threshold_desc}
-						</span>
-						<input
-							className="chat-settings-input"
-							type="number"
-							min={0}
-							max={1}
-							step={0.1}
-							value={intentAgentSettings.confidenceThreshold ?? 0.6}
-							onChange={(event) => {
-								const nextValue = Number.parseFloat(event.target.value);
-								if (Number.isFinite(nextValue) && nextValue >= 0 && nextValue <= 1) {
-									void persistIntentAgentSettings({
-										...intentAgentSettings,
-										confidenceThreshold: nextValue,
-									});
-								}
-							}}
-						/>
-					</label>
-				</div>
+				</label>
 			</div>
 		</div>
 	);

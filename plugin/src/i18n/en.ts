@@ -822,8 +822,8 @@ export class En implements Local {
 	sub_agents_tool_call_title = "Tool Call Agent";
 	sub_agents_tool_call_desc = "Expose a single execute_task tool to the main model and let a dedicated sub-agent choose and run MCP tools";
 	sub_agents_tool_model = "Model";
-	sub_agents_tool_model_desc = "Choose which configured provider tag is used by the tool execution sub-agent. Leave empty to fall back to legacy mode.";
-	sub_agents_tool_model_unset = "Unset (fallback to legacy mode)";
+	sub_agents_tool_model_desc = "Choose which configured provider tag is used by the tool execution sub-agent.";
+	sub_agents_tool_model_unset = "Unset";
 	sub_agents_tool_max_tool_calls = "Max Tool Calls";
 	sub_agents_tool_max_tool_calls_desc = "Maximum number of underlying tool calls inside one execute_task request";
 	sub_agents_tool_timeout = "Timeout (ms)";
@@ -835,14 +835,10 @@ export class En implements Local {
 	sub_agents_intent_title = "Intent Agent";
 	sub_agents_intent_desc = "Classify each chat request before the main model runs and decide whether to answer directly, clarify, or delegate to tools";
 	sub_agents_intent_model = "Model";
-	sub_agents_intent_model_desc = "Choose which configured provider tag is used for intent recognition. Leave empty to rely on shortcut rules only.";
-	sub_agents_intent_model_unset = "Unset (rules only)";
-	sub_agents_intent_shortcut_rules = "Shortcut Rules";
-	sub_agents_intent_shortcut_rules_desc = "Run deterministic shortcut rules before calling the intent model";
+	sub_agents_intent_model_desc = "Choose which configured provider tag is used for prompt-driven intent recognition.";
+	sub_agents_intent_model_unset = "Unset";
 	sub_agents_intent_timeout = "Timeout (ms)";
 	sub_agents_intent_timeout_desc = "Abort the intent recognition model request after this timeout";
-	sub_agents_intent_confidence_threshold = "Confidence Threshold";
-	sub_agents_intent_confidence_threshold_desc = "Below this confidence, the request falls back to host clarification";
 	sub_agents_status_enabled = "Enabled";
 	sub_agents_status_disabled = "Disabled";
 	sub_agents_no_providers = "No provider configured";

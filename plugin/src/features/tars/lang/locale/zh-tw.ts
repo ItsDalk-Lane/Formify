@@ -77,9 +77,9 @@ export default {
 	'Expose a single execute_task tool to the main model and let a dedicated sub-agent choose and run MCP tools.':
 		'向主模型只暴露一個 execute_task 工具，並讓專用子代理選擇與執行 MCP 工具。',
 	'Tool Agent model tag': '工具子代理模型標籤',
-	'Choose which configured provider tag is used by the tool execution sub-agent. Leave empty to fall back to legacy two-phase mode.':
-		'選擇工具執行子代理使用的 provider tag。留空時回退到舊的兩階段模式。',
-	'Tool Agent unset (fallback to legacy two-phase)': '未選擇（回退舊兩階段）',
+	'Choose which configured provider tag is used by the tool execution sub-agent.':
+		'選擇工具執行子代理使用的 provider tag。',
+	'Tool Agent unset': '未選擇',
 	'Tool Agent max tool calls': '工具子代理最大工具呼叫次數',
 	'Maximum number of underlying tool calls inside one execute_task request.':
 		'單次 execute_task 請求內部允許的底層工具呼叫上限。',
@@ -95,16 +95,10 @@ export default {
 	'Classify each chat request before the main model runs and decide whether to answer directly, clarify, or delegate to tools.':
 		'在主模型運行前先對每條聊天請求做意圖分類，再決定直接回答、先澄清，還是委託給工具。',
 	'Intent Agent model tag': '意圖辨識代理模型標籤',
-	'Choose which configured provider tag is used for intent recognition. Leave empty to use shortcut rules plus fallback inference only.':
-		'選擇用於意圖辨識的 provider tag。留空時只使用快捷規則與回退推斷。',
-	'Intent Agent unset (rules and fallback only)': '未選擇（僅使用規則與回退）',
-	'Intent Agent shortcut rules': '意圖辨識快捷規則',
-	'Run deterministic shortcut rules before calling the intent model.':
-		'在呼叫意圖模型前，先執行確定性的快捷規則。',
+	'Choose which configured provider tag is used for prompt-driven intent recognition.':
+		'選擇用於提示詞驅動意圖辨識的 provider tag。',
+	'Intent Agent unset': '未選擇',
 	'Intent Agent timeout (ms)': '意圖辨識逾時（毫秒）',
 	'Abort the intent recognition model request after this timeout.':
 		'超過此時間後終止意圖辨識模型請求。',
-	'Intent Agent confidence threshold': '意圖辨識信心閾值',
-	'Below this confidence, the request falls back to host clarification.':
-		'低於此信心值時，請求會回退為宿主層澄清。',
 }

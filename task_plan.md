@@ -211,3 +211,31 @@ Phase 1
 | Error | Resolution |
 |-------|------------|
 | `planning-with-files` 技能文档中的 `session-catchup.py` 默认路径不存在 | 改为手动检查现有 `task_plan.md` / `findings.md` / `progress.md`，继续在项目根维护记录 |
+
+---
+
+## Session: 2026-03-11 提示词驱动统一子代理重构
+
+### Goal
+移除工具调用与意图识别子代理中的本地硬编码理解链路，把规则迁入系统提示词，并把两者统一到同一套共享子代理底座。
+
+### Current Phase
+Phase 5
+
+### Phases
+- [x] 新增共享 `SubAgentRunner`，统一模型调用、JSON 解析、可选工具注入与超时控制
+- [x] 收瘦 `intent-agent`，删除 `ShortcutRules` / `TriggerSourceRules` / `IntentResultValidator` / `message-analysis`
+- [x] 收瘦 `tool-agent`，删除 `ToolSelector` / registry 预选 / legacy two-phase fallback
+- [x] 改造 `ChatService` / `McpClientManager` 接入，改为模型返回的 relation / routing 驱动
+- [x] 更新设置类型、设置页、i18n 与针对性测试，并完成构建验证
+- **Status:** complete
+
+### Decisions
+| Decision | Rationale |
+|----------|-----------|
+| 硬编码移除范围按“只留安全层”执行 | 用户明确要求把用户需求理解全部交给模型，本地仅保留工具安全与控制通道 |
+| 不保留 legacy fallback | 用户明确要求移除旧链路，不再回退 `find_tool` / 两阶段控制器 |
+| UI 保留“意图识别 / 工具调用”双入口 | 用户明确要求只统一底层，不把设置页改成通用代理列表 |
+| `intent-agent` 不再输出 validator 修正后的富规则结构 | 目标是让模型直接给出最终 routing 决策，避免再回落到本地推断 |
+| `tool-agent` 直接接收允许工具全集，不再做 registry 打分预选 | 工具选择逻辑迁回模型理解，避免继续本地解析任务语义 |
+| Tool Search 与本地工具说明库一起移除 | 用户明确要求连 `FeatureCoordinator` 中的装配、本地说明文件和相关设置一起下掉 |
