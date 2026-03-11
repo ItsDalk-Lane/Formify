@@ -7,12 +7,27 @@ import {
 } from 'src/builtin-mcp/runtime/plan-state';
 import type { ProviderSettings, SaveAttachment } from 'src/features/tars/providers';
 import type { Message as ProviderMessage, ResolveEmbedAsBinary } from 'src/features/tars/providers';
-import { availableVendors, TarsSettings } from 'src/features/tars/settings';
+import {
+	availableVendors,
+	resolveToolExecutionSettings,
+	syncToolExecutionSettings,
+	TarsSettings,
+} from 'src/features/tars/settings';
+import type { McpClientManager, McpSettings } from 'src/features/tars/mcp';
 import { isImageGenerationModel } from 'src/features/tars/providers/openRouter';
 import { MessageService } from './MessageService';
 import { HistoryService, ChatHistoryEntry } from './HistoryService';
 import { FileContentService } from './FileContentService';
-import type { ChatMessage, ChatSession, ChatSettings, ChatState, McpToolMode, SelectedFile, SelectedFolder } from '../types/chat';
+import type {
+	ChatMessage,
+	ChatSession,
+	ChatSettings,
+	ChatState,
+	McpToolMode,
+	PendingIntentClarification,
+	SelectedFile,
+	SelectedFolder,
+} from '../types/chat';
 import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
 import type { CompareGroup, LayoutMode, MultiModelMode, ParallelResponseGroup } from '../types/multiModel';
 import { v4 as uuidv4 } from 'uuid';
@@ -30,6 +45,7 @@ import { createChatTwoPhaseToolController } from 'src/features/tars/mcp/chatTwoP
 import {
 	TOOL_AGENT_SERVER_ID,
 	TOOL_AGENT_TOOL_NAME,
+	type ToolAgentSettings,
 	type ToolAgentRequest,
 } from 'src/features/tool-agent';
 import {
@@ -37,11 +53,14 @@ import {
 	DEFAULT_INTENT_AGENT_SETTINGS,
 	IntentAgent,
 	IntentResultValidator,
+	type IntentAgentSettings,
 	type IntentResult,
 	type IntentTriggerSource,
 	type RequestContext,
 } from 'src/features/intent-agent';
 import { composeChatSystemPrompt } from 'src/service/PromptBuilder';
+import { localInstance } from 'src/i18n/locals';
+import { ChatSettingsModal } from '../components/ChatSettingsModal';
 
 type ChatSubscriber = (state: ChatState) => void;
 
@@ -51,9 +70,11 @@ export interface PreparedChatRequest {
 	currentSelectedFiles: SelectedFile[];
 	currentSelectedFolders: SelectedFolder[];
 	originalUserInput: string;
+	intentRecognitionInput: string;
 	isImageGenerationIntent: boolean;
 	isModelSupportImageGeneration: boolean;
 	triggerSource: IntentTriggerSource;
+	pendingClarificationContext?: PendingIntentClarification | null;
 	requestContext?: RequestContext;
 	intentResult?: IntentResult;
 }
@@ -77,6 +98,8 @@ const CONFIRM_INTENT_PATTERN =
 	/^(确认|确定|继续|继续执行|执行|是|好的|好|yes|y|confirm|proceed|run it|go ahead)[\s.!?。？！]*$/i;
 const CANCEL_INTENT_PATTERN =
 	/^(取消|停止|算了|不用了|否|不|no|n|cancel|stop|abort|never mind)[\s.!?。？！]*$/i;
+const SUPPLEMENTAL_FOLLOW_UP_PATTERN =
+	/^(补充(?:说明)?|改成|改为|换成|换为|改用|用这个|就用这个|就这个|那就用)\s*[：:\s]/i;
 
 const isEphemeralContextMessage = (message: ChatMessage): boolean =>
 	Boolean(message.metadata?.isEphemeralContext);
@@ -158,6 +181,7 @@ export class ChatService {
 	private readonly contextAssembler: ContextAssembler;
 	private readonly intentAgent: IntentAgent;
 	private readonly intentResultValidator: IntentResultValidator;
+	private chatSettingsModal: ChatSettingsModal | null = null;
 	private pendingTriggerSource: IntentTriggerSource = 'chat_input';
 	// 跟踪当前活动文件的路径
 	private currentActiveFilePath: string | null = null;
@@ -352,6 +376,7 @@ export class ChatService {
 			layoutMode: this.state.layoutMode,
 			livePlan: null,
 			pendingIntentConfirmation: null,
+			pendingIntentClarification: null,
 		};
 		this.state.activeSession = session;
 		this.state.contextNotes = [];
@@ -445,13 +470,14 @@ export class ChatService {
 		intentResult: IntentResult;
 	}> {
 		const modelTag = this.state.selectedModelId ?? this.getDefaultProviderTag();
+		const pendingClarification = prepared.pendingClarificationContext;
 		const requestContext = await this.contextAssembler.assemble({
-			userMessage: prepared.originalUserInput,
+			userMessage: prepared.intentRecognitionInput,
 			session: prepared.session,
 			latestUserMessage: prepared.userMessage,
-			triggerSource: prepared.triggerSource,
-			selectedFiles: prepared.currentSelectedFiles,
-			selectedFolders: prepared.currentSelectedFolders,
+			triggerSource: pendingClarification?.triggerSource ?? prepared.triggerSource,
+			selectedFiles: pendingClarification?.selectedFiles ?? prepared.currentSelectedFiles,
+			selectedFolders: pendingClarification?.selectedFolders ?? prepared.currentSelectedFolders,
 			contextNotes: Array.from(
 				new Set([
 					...(prepared.session.contextNotes ?? []),
@@ -463,9 +489,20 @@ export class ChatService {
 			resolveOllamaCapabilities: async (tag) =>
 				await this.getOllamaCapabilitiesForModel(tag),
 			activeFilePath:
-				this.currentActiveFilePath
+				pendingClarification?.activeFilePath
+				?? this.currentActiveFilePath
 				?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path
 				?? prepared.currentSelectedFiles[0]?.path,
+			selectedTextOverride: pendingClarification?.selectedText,
+			pendingClarificationContext: pendingClarification
+				? {
+					originalUserMessage: pendingClarification.originalUserMessage,
+					normalizedRequest: pendingClarification.normalizedRequest,
+					reason: pendingClarification.reason,
+					questions: pendingClarification.questions,
+					currentReply: prepared.originalUserInput,
+				}
+				: undefined,
 		});
 
 		let intentResult: IntentResult;
@@ -473,25 +510,11 @@ export class ChatService {
 			intentResult = await this.intentAgent.recognize(requestContext);
 		} catch (error) {
 			DebugLogger.warn('[IntentAgent] Falling back to validator inference', error);
-			intentResult = this.intentResultValidator.validate({}, requestContext);
-		}
-		const confidenceThreshold =
-			this.plugin.settings.tars.settings.intentAgent?.confidenceThreshold
-			?? DEFAULT_INTENT_AGENT_SETTINGS.confidenceThreshold;
-		if (
-			intentResult.classification.confidence < confidenceThreshold
-			&& intentResult.routing.executionMode !== 'clarify_first'
-		) {
-			intentResult = this.intentResultValidator.validate(
-				{
-					...intentResult,
-					routing: {
-						...intentResult.routing,
-						executionMode: 'clarify_first',
-					},
-				},
-				requestContext
-			);
+			intentResult = this.intentResultValidator.validate({}, requestContext, {
+				confidenceThreshold:
+					this.plugin.settings.tars.settings.intentAgent?.confidenceThreshold
+					?? DEFAULT_INTENT_AGENT_SETTINGS.confidenceThreshold,
+			});
 		}
 
 		prepared.userMessage.metadata = {
@@ -514,6 +537,10 @@ export class ChatService {
 		}
 
 		if (intentResult.routing.executionMode === 'clarify_first') {
+			prepared.session.pendingIntentClarification = this.buildPendingIntentClarification(
+				prepared,
+				intentResult
+			);
 			await this.appendHostAssistantMessage(
 				prepared.session,
 				this.buildClarificationMessage(intentResult)
@@ -528,6 +555,7 @@ export class ChatService {
 			intentResult.routing.safetyFlags.requiresConfirmation
 			&& !isApproved
 		) {
+			prepared.session.pendingIntentClarification = null;
 			prepared.session.pendingIntentConfirmation = {
 				userMessageId: prepared.userMessage.id,
 				normalizedRequest: intentResult.understanding.normalizedRequest,
@@ -541,7 +569,142 @@ export class ChatService {
 		}
 
 		prepared.session.pendingIntentConfirmation = null;
+		prepared.session.pendingIntentClarification = null;
 		return false;
+	}
+
+	private preparePendingIntentClarification(prepared: PreparedChatRequest): void {
+		const pendingClarification = prepared.session.pendingIntentClarification;
+		prepared.intentRecognitionInput = prepared.originalUserInput;
+		prepared.pendingClarificationContext = null;
+		if (!pendingClarification) {
+			this.prepareImplicitIntentFollowUp(prepared);
+			return;
+		}
+
+		const currentSelectedText =
+			typeof prepared.userMessage.metadata?.selectedText === 'string'
+				? prepared.userMessage.metadata.selectedText
+				: undefined;
+		const analysis = this.contextAssembler.analyzeMessage(
+			this.buildMessageAnalysisInput(
+				prepared.originalUserInput,
+				prepared.currentSelectedFiles,
+				prepared.currentSelectedFolders,
+				currentSelectedText
+			)
+		);
+
+		const isNewIndependentRequest =
+			analysis.hasClearAction
+			&& (analysis.hasUniqueResolvedTarget || analysis.primaryAction === 'search');
+
+		if (isNewIndependentRequest) {
+			prepared.session.pendingIntentClarification = null;
+			return;
+		}
+
+		prepared.pendingClarificationContext = pendingClarification;
+		prepared.intentRecognitionInput = `${pendingClarification.originalUserMessage}\n\n补充说明：${prepared.originalUserInput}`;
+	}
+
+	private prepareImplicitIntentFollowUp(prepared: PreparedChatRequest): void {
+		if (!SUPPLEMENTAL_FOLLOW_UP_PATTERN.test(prepared.originalUserInput.trim())) {
+			return;
+		}
+
+		const currentSelectedText =
+			typeof prepared.userMessage.metadata?.selectedText === 'string'
+				? prepared.userMessage.metadata.selectedText
+				: undefined;
+		const analysis = this.contextAssembler.analyzeMessage(
+			this.buildMessageAnalysisInput(
+				prepared.originalUserInput,
+				prepared.currentSelectedFiles,
+				prepared.currentSelectedFolders,
+				currentSelectedText
+			)
+		);
+		const hasTargetSignal =
+			analysis.hasUniqueResolvedTarget
+			|| analysis.references.length > 0
+			|| analysis.resolvedTargets.length > 0;
+		if (analysis.hasClearAction || !hasTargetSignal) {
+			return;
+		}
+
+		const previousUserMessage = this.getPreviousVisibleUserMessage(
+			prepared.session,
+			prepared.userMessage.id
+		);
+		if (!previousUserMessage) {
+			return;
+		}
+
+		const previousIntent = previousUserMessage.metadata?.intentResult;
+		if (!this.isIntentResult(previousIntent)) {
+			return;
+		}
+
+		const previousOriginalUserMessage =
+			this.getTaskUserInput(previousUserMessage) ?? previousUserMessage.content.trim();
+		if (!previousOriginalUserMessage) {
+			return;
+		}
+
+		const previousTriggerSource = this.readIntentTriggerSource(
+			previousUserMessage.metadata?.triggerSource
+		);
+		const previousSelectedText =
+			typeof previousUserMessage.metadata?.selectedText === 'string'
+				? previousUserMessage.metadata.selectedText
+				: undefined;
+
+		prepared.pendingClarificationContext = {
+			originalUserMessage: previousOriginalUserMessage,
+			normalizedRequest: previousIntent.understanding.normalizedRequest,
+			reason: 'follow_up_target_update',
+			questions: [],
+			createdAt: Date.now(),
+			triggerSource: previousTriggerSource ?? prepared.triggerSource,
+			activeFilePath:
+				this.currentActiveFilePath
+				?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path
+				?? prepared.currentSelectedFiles[0]?.path,
+			selectedText: previousSelectedText ?? currentSelectedText,
+			selectedFiles: [...prepared.currentSelectedFiles],
+			selectedFolders: [...prepared.currentSelectedFolders],
+		};
+		prepared.intentRecognitionInput = `${previousOriginalUserMessage}\n\n补充说明：${prepared.originalUserInput}`;
+	}
+
+	private buildPendingIntentClarification(
+		prepared: PreparedChatRequest,
+		intentResult: IntentResult
+	): PendingIntentClarification {
+		const existing = prepared.pendingClarificationContext;
+		const currentSelectedText =
+			typeof prepared.userMessage.metadata?.selectedText === 'string'
+				? prepared.userMessage.metadata.selectedText
+				: undefined;
+		return {
+			originalUserMessage: existing?.originalUserMessage ?? prepared.originalUserInput,
+			normalizedRequest: intentResult.understanding.normalizedRequest,
+			reason:
+				intentResult.routing.clarification?.reason
+				?? '这个请求还需要补充一个关键细节。',
+			questions: intentResult.routing.clarification?.questions ?? [],
+			createdAt: Date.now(),
+			triggerSource: existing?.triggerSource ?? prepared.triggerSource,
+			activeFilePath:
+				existing?.activeFilePath
+				?? this.currentActiveFilePath
+				?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path
+				?? prepared.currentSelectedFiles[0]?.path,
+			selectedText: existing?.selectedText ?? currentSelectedText,
+			selectedFiles: existing?.selectedFiles ?? [...prepared.currentSelectedFiles],
+			selectedFolders: existing?.selectedFolders ?? [...prepared.currentSelectedFolders],
+		};
 	}
 
 	private async handlePendingIntentConfirmation(
@@ -1199,9 +1362,11 @@ export class ChatService {
 			currentSelectedFiles,
 			currentSelectedFolders,
 			originalUserInput,
+			intentRecognitionInput: originalUserInput,
 			isImageGenerationIntent,
 			isModelSupportImageGeneration,
 			triggerSource,
+			pendingClarificationContext: null,
 		};
 	}
 
@@ -1218,6 +1383,7 @@ export class ChatService {
 			return;
 		}
 		await this.ensurePlanSyncReady();
+		this.preparePendingIntentClarification(prepared);
 		if (confirmationState !== 'confirmed') {
 			const recognizedIntent =
 				await this.recognizeIntentForPreparedRequest(prepared);
@@ -1393,6 +1559,7 @@ export class ChatService {
 		message.metadata = nextMetadata;
 		message.timestamp = Date.now();
 		session.pendingIntentConfirmation = null;
+		session.pendingIntentClarification = null;
 
 		// 删除这条消息之后的所有消息（包括AI回复）
 		session.messages = session.messages.slice(0, messageIndex + 1);
@@ -1418,8 +1585,11 @@ export class ChatService {
 				currentSelectedFiles: [...(session.selectedFiles ?? [])],
 				currentSelectedFolders: [...(session.selectedFolders ?? [])],
 				originalUserInput: editableContent,
+				intentRecognitionInput: editableContent,
 				isImageGenerationIntent: this.detectImageGenerationIntent(editableContent),
-				isModelSupportImageGeneration: this.isCurrentModelSupportImageGeneration()
+				isModelSupportImageGeneration: this.isCurrentModelSupportImageGeneration(),
+				triggerSource: 'chat_input',
+				pendingClarificationContext: null,
 			};
 			await this.multiModelService.sendCompareMessage(prepared);
 			return;
@@ -1560,6 +1730,7 @@ export class ChatService {
 	}
 
 	dispose() {
+		this.closeChatSettingsModal();
 		this.subscribers.clear();
 		this.multiModelService?.stopAllGeneration();
 		this.controller?.abort();
@@ -1571,6 +1742,15 @@ export class ChatService {
 	private emitState() {
 		const snapshot = this.getState();
 		this.subscribers.forEach((callback) => callback(snapshot));
+	}
+
+	private cloneValue<T>(value: T): T {
+		return JSON.parse(JSON.stringify(value)) as T;
+	}
+
+	private handleSettingsSaveError(error: unknown): void {
+		const message = error instanceof Error ? error.message : String(error);
+		new Notice(`${localInstance.chat_settings_save_failed}: ${message}`);
 	}
 
 	private getDefaultProviderTag(): string | null {
@@ -2175,7 +2355,7 @@ export class ChatService {
 						providerOptions.mcpGetTools = toolController.getCurrentTools;
 						providerOptions.mcpCallTool = toolController.callTool;
 					}
-					const maxLoops = mcpManager.getSettings().maxToolCallLoops;
+					const maxLoops = resolveToolExecutionSettings(this.plugin.settings.tars.settings).maxToolCalls;
 					const intentMaxLoops =
 						latestIntentResult?.routing.constraints.maxToolCalls;
 					const resolvedMaxLoops =
@@ -2463,10 +2643,168 @@ export class ChatService {
 		return null;
 	}
 
+	private getPreviousVisibleUserMessage(
+		session: ChatSession,
+		excludeMessageId?: string
+	): ChatMessage | null {
+		let skippedCurrent = false;
+		for (let index = session.messages.length - 1; index >= 0; index -= 1) {
+			const message = session.messages[index];
+			if (message.role !== 'user') {
+				continue;
+			}
+			if (message.metadata?.hiddenFromModel || isEphemeralContextMessage(message)) {
+				continue;
+			}
+			const content = message.content.trim();
+			if (!content) {
+				continue;
+			}
+			if (!skippedCurrent && (!excludeMessageId || message.id === excludeMessageId)) {
+				skippedCurrent = true;
+				continue;
+			}
+			return message;
+		}
+		return null;
+	}
+
 	private getLatestIntentResult(session: ChatSession): IntentResult | null {
 		const latestUserMessage = this.getLatestVisibleUserMessage(session);
 		const intentResult = latestUserMessage?.metadata?.intentResult;
 		return this.isIntentResult(intentResult) ? intentResult : null;
+	}
+
+	private buildMessageAnalysisInput(
+		userMessage: string,
+		selectedFiles: SelectedFile[],
+		selectedFolders: SelectedFolder[],
+		selectedText?: string
+	): Parameters<ContextAssembler['analyzeMessage']>[0] {
+		return {
+			userMessage,
+			activeFilePath:
+				this.currentActiveFilePath
+				?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path
+				?? selectedFiles[0]?.path,
+			selectedText,
+			selectedFiles: selectedFiles.map((file) => file.path),
+			selectedFolders: selectedFolders.map((folder) => folder.path),
+		};
+	}
+
+	private getTaskUserInput(message: ChatMessage): string | null {
+		const taskUserInput = message.metadata?.taskUserInput;
+		if (typeof taskUserInput === 'string' && taskUserInput.trim().length > 0) {
+			return taskUserInput.trim();
+		}
+		const editable = getEditableUserMessageContent(message).trim();
+		return editable.length > 0 ? editable : null;
+	}
+
+	private readIntentTriggerSource(value: unknown): IntentTriggerSource | null {
+		switch (value) {
+			case 'chat_input':
+			case 'selection_toolbar':
+			case 'at_trigger':
+			case 'quick_action':
+			case 'command_palette':
+				return value;
+			default:
+				return null;
+		}
+	}
+
+	private buildResolvedSelectionContext(
+		session: ChatSession,
+		intentResult: IntentResult | null
+	): {
+		selectedFiles: SelectedFile[];
+		selectedFolders: SelectedFolder[];
+	} {
+		const fileMap = new Map<string, SelectedFile>();
+		const folderMap = new Map<string, SelectedFolder>();
+
+		for (const file of session.selectedFiles ?? []) {
+			fileMap.set(file.path, file);
+		}
+		for (const folder of session.selectedFolders ?? []) {
+			folderMap.set(folder.path, folder);
+		}
+		for (const path of intentResult?.understanding.target.paths ?? []) {
+			const selectedItem = this.toSelectedItemFromPath(path);
+			if (!selectedItem) {
+				continue;
+			}
+			if (selectedItem.type === 'file') {
+				fileMap.set(selectedItem.path, selectedItem);
+			} else {
+				folderMap.set(selectedItem.path, selectedItem);
+			}
+		}
+
+		return {
+			selectedFiles: Array.from(fileMap.values()),
+			selectedFolders: Array.from(folderMap.values()),
+		};
+	}
+
+	private toSelectedItemFromPath(path: string): SelectedFile | SelectedFolder | null {
+		const abstractFile = this.app.vault.getAbstractFileByPath(path);
+		if (abstractFile instanceof TFile || this.looksLikeVaultFile(abstractFile, path)) {
+			const name =
+				typeof (abstractFile as { name?: unknown })?.name === 'string'
+					? (abstractFile as { name: string }).name
+					: path.split('/').pop() ?? path;
+			const extension =
+				typeof (abstractFile as { extension?: unknown })?.extension === 'string'
+					? (abstractFile as { extension: string }).extension
+					: (name.includes('.') ? name.split('.').pop() ?? '' : '');
+			return {
+				id: path,
+				name,
+				path,
+				extension,
+				type: 'file',
+			};
+		}
+		if (abstractFile instanceof TFolder || this.looksLikeVaultFolder(abstractFile)) {
+			const name =
+				typeof (abstractFile as { name?: unknown })?.name === 'string'
+					? (abstractFile as { name: string }).name
+					: path.split('/').filter(Boolean).pop() ?? path;
+			return {
+				id: path,
+				name,
+				path,
+				type: 'folder',
+			};
+		}
+		return null;
+	}
+
+	private looksLikeVaultFile(value: unknown, path: string): boolean {
+		return Boolean(
+			value
+			&& typeof value === 'object'
+			&& typeof (value as { path?: unknown }).path === 'string'
+			&& typeof (value as { name?: unknown }).name === 'string'
+			&& (
+				typeof (value as { extension?: unknown }).extension === 'string'
+				|| /\.[A-Za-z0-9_-]+$/.test(path)
+			)
+			&& !Array.isArray((value as { children?: unknown[] }).children)
+		);
+	}
+
+	private looksLikeVaultFolder(value: unknown): boolean {
+		return Boolean(
+			value
+			&& typeof value === 'object'
+			&& typeof (value as { path?: unknown }).path === 'string'
+			&& typeof (value as { name?: unknown }).name === 'string'
+			&& Array.isArray((value as { children?: unknown[] }).children)
+		);
 	}
 
 	private buildToolAgentRequestContext(
@@ -2499,11 +2837,12 @@ export class ChatService {
 				].filter((value): value is string => typeof value === 'string' && value.length > 0)
 			)
 		);
-		const toolAgentDefaults = this.plugin.settings.tars.settings.toolAgent;
+		const sharedToolExecutionSettings = resolveToolExecutionSettings(
+			this.plugin.settings.tars.settings
+		);
 		const maxToolCalls =
 			intentResult?.routing.constraints.maxToolCalls
-			?? toolAgentDefaults?.defaultConstraints.maxToolCalls
-			?? this.plugin.settings.tars.settings.mcp?.maxToolCallLoops
+			?? sharedToolExecutionSettings.maxToolCalls
 			?? 10;
 
 		return {
@@ -2711,9 +3050,11 @@ export class ChatService {
 	 */
 	async buildProviderMessagesForAgent(messages: ChatMessage[], session: ChatSession, systemPrompt?: string): Promise<ProviderMessage[]> {
 		const contextNotes = [...(session.contextNotes ?? []), ...this.state.contextNotes];
-		const selectedFiles = session.selectedFiles ?? [];
-		const selectedFolders = session.selectedFolders ?? [];
 		const latestIntentResult = this.getLatestIntentResult(session);
+		const { selectedFiles, selectedFolders } = this.buildResolvedSelectionContext(
+			session,
+			latestIntentResult
+		);
 		
 		// 文件内容读取选项
 		const fileContentOptions = {
@@ -2763,6 +3104,108 @@ export class ChatService {
 
 	getProviders(): ProviderSettings[] {
 		return [...this.plugin.settings.tars.settings.providers];
+	}
+
+	getChatSettingsSnapshot(): ChatSettings {
+		return this.cloneValue(this.plugin.settings.chat);
+	}
+
+	getTarsSettingsSnapshot(): TarsSettings {
+		return this.cloneValue(this.plugin.settings.tars.settings);
+	}
+
+	getMcpClientManager(): McpClientManager | null {
+		return this.plugin.featureCoordinator.getMcpClientManager();
+	}
+
+	openChatSettingsModal(): void {
+		if (this.chatSettingsModal) {
+			return;
+		}
+
+		this.chatSettingsModal = new ChatSettingsModal(this.app, this, () => {
+			this.chatSettingsModal = null;
+		});
+		this.chatSettingsModal.open();
+	}
+
+	closeChatSettingsModal(): void {
+		this.chatSettingsModal?.close();
+		this.chatSettingsModal = null;
+	}
+
+	async persistChatSettings(partial: Partial<ChatSettings>): Promise<void> {
+		const previousChatSettings = this.cloneValue(this.plugin.settings.chat);
+		const nextChatSettings = {
+			...this.plugin.settings.chat,
+			...partial,
+		};
+
+		this.plugin.settings.chat = nextChatSettings;
+		this.updateSettings(nextChatSettings);
+
+		try {
+			await this.plugin.saveSettings();
+		} catch (error) {
+			this.plugin.settings.chat = previousChatSettings;
+			this.updateSettings(previousChatSettings);
+			this.handleSettingsSaveError(error);
+			throw error;
+		}
+	}
+
+	async persistGlobalSystemPromptsEnabled(enabled: boolean): Promise<void> {
+		const previousTarsSettings = this.cloneValue(this.plugin.settings.tars.settings);
+		this.plugin.settings.tars.settings.enableGlobalSystemPrompts = enabled;
+
+		try {
+			await this.plugin.saveSettings();
+		} catch (error) {
+			this.plugin.settings.tars.settings = previousTarsSettings;
+			this.handleSettingsSaveError(error);
+			throw error;
+		}
+	}
+
+	async persistMcpSettings(mcpSettings: McpSettings): Promise<void> {
+		const previousTarsSettings = this.cloneValue(this.plugin.settings.tars.settings);
+		this.plugin.settings.tars.settings.mcp = this.cloneValue(mcpSettings);
+		syncToolExecutionSettings(this.plugin.settings.tars.settings);
+
+		try {
+			await this.plugin.saveSettings();
+		} catch (error) {
+			this.plugin.settings.tars.settings = previousTarsSettings;
+			this.handleSettingsSaveError(error);
+			throw error;
+		}
+	}
+
+	async persistToolAgentSettings(toolAgentSettings: ToolAgentSettings): Promise<void> {
+		const previousTarsSettings = this.cloneValue(this.plugin.settings.tars.settings);
+		this.plugin.settings.tars.settings.toolAgent = this.cloneValue(toolAgentSettings);
+		syncToolExecutionSettings(this.plugin.settings.tars.settings);
+
+		try {
+			await this.plugin.saveSettings();
+		} catch (error) {
+			this.plugin.settings.tars.settings = previousTarsSettings;
+			this.handleSettingsSaveError(error);
+			throw error;
+		}
+	}
+
+	async persistIntentAgentSettings(intentAgentSettings: IntentAgentSettings): Promise<void> {
+		const previousTarsSettings = this.cloneValue(this.plugin.settings.tars.settings);
+		this.plugin.settings.tars.settings.intentAgent = this.cloneValue(intentAgentSettings);
+
+		try {
+			await this.plugin.saveSettings();
+		} catch (error) {
+			this.plugin.settings.tars.settings = previousTarsSettings;
+			this.handleSettingsSaveError(error);
+			throw error;
+		}
 	}
 
 	async rewriteSessionMessages(session: ChatSession) {

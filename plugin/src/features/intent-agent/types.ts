@@ -73,6 +73,86 @@ export interface ConversationSummary {
 	toolNames?: string[];
 }
 
+export type MessageAction =
+	| 'summarize'
+	| 'analyze'
+	| 'search'
+	| 'read'
+	| 'compare'
+	| 'modify'
+	| 'generate'
+	| 'continue'
+	| 'remember';
+
+export type MessageTargetReferenceType =
+	| 'explicit_path'
+	| 'wiki_link'
+	| 'natural_folder'
+	| 'natural_file'
+	| 'active_file'
+	| 'selected_text'
+	| 'parent_folder'
+	| 'time_alias';
+
+export type MessageTargetKind =
+	| 'file'
+	| 'folder'
+	| 'active_file'
+	| 'selected_text'
+	| 'none';
+
+export interface MessageTargetReference {
+	raw: string;
+	type: MessageTargetReferenceType;
+	normalized: string;
+	preferredKind: MessageTargetKind;
+}
+
+export interface MessagePathResolution {
+	referenceRaw: string;
+	referenceType: MessageTargetReferenceType;
+	preferredKind: Extract<MessageTargetKind, 'file' | 'folder'> | 'none';
+	status: 'unique' | 'ambiguous' | 'missing';
+	candidates: string[];
+	reason?: string;
+}
+
+export interface ResolvedMessageTarget {
+	path: string;
+	kind: Extract<MessageTargetKind, 'file' | 'folder'>;
+}
+
+export interface MessageAnalysis {
+	normalizedActions: MessageAction[];
+	primaryAction?: MessageAction;
+	preparatoryActions: MessageAction[];
+	isCompound: boolean;
+	references: MessageTargetReference[];
+	pathResolutions: MessagePathResolution[];
+	resolvedTargets: ResolvedMessageTarget[];
+	resolvedSpecialTarget?: Extract<MessageTargetKind, 'active_file' | 'selected_text'>;
+	preferredTarget: MessageTargetKind;
+	targetStatus: 'none' | 'special' | 'unique' | 'ambiguous' | 'missing';
+	hasClearAction: boolean;
+	hasUniqueResolvedTarget: boolean;
+	ambiguityReasons: string[];
+	summary: string;
+}
+
+export interface ClarificationQuestion {
+	question: string;
+	options?: string[];
+	defaultAssumption: string;
+}
+
+export interface PendingClarificationContext {
+	originalUserMessage: string;
+	normalizedRequest: string;
+	reason: string;
+	questions: ClarificationQuestion[];
+	currentReply: string;
+}
+
 export interface RequestContext {
 	userMessage: string;
 	hasImages: boolean;
@@ -101,6 +181,8 @@ export interface RequestContext {
 			todo: number;
 		};
 	};
+	messageAnalysis: MessageAnalysis;
+	pendingClarificationContext?: PendingClarificationContext;
 	hasCustomSystemPrompt: boolean;
 	currentModelCapabilities?: string[];
 }
@@ -156,14 +238,14 @@ export interface IntentResult {
 			requiresConfirmation: boolean;
 		};
 		clarification?: {
-			questions: Array<{
-				question: string;
-				options?: string[];
-				defaultAssumption: string;
-			}>;
+			questions: ClarificationQuestion[];
 			reason: string;
 		};
 	};
+}
+
+export interface IntentValidationOptions {
+	confidenceThreshold?: number;
 }
 
 export interface IntentAgentSettings {
@@ -187,4 +269,3 @@ export interface IntentAgentProviderResolverResult {
 	vendorName: string;
 	options: BaseOptions;
 }
-

@@ -1,4 +1,4 @@
-import { History, MessageCirclePlus, Zap, Paperclip, ImageUp } from 'lucide-react';
+import { History, MessageCirclePlus, Settings, Zap, Paperclip, ImageUp } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import { ChatService } from '../services/ChatService';
 import type { ChatState } from '../types/chat';
@@ -10,6 +10,7 @@ import { ModeSelector } from '../components/ModeSelector';
 import { LayoutSelector } from '../components/LayoutSelector';
 import { ToggleButtons } from '../components/ToggleButtons';
 import { App, TFile, TFolder } from 'obsidian';
+import { localInstance } from 'src/i18n/locals';
 
 interface ChatControlsProps {
 	service: ChatService;
@@ -64,6 +65,10 @@ export const ChatControls = ({
 
 	const handleNewChat = () => {
 		service.createNewSession();
+	};
+
+	const handleOpenChatSettings = () => {
+		service.openChatSettingsModal();
 	};
 
 	const handleSelectHistory = async (item: ChatHistoryEntry) => {
@@ -169,7 +174,7 @@ export const ChatControls = ({
 						e.stopPropagation();
 						handleFileUpload();
 					}}
-					className="tw-cursor-pointer tw-text-muted hover:tw-text-accent"
+					className="tw-cursor-pointer tw-text-muted hover:tw-text-accent tw-flex tw-items-center tw-justify-center"
 					aria-label="上传文件"
 					title="上传文件"
 				>
@@ -181,17 +186,25 @@ export const ChatControls = ({
 						e.stopPropagation();
 						handleImageUpload();
 					}}
-					className="tw-cursor-pointer tw-text-muted hover:tw-text-accent"
+					className="tw-cursor-pointer tw-text-muted hover:tw-text-accent tw-flex tw-items-center tw-justify-center"
 					aria-label="上传图片"
 					title="上传图片"
 				>
 					<ImageUp className="tw-size-4" />
 				</span>
-				<span ref={historyButtonRef} onClick={() => setHistoryOpen((prev) => !prev)} aria-label="历史记录" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+				<span ref={historyButtonRef} onClick={() => setHistoryOpen((prev) => !prev)} aria-label="历史记录" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent tw-flex tw-items-center tw-justify-center">
 					<History className="tw-size-4" />
 				</span>
-				<span onClick={handleNewChat} aria-label="新建聊天" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
+				<span onClick={handleNewChat} aria-label="新建聊天" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent tw-flex tw-items-center tw-justify-center">
 					<MessageCirclePlus className="tw-size-4" />
+				</span>
+				<span
+					onClick={handleOpenChatSettings}
+					aria-label={localInstance.chat_settings_button_title}
+					title={localInstance.chat_settings_button_title}
+					className="tw-cursor-pointer tw-text-muted hover:tw-text-accent tw-flex tw-items-center tw-justify-center tw-p-1 tw-rounded hover:tw-bg-purple-100"
+				>
+					<Settings className="tw-size-4" />
 				</span>
 			</div>
 			{historyOpen && (

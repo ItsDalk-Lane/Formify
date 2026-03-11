@@ -60,6 +60,7 @@ import {
 	type ToolAgentSettings,
 	type ToolExecutionStep,
 } from 'src/features/tool-agent';
+import type { ToolExecutionSettings } from 'src/features/tars/settings';
 import {
 	clonePlanSnapshot,
 	type PlanSnapshot,
@@ -94,6 +95,7 @@ interface BuiltinDescriptor {
 
 interface McpClientManagerOptions {
 	getToolAgentSettings?: () => ToolAgentSettings;
+	getToolExecutionSettings?: () => ToolExecutionSettings;
 	resolveToolAgentProviderByTag?: (
 		tag: string
 	) => ToolAgentProviderResolverResult | null;
@@ -1046,16 +1048,21 @@ export class McpClientManager {
 			}
 		};
 
+		const sharedToolExecutionSettings = this.options.getToolExecutionSettings?.();
 		const sendRequest = vendor.sendRequestFunc({
 			...providerConfig.options,
 			mcpTools: toolSearchTools,
 			mcpGetTools: toolController.getCurrentTools,
 			mcpCallTool: tracedControllerCall,
-			mcpMaxToolCallLoops: this.settings.maxToolCallLoops ?? 10,
+			mcpMaxToolCallLoops:
+				sharedToolExecutionSettings?.maxToolCalls
+				?? this.settings.maxToolCallLoops
+				?? 10,
 		});
 		const controller = new AbortController();
 		const timeoutMs =
 			requestContext?.constraints?.timeoutMs
+			?? sharedToolExecutionSettings?.timeoutMs
 			?? settings.defaultConstraints.timeoutMs;
 		const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs);
 		const messages: ProviderMessage[] = [

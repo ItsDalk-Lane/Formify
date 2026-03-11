@@ -124,4 +124,90 @@ Phase 1
 |----------|-----------|
 | 不改通用 `withOpenAIMcpToolCallSupport()` | 仅 Ollama 需要脱离 `/v1` 兼容层，改通用包装器会扩大影响面 |
 | Ollama 工具结果按原生 `tool` 角色 + `tool_name` 回传 | 这正是本地 SDK 和 README 已声明的原生协议 |
+
+---
+
+## Session: 2026-03-10 意图识别柔性化与澄清闭环重构
+
+### Goal
+重构 `intent-agent` 链路，新增共享消息语义分析、自然语言路径解析、定向澄清与澄清后完整重识别闭环。
+
+### Current Phase
+Phase 2
+
+### Phases
+- [x] 复核现有 `IntentAgent` / `ContextAssembler` / `ShortcutRules` / `IntentResultValidator` / `ChatService` 实现
+- [x] 锁定最小改动面与回归测试入口
+- [x] 实现共享消息语义分析与路径解析
+- [x] 接入快捷规则、提示词、验证器与会话澄清闭环
+- [x] 补齐单测并做针对性验证
+- **Status:** complete
+
+### Decisions
+| Decision | Rationale |
+|----------|-----------|
+| 不新增用户设置项 | 用户明确要求继续沿用现有 `confidenceThreshold` |
+| 先做共享 `messageAnalysis`，再让规则/提示词/验证器复用 | 避免各层重复做不一致的推断 |
+| 澄清状态只存在会话内，不落历史 frontmatter | 用户明确要求不持久化 pending clarification |
+| 不以全量 `tsc --noEmit` 作为回归门禁 | 当前仓库锁定的 TS 4.7 与部分第三方声明不兼容，会产生无关错误 |
 | 保留原生普通流式回复路径 | 未启用 MCP 时继续复用现有 `sendRequestFuncBase`，避免不必要回归 |
+
+---
+
+## Session: 2026-03-10 AI Chat 设置弹窗二次调整
+
+### Goal
+把内置工具从 `MCP 服务器` 标签中拆出到独立 `工具` 标签，并把 `子代理配置` 改造成 `子代理` 列表 + 详情配置视图。
+
+### Current Phase
+Phase 1
+
+### Phases
+- [x] 复核当前 `ChatSettingsModal`、MCP 列表与子代理平铺表单实现
+- [x] 重构标签页结构，新增 `工具` 标签并将 MCP 页收敛为外部服务器列表
+- [x] 将 `子代理` 页改为列表入口 + 详情配置
+- [x] 补齐样式、i18n 与针对性测试
+- [x] 运行构建校验并记录结果
+- **Status:** complete
+
+---
+
+## Session: 2026-03-10 工具调用共享配置收敛
+
+### Goal
+把 `MCP 服务器` 与 `子代理` 中分散的工具调用次数 / 超时时间收敛为一套共享设置，并移动到 `AI 助手 -> 高级` 分组。
+
+### Current Phase
+Phase 1
+
+### Phases
+- [x] 盘点工具调用次数 / 超时时间的真实存储结构与运行时读取点
+- [x] 在 `TarsSettings` 中增加共享工具调用设置及兼容旧字段的同步逻辑
+- [x] 从 `ChatSettingsModal` 移除重复配置，并在 `settingTab.ts` 的高级分组新增共享配置入口
+- [x] 补充 i18n 与针对性测试
+- [x] 运行构建 / 测试框架 / diff 校验
+- **Status:** complete
+
+### Decisions
+| Decision | Rationale |
+|----------|-----------|
+| 新增顶层 `toolExecution` 作为共享设置源 | 只靠 UI 同步写旧字段，后续仍可能在运行时重新分叉 |
+| 保留 `mcp.maxToolCallLoops` 与 `toolAgent.defaultConstraints.{maxToolCalls, timeoutMs}` 作为兼容字段 | 这样能最小化改动已有调用链，同时让旧配置自动迁移 |
+| `ChatService.persistMcpSettings()` / `persistToolAgentSettings()` 保存时再次同步共享配置 | 避免聊天设置弹窗里改其他字段时把旧的次数/超时值写回去 |
+
+### Errors Encountered
+| Error | Resolution |
+|-------|------------|
+| 当前仓库没有可直接发现的 Jest 配置或脚本入口 | 保留新增测试文件，并以现有 `npm run test:framework` + `npm run build` 作为本次可执行验证 |
+
+### Decisions
+| Decision | Rationale |
+|----------|-----------|
+| 不修改 `ChatService` 的设置持久化接口 | 当前需求只改变 UI 结构，底层配置读写模型不需要扩散修改 |
+| `工具` 标签复用现有内置 MCP 卡片与工具列表弹窗 | 这样可以最小化改动，同时把内置能力与外部 MCP 服务器清晰分开 |
+| `子代理` 使用列表 + 详情视图，而不是再开二级 modal | 用户明确要求在当前页面内先展示代理列表，再进入具体配置界面 |
+
+### Errors Encountered
+| Error | Resolution |
+|-------|------------|
+| `planning-with-files` 技能文档中的 `session-catchup.py` 默认路径不存在 | 改为手动检查现有 `task_plan.md` / `findings.md` / `progress.md`，继续在项目根维护记录 |

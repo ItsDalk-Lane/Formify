@@ -42,7 +42,7 @@ export class SystemPromptManagerModal extends Modal {
 		this.root.render(
 			<StrictMode>
 				<ObsidianAppContext.Provider value={this.app}>
-					<SystemPromptManagerApp app={this.app} onRequestClose={() => this.close()} />
+					<SystemPromptManagerPanel app={this.app} />
 				</ObsidianAppContext.Provider>
 			</StrictMode>
 		);
@@ -55,7 +55,7 @@ export class SystemPromptManagerModal extends Modal {
 	}
 }
 
-function SystemPromptManagerApp(props: { app: App; onRequestClose: () => void }) {
+export function SystemPromptManagerPanel(props: { app: App; embedded?: boolean }) {
 	const [items, setItems] = useState<SystemPromptItem[]>([]);
 	const [loading, setLoading] = useState(true);
 	const service = useMemo(() => SystemPromptDataService.getInstance(props.app), [props.app]);
@@ -140,7 +140,7 @@ function SystemPromptManagerApp(props: { app: App; onRequestClose: () => void })
 	}, [service, props.app]);
 
 	return (
-		<div className="system-prompt-manager">
+		<div className={`system-prompt-manager ${props.embedded ? 'system-prompt-manager--embedded' : ''}`.trim()}>
 			<div className="system-prompt-manager-toolbar">
 				<button className="mod-cta" onClick={openCreate}>
 					{localInstance.system_prompt_new_button || '新建系统提示词'}

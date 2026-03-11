@@ -115,3 +115,81 @@
 | 为 Ollama 单独实现原生 MCP 工具循环 | 保持其它 OpenAI-compatible provider 的现有逻辑不变 |
 | 未启用 MCP 时继续走旧的原生流式回复实现 | 避免把普通对话链路也一并重写 |
 | 更新 `plugin/src/types/ollama.d.ts` | 当前本地声明缺失 `tools` / `tool_calls` / `tool_name`，会降低后续维护可读性 |
+
+---
+
+## Session: 2026-03-10 意图识别柔性化与澄清闭环重构
+
+### Research Findings
+- `IntentResultValidator` 内部硬编码了 `0.5` 置信度阈值，而 `ChatService` 外层又按设置项 `confidenceThreshold` 再做一次降级，形成双重保守处理。
+- `ContextAssembler` 当前只收集 Obsidian 状态，没有对用户消息做任何结构化语义提取；`PromptBuilder` 也只是把原始上下文直接串给模型。
+- `ShortcutRules` 依赖句首关键词和显式选中文件/文件夹，无法处理“给我总结 000 号文件夹中所有文件的内容”这类自然语言路径引用。
+- `TriggerSourceRules` 目前把 `triggerSource` 当成硬门槛，而不是辅助信号。
+- `ChatService` 只有 `pendingIntentConfirmation`，没有保存待澄清意图，因此用户补充说明后不会重新跑完整意图识别链路。
+- 仓库已有可复用的 Vault 搜索/路径数据来源：
+  - `app.vault.getFiles()` / `getAllLoadedFiles()` 可枚举文件与文件夹
+  - `metadataCache.getFirstLinkpathDest()` 可解析 wiki-link
+  - `builtin-mcp/search-engine/search-engine.ts` 已证明仓库允许在内存里同时处理文件和文件夹匹配
+- 最快的全量类型检查 `cd /Users/study_superior/Desktop/Code/Formify/plugin && npx tsc -p tsconfig.json --noEmit` 当前失败于第三方类型声明（`zod v4`、`@types/d3-dispatch`）与仓库锁定的 TypeScript 4.7.4 兼容性，而不是本次任务代码本身。
+
+### Implementation Direction
+- 新增共享 `messageAnalysis`，集中输出动作归一化、目标引用、路径候选、歧义原因与复合意图标记。
+- 重写快捷规则为候选打分模型，但保持对现有 greeting / memory / continue 等高置信捷径的兼容。
+- 让 `IntentResultValidator` 成为唯一的阈值与澄清落地位置，并消费 `messageAnalysis` 做修正。
+- 在 `ChatService` 增加 `pendingIntentClarification`，把澄清后的补充回答与原请求合并后重新识别。
+
+### Implementation Outcome
+- 最终保留了 `TriggerSourceRules` 类，但语义已经从“硬门槛规则”降级为“高权重候选生成器”。
+- `messageAnalysis` 没有直接决定最终 `IntentResult`，而是作为 `ShortcutRules`、`PromptBuilder`、`Validator` 和 `ChatService` 的共享事实层。
+- 针对“上一级目录里的日报”这类请求，没有强行猜具体文件；规则与验证器都会把它识别为需要先做目录内发现的搜索型请求。
+- `pendingIntentClarification` 只保存在 `ChatSession` 内存态和 `saveSessionState/restoreSessionState` 深拷贝中，没有写入历史 frontmatter，符合任务约束。
+
+---
+
+## Session: 2026-03-10 AI Chat 设置弹窗二次调整
+
+### Research Findings
+- 当前 `ChatSettingsModal` 的标签为 `AI Chat / 系统提示词 / MCP 服务器 / 子代理配置`，其中 `MCP 服务器` 同时展示内置与外部服务器，内置项的操作按钮会打开工具列表弹窗。
+- 当前 `子代理配置` 标签直接平铺渲染了 Tool Call Agent 与 Intent Agent 两整块表单，没有列表层级。
+- `ChatService` 已经提供 `persistMcpSettings`、`persistToolAgentSettings`、`persistIntentAgentSettings`，因此这次重构不需要改动设置持久化接口。
+- 现有 `BuiltinMcpToolsModal` 已从 `settingTab.ts` 抽到 `plugin/src/features/tars/mcp/McpConfigModals.ts`，可以直接复用到新的 `工具` 标签。
+- 当前 `tab_sub_agents` 文案仍是“子代理配置”，`mcp_settings_no_external_servers` 的文案也还在暗示“上方列出全部内置服务器”，需要一并调整。
+
+### Technical Decisions
+| Decision | Rationale |
+|----------|-----------|
+| `MCP 服务器` 标签只保留外部服务器列表与新增/导入能力 | 这样可以直接实现“区分内置和外部 MCP” |
+| 新增 `工具` 标签承载内置 MCP server 卡片 | 内置能力目前正是通过 server 分组暴露工具列表，按 server 列表展示最符合现有结构 |
+| `子代理` 标签先展示代理列表，再在当前标签内切到详情表单 | 保持交互简单，且不需要新增更多 modal 状态管理 |
+
+### Implementation Outcome
+- `ChatSettingsModal` 现在的标签顺序变为 `AI Chat / 系统提示词 / MCP 服务器 / 工具 / 子代理`。
+- `MCP 服务器` 标签只显示外部 MCP 服务器，并保留新增、手动配置、导入与 `maxToolCallLoops` 设置。
+- `工具` 标签承载 5 个内置 MCP server 卡片；每张卡保留启用开关和“查看工具列表”按钮。
+- `子代理` 标签不再直接平铺表单，而是先显示 Tool Call Agent / Intent Agent 两个代理卡片，再通过“配置”按钮进入各自详情表单。
+- 新增了用于内置工具列表与子代理状态显示的纯工具函数，并补了对应测试。
+
+---
+
+## Session: 2026-03-10 工具调用共享配置收敛
+
+### Research Findings
+- 当前“工具调用次数 / 超时时间”实际分散在三处：
+  - `mcp.maxToolCallLoops`
+  - `toolAgent.defaultConstraints.maxToolCalls`
+  - `toolAgent.defaultConstraints.timeoutMs`
+- `ChatService`、`McpClientManager` 与 `FeatureCoordinator` 都各自读取这些旧字段，单纯移动 UI 会导致运行时继续分叉。
+- `ChatSettingsModal` 虽然已移除旧设置页入口，但它仍会整体持久化 `mcp` / `toolAgent` 对象；如果不在保存路径做同步，切换别的开关也可能把旧的次数/超时值写回去。
+- 当前 `plugin/` 里存在 Jest 风格测试文件，但没有可直接发现的 `jest.config.*` 或 package script；可执行验证入口仍是 `npm run build` 与 `npm run test:framework`。
+
+### Technical Decisions
+| Decision | Rationale |
+|----------|-----------|
+| 在 `features/tars/settings.ts` 中新增 `toolExecution`、`resolveToolExecutionSettings()`、`syncToolExecutionSettings()` | 让 UI、默认值、迁移兼容和运行时读取共享同一套逻辑 |
+| `FeatureCoordinator` 给 `McpClientManager` 注入共享工具调用设置 getter | 避免 fallback 子代理继续读旧字段 |
+| 共享配置只在 `AI 助手 -> 高级` 提供编辑入口 | 满足“共用一个配置项”要求，并消除聊天设置弹窗中的重复入口 |
+
+### Implementation Outcome
+- `settingTab.ts` 的“高级”分组新增了两项共享设置：工具调用最大次数、工具调用超时时间。
+- `ChatSettingsModal.tsx` 已移除 `MCP 服务器` 页的最大循环次数输入，以及 `Tool Call Agent` 详情页里的最大工具调用次数 / 超时时间输入。
+- 运行时默认读取统一收敛到 `resolveToolExecutionSettings()`；旧配置会在 clone/save 路径中自动同步。

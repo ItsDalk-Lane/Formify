@@ -8,6 +8,7 @@ import {
 import { ChatFeatureManager } from './chat';
 import { McpClientManager, DEFAULT_MCP_SETTINGS } from './tars/mcp';
 import { DEFAULT_TOOL_AGENT_SETTINGS } from './tool-agent';
+import { resolveToolExecutionSettings } from './tars/settings';
 
 export class FeatureCoordinator {
     private tarsFeatureManager: TarsFeatureManager | null = null;
@@ -58,8 +59,19 @@ export class FeatureCoordinator {
                 this.toolLibraryManager,
                 {
                     getToolAgentSettings: () =>
-                        this.plugin.settings.tars.settings.toolAgent
-                        ?? DEFAULT_TOOL_AGENT_SETTINGS,
+                        ({
+                            ...(this.plugin.settings.tars.settings.toolAgent
+                                ?? DEFAULT_TOOL_AGENT_SETTINGS),
+                            defaultConstraints: {
+                                ...(
+                                    this.plugin.settings.tars.settings.toolAgent?.defaultConstraints
+                                    ?? DEFAULT_TOOL_AGENT_SETTINGS.defaultConstraints
+                                ),
+                                ...resolveToolExecutionSettings(this.plugin.settings.tars.settings),
+                            },
+                        }),
+                    getToolExecutionSettings: () =>
+                        resolveToolExecutionSettings(this.plugin.settings.tars.settings),
                     resolveToolAgentProviderByTag: (tag) => {
                         const provider = this.plugin.settings.tars.settings.providers.find(
                             (item) => item.tag === tag

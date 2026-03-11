@@ -43,7 +43,9 @@ export class IntentAgent {
 		if (settings.shortcutRulesEnabled) {
 			const shortcut = this.shortcutRules.evaluate(context);
 			if (shortcut) {
-				return this.validator.validate(shortcut, context);
+				return this.validator.validate(shortcut, context, {
+					confidenceThreshold: settings.confidenceThreshold,
+				});
 			}
 		}
 
@@ -94,7 +96,9 @@ export class IntentAgent {
 			}
 
 			const parsed = this.parseResponse(content);
-			const validated = this.validator.validate(parsed, context);
+			const validated = this.validator.validate(parsed, context, {
+				confidenceThreshold: settings.confidenceThreshold,
+			});
 			DebugLogger.debug('[IntentAgent] IntentResult', validated);
 			return validated;
 		} finally {
@@ -133,4 +137,3 @@ export class IntentAgent {
 		return value.slice(firstBrace, lastBrace + 1);
 	}
 }
-

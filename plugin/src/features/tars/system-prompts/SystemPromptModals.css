@@ -12,6 +12,11 @@
   height: 46vh;
 }
 
+.system-prompt-manager--embedded {
+  height: 100%;
+  min-height: 0;
+}
+
 .system-prompt-manager-toolbar {
   display: flex;
   justify-content: space-between;

@@ -33,6 +33,16 @@ export type { IntentAgentSettings }
 
 export const APP_FOLDER = 'Tars'
 
+export interface ToolExecutionSettings {
+	maxToolCalls: number
+	timeoutMs: number
+}
+
+export const DEFAULT_TOOL_EXECUTION_SETTINGS: ToolExecutionSettings = {
+	maxToolCalls: 10,
+	timeoutMs: 30000,
+}
+
 export interface EditorStatus {
 	isTextInserting: boolean
 }
@@ -86,6 +96,8 @@ export interface TarsSettings {
 
 	/** MCP 配置（外部 servers 由 mcp-servers/*.md 持久化，内置开关仍在 settings） */
 	mcp?: McpSettings
+	/** 共享工具调用配置 */
+	toolExecution?: ToolExecutionSettings
 	/** Tool call agent configuration */
 	toolAgent?: ToolAgentSettings
 	/** Intent recognition agent configuration */
@@ -121,6 +133,7 @@ export const DEFAULT_TARS_SETTINGS: TarsSettings = {
 	tabCompletionProviderTag: '', // 默认为空，使用第一个可用的 provider
 	tabCompletionPromptTemplate: '{{rules}}\n\n{{context}}',
 	mcp: DEFAULT_MCP_SETTINGS,
+	toolExecution: DEFAULT_TOOL_EXECUTION_SETTINGS,
 	toolAgent: DEFAULT_TOOL_AGENT_SETTINGS,
 	intentAgent: DEFAULT_INTENT_AGENT_SETTINGS,
 	modelCapabilityCache: {},
@@ -148,12 +161,73 @@ export const availableVendors: Vendor[] = [
 
 const cloneDeep = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 
+const resolvePositiveInteger = (
+	...candidates: Array<number | undefined | null>
+): number | undefined => {
+	for (const candidate of candidates) {
+		if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0) {
+			return Math.floor(candidate)
+		}
+	}
+	return undefined
+}
+
+export const resolveToolExecutionSettings = (
+	settings?: Partial<TarsSettings> | null
+): ToolExecutionSettings => ({
+	maxToolCalls:
+		resolvePositiveInteger(
+			settings?.toolExecution?.maxToolCalls,
+			settings?.mcp?.maxToolCallLoops,
+			settings?.toolAgent?.defaultConstraints?.maxToolCalls,
+			DEFAULT_TOOL_EXECUTION_SETTINGS.maxToolCalls
+		) ?? DEFAULT_TOOL_EXECUTION_SETTINGS.maxToolCalls,
+	timeoutMs:
+		resolvePositiveInteger(
+			settings?.toolExecution?.timeoutMs,
+			settings?.toolAgent?.defaultConstraints?.timeoutMs,
+			DEFAULT_TOOL_EXECUTION_SETTINGS.timeoutMs
+		) ?? DEFAULT_TOOL_EXECUTION_SETTINGS.timeoutMs,
+})
+
+export const syncToolExecutionSettings = (
+	settings: TarsSettings,
+	override?: Partial<ToolExecutionSettings>
+): ToolExecutionSettings => {
+	const next = {
+		...resolveToolExecutionSettings(settings),
+		...(override ?? {}),
+	}
+
+	settings.toolExecution = cloneDeep(next)
+
+	if (!settings.mcp) {
+		settings.mcp = cloneDeep(DEFAULT_MCP_SETTINGS)
+	}
+	settings.mcp.maxToolCallLoops = next.maxToolCalls
+
+	if (!settings.toolAgent) {
+		settings.toolAgent = cloneDeep(DEFAULT_TOOL_AGENT_SETTINGS)
+	}
+	settings.toolAgent.defaultConstraints = {
+		...DEFAULT_TOOL_AGENT_SETTINGS.defaultConstraints,
+		...(settings.toolAgent.defaultConstraints ?? {}),
+		maxToolCalls: next.maxToolCalls,
+		timeoutMs: next.timeoutMs,
+	}
+
+	return next
+}
+
 export const cloneTarsSettings = (override?: Partial<TarsSettings>): TarsSettings => {
 	const clonedDefaults = cloneDeep(DEFAULT_TARS_SETTINGS)
 	if (!override) {
+		syncToolExecutionSettings(clonedDefaults)
 		return clonedDefaults
 	}
 	const clonedOverride = cloneDeep(override) as Record<string, unknown>
 	delete clonedOverride.promptTemplates
-	return Object.assign(clonedDefaults, clonedOverride)
+	const merged = Object.assign(clonedDefaults, clonedOverride) as TarsSettings
+	syncToolExecutionSettings(merged)
+	return merged
 }

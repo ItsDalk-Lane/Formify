@@ -14,8 +14,10 @@ import type {
 	ConversationSummary,
 	IntentDomain,
 	IntentTriggerSource,
+	PendingClarificationContext,
 	RequestContext,
 } from './types';
+import { MessageSemanticAnalyzer } from './message-analysis';
 
 interface AssembleRequest {
 	userMessage: string;
@@ -33,6 +35,8 @@ interface AssembleRequest {
 		modelName: string;
 	} | null>;
 	activeFilePath?: string;
+	selectedTextOverride?: string;
+	pendingClarificationContext?: PendingClarificationContext;
 }
 
 const summarizeMessage = (message: ChatMessage): ConversationSummary => {
@@ -75,12 +79,18 @@ const domainToDefaultServerIds = (domain: IntentDomain): string[] => {
 };
 
 export class ContextAssembler {
-	constructor(private readonly app: App) {}
+	private readonly messageAnalyzer: MessageSemanticAnalyzer;
+
+	constructor(private readonly app: App) {
+		this.messageAnalyzer = new MessageSemanticAnalyzer(app);
+	}
 
 	async assemble(input: AssembleRequest): Promise<RequestContext> {
 		const latestMetadata = input.latestUserMessage.metadata ?? {};
 		const selectedText =
-			typeof latestMetadata.selectedText === 'string'
+			typeof input.selectedTextOverride === 'string'
+				? input.selectedTextOverride
+				: typeof latestMetadata.selectedText === 'string'
 				? latestMetadata.selectedText
 				: undefined;
 		const provider = input.resolveProviderByTag(input.modelTag ?? undefined);
@@ -141,6 +151,13 @@ export class ContextAssembler {
 
 		const triggerSource =
 			this.normalizeTriggerSource(input.triggerSource, selectedText, activeFilePath);
+		const messageAnalysis = this.messageAnalyzer.analyze({
+			userMessage: input.userMessage,
+			activeFilePath,
+			selectedText,
+			selectedFiles: input.selectedFiles.map((file) => file.path),
+			selectedFolders: input.selectedFolders.map((folder) => folder.path),
+		});
 
 		return {
 			userMessage: input.userMessage,
@@ -160,9 +177,23 @@ export class ContextAssembler {
 			...(input.contextNotes.length > 0 ? { contextNotes: [...input.contextNotes] } : {}),
 			...(recentConversation.length > 0 ? { recentConversation } : {}),
 			...(livePlan ? { livePlan } : {}),
+			messageAnalysis,
+			...(input.pendingClarificationContext
+				? { pendingClarificationContext: input.pendingClarificationContext }
+				: {}),
 			hasCustomSystemPrompt: Boolean(input.session.enableTemplateAsSystemPrompt || input.session.systemPrompt),
 			...(currentModelCapabilities.length > 0 ? { currentModelCapabilities } : {}),
 		};
+	}
+
+	analyzeMessage(input: {
+		userMessage: string;
+		activeFilePath?: string;
+		selectedText?: string;
+		selectedFiles?: string[];
+		selectedFolders?: string[];
+	}) {
+		return this.messageAnalyzer.analyze(input);
 	}
 
 	getDefaultServerIdsForDomain(domain: IntentDomain): string[] {
@@ -195,4 +226,3 @@ export class ContextAssembler {
 		return triggerSource;
 	}
 }
-

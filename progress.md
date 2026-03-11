@@ -129,3 +129,108 @@
 - Ollama 在存在 `mcpTools + mcpCallTool` 时会直接走原生 `ollama.chat(... tools ...)`。
 - 工具结果已按原生协议回传：`role: 'tool'` + `tool_name`。
 - `plugin/src/types/ollama.d.ts` 与 `plugin/scripts/provider-regression.mjs` 已同步更新。
+
+---
+
+## Session: 2026-03-10 意图识别柔性化与澄清闭环重构
+
+### Current Status
+- **Phase:** 2 - Implementation
+- **Started:** 2026-03-10
+- **Status:** in_progress
+
+### Actions Taken
+- 复核 `IntentAgent.ts`、`IntentAgentPromptBuilder.ts`、`IntentResultValidator.ts`、`context-assembler.ts`、`shortcut-rules.ts`、`trigger-source-rules.ts`、`ChatService.ts` 与相关测试，确认真实缺口与报告一致。
+- 确认 `confidenceThreshold` 当前被 `IntentResultValidator` 和 `ChatService` 双重处理。
+- 确认仓库当前没有 `pendingIntentClarification` 会话状态，澄清回复不会回到完整意图识别链路。
+- 确认仓库已有文件/文件夹枚举和 wiki-link 解析能力，可直接用于共享消息分析器。
+- 运行 `npx tsc -p tsconfig.json --noEmit` 作为基线，记录到第三方类型声明兼容性错误，不把它作为本次回归门禁。
+
+### Next
+- 实现 `messageAnalysis` 与类型扩展。
+- 接入规则、验证器、提示词和会话澄清闭环。
+- 补齐针对性单测。
+
+### Update: 2026-03-10 意图识别重构完成
+
+#### Completed
+- 新增 `plugin/src/features/intent-agent/message-analysis.ts`，实现动作归一化、自然语言文件/文件夹引用、wiki-link、显式路径、上一级目录、时间别名的统一解析。
+- `ContextAssembler` 现在会把 `messageAnalysis` 与 `pendingClarificationContext` 一起注入 `RequestContext`。
+- `ShortcutRules` / `TriggerSourceRules` 已改为基于 `messageAnalysis` 的候选打分，不再依赖句首关键词或 triggerSource 硬门槛。
+- `IntentAgentPromptBuilder` 已补充结构化分析输入和 few-shot 示例。
+- `IntentResultValidator` 已改为单点负责阈值、修正与定向澄清；`ChatService` 外层的二次低置信度降级已删除。
+- `ChatService` / `chat.ts` 已加入 `pendingIntentClarification`，澄清回复会合并原请求后重新走完整意图识别链路。
+- 新增/更新测试：
+  - `message-analysis.test.ts`
+  - `shortcut-rules.test.ts`
+  - `IntentResultValidator.test.ts`
+  - `ChatService.plan.test.ts`
+
+#### Verification
+| Test | Expected | Actual | Status |
+|------|----------|--------|--------|
+| `npm run build` (`plugin/`) | 构建通过，证明改动未引入语法/打包错误 | 通过 | passed |
+| `git diff --check` | 无尾随空白、冲突标记等 patch 问题 | 通过 | passed |
+| `npx tsc -p tsconfig.json --noEmit` | 作为全量类型门禁 | 仍失败于 `zod` / `@types/d3-dispatch` 与 TS 4.7.4 的已知兼容性问题 | blocked |
+| `npx eslint ...` | 局部 lint | 当前仓库未内置可直接运行的 ESLint 版本；`npx` 拉到 v10 后因仓库仍使用 `.eslintrc` 旧配置而无法执行 | blocked |
+
+---
+
+## Session: 2026-03-10 AI Chat 设置弹窗二次调整
+
+### Current Status
+- **Phase:** 1 - Discovery / Refactor
+- **Started:** 2026-03-10
+- **Status:** in_progress
+
+### Actions Taken
+- 读取 `ChatSettingsModal.tsx` / `.css`，确认当前 MCP 标签混合了内置与外部服务器，且子代理仍是平铺表单。
+- 读取 `McpConfigModals.ts`，确认 `BuiltinMcpToolsModal` 可直接复用，不需要再回退到 `settingTab.ts`。
+- 读取 `chatSettingsHelpers.ts`、相关测试以及 i18n 片段，确认这次主要是 UI 结构调整，底层持久化接口无需改动。
+- 检查项目根现有 `task_plan.md` / `findings.md` / `progress.md`，手动接续记录本次任务。
+
+### Notes
+- `planning-with-files` 技能文档里提供的 `session-catchup.py` 默认路径在当前环境不存在，因此改为手动维护记录文件。
+
+### Update: 2026-03-10 调整完成
+
+#### Completed
+- 重写 `plugin/src/features/chat/components/ChatSettingsModal.tsx`，把标签结构改成 `AI Chat / 系统提示词 / MCP 服务器 / 工具 / 子代理`。
+- `MCP 服务器` 标签现在只保留外部服务器列表；内置 MCP 卡片迁到新的 `工具` 标签。
+- `子代理` 标签改成列表 + 详情视图，两个代理条目都提供启用开关和“配置”按钮。
+- 更新 `ChatSettingsModal.css` 以支持卡片按钮、详情返回按钮和移动端换行。
+- 更新 `chatSettingsHelpers.ts` 与 `chatSettingsHelpers.test.ts`，补充内置工具列表和子代理状态的纯函数测试。
+- 更新 `local.ts`、`en.ts`、`zh.ts`、`zhTw.ts`，新增 `工具` 标签和子代理列表/配置相关文案，并把 `tab_sub_agents` 文案改为“子代理”。
+
+#### Verification
+| Test | Expected | Actual | Status |
+|------|----------|--------|--------|
+| `npm run build` (`plugin/`) | 构建通过 | 通过 | passed |
+| `npm run test:framework` (`plugin/`) | 现有测试框架不被本次改动打断 | 退出码 0，包含 build + sync 流程 | passed |
+| `git diff --check` | patch 无格式性问题 | 通过 | passed |
+
+---
+
+## Session: 2026-03-10 工具调用共享配置收敛
+
+### Current Status
+- **Phase:** 1 - Implementation / Verification
+- **Started:** 2026-03-10
+- **Status:** complete
+
+### Actions Taken
+- 读取 `settings.ts`、`ChatService.ts`、`McpClientManager.ts`、`FeatureCoordinator.ts`、`settingTab.ts` 和 `ChatSettingsModal.tsx`，确认工具调用次数 / 超时时间的真实读写链路。
+- 在 `plugin/src/features/tars/settings.ts` 中新增 `toolExecution` 共享设置，以及 `resolveToolExecutionSettings()` / `syncToolExecutionSettings()` 兼容 helper。
+- 更新 `FeatureCoordinator`、`McpClientManager`、`ChatService`，让 Tool Call Agent 和 MCP fallback 共用同一套次数 / 超时时间。
+- 在 `settingTab.ts` 的“高级”分组新增共享配置入口，并从 `ChatSettingsModal.tsx` 中移除重复的次数 / 超时输入。
+- 新增 `settings.test.ts`，并扩展 `ChatService.settings.test.ts` 覆盖共享配置同步。
+
+### Verification
+| Test | Expected | Actual | Status |
+|------|----------|--------|--------|
+| `npm run build` (`plugin/`) | 构建通过 | 通过 | passed |
+| `npm run test:framework` (`plugin/`) | 现有测试框架不被本次改动打断 | 退出码 0，包含 build + sync 流程 | passed |
+| `git diff --check` | patch 无格式性问题 | 通过 | passed |
+
+### Notes
+- 仓库中未发现可直接运行新增 Jest 测试文件的 package script 或配置文件，因此本次没有单独执行 `settings.test.ts` / `ChatService.settings.test.ts`。
