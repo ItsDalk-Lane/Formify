@@ -190,6 +190,52 @@ describe('ChatService live plan sync', () => {
 		expect(context).toContain('1. [in_progress] 实现实时刷新');
 	});
 
+	it('should build chat system prompt from configured system prompt followed by live plan guidance only', async () => {
+		const manager = new MockMcpClientManager();
+		const service = new ChatService(createPlugin(manager));
+
+		const session: ChatSession = {
+			id: 'session-1',
+			title: '测试会话',
+			modelId: '',
+			messages: [
+				{
+					id: 'user-1',
+					role: 'user',
+					content: '继续执行',
+					timestamp: 1,
+				},
+			],
+			createdAt: 1,
+			updatedAt: 1,
+			systemPrompt: '配置的 system prompt',
+			livePlan: planSnapshot,
+			selectedImages: [],
+			selectedFiles: [],
+			selectedFolders: [],
+			enableTemplateAsSystemPrompt: false,
+		};
+
+		const providerMessages = await service.buildProviderMessagesForAgent(
+			session.messages,
+			session,
+			session.systemPrompt
+		);
+
+		expect(providerMessages[0]).toEqual({
+			role: 'system',
+			content: [
+				'配置的 system prompt',
+				'当前会话存在一个 livePlan。',
+				'你需要根据最新用户消息自行判断：用户是要继续执行当前计划、先调整计划，还是暂时不处理这个计划。',
+				'如果用户要继续执行：沿用当前计划，保持计划身份不变，并按顺序逐项推进。',
+				'如果用户要调整计划：先调用 write_plan 提交调整后的完整计划，再按新计划执行。',
+				'如果用户当前并不是在处理这个计划：不要擅自推进或改写它。',
+				'无论是调整计划还是宣称某个任务已完成/已跳过，都必须先用 write_plan 同步计划状态，再输出正文说明。',
+			].join('\n\n'),
+		});
+	});
+
 	it('should treat structural write_plan changes as an explicit plan rewrite', () => {
 		const manager = new MockMcpClientManager();
 		const service = new ChatService(createPlugin(manager));

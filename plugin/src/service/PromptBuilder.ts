@@ -3,30 +3,18 @@ import type { Message as ProviderMessage } from 'src/features/tars/providers';
 import { SystemPromptMode } from 'src/model/enums/SystemPromptMode';
 import { PromptSourceType } from 'src/model/enums/PromptSourceType';
 import { InternalLinkParserService, ParseOptions } from 'src/service/InternalLinkParserService';
-import type { ChatMessage, ChatRole, SelectedFile, SelectedFolder, FileIntentAnalysis, FileRole } from 'src/features/chat/types/chat';
+import type { ChatMessage, SelectedFile, SelectedFolder, FileIntentAnalysis } from 'src/features/chat/types/chat';
 import type { FileContentOptions, FileContentService, FileContent, FolderContent } from 'src/features/chat/services/FileContentService';
 import { FileIntentAnalyzer } from 'src/features/chat/services/FileIntentAnalyzer';
 import { parseContentBlocks } from 'src/features/chat/utils/markdown';
 
 export const DEFAULT_HISTORY_ROUNDS = 10;
 
-export const CHAT_BASE_SYSTEM_PROMPT = [
-	'你是 Formify 的主聊天助手，运行在 Obsidian 环境中。',
-	'优先给出直接、准确、可执行的回答，不要为了显得聪明而展开无关铺垫。',
-	'只有在当前上下文明显需要读取、搜索、修改库内容，或需要调用记忆/规划能力时，才依赖工具。',
-	'如果用户请求不完整，先指出缺失信息并请求最小必要澄清。',
-	'如果上下文里已经有 selected text、active file、selected files 或 livePlan，先利用这些上下文，不要重复向用户索取。',
-].join('\n');
-
 export const composeChatSystemPrompt =(params: {
-	basePrompt?: string;
-	promptAugmentation?: string;
 	configuredSystemPrompt?: string;
 	livePlanGuidance?: string | null;
 }): string | undefined => {
 	const layers = [
-		params.basePrompt ?? CHAT_BASE_SYSTEM_PROMPT,
-		params.promptAugmentation,
 		params.configuredSystemPrompt,
 		params.livePlanGuidance ?? undefined,
 	]

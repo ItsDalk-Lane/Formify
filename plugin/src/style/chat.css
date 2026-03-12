@@ -1153,6 +1153,18 @@
 /* 持久化模态框样式 */
 /* ===================================== */
 
+/* 消除 Obsidian 默认 modal-container 的背景模糊效果 */
+.modal-container:has(.chat-persistent-modal) {
+	backdrop-filter: none !important;
+	-webkit-backdrop-filter: none !important;
+}
+
+.modal-container:has(.chat-persistent-modal) .modal-bg {
+	backdrop-filter: none !important;
+	-webkit-backdrop-filter: none !important;
+	background: transparent !important;
+}
+
 .chat-persistent-modal {
 	width: var(--chat-modal-width, 700px);
 	height: var(--chat-modal-height, 500px);

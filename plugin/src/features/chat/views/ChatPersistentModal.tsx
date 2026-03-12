@@ -426,9 +426,11 @@ export class ChatPersistentModal extends Modal {
 				modalEl.style.pointerEvents = 'auto';
 			}
 
-			// 移除模态容器的模态行为限制
+			// 移除模态容器的模态行为限制，并清除背景模糊效果
 			if (modalContainer) {
 				modalContainer.style.pointerEvents = 'none';
+				modalContainer.style.backdropFilter = 'none';
+				(modalContainer.style as CSSStyleDeclaration & { webkitBackdropFilter: string }).webkitBackdropFilter = 'none';
 			}
 
 			// 防止模态框抢回编辑器焦点
