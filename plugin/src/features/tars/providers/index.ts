@@ -1,4 +1,5 @@
 import { EmbedCache } from 'obsidian'
+import type { McpToolAnnotations } from '../mcp/types'
 
 export type MsgRole = 'user' | 'assistant' | 'system'
 
@@ -68,8 +69,11 @@ export interface BaseOptions {
 /** MCP 工具定义（Provider 使用的精简格式） */
 export interface McpToolDefinitionForProvider {
 	readonly name: string
+	readonly title?: string
 	readonly description: string
 	readonly inputSchema: Record<string, unknown>
+	readonly outputSchema?: Record<string, unknown>
+	readonly annotations?: McpToolAnnotations
 	readonly serverId: string
 }
 

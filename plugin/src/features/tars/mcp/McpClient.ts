@@ -137,13 +137,23 @@ export class McpClient {
 	/** 获取/刷新工具列表 */
 	async refreshTools(): Promise<McpToolInfo[]> {
 		const result = await this.sendRequest('tools/list', {}) as {
-			tools: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }>
+			tools: Array<{
+				name: string
+				title?: string
+				description?: string
+				inputSchema?: Record<string, unknown>
+				outputSchema?: Record<string, unknown>
+				annotations?: McpToolInfo['annotations']
+			}>
 		}
 
 		this._tools = (result.tools ?? []).map((tool) => ({
 			name: tool.name,
+			title: tool.title,
 			description: tool.description ?? '',
 			inputSchema: tool.inputSchema ?? { type: 'object', properties: {} },
+			outputSchema: tool.outputSchema,
+			annotations: tool.annotations,
 			serverId: this.config.id,
 		}))
 
@@ -163,6 +173,7 @@ export class McpClient {
 					name,
 					arguments: args,
 				}) as {
+					structuredContent?: Record<string, unknown>
 					content: Array<{ type: string; text?: string; [key: string]: unknown }>
 					isError?: boolean
 				}

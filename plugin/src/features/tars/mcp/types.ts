@@ -57,13 +57,27 @@ export interface McpServerState {
 }
 
 /** MCP 工具信息（从 tools/list 响应解析） */
+export interface McpToolAnnotations {
+	readonly title?: string
+	readonly readOnlyHint?: boolean
+	readonly destructiveHint?: boolean
+	readonly idempotentHint?: boolean
+	readonly openWorldHint?: boolean
+}
+
 export interface McpToolInfo {
 	/** 工具名称 */
 	readonly name: string
+	/** 工具标题 */
+	readonly title?: string
 	/** 工具描述 */
 	readonly description: string
 	/** JSON Schema 格式的输入参数定义 */
 	readonly inputSchema: Record<string, unknown>
+	/** JSON Schema 格式的输出参数定义 */
+	readonly outputSchema?: Record<string, unknown>
+	/** MCP 工具元数据 */
+	readonly annotations?: McpToolAnnotations
 	/** 所属 MCP 服务器 ID */
 	readonly serverId: string
 }
@@ -88,10 +102,16 @@ export interface McpHealthResult {
 export interface McpToolDefinition {
 	/** 工具名称 */
 	readonly name: string
+	/** 工具标题 */
+	readonly title?: string
 	/** 工具描述 */
 	readonly description: string
 	/** JSON Schema 格式的输入参数定义 */
 	readonly inputSchema: Record<string, unknown>
+	/** JSON Schema 格式的输出参数定义 */
+	readonly outputSchema?: Record<string, unknown>
+	/** MCP 工具元数据 */
+	readonly annotations?: McpToolAnnotations
 	/** 所属 MCP 服务器 ID */
 	readonly serverId: string
 }
@@ -102,8 +122,6 @@ export type McpCallToolFn = (
 	toolName: string,
 	args: Record<string, unknown>
 ) => Promise<string>
-
-export const DEFAULT_BUILTIN_MEMORY_FILE_PATH = 'System/formify/mcp-memory.jsonl'
 
 /** MCP 设置（嵌入 TarsSettings） */
 export interface McpSettings {
@@ -120,35 +138,15 @@ export interface McpSettings {
 	 */
 	builtinFilesystemEnabled?: boolean
 	/**
-	 * 是否启用内置 Fetch MCP Server
-	 * @default true
+	 * 内置时间工具默认时区
+	 * @default Asia/Shanghai
 	 */
-	builtinFetchEnabled?: boolean
+	builtinTimeDefaultTimezone?: string
 	/**
-	 * 是否启用内置 Time MCP Server
-	 * @default true
+	 * @deprecated 时间工具已并入内置基础工具，不再提供独立开关。
+	 * 保留此字段仅用于向下兼容读取旧配置文件，写入时忽略。
 	 */
 	builtinTimeEnabled?: boolean
-	/**
-	 * 是否启用内置 Memory MCP Server
-	 * @default true
-	 */
-	builtinMemoryEnabled?: boolean
-	/**
-	 * 是否启用内置 Sequential Thinking MCP Server
-	 * @default true
-	 */
-	builtinSequentialThinkingEnabled?: boolean
-	/**
-	 * 内置 Memory MCP 的持久化文件路径（相对于 Vault）
-	 * @default "System/formify/mcp-memory.jsonl"
-	 */
-	builtinMemoryFilePath?: string
-	/**
-	 * 是否关闭内置 Sequential Thinking MCP 的思维日志输出
-	 * @default true
-	 */
-	builtinSequentialThinkingDisableThoughtLogging?: boolean
 	/**
 	 * 工具调用循环最大次数
 	 * 即一次对话中 AI 最多可连续调用 MCP 工具的轮数
@@ -163,16 +161,13 @@ export interface McpSettings {
 }
 
 /** MCP 设置默认值 */
+export const DEFAULT_BUILTIN_TIME_TIMEZONE = 'Asia/Shanghai'
+
 export const DEFAULT_MCP_SETTINGS: McpSettings = {
 	servers: [],
 	builtinCoreToolsEnabled: true,
 	builtinFilesystemEnabled: true,
-	builtinFetchEnabled: true,
-	builtinTimeEnabled: true,
-	builtinMemoryEnabled: true,
-	builtinSequentialThinkingEnabled: true,
-	builtinMemoryFilePath: DEFAULT_BUILTIN_MEMORY_FILE_PATH,
-	builtinSequentialThinkingDisableThoughtLogging: true,
+	builtinTimeDefaultTimezone: DEFAULT_BUILTIN_TIME_TIMEZONE,
 	maxToolCallLoops: 10,
 }
 

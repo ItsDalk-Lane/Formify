@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting, TextComponent } from 'obsidian';
+import { App, Modal, Notice, Setting, TextComponent, setIcon } from 'obsidian';
 import { localInstance } from 'src/i18n/locals';
 import { t } from '../lang/helper';
 import type { McpServerConfig, McpToolInfo } from './types';
@@ -407,6 +407,16 @@ export class BuiltinMcpToolsModal extends Modal {
 		super(app);
 	}
 
+	private async copyToolName(toolName: string): Promise<void> {
+		try {
+			await navigator.clipboard.writeText(toolName);
+			new Notice(localInstance.copy_success || '复制成功');
+		} catch (error) {
+			console.error('Failed to copy builtin MCP tool name', error);
+			new Notice(localInstance.copy_failed || '复制失败');
+		}
+	}
+
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
@@ -433,8 +443,24 @@ export class BuiltinMcpToolsModal extends Modal {
 				const item = list.createDiv();
 				item.style.cssText =
 					'padding: 8px 10px; border: 1px solid var(--background-modifier-border); border-radius: 6px;';
-				item.createEl('div', { text: tool.name }).style.cssText =
-					'font-weight: 600;';
+				const header = item.createDiv();
+				header.style.cssText =
+					'display: flex; align-items: center; justify-content: space-between; gap: 8px;';
+				header.createEl('div', { text: tool.name }).style.cssText =
+					'font-weight: 600; word-break: break-all;';
+				const copyButton = header.createEl('button', {
+					attr: {
+						type: 'button',
+						'aria-label': localInstance.copy || '复制',
+						title: localInstance.copy || '复制',
+					},
+				});
+				copyButton.addClass('clickable-icon');
+				copyButton.style.flexShrink = '0';
+				setIcon(copyButton, 'copy');
+				copyButton.addEventListener('click', () => {
+					void this.copyToolName(tool.name);
+				});
 				item.createEl('div', {
 					text: tool.description || localInstance.mcp_builtin_tool_no_description,
 					cls: 'setting-item-description',

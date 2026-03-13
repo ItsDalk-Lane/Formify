@@ -305,7 +305,15 @@ export class SettingsManager {
                 nextTarsSettings.mcp = nextMcpSettings;
                 changed = true;
             }
-            for (const legacyBuiltinField of ['builtinVaultEnabled', 'builtinObsidianSearchEnabled'] as const) {
+            for (const legacyBuiltinField of [
+                'builtinVaultEnabled',
+                'builtinObsidianSearchEnabled',
+                'builtinFetchEnabled',
+                'builtinMemoryEnabled',
+                'builtinSequentialThinkingEnabled',
+                'builtinMemoryFilePath',
+                'builtinSequentialThinkingDisableThoughtLogging',
+            ] as const) {
                 if (Object.prototype.hasOwnProperty.call(nextMcpSettings, legacyBuiltinField)) {
                     delete nextMcpSettings[legacyBuiltinField];
                     nextTarsSettings.mcp = nextMcpSettings;
@@ -481,8 +489,17 @@ export class SettingsManager {
             ...DEFAULT_MCP_SETTINGS,
             ...(settings.tars.settings.mcp ?? {}),
         };
-        delete (runtimeMcpSettings as Record<string, unknown>).builtinVaultEnabled;
-        delete (runtimeMcpSettings as Record<string, unknown>).builtinObsidianSearchEnabled;
+        for (const removedBuiltinField of [
+            'builtinVaultEnabled',
+            'builtinObsidianSearchEnabled',
+            'builtinFetchEnabled',
+            'builtinMemoryEnabled',
+            'builtinSequentialThinkingEnabled',
+            'builtinMemoryFilePath',
+            'builtinSequentialThinkingDisableThoughtLogging',
+        ] as const) {
+            delete (runtimeMcpSettings as Record<string, unknown>)[removedBuiltinField];
+        }
         const normalizedMcpServers = await mcpServerService.syncServers(
             normalizedAiDataFolder,
             runtimeMcpSettings.servers ?? []
@@ -497,8 +514,17 @@ export class SettingsManager {
             ...((mergedTarsSettings as any).mcp ?? {}),
         } as Record<string, unknown>;
         delete mergedMcpSettings.servers;
-        delete mergedMcpSettings.builtinVaultEnabled;
-        delete mergedMcpSettings.builtinObsidianSearchEnabled;
+        for (const removedBuiltinField of [
+            'builtinVaultEnabled',
+            'builtinObsidianSearchEnabled',
+            'builtinFetchEnabled',
+            'builtinMemoryEnabled',
+            'builtinSequentialThinkingEnabled',
+            'builtinMemoryFilePath',
+            'builtinSequentialThinkingDisableThoughtLogging',
+        ] as const) {
+            delete mergedMcpSettings[removedBuiltinField];
+        }
         (mergedTarsSettings as any).mcp = mergedMcpSettings;
 
         const settingsToPersist = {

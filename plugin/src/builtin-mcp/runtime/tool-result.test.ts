@@ -26,6 +26,18 @@ describe('serializeMcpToolResult', () => {
 		expect(result).toContain('"mimeType": "audio/mpeg"');
 	});
 
+	it('should prefer structuredContent over text blocks', () => {
+		const result = serializeMcpToolResult({
+			structuredContent: {
+				beta: 2,
+				alpha: 1,
+			},
+			content: [{ type: 'text', text: 'fallback text' }],
+		});
+
+		expect(result).toBe('{\n  "alpha": 1,\n  "beta": 2\n}');
+	});
+
 	it('should prefix tool errors', () => {
 		expect(
 			serializeMcpToolResult({

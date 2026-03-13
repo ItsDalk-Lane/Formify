@@ -11,14 +11,6 @@ import {
 	BUILTIN_CORE_TOOLS_SERVER_NAME,
 	BUILTIN_FILESYSTEM_SERVER_ID,
 	BUILTIN_FILESYSTEM_SERVER_NAME,
-	BUILTIN_FETCH_SERVER_ID,
-	BUILTIN_FETCH_SERVER_NAME,
-	BUILTIN_TIME_SERVER_ID,
-	BUILTIN_TIME_SERVER_NAME,
-	BUILTIN_MEMORY_SERVER_ID,
-	BUILTIN_MEMORY_SERVER_NAME,
-	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
-	BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
 } from 'src/builtin-mcp/constants';
 import {
 	createCoreToolsBuiltinRuntime,
@@ -28,22 +20,6 @@ import {
 	createFilesystemBuiltinRuntime,
 	type FilesystemBuiltinRuntime,
 } from 'src/builtin-mcp/filesystem-mcp-server';
-import {
-	createFetchBuiltinRuntime,
-	type FetchBuiltinRuntime,
-} from 'src/builtin-mcp/fetch-mcp-server';
-import {
-	createMemoryBuiltinRuntime,
-	type MemoryBuiltinRuntime,
-} from 'src/builtin-mcp/memory-mcp-server';
-import {
-	createSequentialThinkingBuiltinRuntime,
-	type SequentialThinkingBuiltinRuntime,
-} from 'src/builtin-mcp/sequentialthinking-mcp-server';
-import {
-	createTimeBuiltinRuntime,
-	type TimeBuiltinRuntime,
-} from 'src/builtin-mcp/time-mcp-server';
 import {
 	clonePlanSnapshot,
 	type PlanSnapshot,
@@ -59,15 +35,10 @@ import type {
 	McpToolDefinition,
 	McpToolInfo,
 } from './types';
-import { DEFAULT_BUILTIN_MEMORY_FILE_PATH } from './types';
 
 type BuiltinRuntime =
 	| CoreToolsBuiltinRuntime
-	| FilesystemBuiltinRuntime
-	| FetchBuiltinRuntime
-	| TimeBuiltinRuntime
-	| MemoryBuiltinRuntime
-	| SequentialThinkingBuiltinRuntime;
+	| FilesystemBuiltinRuntime;
 
 interface BuiltinDescriptor {
 	serverId: string;
@@ -129,17 +100,6 @@ export class McpClientManager {
 		return settings.enabled !== false;
 	}
 
-	private resolveMemoryFilePath(settings: McpSettings = this.settings): string {
-		const configured = (settings.builtinMemoryFilePath ?? '').trim();
-		return configured || DEFAULT_BUILTIN_MEMORY_FILE_PATH;
-	}
-
-	private resolveDisableThoughtLogging(
-		settings: McpSettings = this.settings
-	): boolean {
-		return settings.builtinSequentialThinkingDisableThoughtLogging !== false;
-	}
-
 	private getBuiltinDescriptors(): BuiltinDescriptor[] {
 		return [
 			{
@@ -147,7 +107,8 @@ export class McpClientManager {
 				serverName: BUILTIN_CORE_TOOLS_SERVER_NAME,
 				isEnabled: (settings) =>
 					this.isMcpEnabled(settings) && settings.builtinCoreToolsEnabled !== false,
-				createRuntime: async (app) => await createCoreToolsBuiltinRuntime(app),
+				createRuntime: async (app, settings) =>
+					await createCoreToolsBuiltinRuntime(app, settings),
 				initErrorLogMessage: '[MCP] 初始化内置基础工具 MCP Server 失败',
 			},
 			{
@@ -157,47 +118,6 @@ export class McpClientManager {
 					this.isMcpEnabled(settings) && settings.builtinFilesystemEnabled !== false,
 				createRuntime: async (app) => await createFilesystemBuiltinRuntime(app),
 				initErrorLogMessage: '[MCP] 初始化内置 Filesystem MCP Server 失败',
-			},
-			{
-				serverId: BUILTIN_FETCH_SERVER_ID,
-				serverName: BUILTIN_FETCH_SERVER_NAME,
-				isEnabled: (settings) =>
-					this.isMcpEnabled(settings) && settings.builtinFetchEnabled !== false,
-				createRuntime: async (app) => await createFetchBuiltinRuntime(app),
-				initErrorLogMessage: '[MCP] 初始化内置 Fetch MCP Server 失败',
-			},
-			{
-				serverId: BUILTIN_TIME_SERVER_ID,
-				serverName: BUILTIN_TIME_SERVER_NAME,
-				isEnabled: (settings) =>
-					this.isMcpEnabled(settings) && settings.builtinTimeEnabled !== false,
-				createRuntime: async (app) => await createTimeBuiltinRuntime(app),
-				initErrorLogMessage: '[MCP] 初始化内置 Time MCP Server 失败',
-			},
-			{
-				serverId: BUILTIN_MEMORY_SERVER_ID,
-				serverName: BUILTIN_MEMORY_SERVER_NAME,
-				isEnabled: (settings) =>
-					this.isMcpEnabled(settings) && settings.builtinMemoryEnabled !== false,
-				createRuntime: async (app, settings) =>
-					await createMemoryBuiltinRuntime(app, {
-						filePath: this.resolveMemoryFilePath(settings),
-					}),
-				initErrorLogMessage: '[MCP] 初始化内置 Memory MCP Server 失败',
-			},
-			{
-				serverId: BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
-				serverName: BUILTIN_SEQUENTIAL_THINKING_SERVER_NAME,
-				isEnabled: (settings) =>
-					this.isMcpEnabled(settings) &&
-					settings.builtinSequentialThinkingEnabled !== false,
-				createRuntime: async (app, settings) =>
-					await createSequentialThinkingBuiltinRuntime(app, {
-						disableThoughtLogging:
-							this.resolveDisableThoughtLogging(settings),
-					}),
-				initErrorLogMessage:
-					'[MCP] 初始化内置 Sequential Thinking MCP Server 失败',
 			},
 		];
 	}
@@ -227,26 +147,6 @@ export class McpClientManager {
 		const descriptor = this.getBuiltinDescriptor(serverId);
 		if (!descriptor) return false;
 		return descriptor.isEnabled(settings);
-	}
-
-	private shouldRestartBuiltinRuntime(
-		serverId: string,
-		oldSettings: McpSettings,
-		newSettings: McpSettings
-	): boolean {
-		if (serverId === BUILTIN_MEMORY_SERVER_ID) {
-			return (
-				this.resolveMemoryFilePath(oldSettings) !==
-				this.resolveMemoryFilePath(newSettings)
-			);
-		}
-		if (serverId === BUILTIN_SEQUENTIAL_THINKING_SERVER_ID) {
-			return (
-				this.resolveDisableThoughtLogging(oldSettings) !==
-				this.resolveDisableThoughtLogging(newSettings)
-			);
-		}
-		return false;
 	}
 
 	/** 更新设置 */
@@ -289,18 +189,19 @@ export class McpClientManager {
 				await this.ensureBuiltinRuntime(descriptor.serverId);
 				continue;
 			}
-			if (
-				wasEnabled &&
-				isEnabled &&
-				this.shouldRestartBuiltinRuntime(
-					descriptor.serverId,
-					oldSettings,
-					settings
-				)
-			) {
-				await this.closeBuiltinRuntime(descriptor.serverId);
-				await this.ensureBuiltinRuntime(descriptor.serverId);
-			}
+		}
+
+		const shouldRefreshCoreToolsRuntime =
+			oldEnabled
+			&& newEnabled
+			&& oldSettings.builtinCoreToolsEnabled !== false
+			&& settings.builtinCoreToolsEnabled !== false
+			&& oldSettings.builtinTimeDefaultTimezone
+				!== settings.builtinTimeDefaultTimezone;
+
+		if (shouldRefreshCoreToolsRuntime) {
+			await this.closeBuiltinRuntime(BUILTIN_CORE_TOOLS_SERVER_ID);
+			await this.ensureBuiltinRuntime(BUILTIN_CORE_TOOLS_SERVER_ID);
 		}
 
 		// 检查被移除或禁用的服务器，断开连接
@@ -352,8 +253,11 @@ export class McpClientManager {
 			for (const tool of state.tools) {
 				externalTools.push({
 					name: tool.name,
+					title: tool.title,
 					description: tool.description,
 					inputSchema: tool.inputSchema,
+					outputSchema: tool.outputSchema,
+					annotations: tool.annotations,
 					serverId: tool.serverId,
 				});
 			}
@@ -528,8 +432,11 @@ export class McpClientManager {
 			const tools = await runtime.listTools();
 			const mappedTools = tools.map((tool) => ({
 				name: tool.name,
+				title: tool.title,
 				description: tool.description,
 				inputSchema: tool.inputSchema,
+				outputSchema: tool.outputSchema,
+				annotations: tool.annotations,
 				serverId,
 			}));
 			this.builtinStates.set(serverId, {
@@ -730,8 +637,11 @@ export class McpClientManager {
 				const tools = await runtime.listTools();
 				const toolDefinitions = tools.map((tool) => ({
 					name: tool.name,
+					title: tool.title,
 					description: tool.description,
 					inputSchema: tool.inputSchema,
+					outputSchema: tool.outputSchema,
+					annotations: tool.annotations,
 					serverId: descriptor.serverId,
 				}));
 				mappedTools.push(...toolDefinitions);
@@ -865,8 +775,11 @@ export class McpClientManager {
 					lastError: undefined,
 					tools: tools.map((tool) => ({
 						name: tool.name,
+						title: tool.title,
 						description: tool.description,
 						inputSchema: tool.inputSchema,
+						outputSchema: tool.outputSchema,
+						annotations: tool.annotations,
 						serverId,
 					})),
 				});

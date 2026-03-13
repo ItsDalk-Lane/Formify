@@ -1,5 +1,44 @@
 # Progress Log
 
+## Session: 2026-03-13 Filesystem MCP 工具补齐
+
+### Current Status
+- **Phase:** 2 - Discovery / Implementation
+- **Started:** 2026-03-13 18:24 CST
+- **Status:** in_progress
+
+### Actions Taken
+- 读取 `plugin/src/builtin-mcp/filesystem-mcp-server.ts`，确认现有工具集合、schema 风格、结果封装方式与可复用辅助函数。
+- 读取 `plugin/src/builtin-mcp/tools/helpers.ts` 与 Obsidian 类型定义，确认 `vault.delete(file, force)`、`metadataCache.getFileCache(file)`、`CachedMetadata.listItems/tags/frontmatter` 可直接支撑本次新增能力。
+- 读取 `plugin/src/builtin-mcp/filesystem-mcp-server.test.ts`，确认当前测试使用 jest 风格的 runtime 黑盒调用，需要先增强 `MockApp` 才能覆盖新增能力。
+- 确认当前 `plugin/package.json` 没有直接暴露单测脚本；后续会优先尝试最小化的相关测试入口，再补充构建验证。
+
+### Pending
+- 修改 helpers 和 filesystem runtime。
+- 扩展 `MockApp` 并补齐回归测试。
+- 运行相关验证并记录结果。
+
+## Session: 2026-03-13 移除 Fetch/Memory/Sequential Thinking 内置工具
+
+### Current Status
+- **Phase:** 4 - Implementation / Verification
+- **Started:** 2026-03-13
+- **Status:** complete
+
+### Actions Taken
+- 删除 `plugin/src/builtin-mcp/fetch-mcp-server.ts`、`memory-mcp-server.ts`、`sequentialthinking-mcp-server.ts` 以及 Fetch helper 单测。
+- 更新 `constants.ts`、`mcp/types.ts`、`mcp/index.ts`、`McpClientManager.ts`，把内置 server 收敛为 Core Tools / Filesystem / Time。
+- 更新 `ChatSettingsModal.tsx` 与 `chatSettingsHelpers.ts`，移除 3 张内置工具卡片和对应启停开关逻辑。
+- 在 `features/tars/settings.ts` 与 `settings/SettingsManager.ts` 中清理废弃配置字段，避免旧 `data.json` 持续写回。
+- 执行 `npm uninstall turndown @types/turndown`，同步收敛 `package.json` / `package-lock.json`。
+
+### Verification
+| Test | Expected | Actual | Status |
+|------|----------|--------|--------|
+| `cd plugin && npm run build` | 删除 3 组内置工具后仍可成功构建 | 通过 | passed |
+| `cd plugin && npm run test:framework` | 现有测试框架与本地同步流程不被本次改动打断 | 通过 | passed |
+| `git diff --check` | patch 无尾随空白、冲突标记等问题 | 通过 | passed |
+
 ## Session: 2026-03-11 移除 Search/Vault MCP 并重组内置工具
 
 ### Current Status

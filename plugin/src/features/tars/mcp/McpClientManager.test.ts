@@ -5,10 +5,6 @@ import {
 import {
 	BUILTIN_CORE_TOOLS_SERVER_ID,
 	BUILTIN_FILESYSTEM_SERVER_ID,
-	BUILTIN_FETCH_SERVER_ID,
-	BUILTIN_TIME_SERVER_ID,
-	BUILTIN_MEMORY_SERVER_ID,
-	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
 } from 'src/builtin-mcp/constants';
 import { McpClientManager } from './McpClientManager';
 import type { McpSettings } from './types';
@@ -31,53 +27,10 @@ jest.mock('src/builtin-mcp/filesystem-mcp-server', () => ({
 	}),
 }));
 
-jest.mock('src/builtin-mcp/fetch-mcp-server', () => ({
-	createFetchBuiltinRuntime: jest.fn().mockResolvedValue({
-		serverId: BUILTIN_FETCH_SERVER_ID,
-		serverName: '内置 Fetch 工具',
-		client: {} as any,
-		callTool: jest.fn(),
-		listTools: jest.fn().mockResolvedValue([]),
-		close: jest.fn().mockResolvedValue(undefined),
-	}),
-}));
-
-jest.mock('src/builtin-mcp/time-mcp-server', () => ({
-	createTimeBuiltinRuntime: jest.fn().mockResolvedValue({
-		serverId: BUILTIN_TIME_SERVER_ID,
-		serverName: '内置 Time 工具',
-		client: {} as any,
-		callTool: jest.fn(),
-		listTools: jest.fn().mockResolvedValue([]),
-		close: jest.fn().mockResolvedValue(undefined),
-	}),
-}));
-
-jest.mock('src/builtin-mcp/memory-mcp-server', () => ({
-	createMemoryBuiltinRuntime: jest.fn().mockResolvedValue({
-		serverId: BUILTIN_MEMORY_SERVER_ID,
-		serverName: 'Memory MCP',
-		client: {} as any,
-		callTool: jest.fn(),
-		listTools: jest.fn().mockResolvedValue([]),
-		close: jest.fn().mockResolvedValue(undefined),
-	}),
-}));
-
-jest.mock('src/builtin-mcp/sequentialthinking-mcp-server', () => ({
-	createSequentialThinkingBuiltinRuntime: jest.fn().mockResolvedValue({
-		serverId: BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
-		serverName: 'Sequential Thinking MCP',
-		client: {} as any,
-		callTool: jest.fn(),
-		listTools: jest.fn().mockResolvedValue([]),
-		close: jest.fn().mockResolvedValue(undefined),
-	}),
-}));
-
 function createMockCoreToolsRuntime() {
 	let currentSnapshot: PlanSnapshot | null = null;
 	const listeners = new Set<(snapshot: PlanSnapshot | null) => void>();
+	const close = jest.fn().mockResolvedValue(undefined);
 
 	const emit = (snapshot: PlanSnapshot | null) => {
 		currentSnapshot = clonePlanSnapshot(snapshot);
@@ -100,13 +53,19 @@ function createMockCoreToolsRuntime() {
 					serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 				},
 				{
-					name: 'execute_script',
+					name: 'formify_execute_script',
 					description: 'execute script',
 					inputSchema: {},
 					serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 				},
+				{
+					name: 'formify_get_time',
+					description: 'get current time or convert between timezones',
+					inputSchema: {},
+					serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
+				},
 			]),
-			close: jest.fn().mockResolvedValue(undefined),
+			close,
 			resetState: jest.fn(),
 			getPlanSnapshot: jest.fn(() => clonePlanSnapshot(currentSnapshot)),
 			syncPlanSnapshot: jest.fn((snapshot: PlanSnapshot | null) => {
@@ -121,6 +80,7 @@ function createMockCoreToolsRuntime() {
 			}),
 		},
 		emit,
+		close,
 		getCurrentSnapshot: () => clonePlanSnapshot(currentSnapshot),
 	};
 }
@@ -130,10 +90,7 @@ describe('McpClientManager', () => {
 		servers: [],
 		builtinCoreToolsEnabled: true,
 		builtinFilesystemEnabled: false,
-		builtinFetchEnabled: false,
-		builtinTimeEnabled: false,
-		builtinMemoryEnabled: false,
-		builtinSequentialThinkingEnabled: false,
+		builtinTimeDefaultTimezone: 'Asia/Shanghai',
 		maxToolCallLoops: 10,
 	};
 
@@ -209,8 +166,14 @@ describe('McpClientManager', () => {
 				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 			},
 			{
-				name: 'execute_script',
+				name: 'formify_execute_script',
 				description: 'execute script',
+				inputSchema: {},
+				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
+			},
+			{
+				name: 'formify_get_time',
+				description: 'get current time or convert between timezones',
 				inputSchema: {},
 				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 			},
@@ -241,22 +204,11 @@ describe('McpClientManager', () => {
 		const manager = new McpClientManager({} as any, {
 			...settings,
 			builtinFilesystemEnabled: true,
-			builtinFetchEnabled: true,
-			builtinTimeEnabled: true,
-			builtinMemoryEnabled: true,
-			builtinSequentialThinkingEnabled: true,
 		});
 
 		expect(manager.getEnabledServerSummaries()).toEqual([
 			{ id: BUILTIN_CORE_TOOLS_SERVER_ID, name: '内置基础工具' },
 			{ id: BUILTIN_FILESYSTEM_SERVER_ID, name: '内置 Filesystem 工具' },
-			{ id: BUILTIN_FETCH_SERVER_ID, name: '内置 Fetch 工具' },
-			{ id: BUILTIN_TIME_SERVER_ID, name: '内置 Time 工具' },
-			{ id: BUILTIN_MEMORY_SERVER_ID, name: '内置 Memory 工具' },
-			{
-				id: BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
-				name: '内置 Sequential Thinking 工具',
-			},
 		]);
 
 		await manager.dispose();
@@ -277,14 +229,57 @@ describe('McpClientManager', () => {
 				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 			},
 			{
-				name: 'execute_script',
+				name: 'formify_execute_script',
 				description: 'execute script',
+				inputSchema: {},
+				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
+			},
+			{
+				name: 'formify_get_time',
+				description: 'get current time or convert between timezones',
 				inputSchema: {},
 				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 			},
 		]);
 		expect(tools.some((tool) => tool.name === 'quick_search')).toBe(false);
 		expect(tools.some((tool) => tool.name === 'read_file')).toBe(false);
+
+		await manager.dispose();
+	});
+
+	it('should rebuild core tools runtime when builtin time default timezone changes', async () => {
+		const firstRuntime = createMockCoreToolsRuntime();
+		const secondRuntime = createMockCoreToolsRuntime();
+		const app = {} as any;
+		createCoreToolsBuiltinRuntimeMock
+			.mockResolvedValueOnce(firstRuntime.runtime)
+			.mockResolvedValueOnce(secondRuntime.runtime);
+
+		const manager = new McpClientManager(app, settings);
+		await manager.getToolsForServer(BUILTIN_CORE_TOOLS_SERVER_ID);
+		await manager.syncLivePlanSnapshot(planSnapshot);
+
+		await manager.updateSettings({
+			...settings,
+			builtinTimeDefaultTimezone: 'America/New_York',
+		});
+
+		expect(firstRuntime.close).toHaveBeenCalledTimes(1);
+		expect(secondRuntime.getCurrentSnapshot()).toEqual(planSnapshot);
+		expect(createCoreToolsBuiltinRuntimeMock).toHaveBeenCalledTimes(2);
+		expect(createCoreToolsBuiltinRuntimeMock).toHaveBeenNthCalledWith(
+			1,
+			app,
+			settings
+		);
+		expect(createCoreToolsBuiltinRuntimeMock).toHaveBeenNthCalledWith(
+			2,
+			app,
+			{
+				...settings,
+				builtinTimeDefaultTimezone: 'America/New_York',
+			}
+		);
 
 		await manager.dispose();
 	});

@@ -358,7 +358,7 @@ function buildToolArgCandidates(
 	if (legacyAlternate) addCandidate(legacyAlternate)
 
 	const isRepoTool =
-		/(repo|repository|github|structure|read_text_file|search_doc)/i.test(toolName)
+		/(repo|repository|github|structure|formify_read_text_file|search_doc)/i.test(toolName)
 		|| Object.keys(properties).some((name) => isRepoLikeKey(name) || isUrlLikeKey(name))
 	if (!isRepoTool) {
 		return candidates

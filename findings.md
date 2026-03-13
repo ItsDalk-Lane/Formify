@@ -1,5 +1,36 @@
 # Findings & Decisions
 
+## Session: 2026-03-13 Filesystem MCP 工具补齐
+
+### Research Findings
+- `filesystem-mcp-server.ts` 当前已经具备路径归一化、目录递归、glob 排除、diff 预览和基础 metadata 读取能力，但还没有删除、内容 grep 或 Vault 查询能力。
+- `plugin/src/builtin-mcp/tools/helpers.ts` 已有 `resolveRegex()`，但只支持 `new RegExp(value)`，无法正确处理 `/pattern/flags` 这类 JavaScript 正则字符串。
+- Obsidian 原生类型已提供 `vault.delete(file, force)`、`metadataCache.getFileCache(file)`、`CachedMetadata.tags/frontmatter/listItems`，足以支撑删除、标签统计、属性统计和任务索引。
+- `ListItemCache.task` 可区分任务完成状态，`position.start.line` 可回溯任务所在行号；结合 `cachedRead()` 可恢复任务原文。
+- 当前 builtin MCP 工具描述本身就是直接写在 runtime 里的中文字符串，不走全局 i18n；因此本次不会新增设置页或 UI 国际化入口。
+
+### Technical Decisions
+| Decision | Rationale |
+|----------|-----------|
+| 为 `list_directory` 和 `search_content` 共用“JavaScript 正则字符串”解析逻辑 | 避免一个工具支持 `/.../i`，另一个不支持，降低模型调用歧义 |
+| `search_files` 达到 `maxResults` 后在结果文本尾部显式提示可能还有更多匹配项 | 这是用户明确要求的返回语义，且不破坏现有“按行列出路径”的消费方式 |
+| `query_vault` 的 `property` / `tag` 数据源按聚合结果建模，`task` / `file` 按明细记录建模 | 这样最贴近用户要求的数据源定义，也能让聚合函数继续叠加使用 |
+
+## Session: 2026-03-13 移除 Fetch/Memory/Sequential Thinking 内置工具
+
+### Research Findings
+- 当前用户可见入口集中在 `plugin/src/features/chat/components/ChatSettingsModal.tsx` 的内置工具卡片，以及 `chatSettingsHelpers.ts` 对内置 server 列表的组装。
+- 运行时接入点集中在 `plugin/src/features/tars/mcp/McpClientManager.ts`；只要从 descriptor 列表移除 server，工具发现、启停和状态汇总都会同步消失。
+- 配置残留不只在 `McpSettings` 类型里，还分散在 `cloneTarsSettings()`、`SettingsManager.cleanupLegacyAIStorage()` 和 `SettingsManager.save()`；如果不一起清理，旧 `data.json` 仍会把废字段写回去。
+- `turndown` 与 `@types/turndown` 仅被 `fetch-mcp-server.ts` 使用，删除 Fetch runtime 后已经没有其他源码引用。
+
+### Technical Decisions
+| Decision | Rationale |
+|----------|-----------|
+| 保留 SettingsManager 中对已删除字段的显式 `delete` | 这样能兼容已有用户配置，并确保下一次保存时废字段不会复活 |
+| 继续保留 “工具” 标签页，只缩减为 Core Tools / Filesystem / Time 三组内置工具 | 用户只要求移除 3 组工具，不需要整个 UI 区块消失 |
+| 删除对应 runtime 源码与 helper test，而不是仅仅停用开关 | 用户明确要求“移除代码、UI、功能”，仅停用会留下大量死代码 |
+
 ## Session: 2026-03-11 移除 Search/Vault MCP 并重组内置工具
 
 ### Research Findings

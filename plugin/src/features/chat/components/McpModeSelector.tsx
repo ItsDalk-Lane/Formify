@@ -136,7 +136,7 @@ export const McpModeSelector = ({ mode, selectedServerIds, service }: McpModeSel
 	const isManualWithSelection = mode === 'manual' && selectedServerIds.length > 0;
 
 	let iconClass = 'tw-size-4';
-	let spanClass = 'tw-cursor-pointer';
+	let spanClass = 'tw-cursor-pointer tw-flex tw-items-center tw-justify-center';
 
 	if (!isActive) {
 		// 禁用：降低透明度

@@ -1,3 +1,4 @@
+import { DEFAULT_BUILTIN_TIME_TIMEZONE } from './mcp/types';
 import {
 	DEFAULT_TOOL_EXECUTION_SETTINGS,
 	cloneTarsSettings,
@@ -94,6 +95,32 @@ describe('tool execution settings', () => {
 		expect(cloned.mcp?.builtinCoreToolsEnabled).toBe(false);
 		expect('builtinVaultEnabled' in ((cloned.mcp ?? {}) as any)).toBe(false);
 		expect('builtinObsidianSearchEnabled' in ((cloned.mcp ?? {}) as any)).toBe(false);
+	});
+
+	it('normalizes builtin time default timezone and removes legacy toggle flag', () => {
+		const cloned = cloneTarsSettings({
+			mcp: {
+				servers: [],
+				builtinTimeDefaultTimezone: '  America/New_York  ',
+				builtinTimeEnabled: false,
+			} as any,
+		} as any);
+
+		expect(cloned.mcp?.builtinTimeDefaultTimezone).toBe('America/New_York');
+		expect('builtinTimeEnabled' in ((cloned.mcp ?? {}) as any)).toBe(false);
+	});
+
+	it('falls back to the Beijing timezone when builtin time default timezone is invalid', () => {
+		const cloned = cloneTarsSettings({
+			mcp: {
+				servers: [],
+				builtinTimeDefaultTimezone: 'Invalid/Timezone',
+			} as any,
+		} as any);
+
+		expect(cloned.mcp?.builtinTimeDefaultTimezone).toBe(
+			DEFAULT_BUILTIN_TIME_TIMEZONE
+		);
 	});
 
 	it('falls back to defaults when no values are configured', () => {

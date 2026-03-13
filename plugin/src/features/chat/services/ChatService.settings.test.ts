@@ -162,4 +162,18 @@ describe('ChatService settings integration', () => {
 		expect('toolAgent' in plugin.settings.tars.settings).toBe(false);
 		expect('intentAgent' in plugin.settings.tars.settings).toBe(false);
 	});
+
+	it('persists builtin time default timezone inside MCP settings', async () => {
+		const plugin = createPlugin();
+		const service = new ChatService(plugin);
+
+		await service.persistMcpSettings({
+			...plugin.settings.tars.settings.mcp,
+			builtinTimeDefaultTimezone: 'America/New_York',
+		});
+
+		expect(plugin.settings.tars.settings.mcp.builtinTimeDefaultTimezone).toBe(
+			'America/New_York'
+		);
+	});
 });

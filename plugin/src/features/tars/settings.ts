@@ -1,3 +1,4 @@
+import { IANAZone } from 'luxon'
 import { ProviderSettings, Vendor } from './providers'
 import { azureVendor } from './providers/azure'
 import { claudeVendor } from './providers/claude'
@@ -17,7 +18,11 @@ import { siliconFlowVendor } from './providers/siliconflow'
 import { zhipuVendor } from './providers/zhipu'
 import type { ModelCapabilityCache } from './providers/modelCapability'
 import type { SystemPromptsDataFile } from './system-prompts/types'
-import { type McpSettings, DEFAULT_MCP_SETTINGS } from './mcp/types'
+import {
+	type McpSettings,
+	DEFAULT_BUILTIN_TIME_TIMEZONE,
+	DEFAULT_MCP_SETTINGS,
+} from './mcp/types'
 
 export const APP_FOLDER = 'Tars'
 
@@ -143,6 +148,14 @@ export const availableVendors: Vendor[] = [
 
 const cloneDeep = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 
+const normalizeBuiltinTimeDefaultTimezone = (value: unknown): string => {
+	const normalized = typeof value === 'string' ? value.trim() : ''
+	if (!normalized || !IANAZone.isValidZone(normalized)) {
+		return DEFAULT_BUILTIN_TIME_TIMEZONE
+	}
+	return normalized
+}
+
 const normalizeMcpSettings = (
 	settings?: McpSettings | Record<string, unknown> | null
 ): McpSettings => {
@@ -159,8 +172,22 @@ const normalizeMcpSettings = (
 		normalized.builtinCoreToolsEnabled = raw.builtinVaultEnabled
 	}
 
-	delete (normalized as Record<string, unknown>).builtinVaultEnabled
-	delete (normalized as Record<string, unknown>).builtinObsidianSearchEnabled
+	normalized.builtinTimeDefaultTimezone = normalizeBuiltinTimeDefaultTimezone(
+		raw.builtinTimeDefaultTimezone
+	)
+
+	for (const removedField of [
+		'builtinVaultEnabled',
+		'builtinObsidianSearchEnabled',
+		'builtinFetchEnabled',
+		'builtinMemoryEnabled',
+		'builtinSequentialThinkingEnabled',
+		'builtinMemoryFilePath',
+		'builtinSequentialThinkingDisableThoughtLogging',
+		'builtinTimeEnabled',
+	] as const) {
+		delete (normalized as Record<string, unknown>)[removedField]
+	}
 
 	return normalized
 }

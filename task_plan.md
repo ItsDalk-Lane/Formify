@@ -1,5 +1,51 @@
 # Task Plan: 修复执行条件弹窗下拉菜单点击无效
 
+## Session: 2026-03-13 Filesystem MCP 工具补齐
+
+### Goal
+补齐并增强 `plugin/src/builtin-mcp/filesystem-mcp-server.ts` 的文件系统工具能力，完成 `list_directory` / `search_files` 增强，新增 `delete_file` / `search_content` / `query_vault`，并补齐针对性测试。
+
+### Current Phase
+Phase 2
+
+### Phases
+- [x] 盘点现有 filesystem runtime、helpers 与测试能力
+- [x] 确认 Obsidian `vault.delete`、metadata cache 与任务/标签缓存的可复用边界
+- [ ] 实现工具 schema、描述、处理逻辑与错误返回
+- [ ] 补齐 `filesystem-mcp-server.test.ts` 回归用例
+- [ ] 运行相关测试与构建校验
+- **Status:** in_progress
+
+### Decisions
+| Decision | Rationale |
+|----------|-----------|
+| `search_content` 返回结构化 JSON 摘要，而不是拼接长文本 | 匹配结果包含路径、行号、上下文、截断信息，JSON 更稳定也更便于模型消费 |
+| `query_vault` 采用受限链式表达式解析，而不是直接暴露任意脚本执行 | 需要支持声明式查询能力，同时把执行边界限制在已定义的数据源与操作集合内 |
+| 文本搜索默认跳过常见二进制扩展名和超大文件 | 用户明确要求避免扫描过大的二进制文件，优先保证稳定性 |
+
+## Session: 2026-03-13 移除 Fetch/Memory/Sequential Thinking 内置工具
+
+### Goal
+从插件中移除内置 Fetch、Memory、Sequential Thinking 三组 MCP 工具，包括 runtime、设置项、聊天设置 UI、默认配置与相关测试，并保留其余内置工具可正常工作。
+
+### Current Phase
+Phase 4
+
+### Phases
+- [x] 盘点内置工具 runtime、配置字段、聊天设置 UI 与测试入口
+- [x] 移除 Fetch/Memory/Sequential Thinking runtime 接入与导出常量
+- [x] 清理聊天设置 UI、helper、默认配置与旧字段归一化逻辑
+- [x] 删除对应 runtime/test 文件并收敛依赖
+- [x] 运行构建、测试框架与 patch 校验
+- **Status:** complete
+
+### Decisions
+| Decision | Rationale |
+|----------|-----------|
+| 只移除内置 MCP 的 Fetch/Memory/Sequential Thinking，不碰普通业务里的 `fetch`/stream 实现 | 用户要求是工具、UI、功能层面的移除，不是全局网络能力清空 |
+| 旧配置字段不做迁移映射，统一在 `cloneTarsSettings()` 和 `SettingsManager` 中清理 | 这 3 组能力已被移除，继续保留旧字段只会污染后续保存结果 |
+| 同步卸载 `turndown` / `@types/turndown` | 这两个依赖只被已删除的 Fetch runtime 使用，保留会形成死依赖 |
+
 ## Session: 2026-03-11 移除 Search/Vault MCP 并重组内置工具
 
 ### Goal

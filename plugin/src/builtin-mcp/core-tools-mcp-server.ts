@@ -3,6 +3,11 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { App, moment } from 'obsidian';
 import {
+	DEFAULT_MCP_SETTINGS,
+	type McpToolAnnotations,
+	type McpSettings,
+} from 'src/features/tars/mcp/types';
+import {
 	BUILTIN_CORE_TOOLS_CLIENT_NAME,
 	BUILTIN_CORE_TOOLS_SERVER_ID,
 	BUILTIN_CORE_TOOLS_SERVER_NAME,
@@ -19,11 +24,15 @@ import { ScriptRuntime } from './runtime/script-runtime';
 import { BuiltinToolRegistry } from './runtime/tool-registry';
 import { registerPlanTools } from './tools/plan-tools';
 import { registerScriptTools } from './tools/script-tools';
+import { registerTimeTools } from './tools/time-tools';
 
 export interface BuiltinToolInfo {
 	name: string;
+	title?: string;
 	description: string;
 	inputSchema: Record<string, unknown>;
+	outputSchema?: Record<string, unknown>;
+	annotations?: McpToolAnnotations;
 	serverId: string;
 }
 
@@ -41,7 +50,8 @@ export interface CoreToolsBuiltinRuntime {
 }
 
 export async function createCoreToolsBuiltinRuntime(
-	app: App
+	app: App,
+	settings: Pick<McpSettings, 'builtinTimeDefaultTimezone'> = DEFAULT_MCP_SETTINGS
 ): Promise<CoreToolsBuiltinRuntime> {
 	const server = new McpServer({
 		name: BUILTIN_CORE_TOOLS_SERVER_NAME,
@@ -60,6 +70,11 @@ export async function createCoreToolsBuiltinRuntime(
 
 	registerScriptTools(server, app, registry, scriptRuntime);
 	registerPlanTools(server, registry, planState);
+	registerTimeTools(server, registry, {
+		defaultTimezone:
+			settings.builtinTimeDefaultTimezone
+			?? DEFAULT_MCP_SETTINGS.builtinTimeDefaultTimezone!,
+	});
 
 	const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
 	const client = new Client({
@@ -86,6 +101,7 @@ export async function createCoreToolsBuiltinRuntime(
 				arguments: args,
 			});
 			return serializeMcpToolResult({
+				structuredContent: result.structuredContent,
 				content: result.content,
 				isError: result.isError,
 			});
@@ -94,8 +110,11 @@ export async function createCoreToolsBuiltinRuntime(
 			const result = await client.listTools();
 			return result.tools.map((tool) => ({
 				name: tool.name,
+				title: tool.title,
 				description: tool.description ?? '',
 				inputSchema: tool.inputSchema,
+				outputSchema: tool.outputSchema,
+				annotations: tool.annotations,
 				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 			}));
 		},
@@ -110,7 +129,10 @@ export async function createCoreToolsBuiltinRuntime(
 	};
 }
 
-export async function createCoreToolsBuiltinClient(app: App): Promise<Client> {
-	const runtime = await createCoreToolsBuiltinRuntime(app);
+export async function createCoreToolsBuiltinClient(
+	app: App,
+	settings: Pick<McpSettings, 'builtinTimeDefaultTimezone'> = DEFAULT_MCP_SETTINGS
+): Promise<Client> {
+	const runtime = await createCoreToolsBuiltinRuntime(app, settings);
 	return runtime.client;
 }

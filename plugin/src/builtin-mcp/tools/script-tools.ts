@@ -6,17 +6,34 @@ import {
 	DEFAULT_SHELL_TIMEOUT_MS,
 } from '../constants';
 import { ScriptRuntime } from '../runtime/script-runtime';
-import { registerTextTool } from '../runtime/register-tool';
+import { registerBuiltinTool } from '../runtime/register-tool';
 import { BuiltinToolRegistry } from '../runtime/tool-registry';
 import { normalizeVaultPath } from './helpers';
 
 const executeScriptSchema = z.object({
-	script: z.string().min(1).describe('要执行的 JavaScript 脚本'),
+	script: z
+		.string()
+		.min(1)
+		.max(12_000)
+		.describe('要执行的受限 JavaScript 脚本；可用 API 为 call_tool(name,args) 与 moment()'),
 });
 
 const callShellSchema = z.object({
-	command: z.string().min(1).describe('要执行的 shell 命令'),
+	command: z
+		.string()
+		.min(1)
+		.max(4_000)
+		.describe('要执行的本机 shell 命令'),
 	cwd: z.string().optional().describe('工作目录，默认 Vault 根目录绝对路径'),
+});
+
+const callShellResultSchema = z.object({
+	supported: z.boolean(),
+	cwd: z.string(),
+	stdout: z.string(),
+	stderr: z.string(),
+	exitCode: z.number().int(),
+	timedOut: z.boolean(),
 });
 
 const resolveVaultBasePath = (app: App): string | null => {
@@ -51,31 +68,53 @@ export function registerScriptTools(
 	registry: BuiltinToolRegistry,
 	scriptRuntime: ScriptRuntime
 ): void {
-	registerTextTool(
+	registerBuiltinTool(
 		server,
 		registry,
-		'execute_script',
-		'在沙箱中执行 JavaScript。可用 API: call_tool(name,args)、moment()。',
-		executeScriptSchema,
+		'formify_execute_script',
+		{
+			title: '执行受限脚本',
+			description:
+				'在受限脚本运行时中执行 JavaScript。仅可使用 call_tool(name,args) 和 moment()；不可访问 require/import/process/globalThis/fetch 等全局，超时控制仅为 best-effort，不承诺进程级隔离。',
+			inputSchema: executeScriptSchema,
+			annotations: {
+				readOnlyHint: false,
+				destructiveHint: true,
+				idempotentHint: false,
+				openWorldHint: false,
+			},
+		},
 		async ({ script }) => {
 			return await scriptRuntime.execute(script);
 		}
 	);
 
-	registerTextTool(
+	registerBuiltinTool(
 		server,
 		registry,
-		'call_shell',
-		'执行 shell 命令（仅桌面端支持）。',
-		callShellSchema,
+		'formify_call_shell',
+		{
+			title: '执行本机 Shell',
+			description:
+				'执行本机 shell 命令（仅桌面端支持）。该工具可能修改本地环境并访问开放世界资源；如果输出过长，请缩小命令范围、指定 cwd，或拆分为多次调用。',
+			inputSchema: callShellSchema,
+			outputSchema: callShellResultSchema,
+			annotations: {
+				readOnlyHint: false,
+				destructiveHint: true,
+				idempotentHint: false,
+				openWorldHint: true,
+			},
+		},
 		async ({ command, cwd }) => {
 			if (!Platform.isDesktopApp && !Platform.isDesktop) {
 				return {
 					supported: false,
-					message: 'call_shell 仅支持桌面端',
+					cwd: '',
 					stdout: '',
 					stderr: '',
 					exitCode: -1,
+					timedOut: false,
 				};
 			}
 
@@ -113,6 +152,12 @@ export function registerScriptTools(
 								error && typeof error.code === 'number'
 									? error.code
 									: 0,
+							timedOut: Boolean(
+								error
+								&& typeof error === 'object'
+								&& 'killed' in error
+								&& (error as { killed?: boolean }).killed
+							),
 						});
 					}
 				);

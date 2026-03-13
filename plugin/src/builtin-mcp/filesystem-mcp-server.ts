@@ -2,17 +2,22 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { App, TAbstractFile, TFile, TFolder } from 'obsidian';
+import { localInstance } from 'src/i18n/locals';
+import type { McpToolAnnotations } from 'src/features/tars/mcp/types';
 import { z } from 'zod';
 import {
 	BUILTIN_FILESYSTEM_CLIENT_NAME,
 	BUILTIN_FILESYSTEM_SERVER_ID,
 	BUILTIN_FILESYSTEM_SERVER_NAME,
 	BUILTIN_FILESYSTEM_SERVER_VERSION,
+	DEFAULT_SEARCH_MAX_RESULTS,
+	DEFAULT_TEXT_FILE_MAX_CHARS,
 } from './constants';
-import { registerTextTool } from './runtime/register-tool';
-import { serializeMcpToolResult } from './runtime/tool-result';
+import { registerBuiltinTool } from './runtime/register-tool';
+import { serializeMcpToolResult, toCanonicalJsonText } from './runtime/tool-result';
 import { BuiltinToolRegistry } from './runtime/tool-registry';
 import { registerNavTools } from './tools/nav-tools';
+import { executeVaultQuery } from './tools/vault-query';
 import {
 	assertVaultPath,
 	assertVaultPathOrRoot,
@@ -23,6 +28,7 @@ import {
 	getFileStat,
 	getFolderOrThrow,
 	normalizeVaultPath,
+	resolveRegex,
 } from './tools/helpers';
 
 const { createTwoFilesPatch } = require('diff') as {
@@ -45,8 +51,11 @@ const { minimatch } = require('minimatch') as {
 
 export interface BuiltinToolInfo {
 	name: string;
+	title?: string;
 	description: string;
 	inputSchema: Record<string, unknown>;
+	outputSchema?: Record<string, unknown>;
+	annotations?: McpToolAnnotations;
 	serverId: string;
 }
 
@@ -70,10 +79,58 @@ interface EditOperation {
 	newText: string;
 }
 
+interface ContentSearchContextEntry {
+	line: number;
+	text: string;
+}
+
+interface ContentSearchMatch {
+	path: string;
+	line: number;
+	text: string;
+	before: ContentSearchContextEntry[];
+	after: ContentSearchContextEntry[];
+}
+
+type BuiltinResponseFormat = 'json' | 'text';
+
+const responseFormatSchema = z
+	.enum(['json', 'text'])
+	.default('json')
+	.describe("返回格式：json 为稳定对象，text 为紧凑文本");
+
+const structuredOutputSchema = z.object({}).passthrough();
+const readOnlyToolAnnotations = {
+	readOnlyHint: true,
+	destructiveHint: false,
+	idempotentHint: true,
+	openWorldHint: false,
+} as const;
+const mutationToolAnnotations = {
+	readOnlyHint: false,
+	destructiveHint: true,
+	idempotentHint: false,
+	openWorldHint: false,
+} as const;
+const navigationToolAnnotations = {
+	readOnlyHint: false,
+	destructiveHint: false,
+	idempotentHint: false,
+	openWorldHint: false,
+} as const;
+
 const readTextFileSchema = z.object({
 	path: z.string().min(1).describe('相对于 Vault 根目录的文件路径'),
 	head: z.number().int().positive().optional().describe('仅读取前 N 行'),
 	tail: z.number().int().positive().optional().describe('仅读取后 N 行'),
+	max_chars: z
+		.number()
+		.int()
+		.positive()
+		.max(DEFAULT_TEXT_FILE_MAX_CHARS)
+		.default(DEFAULT_TEXT_FILE_MAX_CHARS)
+		.describe(`最大返回字符数，默认 ${DEFAULT_TEXT_FILE_MAX_CHARS}`),
+	response_format: responseFormatSchema,
 });
 
 const readMediaFileSchema = z.object({
@@ -81,7 +138,19 @@ const readMediaFileSchema = z.object({
 });
 
 const readMultipleFilesSchema = z.object({
-	paths: z.array(z.string().min(1)).min(1).describe('要读取的文件路径数组'),
+	paths: z
+		.array(z.string().min(1))
+		.min(1)
+		.max(20)
+		.describe('要读取的文件路径数组，最多 20 个'),
+	max_chars: z
+		.number()
+		.int()
+		.positive()
+		.max(DEFAULT_TEXT_FILE_MAX_CHARS)
+		.default(DEFAULT_TEXT_FILE_MAX_CHARS)
+		.describe(`单个文件的最大返回字符数，默认 ${DEFAULT_TEXT_FILE_MAX_CHARS}`),
+	response_format: responseFormatSchema,
 });
 
 const writeFileSchema = z.object({
@@ -110,12 +179,29 @@ const directoryPathSchema = z.object({
 		.describe('相对于 Vault 根目录的目录路径；根目录可传 /'),
 });
 
+const listDirectorySchema = z.object({
+	path: z
+		.string()
+		.min(1)
+		.describe('相对于 Vault 根目录的目录路径；根目录可传 /'),
+	regex: z
+		.string()
+		.optional()
+		.describe('可选的 JavaScript 正则表达式字符串，仅返回名称匹配的文件和文件夹'),
+	limit: z.number().int().positive().max(500).default(100),
+	offset: z.number().int().min(0).default(0),
+	response_format: responseFormatSchema,
+});
+
 const listDirectoryWithSizesSchema = z.object({
 	path: z
 		.string()
 		.min(1)
 		.describe('相对于 Vault 根目录的目录路径；根目录可传 /'),
 	sortBy: z.enum(['name', 'size']).optional().default('name'),
+	limit: z.number().int().positive().max(500).default(100),
+	offset: z.number().int().min(0).default(0),
+	response_format: responseFormatSchema,
 });
 
 const moveFileSchema = z.object({
@@ -130,6 +216,14 @@ const searchFilesSchema = z.object({
 		.describe('相对于 Vault 根目录的起始目录路径；根目录可传 /'),
 	pattern: z.string().min(1).describe('glob 风格搜索模式'),
 	excludePatterns: z.array(z.string()).optional().default([]),
+	maxResults: z
+		.number()
+		.int()
+		.positive()
+		.optional()
+		.default(100)
+		.describe('返回结果的最大数量，默认 100'),
+	response_format: responseFormatSchema,
 });
 
 const directoryTreeSchema = z.object({
@@ -138,6 +232,9 @@ const directoryTreeSchema = z.object({
 		.min(1)
 		.describe('相对于 Vault 根目录的起始目录路径；根目录可传 /'),
 	excludePatterns: z.array(z.string()).optional().default([]),
+	max_depth: z.number().int().positive().max(20).default(5),
+	max_nodes: z.number().int().positive().max(2_000).default(200),
+	response_format: responseFormatSchema,
 });
 
 const getFileInfoSchema = z.object({
@@ -145,9 +242,62 @@ const getFileInfoSchema = z.object({
 		.string()
 		.min(1)
 		.describe('相对于 Vault 根目录的文件或目录路径；根目录可传 /'),
+	response_format: responseFormatSchema,
 });
 
-const listAllowedDirectoriesSchema = z.object({});
+const deleteFileSchema = z.object({
+	path: z.string().min(1).describe('相对于 Vault 根目录的文件或文件夹路径'),
+	force: z
+		.boolean()
+		.optional()
+		.default(true)
+		.describe('删除文件夹时是否强制递归删除隐藏内容，默认 true'),
+});
+
+const searchContentSchema = z.object({
+	pattern: z.string().min(1).describe('用于搜索文件内容的正则表达式'),
+	path: z
+		.string()
+		.optional()
+		.default('/')
+		.describe('限制搜索范围的目录路径；默认为整个 Vault'),
+	fileType: z
+		.string()
+		.optional()
+		.describe('文件扩展名过滤，如 md 或 ts,tsx'),
+	maxResults: z
+		.number()
+		.int()
+		.positive()
+		.optional()
+		.default(DEFAULT_SEARCH_MAX_RESULTS)
+		.describe('返回的最大匹配数量，默认 50'),
+	caseSensitive: z
+		.boolean()
+		.optional()
+		.default(false)
+		.describe('是否区分大小写，默认 false'),
+	contextLines: z
+		.number()
+		.int()
+		.min(0)
+		.optional()
+		.default(0)
+		.describe('返回匹配行前后的上下文行数，默认 0'),
+	response_format: responseFormatSchema,
+});
+
+const queryVaultSchema = z.object({
+	expression: z
+		.string()
+		.min(1)
+		.describe('安全 DSL 查询表达式，例如 select(path).from(file).limit(10)'),
+	response_format: responseFormatSchema,
+});
+
+const listAllowedDirectoriesSchema = z.object({
+	response_format: responseFormatSchema,
+});
 
 const mimeTypes: Record<string, string> = {
 	png: 'image/png',
@@ -199,6 +349,102 @@ const formatSize = (bytes: number): string => {
 };
 
 const normalizeLineEndings = (text: string): string => text.replace(/\r\n/g, '\n');
+
+const MAX_CONTENT_SEARCH_FILE_SIZE_BYTES = 2 * 1024 * 1024;
+
+const binaryFileExtensions = new Set([
+	'png',
+	'jpg',
+	'jpeg',
+	'gif',
+	'webp',
+	'bmp',
+	'svg',
+	'ico',
+	'mp3',
+	'wav',
+	'ogg',
+	'flac',
+	'm4a',
+	'mp4',
+	'mov',
+	'avi',
+	'pdf',
+	'zip',
+	'gz',
+	'tar',
+	'7z',
+	'rar',
+	'exe',
+	'dll',
+	'so',
+	'bin',
+	'woff',
+	'woff2',
+	'ttf',
+	'eot',
+]);
+
+const formatLocal = (template: string, ...values: Array<string | number>): string => {
+	return values.reduce((text, value, index) => {
+		return text.replace(new RegExp(`\\{${index}\\}`, 'g'), String(value));
+	}, template);
+};
+
+const parseFileTypeFilter = (fileType?: string): string[] | null => {
+	const raw = String(fileType ?? '').trim();
+	if (!raw) {
+		return null;
+	}
+	const extensions = raw
+		.split(',')
+		.map((part) => part.trim().replace(/^\./, '').toLowerCase())
+		.filter(Boolean);
+	if (extensions.length === 0) {
+		throw new Error(localInstance.mcp_fs_search_content_invalid_file_type);
+	}
+	return Array.from(new Set(extensions));
+};
+
+const createContentSearchRegex = (
+	pattern: string,
+	caseSensitive: boolean
+): RegExp => {
+	try {
+		return new RegExp(pattern, caseSensitive ? '' : 'i');
+	} catch (error) {
+		throw new Error(
+			`非法正则表达式: ${
+				error instanceof Error ? error.message : String(error)
+			}`
+		);
+	}
+};
+
+const isPathUnderDirectory = (rootPath: string, targetPath: string): boolean => {
+	if (!rootPath) {
+		return true;
+	}
+	return targetPath === rootPath || targetPath.startsWith(`${rootPath}/`);
+};
+
+const createContextEntries = (
+	lines: string[],
+	startLine: number,
+	endLine: number
+): ContentSearchContextEntry[] => {
+	const entries: ContentSearchContextEntry[] = [];
+	for (let index = startLine; index <= endLine; index += 1) {
+		if (index < 0 || index >= lines.length) {
+			continue;
+		}
+		entries.push({
+			line: index + 1,
+			text: lines[index],
+		});
+	}
+	return entries;
+};
 
 const applyEditsToText = (
 	originalText: string,
@@ -287,6 +533,34 @@ const sliceTextByLines = (
 	return normalized;
 };
 
+const applyMaxChars = (
+	text: string,
+	maxChars: number
+): { text: string; truncated: boolean } => {
+	const normalized = normalizeLineEndings(text);
+	if (normalized.length <= maxChars) {
+		return {
+			text: normalized,
+			truncated: false,
+		};
+	}
+	return {
+		text: normalized.slice(0, maxChars),
+		truncated: true,
+	};
+};
+
+const asStructuredOrText = <T extends Record<string, unknown>>(
+	responseFormat: BuiltinResponseFormat,
+	value: T,
+	textFactory?: (structured: T) => string
+): T | string => {
+	if (responseFormat === 'json') {
+		return value;
+	}
+	return textFactory ? textFactory(value) : toCanonicalJsonText(value);
+};
+
 const toBase64 = (buffer: ArrayBuffer): string =>
 	Buffer.from(buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : buffer).toString(
 		'base64'
@@ -326,21 +600,46 @@ const collectDescendants = (folder: TFolder): TAbstractFile[] => {
 const buildDirectoryTree = (
 	folder: TFolder,
 	rootPath: string,
-	excludePatterns: string[]
+	excludePatterns: string[],
+	maxDepth: number,
+	maxNodes: number,
+	state: { nodes: number; truncated: boolean },
+	currentDepth = 1
 ): FilesystemEntry[] => {
 	const result: FilesystemEntry[] = [];
 
 	for (const child of folder.children) {
+		if (state.nodes >= maxNodes) {
+			state.truncated = true;
+			break;
+		}
 		const relativePath = toRelativeChildPath(rootPath, child.path);
 		if (isExcludedByPatterns(relativePath, excludePatterns)) {
 			continue;
 		}
+		state.nodes += 1;
 
 		if (child instanceof TFolder) {
+			if (currentDepth >= maxDepth) {
+				state.truncated = true;
+				result.push({
+					name: child.name,
+					type: 'directory',
+				});
+				continue;
+			}
 			result.push({
 				name: child.name,
 				type: 'directory',
-				children: buildDirectoryTree(child, rootPath, excludePatterns),
+				children: buildDirectoryTree(
+					child,
+					rootPath,
+					excludePatterns,
+					maxDepth,
+					maxNodes,
+					state,
+					currentDepth + 1
+				),
 			});
 			continue;
 		}
@@ -354,6 +653,25 @@ const buildDirectoryTree = (
 	return result;
 };
 
+const shouldSkipContentSearchFile = (
+	file: TFile,
+	allowedExtensions: string[] | null
+): string | null => {
+	const extension = file.extension?.toLowerCase() ?? '';
+	if (allowedExtensions && allowedExtensions.length > 0) {
+		if (!allowedExtensions.includes(extension)) {
+			return 'filtered';
+		}
+	}
+	if (binaryFileExtensions.has(extension)) {
+		return localInstance.mcp_fs_search_content_skipped_binary;
+	}
+	if ((file.stat?.size ?? 0) > MAX_CONTENT_SEARCH_FILE_SIZE_BYTES) {
+		return localInstance.mcp_fs_search_content_skipped_large;
+	}
+	return null;
+};
+
 export async function createFilesystemBuiltinRuntime(
 	app: App
 ): Promise<FilesystemBuiltinRuntime> {
@@ -363,25 +681,45 @@ export async function createFilesystemBuiltinRuntime(
 	});
 	const registry = new BuiltinToolRegistry();
 
-	registerTextTool(
+	registerBuiltinTool(
 		server,
 		registry,
-		'read_text_file',
-		'读取单个文本文件完整内容，可选仅返回前 N 行或后 N 行。',
-		readTextFileSchema,
-		async ({ path, head, tail }) => {
+		'formify_read_text_file',
+		{
+			title: '读取文本文件',
+			description: '读取单个文本文件，可选仅返回前 N 行或后 N 行，并限制最大字符数。',
+			inputSchema: readTextFileSchema,
+			outputSchema: structuredOutputSchema,
+			annotations: readOnlyToolAnnotations,
+		},
+		async ({ path, head, tail, max_chars = DEFAULT_TEXT_FILE_MAX_CHARS, response_format = 'json' }) => {
 			const normalizedPath = normalizeFilePath(path);
 			const file = getFileOrThrow(app, normalizedPath);
 			const content = await app.vault.cachedRead(file);
-			return sliceTextByLines(content, { head, tail });
+			const sliced = sliceTextByLines(content, { head, tail });
+			const limited = applyMaxChars(sliced, max_chars);
+			return asStructuredOrText(
+				response_format,
+				{
+					path: normalizedPath,
+					content: limited.text,
+					truncated: limited.truncated,
+					max_chars,
+					head: head ?? null,
+					tail: tail ?? null,
+				},
+				(structured) => structured.content as string
+			);
 		}
 	);
 
 	server.registerTool(
-		'read_media_file',
+		'formify_read_media_file',
 		{
+			title: '读取媒体文件',
 			description: '读取图片或音频文件，返回 base64 数据和 MIME 类型。',
 			inputSchema: readMediaFileSchema,
+			annotations: readOnlyToolAnnotations,
 		},
 		async (args) => {
 			try {
@@ -417,39 +755,82 @@ export async function createFilesystemBuiltinRuntime(
 		}
 	);
 
-	registerTextTool(
+	registerBuiltinTool(
 		server,
 		registry,
-		'read_multiple_files',
-		'批量读取多个文本文件，单个文件失败不会影响其他文件。',
-		readMultipleFilesSchema,
-		async ({ paths }) => {
-			const results = await Promise.all(
+		'formify_read_multiple_files',
+		{
+			title: '批量读取文本文件',
+			description: '批量读取多个文本文件，单个文件失败不会影响其他文件。',
+			inputSchema: readMultipleFilesSchema,
+			outputSchema: structuredOutputSchema,
+			annotations: readOnlyToolAnnotations,
+		},
+		async ({ paths, max_chars = DEFAULT_TEXT_FILE_MAX_CHARS, response_format = 'json' }) => {
+			const files = await Promise.all(
 				paths.map(async (filePath) => {
 					try {
 						const normalizedPath = normalizeFilePath(filePath);
 						const file = getFileOrThrow(app, normalizedPath);
 						const content = await app.vault.cachedRead(file);
-						return `${normalizedPath}:\n${content}`;
+						const limited = applyMaxChars(content, max_chars);
+						return {
+							path: normalizedPath,
+							content: limited.text,
+							truncated: limited.truncated,
+							error: null,
+						};
 					} catch (error) {
-						return `${filePath}: Error - ${error instanceof Error ? error.message : String(error)}`;
+						return {
+							path: filePath,
+							content: '',
+							truncated: false,
+							error: error instanceof Error ? error.message : String(error),
+						};
 					}
 				})
 			);
-			return results.join('\n---\n');
+			return asStructuredOrText(
+				response_format,
+				{
+					files,
+					meta: {
+						returned: files.length,
+						max_chars,
+					},
+				},
+				(structured) =>
+					(structured.files as Array<{
+						path: string;
+						content: string;
+						error: string | null;
+					}>)
+						.map((file) =>
+							file.error
+								? `${file.path}: Error - ${file.error}`
+								: `${file.path}:\n${file.content}`
+						)
+						.join('\n---\n')
+			);
 		}
 	);
 
-	registerTextTool(
+	registerBuiltinTool(
 		server,
 		registry,
-		'write_file',
-		'创建或覆盖文本文件内容。',
-		writeFileSchema,
+		'formify_write_file',
+		{
+			title: '写入文本文件',
+			description: '创建或覆盖文本文件内容。',
+			inputSchema: writeFileSchema,
+			outputSchema: structuredOutputSchema,
+			annotations: mutationToolAnnotations,
+		},
 		async ({ path, content }) => {
 			const normalizedPath = normalizeFilePath(path);
 			await ensureParentFolderExists(app, normalizedPath);
 			const existing = app.vault.getAbstractFileByPath(normalizedPath);
+			const existed = !!existing;
 			if (!existing) {
 				await app.vault.create(normalizedPath, content);
 			} else if (existing instanceof TFile) {
@@ -457,16 +838,25 @@ export async function createFilesystemBuiltinRuntime(
 			} else {
 				throw new Error(`目标不是文件: ${normalizedPath}`);
 			}
-			return `Successfully wrote to ${normalizedPath}`;
+			return {
+				path: normalizedPath,
+				action: existed ? 'updated' : 'created',
+				bytesWritten: content.length,
+			};
 		}
 	);
 
-	registerTextTool(
+	registerBuiltinTool(
 		server,
 		registry,
-		'edit_file',
-		'按文本片段精确或宽松匹配编辑文件内容，支持 dryRun 预览 diff。',
-		editFileSchema,
+		'formify_edit_file',
+		{
+			title: '编辑文本文件',
+			description: '按文本片段精确或宽松匹配编辑文件内容，支持 dryRun 预览 diff。',
+			inputSchema: editFileSchema,
+			outputSchema: structuredOutputSchema,
+			annotations: mutationToolAnnotations,
+		},
 		async ({ path, edits, dryRun = false }) => {
 			const normalizedPath = normalizeFilePath(path);
 			const file = getFileOrThrow(app, normalizedPath);
@@ -480,45 +870,103 @@ export async function createFilesystemBuiltinRuntime(
 			if (!dryRun) {
 				await app.vault.modify(file, modifiedText);
 			}
-			return diff;
+			return {
+				path: normalizedPath,
+				dryRun,
+				appliedEdits: edits.length,
+				updated: !dryRun,
+				diff,
+			};
 		}
 	);
 
-	registerTextTool(
+	registerBuiltinTool(
 		server,
 		registry,
-		'create_directory',
-		'创建目录，目录已存在时静默成功。',
-		directoryPathSchema,
+		'formify_create_directory',
+		{
+			title: '创建目录',
+			description: '创建目录，目录已存在时静默成功。',
+			inputSchema: directoryPathSchema,
+			outputSchema: structuredOutputSchema,
+			annotations: mutationToolAnnotations,
+		},
 		async ({ path }) => {
 			const normalizedPath = normalizeDirectoryPath(path);
+			const existed = !!app.vault.getAbstractFileByPath(normalizedPath);
 			await ensureFolderExists(app, normalizedPath);
-			return `Successfully created directory ${normalizedPath || '/'}`;
+			return {
+				path: normalizedPath || '/',
+				created: !existed,
+				existed,
+			};
 		}
 	);
 
-	registerTextTool(
+	registerBuiltinTool(
 		server,
 		registry,
-		'list_directory',
-		'列出目录内容，使用 [FILE] / [DIR] 前缀。',
-		directoryPathSchema,
-		async ({ path }) => {
+		'formify_list_directory',
+		{
+			title: '列出目录内容',
+			description: '列出目录内容，支持按名称正则过滤、分页和 JSON/text 两种返回格式。',
+			inputSchema: listDirectorySchema,
+			outputSchema: structuredOutputSchema,
+			annotations: readOnlyToolAnnotations,
+		},
+		async ({ path, regex, limit = 100, offset = 0, response_format = 'json' }) => {
 			const normalizedPath = normalizeDirectoryPath(path);
 			const folder = getFolderOrThrow(app, normalizedPath);
-			return folder.children
-				.map((child) => `${child instanceof TFolder ? '[DIR]' : '[FILE]'} ${child.name}`)
-				.join('\n');
+			const pattern = resolveRegex(regex);
+			const items = folder.children
+				.filter((child) => !pattern || pattern.test(child.name))
+				.map((child) => ({
+					name: child.name,
+					type: child instanceof TFolder ? 'directory' : 'file',
+					path: child.path,
+				}));
+			const pagedItems = items.slice(offset, offset + limit);
+			return asStructuredOrText(
+				response_format,
+				{
+					path: normalizedPath || '/',
+					items: pagedItems,
+					meta: {
+						totalBeforeLimit: items.length,
+						returned: pagedItems.length,
+						offset,
+						limit,
+						truncated: offset + pagedItems.length < items.length,
+					},
+				},
+				(structured) => {
+					const textItems = structured.items as Array<{ name: string; type: string }>;
+					const meta = structured.meta as { truncated: boolean };
+					return [
+						...textItems.map((item) =>
+							`${item.type === 'directory' ? '[DIR]' : '[FILE]'} ${item.name}`
+						),
+						...(meta.truncated
+							? ['[结果已截断，请增大 limit 或调整 offset]']
+							: []),
+					].join('\n');
+				}
+			);
 		}
 	);
 
-	registerTextTool(
+	registerBuiltinTool(
 		server,
 		registry,
-		'list_directory_with_sizes',
-		'列出目录内容及大小统计。',
-		listDirectoryWithSizesSchema,
-		async ({ path, sortBy = 'name' }) => {
+		'formify_list_directory_with_sizes',
+		{
+			title: '列出目录内容及大小',
+			description: '列出目录内容及大小统计，支持排序、分页和 JSON/text 两种返回格式。',
+			inputSchema: listDirectoryWithSizesSchema,
+			outputSchema: structuredOutputSchema,
+			annotations: readOnlyToolAnnotations,
+		},
+		async ({ path, sortBy = 'name', limit = 100, offset = 0, response_format = 'json' }) => {
 			const normalizedPath = normalizeDirectoryPath(path);
 			const folder = getFolderOrThrow(app, normalizedPath);
 			const entries = folder.children.map((child) => ({
@@ -537,43 +985,119 @@ export async function createFilesystemBuiltinRuntime(
 			const totalFiles = entries.filter((entry) => !entry.isDirectory).length;
 			const totalDirs = entries.filter((entry) => entry.isDirectory).length;
 			const totalSize = entries.reduce((sum, entry) => sum + (entry.isDirectory ? 0 : entry.size), 0);
+			const pagedEntries = sortedEntries.slice(offset, offset + limit);
 
-			return [
-				...sortedEntries.map((entry) =>
-					`${entry.isDirectory ? '[DIR]' : '[FILE]'} ${entry.name.padEnd(30)} ${
-						entry.isDirectory ? '' : formatSize(entry.size).padStart(10)
-					}`.trimEnd()
-				),
-				'',
-				`Total: ${totalFiles} files, ${totalDirs} directories`,
-				`Combined size: ${formatSize(totalSize)}`,
-			].join('\n');
-		}
-	);
-
-	registerTextTool(
-		server,
-		registry,
-		'directory_tree',
-		'以 JSON 树结构递归返回目录内容。',
-		directoryTreeSchema,
-		async ({ path, excludePatterns = [] }) => {
-			const normalizedPath = normalizeDirectoryPath(path);
-			const folder = getFolderOrThrow(app, normalizedPath);
-			return JSON.stringify(
-				buildDirectoryTree(folder, normalizedPath, excludePatterns),
-				null,
-				2
+			return asStructuredOrText(
+				response_format,
+				{
+					path: normalizedPath || '/',
+					items: pagedEntries.map((entry) => ({
+						name: entry.name,
+						type: entry.isDirectory ? 'directory' : 'file',
+						size: entry.size,
+						sizeText: entry.isDirectory ? null : formatSize(entry.size),
+					})),
+					meta: {
+						totalBeforeLimit: sortedEntries.length,
+						returned: pagedEntries.length,
+						offset,
+						limit,
+						truncated: offset + pagedEntries.length < sortedEntries.length,
+					},
+					summary: {
+						totalFiles,
+						totalDirs,
+						totalSize,
+						totalSizeText: formatSize(totalSize),
+					},
+				},
+				(structured) => {
+					const items = structured.items as Array<{
+						name: string;
+						type: string;
+						sizeText: string | null;
+					}>;
+					const summary = structured.summary as {
+						totalFiles: number;
+						totalDirs: number;
+						totalSizeText: string;
+					};
+					const meta = structured.meta as { truncated: boolean };
+					return [
+						...items.map((entry) =>
+							`${entry.type === 'directory' ? '[DIR]' : '[FILE]'} ${entry.name.padEnd(30)} ${
+								entry.type === 'directory' ? '' : String(entry.sizeText ?? '').padStart(10)
+							}`.trimEnd()
+						),
+						'',
+						`Total: ${summary.totalFiles} files, ${summary.totalDirs} directories`,
+						`Combined size: ${summary.totalSizeText}`,
+						...(meta.truncated
+							? ['[结果已截断，请增大 limit 或调整 offset]']
+							: []),
+					].join('\n');
+				}
 			);
 		}
 	);
 
-	registerTextTool(
+	registerBuiltinTool(
 		server,
 		registry,
-		'move_file',
-		'移动或重命名文件/目录；目标已存在时失败。',
-		moveFileSchema,
+		'formify_directory_tree',
+		{
+			title: '递归列出目录树',
+			description: '递归返回目录树结构，支持排除模式、最大深度、最大节点数和 JSON/text 两种返回格式。',
+			inputSchema: directoryTreeSchema,
+			outputSchema: structuredOutputSchema,
+			annotations: readOnlyToolAnnotations,
+		},
+		async ({
+			path,
+			excludePatterns = [],
+			max_depth = 5,
+			max_nodes = 200,
+			response_format = 'json',
+		}) => {
+			const normalizedPath = normalizeDirectoryPath(path);
+			const folder = getFolderOrThrow(app, normalizedPath);
+			const state = { nodes: 0, truncated: false };
+			const tree = buildDirectoryTree(
+				folder,
+				normalizedPath,
+				excludePatterns,
+				max_depth,
+				max_nodes,
+				state
+			);
+			return asStructuredOrText(
+				response_format,
+				{
+					path: normalizedPath || '/',
+					tree,
+					meta: {
+						maxDepth: max_depth,
+						maxNodes: max_nodes,
+						returnedNodes: state.nodes,
+						truncated: state.truncated,
+					},
+				},
+				(structured) => toCanonicalJsonText(structured)
+			);
+		}
+	);
+
+	registerBuiltinTool(
+		server,
+		registry,
+		'formify_move_file',
+		{
+			title: '移动或重命名路径',
+			description: '移动或重命名文件/目录；目标已存在时失败。',
+			inputSchema: moveFileSchema,
+			outputSchema: structuredOutputSchema,
+			annotations: mutationToolAnnotations,
+		},
 		async ({ source, destination }) => {
 			const normalizedSource = normalizeFilePath(source, 'source');
 			const normalizedDestination = normalizeFilePath(destination, 'destination');
@@ -586,17 +1110,26 @@ export async function createFilesystemBuiltinRuntime(
 				: '';
 			await ensureFolderExists(app, destinationParent);
 			await app.vault.rename(from, normalizedDestination);
-			return `Successfully moved ${normalizedSource} to ${normalizedDestination}`;
+			return {
+				source: normalizedSource,
+				destination: normalizedDestination,
+				moved: true,
+			};
 		}
 	);
 
-	registerTextTool(
+	registerBuiltinTool(
 		server,
 		registry,
-		'search_files',
-		'递归搜索匹配 glob 模式的文件和目录，返回 Vault 相对路径。',
-		searchFilesSchema,
-		async ({ path, pattern, excludePatterns = [] }) => {
+		'formify_search_files',
+		{
+			title: '搜索路径',
+			description: '递归搜索匹配 glob 模式的文件和目录，返回 Vault 相对路径。',
+			inputSchema: searchFilesSchema,
+			outputSchema: structuredOutputSchema,
+			annotations: readOnlyToolAnnotations,
+		},
+		async ({ path, pattern, excludePatterns = [], maxResults = 100, response_format = 'json' }) => {
 			const normalizedPath = normalizeDirectoryPath(path);
 			const folder = getFolderOrThrow(app, normalizedPath);
 			const matches = collectDescendants(folder)
@@ -612,17 +1145,223 @@ export async function createFilesystemBuiltinRuntime(
 				})
 				.map((child) => child.path);
 
-			return matches.length > 0 ? matches.join('\n') : 'No matches found';
+			const limitedMatches = matches.slice(0, maxResults);
+			return asStructuredOrText(
+				response_format,
+				{
+					path: normalizedPath || '/',
+					pattern,
+					excludePatterns,
+					matches: limitedMatches,
+					meta: {
+						totalBeforeLimit: matches.length,
+						returned: limitedMatches.length,
+						maxResults,
+						truncated: limitedMatches.length < matches.length,
+					},
+				},
+				(structured) => {
+					const textMatches = structured.matches as string[];
+					const meta = structured.meta as { truncated: boolean; maxResults: number };
+					if (textMatches.length === 0) {
+						return 'No matches found';
+					}
+					return [
+						...textMatches,
+						...(meta.truncated
+							? [formatLocal(localInstance.mcp_fs_search_files_truncated, meta.maxResults)]
+							: []),
+					].join('\n');
+				}
+			);
 		}
 	);
 
-	registerTextTool(
+	registerBuiltinTool(
 		server,
 		registry,
-		'get_file_info',
-		'读取文件或目录的元数据信息。',
-		getFileInfoSchema,
-		async ({ path }) => {
+		'formify_delete_file',
+		{
+			title: '删除路径',
+			description: '永久删除指定文件或文件夹，文件夹会递归删除全部内容。该操作不可恢复，请谨慎使用。',
+			inputSchema: deleteFileSchema,
+			outputSchema: structuredOutputSchema,
+			annotations: mutationToolAnnotations,
+		},
+		async ({ path, force = true }) => {
+			const normalizedPath = normalizeVaultPath(path);
+			if (!normalizedPath) {
+				throw new Error(localInstance.mcp_fs_delete_root_forbidden);
+			}
+			assertVaultPath(normalizedPath, 'path');
+			const target = app.vault.getAbstractFileByPath(normalizedPath);
+			if (!target) {
+				return {
+					path: normalizedPath,
+					existed: false,
+					deleted: false,
+				};
+			}
+			await app.vault.delete(target, force);
+			return {
+				path: normalizedPath,
+				existed: true,
+				deleted: true,
+			};
+		}
+	);
+
+	registerBuiltinTool(
+		server,
+		registry,
+		'formify_search_content',
+		{
+			title: '搜索文件内容',
+			description: '递归搜索文件内容中的正则表达式匹配，支持文件类型过滤、上下文行和 JSON/text 两种返回格式。',
+			inputSchema: searchContentSchema,
+			outputSchema: structuredOutputSchema,
+			annotations: readOnlyToolAnnotations,
+		},
+		async ({
+			pattern,
+			path = '/',
+			fileType,
+			maxResults = DEFAULT_SEARCH_MAX_RESULTS,
+			caseSensitive = false,
+			contextLines = 0,
+			response_format = 'json',
+		}) => {
+			const normalizedPath = normalizeDirectoryPath(path);
+			if (normalizedPath) {
+				getFolderOrThrow(app, normalizedPath);
+			}
+			const regex = createContentSearchRegex(pattern, caseSensitive);
+			const allowedExtensions = parseFileTypeFilter(fileType);
+			const matches: ContentSearchMatch[] = [];
+			const skippedFiles: Array<{ path: string; reason: string }> = [];
+			let scannedFiles = 0;
+			const buildResponse = (truncated: boolean) =>
+				asStructuredOrText(
+					response_format,
+					{
+						matches,
+						meta: {
+							path: normalizedPath || '/',
+							fileType: allowedExtensions,
+							maxResults,
+							caseSensitive,
+							contextLines,
+							scannedFiles,
+							skippedFiles,
+							returned: matches.length,
+							hasMore: truncated,
+							truncated,
+						},
+					},
+					(structured) => {
+						const textMatches = structured.matches as ContentSearchMatch[];
+						const meta = structured.meta as { truncated: boolean };
+						if (textMatches.length === 0) {
+							return 'No content matches found';
+						}
+						return [
+							...textMatches.flatMap((match) => {
+								const lines = [`${match.path}:${match.line}: ${match.text}`];
+								for (const before of match.before) {
+									lines.push(`  ${before.line}- ${before.text}`);
+								}
+								for (const after of match.after) {
+									lines.push(`  ${after.line}+ ${after.text}`);
+								}
+								return lines;
+							}),
+							...(meta.truncated
+								? ['[结果已截断，请缩小搜索范围或降低 maxResults]']
+								: []),
+						].join('\n');
+					}
+				);
+
+			for (const file of app.vault.getFiles()) {
+				if (!isPathUnderDirectory(normalizedPath, file.path)) {
+					continue;
+				}
+				const skipReason = shouldSkipContentSearchFile(file, allowedExtensions);
+				if (skipReason) {
+					if (skipReason !== 'filtered') {
+						skippedFiles.push({
+							path: file.path,
+							reason: skipReason,
+						});
+					}
+					continue;
+				}
+
+				const content = await app.vault.cachedRead(file);
+				scannedFiles += 1;
+				const lines = normalizeLineEndings(content).split('\n');
+				for (let index = 0; index < lines.length; index += 1) {
+					if (!regex.test(lines[index])) {
+						continue;
+					}
+					matches.push({
+						path: file.path,
+						line: index + 1,
+						text: lines[index],
+						before: createContextEntries(
+							lines,
+							index - contextLines,
+							index - 1
+						),
+						after: createContextEntries(
+							lines,
+							index + 1,
+							index + contextLines
+						),
+					});
+					if (matches.length >= maxResults) {
+						return buildResponse(true);
+					}
+				}
+			}
+
+			return buildResponse(false);
+		}
+	);
+
+	registerBuiltinTool(
+		server,
+		registry,
+		'formify_query_vault',
+		{
+			title: '查询 Vault DSL',
+			description: '使用安全 DSL 查询 Vault 中的文件、属性、标签和任务数据，并返回结构化 JSON。',
+			inputSchema: queryVaultSchema,
+			outputSchema: structuredOutputSchema,
+			annotations: readOnlyToolAnnotations,
+		},
+		async ({ expression, response_format = 'json' }) => {
+			const result = await executeVaultQuery(app, expression);
+			return asStructuredOrText(
+				response_format,
+				result,
+				(structured) => toCanonicalJsonText(structured)
+			);
+		}
+	);
+
+	registerBuiltinTool(
+		server,
+		registry,
+		'formify_get_file_info',
+		{
+			title: '读取文件元信息',
+			description: '读取文件或目录的元数据信息。',
+			inputSchema: getFileInfoSchema,
+			outputSchema: structuredOutputSchema,
+			annotations: readOnlyToolAnnotations,
+		},
+		async ({ path, response_format = 'json' }) => {
 			const normalizedPath = normalizeDirectoryPath(path);
 			const target = normalizedPath
 				? getAbstractFileOrThrow(app, normalizedPath)
@@ -631,28 +1370,45 @@ export async function createFilesystemBuiltinRuntime(
 				? await app.vault.adapter.stat(normalizedPath)
 				: null;
 			const fileStat = target instanceof TFile ? getFileStat(target) : null;
-			return Object.entries({
-				path: normalizedPath || '/',
-				type: target instanceof TFolder ? 'directory' : 'file',
-				size: fileStat?.size ?? adapterStat?.size ?? 0,
-				created: fileStat?.ctime ?? adapterStat?.ctime ?? null,
-				modified: fileStat?.mtime ?? adapterStat?.mtime ?? null,
-				accessed: null,
-				permissions: 'N/A',
-			})
-				.map(([key, value]) => `${key}: ${value}`)
-				.join('\n');
+			return asStructuredOrText(
+				response_format,
+				{
+					path: normalizedPath || '/',
+					type: target instanceof TFolder ? 'directory' : 'file',
+					size: fileStat?.size ?? adapterStat?.size ?? 0,
+					created: fileStat?.ctime ?? adapterStat?.ctime ?? null,
+					modified: fileStat?.mtime ?? adapterStat?.mtime ?? null,
+					accessed: null,
+					permissions: 'N/A',
+				},
+				(structured) =>
+					Object.entries(structured)
+						.map(([key, value]) => `${key}: ${value}`)
+						.join('\n')
+			);
 		}
 	);
 
-	registerTextTool(
+	registerBuiltinTool(
 		server,
 		registry,
-		'list_allowed_directories',
-		'返回当前内置 Filesystem 工具允许访问的目录范围。',
-		listAllowedDirectoriesSchema,
-		async () => {
-			return 'Allowed directories:\n/';
+		'formify_list_allowed_directories',
+		{
+			title: '列出允许访问的目录',
+			description: '返回当前内置 Filesystem 工具允许访问的目录范围。',
+			inputSchema: listAllowedDirectoriesSchema,
+			outputSchema: structuredOutputSchema,
+			annotations: readOnlyToolAnnotations,
+		},
+		async ({ response_format = 'json' }) => {
+			return asStructuredOrText(
+				response_format,
+				{
+					directories: ['/'],
+					scope: 'vault-root',
+				},
+				() => 'Allowed directories:\n/'
+			);
 		}
 	);
 
@@ -681,6 +1437,7 @@ export async function createFilesystemBuiltinRuntime(
 				arguments: args,
 			});
 			return serializeMcpToolResult({
+				structuredContent: result.structuredContent,
 				content: result.content,
 				isError: result.isError,
 			});
@@ -689,8 +1446,11 @@ export async function createFilesystemBuiltinRuntime(
 			const result = await client.listTools();
 			return result.tools.map((tool) => ({
 				name: tool.name,
+				title: tool.title,
 				description: tool.description ?? '',
 				inputSchema: tool.inputSchema,
+				outputSchema: tool.outputSchema,
+				annotations: tool.annotations,
 				serverId: BUILTIN_FILESYSTEM_SERVER_ID,
 			}));
 		},

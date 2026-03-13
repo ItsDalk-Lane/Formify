@@ -52,6 +52,9 @@ describe('time-utils', () => {
 				datetime: '2024-01-01T00:00:00+00:00',
 				day_of_week: 'Monday',
 				is_dst: false,
+				month: 1,
+				iso_week_of_year: 1,
+				iso_week_year: 2024,
 			});
 		});
 	});
@@ -69,12 +72,18 @@ describe('time-utils', () => {
 				datetime: '2024-01-01T12:00:00+01:00',
 				day_of_week: 'Monday',
 				is_dst: false,
+				month: 1,
+				iso_week_of_year: 1,
+				iso_week_year: 2024,
 			});
 			expect(result.target).toEqual({
 				timezone: 'Europe/London',
 				datetime: '2024-01-01T11:00:00+00:00',
 				day_of_week: 'Monday',
 				is_dst: false,
+				month: 1,
+				iso_week_of_year: 1,
+				iso_week_year: 2024,
 			});
 			expect(result.time_difference).toBe('-1.0h');
 		});

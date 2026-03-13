@@ -1,4 +1,5 @@
 import { App, Modal, Notice } from 'obsidian';
+import { IANAZone } from 'luxon';
 import { StrictMode, useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Pencil, Plus, Trash2, Wrench } from 'lucide-react';
@@ -9,10 +10,7 @@ import { localInstance } from 'src/i18n/locals';
 import {
 	BUILTIN_CORE_TOOLS_SERVER_ID,
 	BUILTIN_FILESYSTEM_SERVER_ID,
-	BUILTIN_FETCH_SERVER_ID,
-	BUILTIN_TIME_SERVER_ID,
-	BUILTIN_MEMORY_SERVER_ID,
-	BUILTIN_SEQUENTIAL_THINKING_SERVER_ID,
+	DEFAULT_BUILTIN_TIME_TIMEZONE,
 	DEFAULT_MCP_SETTINGS,
 	McpConfigImporter,
 	type McpServerConfig,
@@ -79,22 +77,18 @@ const updateBuiltinMcpEnabled = (
 		case BUILTIN_FILESYSTEM_SERVER_ID:
 			nextMcpSettings.builtinFilesystemEnabled = enabled;
 			break;
-		case BUILTIN_FETCH_SERVER_ID:
-			nextMcpSettings.builtinFetchEnabled = enabled;
-			break;
-		case BUILTIN_TIME_SERVER_ID:
-			nextMcpSettings.builtinTimeEnabled = enabled;
-			break;
-		case BUILTIN_MEMORY_SERVER_ID:
-			nextMcpSettings.builtinMemoryEnabled = enabled;
-			break;
-		case BUILTIN_SEQUENTIAL_THINKING_SERVER_ID:
-			nextMcpSettings.builtinSequentialThinkingEnabled = enabled;
-			break;
 		default:
 			break;
 	}
 	return nextMcpSettings;
+};
+
+const normalizeBuiltinTimeTimezoneInput = (value: string): string | null => {
+	const normalized = value.trim();
+	if (!normalized || !IANAZone.isValidZone(normalized)) {
+		return null;
+	}
+	return normalized;
 };
 
 export class ChatSettingsModal extends Modal {
@@ -143,6 +137,9 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 	const [mcpStates, setMcpStates] = useState<McpServerState[]>(() =>
 		service.getMcpClientManager()?.getAllStates() ?? []
 	);
+	const [builtinTimeTimezoneDraft, setBuiltinTimeTimezoneDraft] = useState(
+		() => DEFAULT_BUILTIN_TIME_TIMEZONE
+	);
 
 	const providers = tarsSettings.providers ?? service.getProviders();
 	const providerOptions = useMemo(
@@ -171,6 +168,12 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 	useEffect(() => {
 		reloadSnapshots();
 	}, [reloadSnapshots]);
+
+	useEffect(() => {
+		setBuiltinTimeTimezoneDraft(
+			mcpSettings.builtinTimeDefaultTimezone ?? DEFAULT_BUILTIN_TIME_TIMEZONE
+		);
+	}, [mcpSettings.builtinTimeDefaultTimezone]);
 
 	useEffect(() => {
 		const manager = service.getMcpClientManager();
@@ -345,6 +348,41 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 			servers: mcpSettings.servers.filter((server) => server.id !== serverId),
 		});
 	}, [mcpSettings, persistMcpSettings]);
+
+	const commitBuiltinTimeTimezone = useCallback(async (): Promise<void> => {
+		const normalizedTimezone = normalizeBuiltinTimeTimezoneInput(
+			builtinTimeTimezoneDraft
+		);
+		const persistedTimezone =
+			mcpSettings.builtinTimeDefaultTimezone ?? DEFAULT_BUILTIN_TIME_TIMEZONE;
+
+		if (!normalizedTimezone) {
+			new Notice(localInstance.mcp_builtin_time_timezone_invalid);
+			setBuiltinTimeTimezoneDraft(persistedTimezone);
+			return;
+		}
+
+		if (normalizedTimezone === persistedTimezone) {
+			setBuiltinTimeTimezoneDraft(persistedTimezone);
+			return;
+		}
+
+		const success = await persistMcpSettings({
+			...mcpSettings,
+			builtinTimeDefaultTimezone: normalizedTimezone,
+		});
+
+		if (!success) {
+			setBuiltinTimeTimezoneDraft(persistedTimezone);
+			return;
+		}
+
+		setBuiltinTimeTimezoneDraft(normalizedTimezone);
+	}, [
+		builtinTimeTimezoneDraft,
+		mcpSettings,
+		persistMcpSettings,
+	]);
 
 	const builtinToolEntries = useMemo(
 		() => getBuiltinToolEntries(mcpSettings, localInstance.mcp_settings_transport_in_memory),
@@ -607,6 +645,34 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 							<div className="chat-settings-server-card__desc">
 								{descriptionParts.join(' · ')}
 							</div>
+							{entry.serverId === BUILTIN_CORE_TOOLS_SERVER_ID && (
+								<label className="chat-settings-field">
+									<span className="chat-settings-field__title">
+										{localInstance.mcp_builtin_time_timezone}
+									</span>
+									<span className="chat-settings-field__desc">
+										{localInstance.mcp_builtin_time_timezone_desc}
+									</span>
+									<input
+										className="chat-settings-input"
+										type="text"
+										value={builtinTimeTimezoneDraft}
+										placeholder={DEFAULT_BUILTIN_TIME_TIMEZONE}
+										onChange={(event) => {
+											setBuiltinTimeTimezoneDraft(event.target.value);
+										}}
+										onBlur={() => {
+											void commitBuiltinTimeTimezone();
+										}}
+										onKeyDown={(event) => {
+											if (event.key === 'Enter') {
+												event.preventDefault();
+												event.currentTarget.blur();
+											}
+										}}
+									/>
+								</label>
+							)}
 						</div>
 					);
 				})}

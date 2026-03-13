@@ -5,6 +5,9 @@ export interface TimeResult {
 	datetime: string;
 	day_of_week: string;
 	is_dst: boolean;
+	month: number;
+	iso_week_of_year: number;
+	iso_week_year: number;
 }
 
 export interface TimeConversionResult {
@@ -31,6 +34,9 @@ const toTimeResult = (timezone: string, dt: DateTime): TimeResult => {
 		datetime: toIsoSeconds(dt),
 		day_of_week: dt.setLocale('en').toFormat('cccc'),
 		is_dst: dt.isInDST,
+		month: dt.month,
+		iso_week_of_year: dt.weekNumber,
+		iso_week_year: dt.weekYear,
 	};
 };
 
