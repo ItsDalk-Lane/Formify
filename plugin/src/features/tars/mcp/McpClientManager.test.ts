@@ -10,6 +10,7 @@ import { McpClientManager } from './McpClientManager';
 import type { McpSettings } from './types';
 
 const createCoreToolsBuiltinRuntimeMock = jest.fn();
+const createFilesystemBuiltinRuntimeMock = jest.fn();
 
 jest.mock('src/builtin-mcp/core-tools-mcp-server', () => ({
 	createCoreToolsBuiltinRuntime: (...args: unknown[]) =>
@@ -17,14 +18,8 @@ jest.mock('src/builtin-mcp/core-tools-mcp-server', () => ({
 }));
 
 jest.mock('src/builtin-mcp/filesystem-mcp-server', () => ({
-	createFilesystemBuiltinRuntime: jest.fn().mockResolvedValue({
-		serverId: BUILTIN_FILESYSTEM_SERVER_ID,
-		serverName: '内置 Filesystem 工具',
-		client: {} as any,
-		callTool: jest.fn(),
-		listTools: jest.fn().mockResolvedValue([]),
-		close: jest.fn().mockResolvedValue(undefined),
-	}),
+	createFilesystemBuiltinRuntime: (...args: unknown[]) =>
+		createFilesystemBuiltinRuntimeMock(...args),
 }));
 
 function createMockCoreToolsRuntime() {
@@ -53,13 +48,13 @@ function createMockCoreToolsRuntime() {
 					serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 				},
 				{
-					name: 'formify_execute_script',
+					name: 'run_script',
 					description: 'execute script',
 					inputSchema: {},
 					serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 				},
 				{
-					name: 'formify_get_time',
+					name: 'get_time',
 					description: 'get current time or convert between timezones',
 					inputSchema: {},
 					serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
@@ -114,6 +109,15 @@ describe('McpClientManager', () => {
 
 	beforeEach(() => {
 		createCoreToolsBuiltinRuntimeMock.mockReset();
+		createFilesystemBuiltinRuntimeMock.mockReset();
+		createFilesystemBuiltinRuntimeMock.mockResolvedValue({
+			serverId: BUILTIN_FILESYSTEM_SERVER_ID,
+			serverName: '内置 Filesystem 工具',
+			client: {} as any,
+			callTool: jest.fn(),
+			listTools: jest.fn().mockResolvedValue([]),
+			close: jest.fn().mockResolvedValue(undefined),
+		});
 	});
 
 	it('should broadcast live plan changes from core tools runtime', async () => {
@@ -166,13 +170,13 @@ describe('McpClientManager', () => {
 				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 			},
 			{
-				name: 'formify_execute_script',
+				name: 'run_script',
 				description: 'execute script',
 				inputSchema: {},
 				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 			},
 			{
-				name: 'formify_get_time',
+				name: 'get_time',
 				description: 'get current time or convert between timezones',
 				inputSchema: {},
 				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
@@ -229,13 +233,13 @@ describe('McpClientManager', () => {
 				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 			},
 			{
-				name: 'formify_execute_script',
+				name: 'run_script',
 				description: 'execute script',
 				inputSchema: {},
 				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
 			},
 			{
-				name: 'formify_get_time',
+				name: 'get_time',
 				description: 'get current time or convert between timezones',
 				inputSchema: {},
 				serverId: BUILTIN_CORE_TOOLS_SERVER_ID,
@@ -243,6 +247,39 @@ describe('McpClientManager', () => {
 		]);
 		expect(tools.some((tool) => tool.name === 'quick_search')).toBe(false);
 		expect(tools.some((tool) => tool.name === 'read_file')).toBe(false);
+
+		await manager.dispose();
+	});
+
+	it('should prepend builtin filesystem routing guidance in model context descriptions', async () => {
+		const mockRuntime = createMockCoreToolsRuntime();
+		createCoreToolsBuiltinRuntimeMock.mockResolvedValue(mockRuntime.runtime);
+		createFilesystemBuiltinRuntimeMock.mockResolvedValue({
+			serverId: BUILTIN_FILESYSTEM_SERVER_ID,
+			serverName: '内置 Filesystem 工具',
+			client: {} as any,
+			callTool: jest.fn(),
+			listTools: jest.fn().mockResolvedValue([
+				{
+					name: 'find_paths',
+					description: '按名称发现路径',
+					inputSchema: {},
+					serverId: BUILTIN_FILESYSTEM_SERVER_ID,
+				},
+			]),
+			close: jest.fn().mockResolvedValue(undefined),
+		});
+
+		const manager = new McpClientManager({} as any, {
+			...settings,
+			builtinFilesystemEnabled: true,
+		});
+		const tools = await manager.getToolsForModelContext();
+		const filesystemTool = tools.find((tool) => tool.name === 'find_paths');
+
+		expect(filesystemTool?.description).toContain('全局文件工具路由规则');
+		expect(filesystemTool?.description).toContain('find_paths');
+		expect(filesystemTool?.description).toContain('query_index');
 
 		await manager.dispose();
 	});

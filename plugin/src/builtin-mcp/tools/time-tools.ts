@@ -34,41 +34,32 @@ const getTimeSchema = z
 			.optional()
 			.describe('要转换的时间，24 小时制 HH:MM'),
 	})
-	.strict()
-	.superRefine((value, ctx) => {
-		if (value.mode === 'current') {
-			for (const field of ['source_timezone', 'target_timezone', 'time'] as const) {
-				if (value[field] !== undefined) {
-					ctx.addIssue({
-						code: z.ZodIssueCode.custom,
-						path: [field],
-						message: `current 模式不支持参数 ${field}`,
-					});
-				}
-			}
-			return;
-		}
-
-		for (const field of ['source_timezone', 'target_timezone', 'time'] as const) {
-			if (value[field] === undefined) {
-				ctx.addIssue({
-					code: z.ZodIssueCode.custom,
-					path: [field],
-					message: `convert 模式必须提供参数 ${field}`,
-				});
-			}
-		}
-
-		if (value.timezone !== undefined) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				path: ['timezone'],
-				message: 'convert 模式不支持参数 timezone',
-			});
-		}
-	});
+	.strict();
 
 type GetTimeArgs = z.infer<typeof getTimeSchema>;
+
+const parseGetTimeArgs = (value: GetTimeArgs): GetTimeArgs => {
+	if (value.mode === 'current') {
+		for (const field of ['source_timezone', 'target_timezone', 'time'] as const) {
+			if (value[field] !== undefined) {
+				throw new Error(`current 模式不支持参数 ${field}`);
+			}
+		}
+		return value;
+	}
+
+	for (const field of ['source_timezone', 'target_timezone', 'time'] as const) {
+		if (value[field] === undefined) {
+			throw new Error(`convert 模式必须提供参数 ${field}`);
+		}
+	}
+
+	if (value.timezone !== undefined) {
+		throw new Error('convert 模式不支持参数 timezone');
+	}
+
+	return value;
+};
 
 const timeResultSchema = z.object({
 	timezone: z.string(),
@@ -106,10 +97,11 @@ export function registerTimeTools(
 	registerBuiltinTool(
 		server,
 		registry,
-		'formify_get_time',
+		'get_time',
 		{
 			title: '获取或转换时间',
-			description: '获取当前时间，或在两个 IANA 时区之间转换时间。默认使用已配置的默认时区。',
+			description:
+				'做什么：获取当前时间，或在两个 IANA 时区之间转换时间。\n什么时候用：用户询问当前时间、时区时间，或需要把一个时间从源时区换算到目标时区时使用。\n不要在什么场景用：不要用于日期算术、日程规划或文件操作。\n返回什么：current 模式返回当前时区时间信息；convert 模式返回 source、target 与 time_difference。\n失败后下一步怎么做：如果参数与 mode 不匹配，请按 schema 修正字段；如果只需要当前时间，不要传 convert 模式字段。',
 			inputSchema: getTimeSchema,
 			outputSchema: getTimeResultSchema,
 			annotations: {
@@ -126,7 +118,7 @@ export function registerTimeTools(
 				source_timezone,
 				target_timezone,
 				time,
-			} = getTimeSchema.parse(args);
+			} = parseGetTimeArgs(getTimeSchema.parse(args));
 
 			if (mode === 'convert') {
 				return {

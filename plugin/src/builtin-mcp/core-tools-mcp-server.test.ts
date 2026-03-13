@@ -14,25 +14,34 @@ describe('createCoreToolsBuiltinRuntime', () => {
 		Settings.now = originalNow;
 	});
 
-	it('should list core tools including formify_get_time', async () => {
+	it('should list core tools including get_time', async () => {
 		const runtime = await createCoreToolsBuiltinRuntime({} as any);
 
 		const tools = await runtime.listTools();
 
 		expect(tools.map((tool) => tool.name)).toEqual([
-			'formify_execute_script',
-			'formify_call_shell',
+			'run_script',
+			'run_shell',
 			'write_plan',
-			'formify_get_time',
+			'get_time',
 		]);
+		expect(
+			(tools.find((tool) => tool.name === 'get_time')?.inputSchema as { properties?: Record<string, unknown> })?.properties
+		).toEqual(expect.objectContaining({
+			mode: expect.any(Object),
+			timezone: expect.any(Object),
+			source_timezone: expect.any(Object),
+			target_timezone: expect.any(Object),
+			time: expect.any(Object),
+		}));
 
 		await runtime.close();
 	});
 
-	it('should return Beijing time by default through formify_get_time', async () => {
+	it('should return Beijing time by default through get_time', async () => {
 		const runtime = await createCoreToolsBuiltinRuntime({} as any);
 
-		const rawResult = await runtime.callTool('formify_get_time', {});
+		const rawResult = await runtime.callTool('get_time', {});
 		const result = JSON.parse(rawResult);
 
 		expect(result).toMatchObject({
@@ -46,10 +55,10 @@ describe('createCoreToolsBuiltinRuntime', () => {
 		await runtime.close();
 	});
 
-	it('should convert time through formify_get_time convert mode', async () => {
+	it('should convert time through get_time convert mode', async () => {
 		const runtime = await createCoreToolsBuiltinRuntime({} as any);
 
-		const rawResult = await runtime.callTool('formify_get_time', {
+		const rawResult = await runtime.callTool('get_time', {
 			mode: 'convert',
 			source_timezone: 'Europe/Warsaw',
 			target_timezone: 'Europe/London',
@@ -76,8 +85,24 @@ describe('createCoreToolsBuiltinRuntime', () => {
 			builtinTimeDefaultTimezone: 'Asia/Shanghai',
 		});
 
-		const rawResult = await runtime.callTool('formify_get_time', {
+		const rawResult = await runtime.callTool('get_time', {
 			timezone: 'Europe/London',
+		});
+		const result = JSON.parse(rawResult);
+
+		expect(result).toMatchObject({
+			mode: 'current',
+			timezone: 'Europe/London',
+		});
+
+		await runtime.close();
+	});
+
+	it('should let run_script orchestrate other builtin tools', async () => {
+		const runtime = await createCoreToolsBuiltinRuntime({} as any);
+
+		const rawResult = await runtime.callTool('run_script', {
+			script: 'return await call_tool("get_time", { timezone: "Europe/London" });',
 		});
 		const result = JSON.parse(rawResult);
 
@@ -92,7 +117,7 @@ describe('createCoreToolsBuiltinRuntime', () => {
 	it('should reject convert-only arguments in current mode', async () => {
 		const runtime = await createCoreToolsBuiltinRuntime({} as any);
 
-		const rawResult = await runtime.callTool('formify_get_time', {
+		const rawResult = await runtime.callTool('get_time', {
 			mode: 'current',
 			source_timezone: 'Europe/Warsaw',
 		});

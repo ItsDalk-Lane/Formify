@@ -818,7 +818,7 @@ export class En implements Local {
 	mcp_builtin_tools_empty = "No tools available";
 	mcp_builtin_tool_no_description = "No description";
 	mcp_builtin_time_timezone = "Default timezone (Beijing by default)";
-	mcp_builtin_time_timezone_desc = "Used by formify_get_time when no timezone is explicitly provided. Enter an IANA timezone name.";
+	mcp_builtin_time_timezone_desc = "Used by get_time when no timezone is explicitly provided. Enter an IANA timezone name.";
 	mcp_builtin_time_timezone_invalid = "Please enter a valid IANA timezone name, for example Asia/Shanghai";
 	mcp_fs_search_files_truncated = "Reached the maximum of {0} results. More matches may exist.";
 	mcp_fs_delete_deleted = "Deleted: {0}";

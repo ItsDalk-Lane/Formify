@@ -6,32 +6,21 @@ import { BuiltinToolRegistry } from '../runtime/tool-registry';
 import { assertVaultPath, getFileOrThrow, normalizeVaultPath } from './helpers';
 
 const openFileSchema = z.object({
-	path: z.string().min(1).describe('相对于 Vault 根目录的文件路径'),
-	new_panel: z.boolean().default(false).optional(),
-});
-
-const getFirstLinkPathSchema = z.object({
-	internalLink: z
+	file_path: z
 		.string()
 		.min(1)
-		.describe('内部链接文本（不含 [[ ]]，不含别名）'),
-	response_format: z
-		.enum(['json', 'text'])
-		.default('json')
-		.describe("返回格式：json 为稳定对象，text 为紧凑文本"),
-});
+		.describe('已知文件路径；相对于 Vault 根目录。仅在已经知道准确文件路径时使用'),
+	open_in_new_panel: z
+		.boolean()
+		.default(false)
+		.optional()
+		.describe('是否在新的编辑面板中打开文件，默认 false'),
+}).strict();
 
 const openFileResultSchema = z.object({
-	path: z.string(),
-	new_panel: z.boolean(),
+	file_path: z.string(),
+	open_in_new_panel: z.boolean(),
 	opened: z.boolean(),
-});
-
-const getFirstLinkPathResultSchema = z.object({
-	internalLink: z.string(),
-	sourcePath: z.string(),
-	resolvedPath: z.string().nullable(),
-	found: z.boolean(),
 });
 
 export function registerNavTools(
@@ -42,10 +31,11 @@ export function registerNavTools(
 	registerBuiltinTool(
 		server,
 		registry,
-		'formify_open_file',
+		'open_file',
 		{
 			title: '在 Obsidian 中打开文件',
-			description: '在 Obsidian 中打开指定文件。',
+			description:
+				'做什么：在 Obsidian 中打开一个已知 file_path 的文件。\n什么时候用：你已经知道准确文件路径，并且需要把它展示给用户或切换到该文件。\n不要在什么场景用：不要用于查找未知路径；如果只知道名称，请先使用 find_paths。不要用于读取文件内容。\n返回什么：file_path、open_in_new_panel、opened。\n失败后下一步怎么做：如果报路径不存在，先调用 find_paths 定位路径。',
 			inputSchema: openFileSchema,
 			outputSchema: openFileResultSchema,
 			annotations: {
@@ -55,51 +45,16 @@ export function registerNavTools(
 				openWorldHint: false,
 			},
 		},
-		async ({ path, new_panel = false }) => {
-			const normalizedPath = normalizeVaultPath(path);
-			assertVaultPath(normalizedPath, 'path');
+		async ({ file_path, open_in_new_panel = false }) => {
+			const normalizedPath = normalizeVaultPath(file_path);
+			assertVaultPath(normalizedPath, 'file_path');
 			const file = getFileOrThrow(app, normalizedPath);
-			const leaf = app.workspace.getLeaf(new_panel);
+			const leaf = app.workspace.getLeaf(open_in_new_panel);
 			await leaf.openFile(file);
 			return {
-				path: normalizedPath,
-				new_panel,
+				file_path: normalizedPath,
+				open_in_new_panel,
 				opened: true,
-			};
-		}
-	);
-
-	registerBuiltinTool(
-		server,
-		registry,
-		'formify_get_first_link_path',
-		{
-			title: '解析第一个 Wiki 链接路径',
-			description: '解析内部 Wiki 链接到实际 Vault 文件路径。',
-			inputSchema: getFirstLinkPathSchema,
-			outputSchema: getFirstLinkPathResultSchema,
-			annotations: {
-				readOnlyHint: true,
-				destructiveHint: false,
-				idempotentHint: true,
-				openWorldHint: false,
-			},
-		},
-		async ({ internalLink, response_format = 'json' }) => {
-			const sourcePath = app.workspace.getActiveFile()?.path ?? '';
-			const cleaned = internalLink
-				.split('|')[0]
-				.split('#')[0]
-				.trim();
-			const file = app.metadataCache.getFirstLinkpathDest(cleaned, sourcePath);
-			if (response_format === 'text') {
-				return file?.path ?? '未找到匹配文件';
-			}
-			return {
-				internalLink: cleaned,
-				sourcePath,
-				resolvedPath: file?.path ?? null,
-				found: !!file,
 			};
 		}
 	);

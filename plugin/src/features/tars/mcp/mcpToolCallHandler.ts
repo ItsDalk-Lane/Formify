@@ -7,6 +7,7 @@
 
 import OpenAI from 'openai'
 import { DebugLogger } from 'src/utils/DebugLogger'
+import { getBuiltinToolHint, type ToolHintCoercion } from './toolHints'
 import type {
 	BaseOptions,
 	McpCallToolFnForProvider,
@@ -65,16 +66,99 @@ export interface ToolLoopMessage {
 	reasoning_details?: unknown
 }
 
+interface ToolFailureTrackerEntry {
+	count: number
+	lastContent: string
+}
+
+type ToolFailureTracker = Map<string, ToolFailureTrackerEntry>
+
+function hasUsableValue(value: unknown): boolean {
+	if (value === undefined || value === null) return false
+	if (typeof value === 'string') return value.trim().length > 0
+	if (Array.isArray(value)) return value.length > 0
+	return true
+}
+
+function toSnakeCaseKey(key: string): string {
+	return key
+		.replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+		.replace(/[\s-]+/g, '_')
+		.toLowerCase()
+}
+
+function trimArgsDeep(value: unknown): unknown {
+	if (typeof value === 'string') return value.trim()
+	if (Array.isArray(value)) return value.map((item) => trimArgsDeep(item))
+	if (!value || typeof value !== 'object') return value
+	return Object.fromEntries(
+		Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+			key,
+			trimArgsDeep(nestedValue),
+		]),
+	)
+}
+
+function coerceValue(value: unknown, coercion: ToolHintCoercion): unknown {
+	if (coercion === 'string_array') {
+		if (Array.isArray(value)) {
+			return value
+				.map((item) => (typeof item === 'string' ? item.trim() : item))
+				.filter((item) => typeof item === 'string' && item.length > 0)
+		}
+		if (typeof value === 'string') {
+			return value
+				.split(',')
+				.map((part) => part.trim())
+				.filter(Boolean)
+		}
+		return value
+	}
+
+	if (coercion === 'boolean' && typeof value === 'string') {
+		if (/^(true|false)$/i.test(value.trim())) {
+			return value.trim().toLowerCase() === 'true'
+		}
+		return value
+	}
+
+	if ((coercion === 'number' || coercion === 'integer') && typeof value === 'string') {
+		const trimmed = value.trim()
+		if (!trimmed) return value
+		const parsed = Number(trimmed)
+		if (!Number.isFinite(parsed)) return value
+		if (coercion === 'integer' && !Number.isInteger(parsed)) return value
+		return parsed
+	}
+
+	return value
+}
+
+function getSchemaType(propertySchema: unknown): string | null {
+	if (!propertySchema || typeof propertySchema !== 'object') return null
+	const type = (propertySchema as { type?: unknown }).type
+	return typeof type === 'string' ? type : null
+}
+
+function getSchemaEnum(propertySchema: unknown): string[] | null {
+	if (!propertySchema || typeof propertySchema !== 'object') return null
+	const enumValues = (propertySchema as { enum?: unknown }).enum
+	if (!Array.isArray(enumValues)) return null
+	return enumValues.filter((value): value is string => typeof value === 'string')
+}
+
 /**
  * 对工具参数做基础校验（仅覆盖对象根节点常见约束）
  * 目标：在明显参数错误时提前返回，避免远端 MCP 服务报 5xx。
  */
 function validateToolArgs(
+	toolName: string,
 	schema: Record<string, unknown> | undefined,
 	args: Record<string, unknown>,
 ): string[] {
 	if (!schema || typeof schema !== 'object') return []
 
+	const toolHint = getBuiltinToolHint(toolName)
 	const required = Array.isArray(schema.required)
 		? schema.required.filter((key): key is string => typeof key === 'string')
 		: []
@@ -84,10 +168,18 @@ function validateToolArgs(
 			: {}
 
 	const errors: string[] = []
+	const propertyNames = new Set(Object.keys(properties))
+	const shouldRejectUnknownFields = propertyNames.size > 0 || Boolean(toolHint)
 
 	for (const key of required) {
-		if (!(key in args) || args[key] === undefined || args[key] === null) {
+		if (!hasUsableValue(args[key])) {
 			errors.push(`缺少必填参数: ${key}`)
+		}
+	}
+
+	for (const key of Object.keys(args)) {
+		if (shouldRejectUnknownFields && !propertyNames.has(key)) {
+			errors.push(`未知参数: ${key}`)
 		}
 	}
 
@@ -95,8 +187,8 @@ function validateToolArgs(
 		const propSchema = properties[key]
 		if (!propSchema || typeof propSchema !== 'object') continue
 
-		const expectedType = (propSchema as { type?: unknown }).type
-		if (typeof expectedType !== 'string') continue
+		const expectedType = getSchemaType(propSchema)
+		if (!expectedType) continue
 
 		const actualType = Array.isArray(value) ? 'array' : typeof value
 		const normalizedActualType =
@@ -118,6 +210,49 @@ function validateToolArgs(
 
 		if (!matches) {
 			errors.push(`参数类型不匹配: ${key} 期望 ${expectedType}，实际 ${normalizedActualType}`)
+			continue
+		}
+
+		const enumValues = getSchemaEnum(propSchema)
+		if (enumValues && typeof value === 'string' && !enumValues.includes(value)) {
+			errors.push(`参数取值无效: ${key} 仅接受 ${enumValues.join(', ')}`)
+		}
+
+		if (expectedType === 'array' && Array.isArray(value)) {
+			const itemType = getSchemaType((propSchema as { items?: unknown }).items)
+			if (itemType) {
+				const hasInvalid = value.some((item) => {
+					const itemActualType = Array.isArray(item) ? 'array' : typeof item
+					if (itemType === 'integer') {
+						return typeof item !== 'number' || !Number.isInteger(item)
+					}
+					return itemActualType !== itemType
+				})
+				if (hasInvalid) {
+					errors.push(`数组参数类型不匹配: ${key} 的元素必须是 ${itemType}`)
+				}
+			}
+		}
+	}
+
+	for (const group of toolHint?.mutuallyExclusive ?? []) {
+		const activeFields = group.filter((field) => hasUsableValue(args[field]))
+		if (activeFields.length > 1) {
+			errors.push(`参数互斥: ${activeFields.join(', ')} 不能同时提供`)
+		}
+	}
+
+	for (const rule of toolHint?.conditionalRules ?? []) {
+		if (args[rule.field] !== rule.when) continue
+		for (const requiredField of rule.requires ?? []) {
+			if (!hasUsableValue(args[requiredField])) {
+				errors.push(rule.message ?? `参数依赖: 当 ${rule.field}=${String(rule.when)} 时必须提供 ${requiredField}`)
+			}
+		}
+		for (const forbiddenField of rule.forbids ?? []) {
+			if (hasUsableValue(args[forbiddenField])) {
+				errors.push(rule.message ?? `参数不兼容: 当 ${rule.field}=${String(rule.when)} 时不能提供 ${forbiddenField}`)
+			}
 		}
 	}
 
@@ -176,19 +311,70 @@ function toGithubSlug(value: string): string {
 }
 
 function normalizeToolArgs(
+	toolName: string,
 	schema: Record<string, unknown> | undefined,
 	rawArgs: Record<string, unknown>,
 ): { args: Record<string, unknown>; notes: string[] } {
+	const toolHint = getBuiltinToolHint(toolName)
 	const { required } = getSchemaMeta(schema)
 	const notes: string[] = []
+	const properties =
+		schema && typeof schema === 'object' && typeof schema.properties === 'object' && schema.properties !== null
+			? (schema.properties as Record<string, unknown>)
+			: {}
+	const aliasMap = toolHint?.aliases ?? {}
+	let preNormalized = trimArgsDeep(rawArgs) as Record<string, unknown>
+
+	if (toolHint?.normalize) {
+		const normalizedByHint = toolHint.normalize(preNormalized)
+		preNormalized = normalizedByHint.args
+		notes.push(...normalizedByHint.notes)
+	}
+
 	const normalized: Record<string, unknown> = {}
 
-	for (const [key, value] of Object.entries(rawArgs)) {
+	for (const [rawKey, value] of Object.entries(preNormalized)) {
 		if (value === undefined) continue
-		normalized[key] = typeof value === 'string' ? value.trim() : value
+		const aliasTarget = aliasMap[rawKey]
+		const snakeKey = toSnakeCaseKey(rawKey)
+		const canonicalKey =
+			aliasTarget
+			|| (rawKey in properties ? rawKey : undefined)
+			|| (snakeKey in properties ? snakeKey : undefined)
+			|| rawKey
+		if (canonicalKey !== rawKey) {
+			notes.push(`已将 ${rawKey} 映射为 ${canonicalKey}`)
+		}
+		if (!(canonicalKey in normalized) || !hasUsableValue(normalized[canonicalKey])) {
+			normalized[canonicalKey] = value
+		}
 	}
 
 	for (const [key, value] of Object.entries(normalized)) {
+		const coercion =
+			toolHint?.valueCoercions?.[key]
+			|| ((): ToolHintCoercion | undefined => {
+				const propSchema = properties[key]
+				const schemaType = getSchemaType(propSchema)
+				if (schemaType === 'integer') return 'integer'
+				if (schemaType === 'number') return 'number'
+				if (schemaType === 'boolean') return 'boolean'
+				if (
+					schemaType === 'array'
+					&& getSchemaType((propSchema as { items?: unknown }).items) === 'string'
+				) {
+					return 'string_array'
+				}
+				return undefined
+			})()
+		if (coercion) {
+			const next = coerceValue(value, coercion)
+			if (next !== value) {
+				normalized[key] = next
+				notes.push(`${key}: 已自动转换为 ${coercion}`)
+			}
+		}
+
 		if (typeof value !== 'string' || !value) continue
 
 		if (isUrlLikeKey(key) || (isRepoLikeKey(key) && /url|uri/i.test(key))) {
@@ -358,7 +544,7 @@ function buildToolArgCandidates(
 	if (legacyAlternate) addCandidate(legacyAlternate)
 
 	const isRepoTool =
-		/(repo|repository|github|structure|formify_read_text_file|search_doc)/i.test(toolName)
+		/(repo|repository|github|structure|search_doc)/i.test(toolName)
 		|| Object.keys(properties).some((name) => isRepoLikeKey(name) || isUrlLikeKey(name))
 	if (!isRepoTool) {
 		return candidates
@@ -427,6 +613,60 @@ function safeJsonPreview(value: unknown, maxLen = 400): string {
 	}
 }
 
+function stableToolValue(value: unknown): unknown {
+	if (Array.isArray(value)) {
+		return value.map((item) => stableToolValue(item))
+	}
+	if (!value || typeof value !== 'object') {
+		return value
+	}
+
+	return Object.keys(value as Record<string, unknown>)
+		.sort()
+		.reduce<Record<string, unknown>>((acc, key) => {
+			acc[key] = stableToolValue((value as Record<string, unknown>)[key])
+			return acc
+		}, {})
+}
+
+function buildToolFailureSignature(toolName: string, args: Record<string, unknown>): string {
+	return `${toolName}:${JSON.stringify(stableToolValue(args))}`
+}
+
+function isToolFailureContent(content: string): boolean {
+	const trimmed = content.trim()
+	return trimmed.startsWith('工具调用失败:') || trimmed.startsWith('[工具执行错误]')
+}
+
+function recordToolFailure(
+	failureTracker: ToolFailureTracker | undefined,
+	signature: string,
+	content: string,
+): ToolFailureTrackerEntry | null {
+	if (!failureTracker) return null
+	const previous = failureTracker.get(signature)
+	const next: ToolFailureTrackerEntry = {
+		count: (previous?.count ?? 0) + 1,
+		lastContent: content,
+	}
+	failureTracker.set(signature, next)
+	return next
+}
+
+function clearToolFailure(
+	failureTracker: ToolFailureTracker | undefined,
+	signature: string,
+): void {
+	failureTracker?.delete(signature)
+}
+
+function getToolFailure(
+	failureTracker: ToolFailureTracker | undefined,
+	signature: string,
+): ToolFailureTrackerEntry | undefined {
+	return failureTracker?.get(signature)
+}
+
 function summarizeSchema(schema: Record<string, unknown> | undefined): string {
 	const { required, properties } = getSchemaMeta(schema)
 	const propSummary = Object.entries(properties)
@@ -437,6 +677,29 @@ function summarizeSchema(schema: Record<string, unknown> | undefined): string {
 		})
 		.join(', ')
 	return `required=[${required.join(', ')}], props=[${propSummary}]`
+}
+
+function buildToolRecoveryHint(toolName: string): string {
+	const toolHint = getBuiltinToolHint(toolName)
+	const parts: string[] = []
+	if (toolHint?.usageHint) {
+		parts.push(`使用建议=${toolHint.usageHint}`)
+	}
+	if (toolHint?.fallbackTool) {
+		parts.push(`如果当前工具不适合，请改用 ${toolHint.fallbackTool}`)
+	}
+	return parts.join('。')
+}
+
+function areAllToolResultsBlocked(toolResults: ToolLoopMessage[]): boolean {
+	return (
+		toolResults.length > 0
+		&& toolResults.every(
+			(result) =>
+				typeof result.content === 'string'
+				&& result.content.startsWith('工具调用已阻止:'),
+		)
+	)
 }
 
 /**
@@ -511,6 +774,7 @@ export async function executeMcpToolCalls(
 	toolCalls: OpenAIToolCall[],
 	mcpTools: McpToolDefinitionForProvider[],
 	mcpCallTool: McpCallToolFnForProvider,
+	failureTracker?: ToolFailureTracker,
 ): Promise<ToolLoopMessage[]> {
 	const results: ToolLoopMessage[] = []
 
@@ -549,21 +813,40 @@ export async function executeMcpToolCalls(
 			continue
 		}
 
-		const normalized = normalizeToolArgs(toolDef?.inputSchema, args)
+		const normalized = normalizeToolArgs(toolName, toolDef?.inputSchema, args)
 		args = normalized.args
 		if (normalized.notes.length > 0) {
 			DebugLogger.warn(`[MCP] 工具参数已自动修正: ${toolName}`, normalized.notes)
 		}
-
-		const argValidationErrors = validateToolArgs(toolDef?.inputSchema, args)
-		if (argValidationErrors.length > 0) {
-			const validationText = argValidationErrors.join('; ')
-			DebugLogger.warn(`[MCP] 工具参数校验失败: ${toolName}: ${validationText}`)
+		const failureSignature = buildToolFailureSignature(toolName, args)
+		const previousFailure = getToolFailure(failureTracker, failureSignature)
+		if (previousFailure) {
+			const recoveryHint = buildToolRecoveryHint(toolName)
 			results.push({
 				role: 'tool',
 				tool_call_id: call.id,
 				name: toolName,
-				content: `工具调用失败: 参数校验失败（${validationText}）。当前参数=${safeJsonPreview(args)}。参数约束=${summarizeSchema(toolDef?.inputSchema)}`,
+				content:
+					`工具调用已阻止: 相同参数已失败 ${previousFailure.count} 次。` +
+					`请不要继续使用同一组参数重试。最近错误=${previousFailure.lastContent}。${recoveryHint}`,
+			})
+			continue
+		}
+
+		const argValidationErrors = validateToolArgs(toolName, toolDef?.inputSchema, args)
+		if (argValidationErrors.length > 0) {
+			const validationText = argValidationErrors.join('; ')
+			const recoveryHint = buildToolRecoveryHint(toolName)
+			DebugLogger.warn(`[MCP] 工具参数校验失败: ${toolName}: ${validationText}`)
+			const failureContent =
+				`工具调用失败: 参数校验失败（${validationText}）。当前参数=${safeJsonPreview(args)}。` +
+				`参数约束=${summarizeSchema(toolDef?.inputSchema)}。${recoveryHint}`
+			recordToolFailure(failureTracker, failureSignature, failureContent)
+			results.push({
+				role: 'tool',
+				tool_call_id: call.id,
+				name: toolName,
+				content: failureContent,
 			})
 			continue
 		}
@@ -588,6 +871,11 @@ export async function executeMcpToolCalls(
 				}
 
 				const result = await mcpCallTool(serverId, toolName, candidateArgs)
+				if (typeof result === 'string' && isToolFailureContent(result)) {
+					recordToolFailure(failureTracker, failureSignature, result)
+				} else {
+					clearToolFailure(failureTracker, failureSignature)
+				}
 				results.push({
 					role: 'tool',
 					tool_call_id: call.id,
@@ -610,11 +898,16 @@ export async function executeMcpToolCalls(
 
 		if (!callSucceeded) {
 			const errorMsg = lastError instanceof Error ? lastError.message : String(lastError)
+			const recoveryHint = buildToolRecoveryHint(toolName)
+			const failureContent =
+				`工具调用失败: ${errorMsg}。最后参数=${safeJsonPreview(lastTriedArgs)}。` +
+				`参数约束=${summarizeSchema(toolDef?.inputSchema)}。${recoveryHint}`
+			recordToolFailure(failureTracker, failureSignature, failureContent)
 			results.push({
 				role: 'tool',
 				tool_call_id: call.id,
 				name: toolName,
-				content: `工具调用失败: ${errorMsg}。最后参数=${safeJsonPreview(lastTriedArgs)}。参数约束=${summarizeSchema(toolDef?.inputSchema)}`,
+				content: failureContent,
 			})
 		}
 	}
@@ -1215,6 +1508,7 @@ export function withOpenAIMcpToolCallSupport(
 					messages,
 					resolveEmbedAsBinary,
 				)
+				const toolFailureTracker: ToolFailureTracker = new Map()
 
 					for (let loop = 0; loop < maxToolCallLoops; loop++) {
 						if (controller.signal.aborted) return
@@ -1276,7 +1570,12 @@ export function withOpenAIMcpToolCallSupport(
 
 							const toolResults: ToolLoopMessage[] = []
 							for (const call of toolCalls) {
-								const singleResults = await executeMcpToolCalls([call], currentMcpTools, mcpCallTool)
+								const singleResults = await executeMcpToolCalls(
+									[call],
+									currentMcpTools,
+									mcpCallTool,
+									toolFailureTracker,
+								)
 								toolResults.push(...singleResults)
 
 								const resultContent = typeof singleResults[0]?.content === 'string'
@@ -1286,6 +1585,10 @@ export function withOpenAIMcpToolCallSupport(
 							}
 
 							loopMessages.push(...toolResults)
+							if (areAllToolResultsBlocked(toolResults)) {
+								DebugLogger.warn('[MCP] 检测到重复失败的相同工具调用，提前结束工具循环')
+								break
+							}
 
 							DebugLogger.debug(
 								`[MCP] 已执行 ${toolCalls.length} 个工具调用（非流式），继续循环`,
@@ -1445,7 +1748,12 @@ export function withOpenAIMcpToolCallSupport(
 
 					const toolResults: ToolLoopMessage[] = []
 					for (const call of toolCalls) {
-						const singleResults = await executeMcpToolCalls([call], currentMcpTools, mcpCallTool)
+						const singleResults = await executeMcpToolCalls(
+							[call],
+							currentMcpTools,
+							mcpCallTool,
+							toolFailureTracker,
+						)
 						toolResults.push(...singleResults)
 
 						// 将工具调用结果注入流式输出，使聊天界面实时展示
@@ -1456,6 +1764,10 @@ export function withOpenAIMcpToolCallSupport(
 					}
 
 					loopMessages.push(...toolResults)
+					if (areAllToolResultsBlocked(toolResults)) {
+						DebugLogger.warn('[MCP] 检测到重复失败的相同工具调用，提前结束工具循环')
+						break
+					}
 
 					DebugLogger.debug(
 						`[MCP] 已执行 ${toolCalls.length} 个工具调用，继续循环`,

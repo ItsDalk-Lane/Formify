@@ -760,6 +760,9 @@ const runPR11 = async () => {
 				error: () => {}
 			}
 		},
+		'./toolHints': {
+			getBuiltinToolHint: () => undefined
+		},
 		'../providers': {},
 		'../providers/utils': {
 			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } }),
@@ -1093,6 +1096,9 @@ const runPR17 = async () => {
 				error: () => {}
 			}
 		},
+		'./toolHints': {
+			getBuiltinToolHint: () => undefined
+		},
 		'../providers': {},
 		'../providers/utils': {
 			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } }),
@@ -1225,6 +1231,9 @@ const runPR19 = async () => {
 				error: () => {}
 			}
 		},
+		'./toolHints': {
+			getBuiltinToolHint: () => undefined
+		},
 		'../providers': {},
 		'../providers/utils': {
 			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } }),
@@ -1303,6 +1312,9 @@ const runPR20 = async () => {
 				error: () => {}
 			}
 		},
+		'./toolHints': {
+			getBuiltinToolHint: () => undefined
+		},
 		'../providers': {},
 		'../providers/utils': {
 			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } }),
@@ -1325,9 +1337,15 @@ const runPR20 = async () => {
 		model: 'kimi-k2',
 		parameters: {},
 		mcpTools: [{
-			name: 'formify_list_directory',
+			name: 'list_directory',
 			description: 'list files',
-			inputSchema: { type: 'object', properties: {} },
+			inputSchema: {
+				type: 'object',
+				required: ['directory_path'],
+				properties: {
+					directory_path: { type: 'string' }
+				}
+			},
 			serverId: 'mock-server'
 		}],
 		mcpCallTool: async () => 'tool-result'
@@ -1335,8 +1353,8 @@ const runPR20 = async () => {
 
 	// 第一轮：Provider 仅返回 legacy function_call 增量字段
 	streamQueue.push([
-		{ choices: [{ delta: { function_call: { name: 'formify_list_directory' } } }] },
-		{ choices: [{ delta: { function_call: { arguments: '{"folder_name_or_path":"Inbox"}' } } }] }
+		{ choices: [{ delta: { function_call: { name: 'list_directory' } } }] },
+		{ choices: [{ delta: { function_call: { arguments: '{"directory_path":"Inbox"}' } } }] }
 	])
 	// 第二轮：拿到工具结果后返回正常文本
 	streamQueue.push([
@@ -1353,7 +1371,7 @@ const runPR20 = async () => {
 	}
 
 	assert(
-		output.includes('{{FF_MCP_TOOL_START}}:formify_list_directory:tool-result{{FF_MCP_TOOL_END}}:'),
+		output.includes('{{FF_MCP_TOOL_START}}:list_directory:tool-result{{FF_MCP_TOOL_END}}:'),
 		'PR20-1: legacy function_call should still execute MCP tools'
 	)
 	assert(
@@ -1408,7 +1426,7 @@ const runPR21 = () => {
 
 	const transformed = capturedMcpOptions.transformApiParams(
 		{ temperature: 0.7, enableThinking: false, enableWebSearch: false },
-		{ enableReasoning: true, mcpTools: [{ name: 'formify_list_directory' }] }
+		{ enableReasoning: true, mcpTools: [{ name: 'list_directory' }] }
 	)
 	assert(
 		transformed.tool_choice === 'auto',
@@ -1463,6 +1481,9 @@ const runPR22 = async () => {
 				error: () => {}
 			}
 		},
+		'./toolHints': {
+			getBuiltinToolHint: () => undefined
+		},
 		'../providers': {},
 		'../providers/utils': {
 			convertEmbedToImageUrl: async () => ({ type: 'image_url', image_url: { url: '' } }),
@@ -1488,9 +1509,15 @@ const runPR22 = async () => {
 			model: 'malicious-override'
 		},
 		mcpTools: [{
-			name: 'formify_list_directory',
+			name: 'list_directory',
 			description: 'list files',
-			inputSchema: { type: 'object', properties: {} },
+			inputSchema: {
+				type: 'object',
+				required: ['directory_path'],
+				properties: {
+					directory_path: { type: 'string' }
+				}
+			},
 			serverId: 'mock-server'
 		}],
 		mcpCallTool: async () => 'ok'
@@ -1586,8 +1613,8 @@ const runPR23 = () => {
 				content: '',
 				tool_calls: [{
 					function: {
-						name: 'formify_list_directory',
-						arguments: { folder_name_or_path: 'Inbox' }
+						name: 'list_directory',
+						arguments: { directory_path: 'Inbox' }
 					}
 				}]
 			}
@@ -1604,13 +1631,19 @@ const runPR23 = () => {
 		parameters: {},
 		enableReasoning: false,
 		mcpTools: [{
-			name: 'formify_list_directory',
+			name: 'list_directory',
 			description: 'list files',
-			inputSchema: { type: 'object', properties: {} },
+			inputSchema: {
+				type: 'object',
+				required: ['directory_path'],
+				properties: {
+					directory_path: { type: 'string' }
+				}
+			},
 			serverId: 'mock-server'
 		}],
 		mcpCallTool: async (_serverId, _toolName, args) =>
-			args.folder_name_or_path === 'Inbox' ? 'tool-result' : 'unexpected'
+			args.directory_path === 'Inbox' ? 'tool-result' : 'unexpected'
 	})
 
 	return (async () => {
@@ -1636,7 +1669,7 @@ const runPR23 = () => {
 			'PR23-3: native Ollama MCP path should stream assistant text before tool execution'
 		)
 		assert(
-			output.includes('{{FF_MCP_TOOL_START}}:formify_list_directory:tool-result{{FF_MCP_TOOL_END}}:'),
+		output.includes('{{FF_MCP_TOOL_START}}:list_directory:tool-result{{FF_MCP_TOOL_END}}:'),
 			'PR23-4: native Ollama MCP path should execute tools and emit MCP tool markers'
 		)
 		assert(
@@ -1646,7 +1679,7 @@ const runPR23 = () => {
 		const secondRoundMessages = capturedRequests[1]?.messages ?? []
 		const toolMessage = secondRoundMessages.find((message) => message.role === 'tool')
 		assert(
-			toolMessage?.tool_name === 'formify_list_directory' && toolMessage?.content === 'tool-result',
+			toolMessage?.tool_name === 'list_directory' && toolMessage?.content === 'tool-result',
 			'PR23-6: second native Ollama request should feed tool results back with role=tool and tool_name'
 		)
 	})()

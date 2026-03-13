@@ -843,7 +843,7 @@ export class ZhTw implements Local {
 	mcp_builtin_tools_empty = "暫無可用工具";
 	mcp_builtin_tool_no_description = "無描述";
 	mcp_builtin_time_timezone = "預設時區（預設北京時間）";
-	mcp_builtin_time_timezone_desc = "用於 formify_get_time 在未明確指定 timezone 時返回目前時間，需填寫 IANA 時區名稱。";
+	mcp_builtin_time_timezone_desc = "用於 get_time 在未明確指定 timezone 時返回目前時間，需填寫 IANA 時區名稱。";
 	mcp_builtin_time_timezone_invalid = "請輸入有效的 IANA 時區名稱，例如 Asia/Shanghai";
 	mcp_fs_search_files_truncated = "已達到最大返回數量 {0}，可能還有更多匹配項。";
 	mcp_fs_delete_deleted = "已刪除: {0}";

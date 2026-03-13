@@ -242,94 +242,87 @@ describe('createFilesystemBuiltinRuntime', () => {
 
 		expect(tools.map((tool) => tool.name)).toEqual(
 			expect.arrayContaining([
-				'formify_read_text_file',
-				'formify_read_media_file',
-				'formify_edit_file',
-				'formify_list_allowed_directories',
-				'formify_open_file',
-				'formify_get_first_link_path',
-				'formify_delete_file',
-				'formify_search_content',
-				'formify_query_vault',
+				'read_file',
+				'read_media',
+				'edit_file',
+				'find_paths',
+				'list_directory',
+				'open_file',
+				'delete_path',
+				'search_content',
+				'query_index',
 			])
 		);
+		expect(tools.find((tool) => tool.name === 'find_paths')?.description).toContain('不要在什么场景用');
+		expect(tools.find((tool) => tool.name === 'query_index')?.description).toContain('不要用于发现未知路径');
+		expect(
+			(tools.find((tool) => tool.name === 'read_file')?.inputSchema as { properties?: Record<string, unknown> })?.properties
+		).toEqual(expect.objectContaining({
+			file_path: expect.any(Object),
+			read_mode: expect.any(Object),
+		}));
+		expect(
+			(tools.find((tool) => tool.name === 'list_directory')?.inputSchema as { properties?: Record<string, unknown> })?.properties
+		).toEqual(expect.objectContaining({
+			directory_path: expect.any(Object),
+			view: expect.any(Object),
+		}));
 
 		const textFileResult = parseJson<{
-			path: string;
+			file_path: string;
+			read_mode: string;
 			content: string;
 			truncated: boolean;
+			total_lines: number;
+			has_more: boolean;
 		}>(
-			await runtime.callTool('formify_read_text_file', { path: 'notes/alpha.md' })
+			await runtime.callTool('read_file', { file_path: 'notes/alpha.md', read_mode: 'full' })
 		);
 		expect(textFileResult).toMatchObject({
-			path: 'notes/alpha.md',
+			file_path: 'notes/alpha.md',
+			read_mode: 'full',
 			content: '# Alpha\nBody',
 			truncated: false,
+			total_lines: 2,
+			has_more: false,
 		});
 
-		expect(
-			parseJson<{ directories: string[]; scope: string }>(
-				await runtime.callTool('formify_list_allowed_directories', {})
-			)
-		).toEqual({
-			directories: ['/'],
-			scope: 'vault-root',
-		});
-
-		const mediaResult = await runtime.callTool('formify_read_media_file', {
-			path: 'assets/logo.png',
+		const mediaResult = await runtime.callTool('read_media', {
+			file_path: 'assets/logo.png',
 		});
 		expect(mediaResult).toContain('"type": "image"');
 		expect(mediaResult).toContain('"mimeType": "image/png"');
 
 		const editResult = parseJson<{
 			diff: string;
-			dryRun: boolean;
+			dry_run: boolean;
 			updated: boolean;
 		}>(
-			await runtime.callTool('formify_edit_file', {
-				path: 'notes/alpha.md',
+			await runtime.callTool('edit_file', {
+				file_path: 'notes/alpha.md',
 				edits: [{ oldText: 'Body', newText: 'Updated body' }],
-				dryRun: true,
+				dry_run: true,
 			})
 		);
 		expect(editResult.diff).toContain('Updated body');
 		expect(editResult.updated).toBe(false);
 		expect(app.vault.modify).not.toHaveBeenCalled();
 
-		const openResult = parseJson<{ path: string; opened: boolean }>(
-			await runtime.callTool('formify_open_file', { path: 'notes/alpha.md' })
+		const openResult = parseJson<{ file_path: string; opened: boolean }>(
+			await runtime.callTool('open_file', { file_path: 'notes/alpha.md' })
 		);
 		expect(openResult).toMatchObject({
-			path: 'notes/alpha.md',
+			file_path: 'notes/alpha.md',
 			opened: true,
 		});
 		expect(app.openFile).toHaveBeenCalledWith(
 			expect.objectContaining({ path: 'notes/alpha.md' })
 		);
 
-		expect(
-			parseJson<{
-				internalLink: string;
-				sourcePath: string;
-				resolvedPath: string | null;
-				found: boolean;
-			}>(
-				await runtime.callTool('formify_get_first_link_path', {
-					internalLink: 'notes/alpha',
-				})
-			)
-		).toEqual({
-			internalLink: 'notes/alpha',
-			sourcePath: '',
-			resolvedPath: 'notes/alpha.md',
-			found: true,
-		});
-
 		await runtime.close();
 	});
 
-	it('should filter formify_list_directory results by regex and keep text mode', async () => {
+	it('should filter list_directory flat results by regex and keep text mode', async () => {
 		const app = new MockApp() as any;
 		app.addFile('notes/alpha.md', '# Alpha');
 		app.addFile('notes/beta.txt', 'Beta');
@@ -338,8 +331,8 @@ describe('createFilesystemBuiltinRuntime', () => {
 		const runtime = await createFilesystemBuiltinRuntime(app);
 
 		expect(
-			await runtime.callTool('formify_list_directory', {
-				path: 'notes',
+			await runtime.callTool('list_directory', {
+				directory_path: 'notes',
 				regex: '\\.md$',
 				response_format: 'text',
 			})
@@ -349,8 +342,8 @@ describe('createFilesystemBuiltinRuntime', () => {
 			items: Array<{ name: string }>;
 			meta: { returned: number; truncated: boolean };
 		}>(
-			await runtime.callTool('formify_list_directory', {
-				path: 'notes',
+			await runtime.callTool('list_directory', {
+				directory_path: 'notes',
 				regex: '\\.md$',
 			})
 		);
@@ -360,8 +353,8 @@ describe('createFilesystemBuiltinRuntime', () => {
 			truncated: false,
 		});
 
-		const error = await runtime.callTool('formify_list_directory', {
-			path: 'notes',
+		const error = await runtime.callTool('list_directory', {
+			directory_path: 'notes',
 			regex: '(',
 		});
 		expect(error).toContain('[工具执行错误]');
@@ -370,32 +363,198 @@ describe('createFilesystemBuiltinRuntime', () => {
 		await runtime.close();
 	});
 
-	it('should cap formify_search_files results and return truncation metadata', async () => {
+	it('should support list_directory tree and size views', async () => {
+		const app = new MockApp() as any;
+		app.addFile('notes/alpha.md', '# Alpha', { stat: { size: 7 } });
+		app.addFile('notes/nested/beta.md', '# Beta', { stat: { size: 20 } });
+		app.addFile('notes/nested/gamma.txt', 'Gamma', { stat: { size: 5 } });
+
+		const runtime = await createFilesystemBuiltinRuntime(app);
+
+		const sized = parseJson<{
+			items: Array<{ name: string; sizeText: string | null }>;
+			summary: { totalFiles: number; totalDirs: number };
+		}>(
+			await runtime.callTool('list_directory', {
+				directory_path: 'notes',
+				include_sizes: true,
+				sort_by: 'size',
+			})
+		);
+		expect(sized.items[0]).toMatchObject({ name: 'alpha.md', sizeText: '7 B' });
+		expect(sized.summary).toMatchObject({ totalFiles: 1, totalDirs: 1 });
+
+		const tree = parseJson<{
+			view: string;
+			tree: Array<{ name: string; type: string; children?: Array<{ name: string }> }>;
+		}>(
+			await runtime.callTool('list_directory', {
+				directory_path: 'notes',
+				view: 'tree',
+				max_depth: 3,
+				max_nodes: 20,
+			})
+		);
+		expect(tree.view).toBe('tree');
+		expect(tree.tree).toEqual([
+			{ name: 'alpha.md', type: 'file' },
+			{
+				name: 'nested',
+				type: 'directory',
+				children: expect.arrayContaining([
+					expect.objectContaining({ name: 'beta.md', type: 'file' }),
+					expect.objectContaining({ name: 'gamma.txt', type: 'file' }),
+				]),
+			},
+		]);
+
+		await runtime.close();
+	});
+
+	it('should paginate read_file segments and suggest the next call for long content', async () => {
+		const app = new MockApp() as any;
+		app.addFile('notes/long.md', 'line 1\nline 2\nline 3\nline 4\nline 5');
+
+		const runtime = await createFilesystemBuiltinRuntime(app);
+
+		const firstSegment = parseJson<{
+			file_path: string;
+			read_mode: string;
+			content: string;
+			returned_start_line: number;
+			returned_end_line: number;
+			has_more: boolean;
+			next_start_line: number | null;
+			suggested_next_call: { tool_name: string; args: { start_line: number; line_count: number } } | null;
+		}>(
+			await runtime.callTool('read_file', {
+				file_path: 'notes/long.md',
+				read_mode: 'segment',
+				start_line: 1,
+				line_count: 2,
+			})
+		);
+
+		expect(firstSegment).toMatchObject({
+			file_path: 'notes/long.md',
+			read_mode: 'segment',
+			content: 'line 1\nline 2',
+			returned_start_line: 1,
+			returned_end_line: 2,
+			has_more: true,
+			next_start_line: 3,
+		});
+		expect(firstSegment.suggested_next_call).toEqual({
+			tool_name: 'read_file',
+			args: {
+				file_path: 'notes/long.md',
+				read_mode: 'segment',
+				start_line: 3,
+				line_count: 2,
+			},
+		});
+
+		const secondSegment = parseJson<{
+			content: string;
+			returned_start_line: number;
+			returned_end_line: number;
+			has_more: boolean;
+			next_start_line: number | null;
+		}>(
+			await runtime.callTool('read_file', {
+				file_path: 'notes/long.md',
+				read_mode: 'segment',
+				start_line: 3,
+				line_count: 2,
+			})
+		);
+
+		expect(secondSegment).toMatchObject({
+			content: 'line 3\nline 4',
+			returned_start_line: 3,
+			returned_end_line: 4,
+			has_more: true,
+			next_start_line: 5,
+		});
+
+		const oversizedApp = new MockApp() as any;
+		oversizedApp.addFile(
+			'notes/huge.md',
+			'x'.repeat(25_000)
+		);
+		const oversizedRuntime = await createFilesystemBuiltinRuntime(oversizedApp);
+		const fullReadFallback = parseJson<{
+			content: string;
+			truncated: boolean;
+			has_more: boolean;
+			warning: string | null;
+			suggested_next_call: { tool_name: string; args: { file_path: string; read_mode: string } } | null;
+		}>(
+			await oversizedRuntime.callTool('read_file', {
+				file_path: 'notes/huge.md',
+				read_mode: 'full',
+			})
+		);
+		expect(fullReadFallback.content).toBe('');
+		expect(fullReadFallback.truncated).toBe(true);
+		expect(fullReadFallback.has_more).toBe(true);
+		expect(fullReadFallback.warning).toContain('请改用 segment 模式');
+		expect(fullReadFallback.suggested_next_call).toMatchObject({
+			tool_name: 'read_file',
+			args: {
+				file_path: 'notes/huge.md',
+				read_mode: 'segment',
+			},
+		});
+
+		await oversizedRuntime.close();
+		await runtime.close();
+	});
+
+	it('should find paths by name fragments and scope path', async () => {
 		const app = new MockApp() as any;
 		app.addFile('notes/alpha.md', '# Alpha');
 		app.addFile('notes/beta.md', '# Beta');
 		app.addFile('notes/gamma.md', '# Gamma');
+		app.addFile('notes/archive/todo.md', 'todo');
 		app.addFile('notes/keep.txt', 'Keep');
 
 		const runtime = await createFilesystemBuiltinRuntime(app);
 		const result = parseJson<{
-			matches: string[];
-			meta: { truncated: boolean; returned: number; totalBeforeLimit: number };
+			matches: Array<{ path: string; type: string; matched_on: string }>;
+			meta: { truncated: boolean; returned: number; total_before_limit: number };
 		}>(
-			await runtime.callTool('formify_search_files', {
-				path: 'notes',
-				pattern: '*.md',
-				excludePatterns: ['gamma.md'],
-				maxResults: 1,
+			await runtime.callTool('find_paths', {
+				query: 'a',
+				scope_path: 'notes',
+				target_type: 'file',
+				max_results: 2,
 			})
 		);
 
-		expect(result.matches).toEqual(['notes/alpha.md']);
+		expect(result.matches.map((match) => match.path)).toEqual([
+			'notes/alpha.md',
+			'notes/beta.md',
+		]);
 		expect(result.meta).toMatchObject({
 			truncated: true,
-			returned: 1,
-			totalBeforeLimit: 2,
+			returned: 2,
+			total_before_limit: 4,
 		});
+
+		const directoryResult = parseJson<{
+			matches: Array<{ path: string; type: string }>;
+		}>(
+			await runtime.callTool('find_paths', {
+				query: 'archive',
+				scope_path: 'notes',
+				target_type: 'directory',
+				match_mode: 'exact',
+			})
+		);
+		expect(directoryResult.matches).toEqual([
+			{ path: 'notes/archive', name: 'archive', type: 'directory', matched_on: 'name' },
+		]);
 
 		await runtime.close();
 	});
@@ -410,14 +569,14 @@ describe('createFilesystemBuiltinRuntime', () => {
 
 		expect(
 			parseJson<{ deleted: boolean; existed: boolean }>(
-				await runtime.callTool('formify_delete_file', { path: 'notes/alpha.md' })
+				await runtime.callTool('delete_path', { target_path: 'notes/alpha.md' })
 			)
 		).toMatchObject({ deleted: true, existed: true });
 		expect(app.hasPath('notes/alpha.md')).toBe(false);
 
 		expect(
 			parseJson<{ deleted: boolean; existed: boolean }>(
-				await runtime.callTool('formify_delete_file', { path: 'trash', force: true })
+				await runtime.callTool('delete_path', { target_path: 'trash', force: true })
 			)
 		).toMatchObject({ deleted: true, existed: true });
 		expect(app.hasPath('trash')).toBe(false);
@@ -425,11 +584,11 @@ describe('createFilesystemBuiltinRuntime', () => {
 
 		expect(
 			parseJson<{ deleted: boolean; existed: boolean }>(
-				await runtime.callTool('formify_delete_file', { path: 'missing.md' })
+				await runtime.callTool('delete_path', { target_path: 'missing.md' })
 			)
 		).toMatchObject({ deleted: false, existed: false });
 
-		expect(await runtime.callTool('formify_delete_file', { path: '/' })).toContain(
+		expect(await runtime.callTool('delete_path', { target_path: '/' })).toContain(
 			'[工具执行错误] 不允许删除 Vault 根目录'
 		);
 
@@ -459,17 +618,17 @@ describe('createFilesystemBuiltinRuntime', () => {
 			}>;
 			meta: {
 				truncated: boolean;
-				hasMore: boolean;
-				scannedFiles: number;
-				skippedFiles: Array<{ path: string; reason: string }>;
+				has_more: boolean;
+				scanned_files: number;
+				skipped_files: Array<{ path: string; reason: string }>;
 			};
 		}>(
-			await runtime.callTool('formify_search_content', {
+			await runtime.callTool('search_content', {
 				pattern: 'hello',
-				path: 'notes',
-				fileType: 'md',
-				contextLines: 1,
-				maxResults: 2,
+				scope_path: 'notes',
+				file_types: ['md'],
+				context_lines: 1,
+				max_results: 2,
 			})
 		);
 
@@ -483,21 +642,21 @@ describe('createFilesystemBuiltinRuntime', () => {
 			{ line: 2, text: 'Alpha line' },
 		]);
 		expect(markdownResult.meta.truncated).toBe(true);
-		expect(markdownResult.meta.hasMore).toBe(true);
+		expect(markdownResult.meta.has_more).toBe(true);
 
 		const tsResult = parseJson<{
 			matches: Array<{ path: string }>;
 			meta: {
 				truncated: boolean;
-				skippedFiles: Array<{ path: string; reason: string }>;
+				skipped_files: Array<{ path: string; reason: string }>;
 			};
 		}>(
-			await runtime.callTool('formify_search_content', {
+			await runtime.callTool('search_content', {
 				pattern: 'HELLO',
-				path: 'notes',
-				fileType: 'ts,tsx',
-				caseSensitive: true,
-				maxResults: 5,
+				scope_path: 'notes',
+				file_types: ['ts', 'tsx'],
+				case_sensitive: true,
+				max_results: 5,
 			})
 		);
 
@@ -506,15 +665,15 @@ describe('createFilesystemBuiltinRuntime', () => {
 
 		const allResult = parseJson<{
 			meta: {
-				skippedFiles: Array<{ path: string; reason: string }>;
+				skipped_files: Array<{ path: string; reason: string }>;
 			};
 		}>(
-			await runtime.callTool('formify_search_content', {
+			await runtime.callTool('search_content', {
 				pattern: 'Alpha',
-				path: 'notes',
+				scope_path: 'notes',
 			})
 		);
-		expect(allResult.meta.skippedFiles).toEqual(
+		expect(allResult.meta.skipped_files).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({ path: 'notes/image.png' }),
 				expect.objectContaining({ path: 'notes/large.md' }),
@@ -524,7 +683,7 @@ describe('createFilesystemBuiltinRuntime', () => {
 		await runtime.close();
 	});
 
-	it('should query vault data sources with filtering, grouping, and pagination', async () => {
+	it('should query structured index data sources with filtering, grouping, and pagination', async () => {
 		const app = new MockApp() as any;
 		app.setProperties({
 			status: { name: 'status', type: 'text' },
@@ -565,11 +724,26 @@ describe('createFilesystemBuiltinRuntime', () => {
 		const runtime = await createFilesystemBuiltinRuntime(app);
 
 		const fileRows = parseJson<{
-			rows: Array<{ extension: string; total: number; avgSize: number; totalSize: number }>;
+			rows: Array<{ extension: string; total: number; avg_size: number; total_size: number }>;
 		}>(
-			await runtime.callTool('formify_query_vault', {
-				expression:
-					'select(extension, count() as total, avg(size) as avgSize, sum(size) as totalSize).from(file).where(size >= 0).andGroup(size >= 80).orGroup(name == "alpha.md").groupBy(extension).orderBy(extension)',
+			await runtime.callTool('query_index', {
+				data_source: 'file',
+				select: {
+					fields: ['extension'],
+					aggregates: [
+						{ aggregate: 'count', alias: 'total' },
+						{ aggregate: 'avg', field: 'size', alias: 'avg_size' },
+						{ aggregate: 'sum', field: 'size', alias: 'total_size' },
+					],
+				},
+				filters: {
+					match: 'all',
+					conditions: [
+						{ field: 'size', operator: 'gte', value: 0 },
+					],
+				},
+				group_by: 'extension',
+				order_by: { field: 'extension', direction: 'asc' },
 			})
 		);
 		expect(fileRows.rows).toEqual(
@@ -580,71 +754,103 @@ describe('createFilesystemBuiltinRuntime', () => {
 		);
 
 		const propertyRows = parseJson<{
-			rows: Array<{ name: string; usageCount: number }>;
+			rows: Array<{ name: string; usage_count: number }>;
 		}>(
-			await runtime.callTool('formify_query_vault', {
-				expression:
-					'select(name, usageCount).from(property).where(usageCount > 0).orderBy(name)',
+			await runtime.callTool('query_index', {
+				data_source: 'property',
+				select: {
+					fields: ['name', 'usage_count'],
+				},
+				filters: {
+					match: 'all',
+					conditions: [{ field: 'usage_count', operator: 'gt', value: 0 }],
+				},
+				order_by: { field: 'name', direction: 'asc' },
 			})
 		);
 		expect(propertyRows.rows).toEqual([
-			{ name: 'done', usageCount: 2 },
-			{ name: 'status', usageCount: 2 },
+			{ name: 'done', usage_count: 2 },
+			{ name: 'status', usage_count: 2 },
 		]);
 
 		const tagRows = parseJson<{
-			rows: Array<{ tag: string; count: number; fileCount: number }>;
-			meta: { totalBeforeLimit: number; returned: number; truncated: boolean };
+			rows: Array<{ tag: string; count: number; file_count: number }>;
+			meta: { total_before_limit: number; returned: number; truncated: boolean };
 		}>(
-			await runtime.callTool('formify_query_vault', {
-				expression:
-					'select(tag, count, fileCount).from(tag).orderBy(tag).limit(1).offset(1)',
+			await runtime.callTool('query_index', {
+				data_source: 'tag',
+				select: {
+					fields: ['tag', 'count', 'file_count'],
+				},
+				order_by: { field: 'tag', direction: 'asc' },
+				limit: 1,
+				offset: 1,
 			})
 		);
 		expect(tagRows.rows).toHaveLength(1);
 		expect(tagRows.meta).toMatchObject({
-			totalBeforeLimit: 2,
+			total_before_limit: 2,
 			returned: 1,
 			truncated: false,
 		});
 
 		const taskRows = parseJson<{
-			rows: Array<{ filePath: string; completed: boolean; priority: string | null }>;
+			rows: Array<{ file_path: string; completed: boolean; priority: string | null }>;
 		}>(
-			await runtime.callTool('formify_query_vault', {
-				expression:
-					'select(filePath, completed, priority).from(task).where(completed == true || priority == "high").orderBy(filePath)',
+			await runtime.callTool('query_index', {
+				data_source: 'task',
+				select: {
+					fields: ['file_path', 'completed', 'priority'],
+				},
+				filters: {
+					match: 'any',
+					conditions: [
+						{ field: 'completed', operator: 'eq', value: true },
+						{ field: 'priority', operator: 'eq', value: 'high' },
+					],
+				},
+				order_by: { field: 'file_path', direction: 'asc' },
 			})
 		);
 		expect(taskRows.rows).toEqual([
-			{ filePath: 'notes/alpha.md', completed: false, priority: 'high' },
-			{ filePath: 'notes/beta.md', completed: true, priority: 'highest' },
+			{ file_path: 'notes/alpha.md', completed: false, priority: 'high' },
+			{ file_path: 'notes/beta.md', completed: true, priority: 'highest' },
 		]);
 
 		await runtime.close();
 	});
 
-	it('should return clear formify_query_vault errors for invalid expressions', async () => {
+	it('should return clear query_index errors for invalid field definitions', async () => {
 		const app = new MockApp() as any;
 		app.addFile('notes/alpha.md', '# Alpha');
 
 		const runtime = await createFilesystemBuiltinRuntime(app);
 
 		expect(
-			await runtime.callTool('formify_query_vault', {
-				expression: 'select(path).from(unknown)',
+			await runtime.callTool('query_index', {
+				data_source: 'file',
+				select: {
+					fields: ['unknown_field'],
+				},
 			})
 		).toContain('[工具执行错误]');
 		expect(
-			await runtime.callTool('formify_query_vault', {
-				expression: 'select(missingField).from(file)',
+			await runtime.callTool('query_index', {
+				data_source: 'file',
+				select: {
+					fields: [],
+					aggregates: [],
+				},
 			})
-		).toContain('未知字段');
+		).toContain('select.fields 或 select.aggregates');
 		expect(
-			await runtime.callTool('formify_query_vault', {
-				expression: 'from(file)',
+			await runtime.callTool('query_index', {
+				data_source: 'file',
+				select: {
+					aggregates: [{ aggregate: 'sum' }],
+				},
 			})
-		).toContain('select');
+		).toContain('sum 聚合必须提供 field');
 
 		await runtime.close();
 	});

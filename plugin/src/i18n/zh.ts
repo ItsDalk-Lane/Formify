@@ -827,7 +827,7 @@ export class Zh implements Local {
 	mcp_builtin_tools_empty = "暂无可用工具";
 	mcp_builtin_tool_no_description = "无描述";
 	mcp_builtin_time_timezone = "默认时区（默认北京时间）";
-	mcp_builtin_time_timezone_desc = "用于 formify_get_time 在未显式指定 timezone 时返回当前时间，需填写 IANA 时区名称。";
+	mcp_builtin_time_timezone_desc = "用于 get_time 在未显式指定 timezone 时返回当前时间，需填写 IANA 时区名称。";
 	mcp_builtin_time_timezone_invalid = "请输入有效的 IANA 时区名称，例如 Asia/Shanghai";
 	mcp_fs_search_files_truncated = "已达到最大返回数量 {0}，可能还有更多匹配项。";
 	mcp_fs_delete_deleted = "已删除: {0}";

@@ -71,11 +71,11 @@ export function registerScriptTools(
 	registerBuiltinTool(
 		server,
 		registry,
-		'formify_execute_script',
+		'run_script',
 		{
 			title: '执行受限脚本',
 			description:
-				'在受限脚本运行时中执行 JavaScript。仅可使用 call_tool(name,args) 和 moment()；不可访问 require/import/process/globalThis/fetch 等全局，超时控制仅为 best-effort，不承诺进程级隔离。',
+				'做什么：在受限脚本运行时中执行 JavaScript，用于多步工具编排、条件判断和结果拼装。\n什么时候用：需要连续调用多个工具、根据结果分支处理，或把多个工具结果组合成一个答案时使用。\n不要在什么场景用：不要用于执行本机命令、访问系统资源或直接读写操作系统文件；这类场景请使用 run_shell 或专用文件工具。\n返回什么：脚本执行结果；脚本内只可使用 call_tool(name,args) 与 moment()。\n失败后下一步怎么做：如果需要执行本机命令，请改用 run_shell；如果只是调用单个工具，不要继续重试 run_script。',
 			inputSchema: executeScriptSchema,
 			annotations: {
 				readOnlyHint: false,
@@ -92,11 +92,11 @@ export function registerScriptTools(
 	registerBuiltinTool(
 		server,
 		registry,
-		'formify_call_shell',
+		'run_shell',
 		{
 			title: '执行本机 Shell',
 			description:
-				'执行本机 shell 命令（仅桌面端支持）。该工具可能修改本地环境并访问开放世界资源；如果输出过长，请缩小命令范围、指定 cwd，或拆分为多次调用。',
+				'做什么：执行本机 shell 命令（仅桌面端支持）。\n什么时候用：确实需要调用 OS/CLI 命令、脚本文件或外部程序时使用。\n不要在什么场景用：不要用于工具编排、条件分支或文件读取抽象；这类场景请使用 run_script 或对应的文件工具。\n返回什么：supported、cwd、stdout、stderr、exitCode、timedOut。\n失败后下一步怎么做：如果只是想让多个工具协作，请改用 run_script；如果命令依赖桌面环境，请确认当前平台支持。',
 			inputSchema: callShellSchema,
 			outputSchema: callShellResultSchema,
 			annotations: {

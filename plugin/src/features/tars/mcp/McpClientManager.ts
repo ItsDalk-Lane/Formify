@@ -49,6 +49,8 @@ interface BuiltinDescriptor {
 }
 
 const EXTERNAL_CONNECT_RETRY_COOLDOWN_MS = 15_000;
+const BUILTIN_FILESYSTEM_ROUTING_HINT =
+	'全局文件工具路由规则：只知道名称或路径片段时先用 find_paths；已经知道 directory_path 才用 list_directory；已经知道 file_path 要读内容时用 read_file；搜索正文内容用 search_content；查询标签、任务、属性或文件统计用 query_index。';
 
 export class McpClientManager {
 	private processManager: McpProcessManager;
@@ -300,7 +302,16 @@ export class McpClientManager {
 	 */
 	async getToolsForModelContext(): Promise<McpToolDefinition[]> {
 		if (!this.isMcpEnabled()) return [];
-		return await this.getAvailableToolsWithLazyStart();
+		const tools = await this.getAvailableToolsWithLazyStart();
+		return tools.map((tool) => {
+			if (tool.serverId !== BUILTIN_FILESYSTEM_SERVER_ID) {
+				return tool;
+			}
+			return {
+				...tool,
+				description: `${BUILTIN_FILESYSTEM_ROUTING_HINT}\n\n${tool.description}`,
+			};
+		});
 	}
 
 	/**
