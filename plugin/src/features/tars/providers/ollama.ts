@@ -4,11 +4,11 @@ import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { arrayBufferToBase64, getMimeTypeFromFilename, buildReasoningBlockStart, buildReasoningBlockEnd } from './utils'
 import {
-	executeMcpToolCalls,
-	resolveCurrentMcpTools,
 	toOpenAITools,
-	type OpenAIToolCall,
-} from '../mcp/mcpToolCallHandler'
+	resolveCurrentTools,
+} from '../agent-loop'
+import type { ToolDefinition, ToolExecutor, ToolCallRequest } from '../agent-loop/types'
+import type { OpenAIToolCall } from '../agent-loop/OpenAILoopHandler'
 import { normalizeProviderError } from './errors'
 
 // Structured Output Format 类型
@@ -48,6 +48,10 @@ const OLLAMA_INTERNAL_OPTION_KEYS = new Set([
 	'baseURL',
 	'model',
 	'parameters',
+	'tools',
+	'toolExecutor',
+	'maxToolCallLoops',
+	'getTools',
 	'mcpTools',
 	'mcpGetTools',
 	'mcpCallTool',
@@ -268,9 +272,9 @@ const sendRequestFuncBase = (settings: BaseOptions): SendRequest =>
 	}
 
 const sendRequestFunc = (settings: BaseOptions): SendRequest => {
-	const hasStaticTools = Array.isArray(settings.mcpTools) && settings.mcpTools.length > 0
-	const hasDynamicTools = typeof settings.mcpGetTools === 'function'
-	if ((!hasStaticTools && !hasDynamicTools) || !settings.mcpCallTool) {
+	const hasStaticTools = Array.isArray(settings.tools) && settings.tools.length > 0
+	const hasDynamicTools = typeof settings.getTools === 'function'
+	if ((!hasStaticTools && !hasDynamicTools) || !settings.toolExecutor) {
 		return sendRequestFuncBase(settings)
 	}
 
@@ -284,8 +288,8 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest => {
 			const loopMessages: OllamaChatMessage[] = [...formattedMessages]
 			const ollama = new Ollama({ host: options.baseURL })
 			const maxToolCallLoops =
-				typeof settings.mcpMaxToolCallLoops === 'number' && settings.mcpMaxToolCallLoops > 0
-					? settings.mcpMaxToolCallLoops
+				typeof settings.maxToolCallLoops === 'number' && settings.maxToolCallLoops > 0
+					? settings.maxToolCallLoops
 					: DEFAULT_MAX_TOOL_CALL_LOOPS
 			const isReasoningEnabled = options.enableReasoning ?? false
 
@@ -295,12 +299,12 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest => {
 					return
 				}
 
-				const currentMcpTools = await resolveCurrentMcpTools(settings.mcpTools, settings.mcpGetTools)
+				const currentTools = await resolveCurrentTools(settings.tools, settings.getTools)
 				const response = await ollama.chat(
 					buildOllamaChatRequest(
 						options,
 						loopMessages,
-						currentMcpTools.length > 0 ? { tools: toOpenAITools(currentMcpTools) } : undefined
+						currentTools.length > 0 ? { tools: toOpenAITools(currentTools) } : undefined
 					) as any
 				)
 
@@ -370,21 +374,31 @@ const sendRequestFunc = (settings: BaseOptions): SendRequest => {
 					tool_calls: nativeToolCalls,
 				})
 
-				const toolResults = await executeMcpToolCalls(
-					openAIToolCalls,
-					currentMcpTools,
-					settings.mcpCallTool
-				)
-
-				for (const result of toolResults) {
-					const resultContent = normalizeToolResultContent(result.content)
-					yield `{{FF_MCP_TOOL_START}}:${result.name ?? 'tool'}:${resultContent}{{FF_MCP_TOOL_END}}:`
-					if (!result.name) continue
-					loopMessages.push({
-						role: 'tool',
-						content: resultContent,
-						tool_name: result.name,
-					})
+				for (const call of openAIToolCalls) {
+					const request: ToolCallRequest = {
+						id: call.id,
+						name: call.function.name,
+						arguments: call.function.arguments,
+					}
+					try {
+						const result = await settings.toolExecutor!.execute(request, currentTools)
+						const resultContent = normalizeToolResultContent(result.content)
+						yield `{{FF_MCP_TOOL_START}}:${result.name ?? 'tool'}:${resultContent}{{FF_MCP_TOOL_END}}:`
+						loopMessages.push({
+							role: 'tool',
+							content: resultContent,
+							tool_name: result.name,
+						})
+					} catch (err) {
+						const errorMsg = err instanceof Error ? err.message : String(err)
+						const errorContent = `工具调用失败: ${errorMsg}`
+						yield `{{FF_MCP_TOOL_START}}:${call.function.name}:${errorContent}{{FF_MCP_TOOL_END}}:`
+						loopMessages.push({
+							role: 'tool',
+							content: errorContent,
+							tool_name: call.function.name,
+						})
+					}
 				}
 			}
 

@@ -3,7 +3,7 @@ import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { buildReasoningBlockEnd, buildReasoningBlockStart } from './utils'
 import { DebugLogger } from '../../../utils/DebugLogger'
-import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
+import { withToolCallLoopSupport } from '../agent-loop'
 
 export interface AzureOptions extends BaseOptions {
 	endpoint: string
@@ -141,7 +141,7 @@ const sendRequestFuncBase = (settings: AzureOptions): SendRequest =>
  * Azure OpenAI MCP 包装器：使用 AzureOpenAI SDK 创建客户端以支持工具调用
  * Responses API（推理模式）不支持 tools，遇到时跳过 MCP 直接使用原始函数
  */
-const sendRequestFuncWithMcp = withOpenAIMcpToolCallSupport(
+const sendRequestFuncWithMcp = withToolCallLoopSupport(
 	sendRequestFuncBase as unknown as (settings: BaseOptions) => SendRequest,
 	{
 		createClient: (allOptions) => {

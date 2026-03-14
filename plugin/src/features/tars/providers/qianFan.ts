@@ -5,7 +5,7 @@ import { BaseOptions, Message, ResolveEmbedAsBinary, SaveAttachment, SendRequest
 import { buildReasoningBlockEnd, buildReasoningBlockStart, convertEmbedToImageUrl } from './utils'
 import { withToolMessageContext } from './messageFormat'
 import { DebugLogger } from '../../../utils/DebugLogger'
-import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
+import { withToolCallLoopSupport } from '../agent-loop'
 
 export interface QianFanOptions extends BaseOptions {
 	enableThinking?: boolean
@@ -414,7 +414,7 @@ export const qianFanVendor: Vendor = {
 		imageDisplayWidth: 400,
 		parameters: {}
 	} as QianFanOptions,
-	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc, {
+	sendRequestFunc: withToolCallLoopSupport(sendRequestFunc, {
 		transformApiParams: (apiParams, allOptions) => {
 			const mapped: Record<string, unknown> = { ...apiParams }
 			if (allOptions.enableThinking === true && mapped.enable_thinking === undefined) {

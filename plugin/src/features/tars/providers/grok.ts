@@ -2,7 +2,7 @@ import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl } from './utils'
 import { feedChunk } from './sse'
-import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
+import { withToolCallLoopSupport } from '../agent-loop'
 
 // Grok选项接口，扩展基础选项以支持推理功能
 export interface GrokOptions extends BaseOptions {
@@ -220,7 +220,7 @@ const formatMsg = async (msg: Message, resolveEmbedAsBinary: ResolveEmbedAsBinar
 const sendRequestFuncBase = sendRequestFunc
 
 // MCP 支持的包装函数（用于普通模式）
-const sendRequestFuncWithMcp = withOpenAIMcpToolCallSupport(sendRequestFunc)
+const sendRequestFuncWithMcp = withToolCallLoopSupport(sendRequestFunc)
 
 export const grokVendor: Vendor = {
 	name: 'Grok',

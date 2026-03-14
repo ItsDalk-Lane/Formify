@@ -5,7 +5,7 @@ import { arrayBufferToBase64, buildReasoningBlockStart, buildReasoningBlockEnd, 
 import { withToolMessageContext } from './messageFormat'
 import { normalizeProviderError } from './errors'
 import { withRetry } from './retry'
-import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
+import { withToolCallLoopSupport } from '../agent-loop'
 
 // OpenRouter Reasoning Effort 级别
 export type OpenRouterReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
@@ -951,7 +951,7 @@ export const openRouterVendor: Vendor = {
 		reasoningEffort: 'medium',
 		parameters: {}
 	} as OpenRouterOptions,
-	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc, {
+	sendRequestFunc: withToolCallLoopSupport(sendRequestFunc, {
 		// OpenRouter 的 Chat Completions API 需要 reasoning 参数来启用推理功能
 		// 将插件内部的 enableReasoning + reasoningEffort 转换为 API 所需的 reasoning 对象
 		transformApiParams: (apiParams, allOptions) => {

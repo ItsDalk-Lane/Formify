@@ -4,7 +4,7 @@ import { BaseOptions, Message, ResolveEmbedAsBinary, SaveAttachment, SendRequest
 import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl, getMimeTypeFromFilename } from './utils'
 import { normalizeProviderError } from './errors'
 import { withRetry } from './retry'
-import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
+import { withToolCallLoopSupport } from '../agent-loop'
 import {
 	DEFAULT_DOUBAO_IMAGE_OPTIONS,
 	doubaoImageVendor,
@@ -642,7 +642,7 @@ const models = Array.from(new Set([...DOUBAO_KNOWN_CHAT_MODELS, ...DOUBAO_IMAGE_
 const sendRequestFuncBase = sendRequestFunc
 
 // MCP 支持的包装函数（用于普通模式）
-const sendRequestFuncWithMcp = withOpenAIMcpToolCallSupport(sendRequestFunc, {
+const sendRequestFuncWithMcp = withToolCallLoopSupport(sendRequestFunc, {
 	transformApiParams: (apiParams, allOptions) => {
 		const mapped: Record<string, unknown> = { ...apiParams }
 

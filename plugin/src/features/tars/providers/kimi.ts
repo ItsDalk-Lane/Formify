@@ -4,7 +4,7 @@ import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl } from './utils'
 import { feedChunk, ParsedSSEEvent } from './sse'
-import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
+import { withToolCallLoopSupport } from '../agent-loop'
 
 // Kimi选项接口，扩展基础选项以支持推理功能
 export interface KimiOptions extends BaseOptions {
@@ -150,7 +150,7 @@ export const kimiVendor: Vendor = {
 		parameters: {},
 		enableReasoning: false // 默认关闭推理功能
 	} as KimiOptions,
-	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc, {
+	sendRequestFunc: withToolCallLoopSupport(sendRequestFunc, {
 		// 使用流式工具调用循环：Moonshot 官方推荐思考模型使用流式输出（stream=true），
 		// 以获得更好的用户体验（实时推理内容与回复内容）并避免网络超时
 		// 使用自定义客户端工厂，避免 OpenAI SDK v5 附加的非标准 HTTP 头部

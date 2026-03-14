@@ -2,7 +2,7 @@ import OpenAI from 'openai'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { arrayBufferToBase64, getMimeTypeFromFilename } from './utils'
-import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
+import { withToolCallLoopSupport } from '../agent-loop'
 
 type GeminiContentItem = { text?: string; inlineData?: { mimeType?: string; data?: string } }
 type GeminiContent = { role: 'user' | 'model'; parts: GeminiContentItem[] }
@@ -225,7 +225,7 @@ const sendRequestFuncBase = (settings: BaseOptions): SendRequest =>
 	}
 
 /** Gemini 的 OpenAI 兼容端点通过 geminiNormalizeOpenAIBaseURL 规范化，支持 MCP 工具调用 */
-const sendRequestFunc = withOpenAIMcpToolCallSupport(
+const sendRequestFunc = withToolCallLoopSupport(
 	sendRequestFuncBase,
 	{ transformBaseURL: geminiNormalizeOpenAIBaseURL },
 )

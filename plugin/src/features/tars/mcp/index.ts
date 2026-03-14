@@ -1,5 +1,7 @@
 /**
  * MCP（Model Context Protocol）模块导出
+ *
+ * MCP 负责工具定义提供和工具执行，循环控制已迁移至 agent-loop 模块
  */
 
 export { McpClientManager } from './McpClientManager'
@@ -30,10 +32,11 @@ export {
 	toClaudeTools,
 	findToolServerId,
 	executeMcpToolCalls,
-	withOpenAIMcpToolCallSupport,
+	resolveCurrentMcpTools,
 } from './mcpToolCallHandler'
 export type {
 	OpenAIToolDefinition,
 	OpenAIToolCall,
 	ToolLoopMessage,
 } from './mcpToolCallHandler'
+export { McpToolExecutor, mcpToolToToolDefinition } from './McpToolExecutor'

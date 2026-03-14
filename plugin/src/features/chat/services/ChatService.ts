@@ -14,6 +14,7 @@ import {
 	TarsSettings,
 } from 'src/features/tars/settings';
 import type { McpClientManager, McpSettings } from 'src/features/tars/mcp';
+import { McpToolExecutor, mcpToolToToolDefinition } from 'src/features/tars/mcp/McpToolExecutor';
 import { isImageGenerationModel } from 'src/features/tars/providers/openRouter';
 import { MessageService } from './MessageService';
 import { HistoryService, ChatHistoryEntry } from './HistoryService';
@@ -1939,11 +1940,12 @@ export class ChatService {
 							}
 							return result;
 						};
-						providerOptions.mcpTools = mcpTools;
-						providerOptions.mcpCallTool = baseActualMcpCallTool;
+						const toolDefs = mcpTools.map(mcpToolToToolDefinition);
+						providerOptions.tools = toolDefs;
+						providerOptions.toolExecutor = new McpToolExecutor(baseActualMcpCallTool);
 						const maxLoops = resolveToolExecutionSettings(this.plugin.settings.tars.settings).maxToolCalls;
 						if (typeof maxLoops === 'number' && maxLoops > 0) {
-							providerOptions.mcpMaxToolCallLoops = maxLoops;
+							providerOptions.maxToolCallLoops = maxLoops;
 						}
 					} else {
 						const hasEnabledMcpServer = mcpManager.getSettings().servers.some((server) => server.enabled);

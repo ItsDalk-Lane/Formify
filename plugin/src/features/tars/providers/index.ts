@@ -1,5 +1,6 @@
 import { EmbedCache } from 'obsidian'
 import type { McpToolAnnotations } from '../mcp/types'
+import type { ToolDefinition, ToolExecutor, GetToolsFn } from '../agent-loop/types'
 
 export type MsgRole = 'user' | 'assistant' | 'system'
 
@@ -56,13 +57,31 @@ export interface BaseOptions {
 	model: string
 	parameters: Record<string, unknown>
 	enableWebSearch?: boolean
-	/** MCP 工具定义列表（可选，由 McpClientManager 注入） */
+
+	/** 通用工具定义列表（由 ChatService 注入，来源可以是 MCP 或其他工具后端） */
+	tools?: ToolDefinition[]
+	/** 通用工具执行器（由 ChatService 注入，如 McpToolExecutor） */
+	toolExecutor?: ToolExecutor
+	/** 工具调用循环最大次数（可选，默认 10） */
+	maxToolCallLoops?: number
+	/** 动态工具集解析函数（可选，支持按轮次动态刷新工具集） */
+	getTools?: GetToolsFn
+
+	/**
+	 * @deprecated 使用 tools 代替。保留用于向后兼容过渡期
+	 */
 	mcpTools?: McpToolDefinitionForProvider[]
-	/** MCP 当前工具集解析器（可选，支持按轮次动态刷新工具集） */
+	/**
+	 * @deprecated 使用 getTools 代替。保留用于向后兼容过渡期
+	 */
 	mcpGetTools?: McpGetToolsFnForProvider
-	/** MCP 工具调用回调（可选，由 McpClientManager 注入） */
+	/**
+	 * @deprecated 使用 toolExecutor 代替。保留用于向后兼容过渡期
+	 */
 	mcpCallTool?: McpCallToolFnForProvider
-	/** MCP 工具调用循环最大次数（可选，默认 10） */
+	/**
+	 * @deprecated 使用 maxToolCallLoops 代替。保留用于向后兼容过渡期
+	 */
 	mcpMaxToolCallLoops?: number
 }
 

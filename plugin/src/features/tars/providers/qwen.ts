@@ -2,7 +2,7 @@ import OpenAI from 'openai'
 import { t } from 'tars/lang/helper'
 import { BaseOptions, Message, ResolveEmbedAsBinary, SendRequest, Vendor } from '.'
 import { buildReasoningBlockStart, buildReasoningBlockEnd, convertEmbedToImageUrl } from './utils'
-import { withOpenAIMcpToolCallSupport } from '../mcp/mcpToolCallHandler'
+import { withToolCallLoopSupport } from '../agent-loop'
 
 // Qwen 扩展选项接口
 export interface QwenOptions extends BaseOptions {
@@ -182,7 +182,7 @@ export const qwenVendor: Vendor = {
 		model: QWEN_MODELS[0],
 		parameters: {}
 	},
-	sendRequestFunc: withOpenAIMcpToolCallSupport(sendRequestFunc),
+	sendRequestFunc: withToolCallLoopSupport(sendRequestFunc),
 	models: QWEN_MODELS,
 	websiteToObtainKey: 'https://dashscope.console.aliyun.com',
 	capabilities: ['Text Generation', 'Image Vision', 'Reasoning']
