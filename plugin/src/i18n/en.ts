@@ -781,6 +781,12 @@ export class En implements Local {
 	chat_settings_auto_add_active_file_desc = "Automatically add the current active Markdown file to chat context and remove it when the file closes";
 	chat_settings_show_ribbon_icon = "Show Ribbon Icon";
 	chat_settings_show_ribbon_icon_desc = "Show an AI Chat icon in the left ribbon of Obsidian";
+	chat_settings_message_management = "Enable Message Compaction";
+	chat_settings_message_management_desc = "Automatically compact older chat history and attached file context while keeping the most recent turns verbatim and reusing model summaries when needed.";
+	chat_settings_history_budget_tokens = "Context Budget (tokens)";
+	chat_settings_history_budget_tokens_desc = "Shared budget for chat history, attached files/folders, and temporary runtime context. Older spans are summarized when the budget is exceeded.";
+	chat_settings_recent_turns = "Recent Turns to Keep";
+	chat_settings_recent_turns_desc = "Always keep the most recent user turns in full text while moving older turns into a structured summary.";
 	chat_settings_configure = "Configure";
 	chat_settings_save_failed = "Failed to save settings";
 	tool_execution_max_tool_calls = "Shared Max Tool Calls";

@@ -24,7 +24,12 @@ import {
 } from 'src/features/tars/mcp/McpConfigModals';
 import { SystemPromptManagerPanel } from 'src/features/tars/system-prompts/SystemPromptManagerModal';
 import type { TarsSettings } from 'src/features/tars/settings';
-import type { ChatOpenMode, ChatSettings } from '../types/chat';
+import {
+	DEFAULT_MESSAGE_MANAGEMENT_SETTINGS,
+	normalizeMessageManagementSettings,
+	type ChatOpenMode,
+	type ChatSettings,
+} from '../types/chat';
 import type { ChatService } from '../services/ChatService';
 import {
 	formatProviderOptionLabel,
@@ -140,6 +145,10 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 	const [builtinTimeTimezoneDraft, setBuiltinTimeTimezoneDraft] = useState(
 		() => DEFAULT_BUILTIN_TIME_TIMEZONE
 	);
+	// 临时状态：允许用户自由编辑输入框（包括清空）
+	// 使用 null 表示未编辑状态，空字符串表示用户已清空
+	const [contextBudgetDraft, setContextBudgetDraft] = useState<string | null>(null);
+	const [recentTurnsDraft, setRecentTurnsDraft] = useState<string | null>(null);
 
 	const providers = tarsSettings.providers ?? service.getProviders();
 	const providerOptions = useMemo(
@@ -157,6 +166,13 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 			servers: cloneValue(tarsSettings.mcp?.servers ?? []),
 		}),
 		[tarsSettings.mcp]
+	);
+	const messageManagement = useMemo(
+		() => normalizeMessageManagementSettings({
+			...DEFAULT_MESSAGE_MANAGEMENT_SETTINGS,
+			...(chatSettings.messageManagement ?? {}),
+		}),
+		[chatSettings.messageManagement]
 	);
 
 	const reloadSnapshots = useCallback(() => {
@@ -564,6 +580,135 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 								if (Number.isFinite(nextValue) && nextValue > 0) {
 									void persistChatSettings({ chatModalHeight: nextValue });
 								}
+							}}
+						/>
+					</label>
+				</div>
+
+				<div className="chat-settings-switch">
+					<div>
+						<div className="chat-settings-field__title">
+							{localInstance.chat_settings_message_management}
+						</div>
+						<div className="chat-settings-field__desc">
+							{localInstance.chat_settings_message_management_desc}
+						</div>
+					</div>
+					<ToggleSwitch
+						checked={messageManagement.enabled}
+						onChange={(checked) => {
+							void persistChatSettings({
+								messageManagement: {
+									...messageManagement,
+									enabled: checked,
+								},
+							});
+						}}
+						ariaLabel={localInstance.chat_settings_message_management}
+					/>
+				</div>
+
+				<div className="chat-settings-grid">
+					<label className="chat-settings-field chat-settings-field--section">
+						<span className="chat-settings-field__title">
+							{localInstance.chat_settings_history_budget_tokens}
+						</span>
+						<span className="chat-settings-field__desc">
+							{localInstance.chat_settings_history_budget_tokens_desc}
+						</span>
+						<input
+							className="chat-settings-input"
+							type="number"
+							min={1000}
+							step={500}
+							value={contextBudgetDraft ?? messageManagement.contextBudgetTokens}
+							onChange={(event) => {
+								setContextBudgetDraft(event.target.value);
+							}}
+							onFocus={() => {
+								setContextBudgetDraft(String(messageManagement.contextBudgetTokens));
+							}}
+							onBlur={() => {
+								if (contextBudgetDraft === null) {
+									return;
+								}
+								const draft = contextBudgetDraft.trim();
+								if (draft === '') {
+									// 空值时恢复原值
+									setContextBudgetDraft(null);
+									return;
+								}
+								const nextValue = Number.parseInt(draft, 10);
+								if (Number.isFinite(nextValue) && nextValue >= 1000) {
+									void persistChatSettings({
+										messageManagement: {
+											...messageManagement,
+											contextBudgetTokens: nextValue,
+										},
+									});
+								}
+								setContextBudgetDraft(null);
+							}}
+							onKeyDown={(event) => {
+								if (event.key === 'Enter') {
+									event.currentTarget.blur();
+								}
+							}}
+							onWheel={(event) => {
+								// 禁用鼠标滚轮改变数值
+								event.currentTarget.blur();
+							}}
+						/>
+					</label>
+
+					<label className="chat-settings-field chat-settings-field--section">
+						<span className="chat-settings-field__title">
+							{localInstance.chat_settings_recent_turns}
+						</span>
+						<span className="chat-settings-field__desc">
+							{localInstance.chat_settings_recent_turns_desc}
+						</span>
+						<input
+							className="chat-settings-input"
+							type="number"
+							min={1}
+							step={1}
+							value={recentTurnsDraft ?? messageManagement.recentTurns}
+							onChange={(event) => {
+								setRecentTurnsDraft(event.target.value);
+							}}
+							onFocus={() => {
+								setRecentTurnsDraft(String(messageManagement.recentTurns));
+							}}
+							onBlur={() => {
+								if (recentTurnsDraft === null) {
+									return;
+								}
+								const draft = recentTurnsDraft.trim();
+								if (draft === '') {
+									// 空值时恢复原值
+									setRecentTurnsDraft(null);
+									return;
+								}
+								const nextValue = Number.parseInt(draft, 10);
+								if (Number.isFinite(nextValue) && nextValue > 0) {
+									void persistChatSettings({
+										messageManagement: {
+											...messageManagement,
+											recentTurns: nextValue,
+										},
+									});
+								}
+								setRecentTurnsDraft(null);
+							}}
+							onKeyDown={(event) => {
+								if (event.key === 'Enter') {
+									event.currentTarget.blur();
+								}
+							}}
+							onWheel={(event) => {
+								// 禁用鼠标滚轮改变数值
+								event.currentTarget.blur();
 							}}
 						/>
 					</label>

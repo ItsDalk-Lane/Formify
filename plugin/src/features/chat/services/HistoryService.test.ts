@@ -130,4 +130,50 @@ livePlan:
 		expect(session?.livePlan).toEqual(newerMessagePlan);
 		expect(session?.livePlan).not.toEqual(staleFrontmatterPlan);
 	});
+
+	it('should restore context compaction state from frontmatter', async () => {
+		const mockApp = new MockApp() as any;
+		const service = new HistoryService(mockApp, 'System/formify');
+		const file = createMockFile('history.md');
+
+		mockApp.vault.getAbstractFileByPath.mockReturnValue(file);
+		mockApp.vault.read.mockResolvedValue(`---
+id: history-2
+title: 历史摘要
+model: deepseek-chat
+created: 2026-03-08 11:00:00
+updated: 2026-03-08 11:30:00
+contextCompaction:
+  version: 1
+  coveredRange:
+    endMessageId: assistant-2
+    messageCount: 4
+    signature: abc123
+  summary: |
+    [Earlier conversation summary]
+    Reused summary
+  historyTokenEstimate: 256
+  updatedAt: 1710000000000
+  droppedReasoningCount: 2
+---
+
+# 用户 (2026/03/08 11:30:00)
+继续
+`);
+
+		const session = await service.loadSession('history.md');
+
+		expect(session?.contextCompaction).toEqual({
+			version: 1,
+			coveredRange: {
+				endMessageId: 'assistant-2',
+				messageCount: 4,
+				signature: 'abc123',
+			},
+			summary: '[Earlier conversation summary]\nReused summary\n',
+			historyTokenEstimate: 256,
+			updatedAt: 1710000000000,
+			droppedReasoningCount: 2,
+		});
+	});
 });

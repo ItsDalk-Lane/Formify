@@ -42,10 +42,23 @@ export interface PromptBuilderChatContext {
 	parseLinksInTemplates?: boolean;
 	sourcePath?: string;
 	maxHistoryRounds?: number;
+	prebuiltContextMessage?: ProviderMessage | null;
 	/** 任务模板内容，用于智能判断文件角色 */
 	taskTemplate?: string;
 	/** 是否启用智能文件角色判断 */
 	enableFileIntentAnalysis?: boolean;
+}
+
+export interface PromptBuilderContextMessageParams {
+	selectedFiles: SelectedFile[];
+	selectedFolders: SelectedFolder[];
+	contextNotes: string[];
+	selectedText: string | null;
+	fileContentOptions?: FileContentOptions;
+	linkParseOptions?: PromptBuilderLinkParseOptions;
+	sourcePath: string;
+	embeds?: EmbedCache[];
+	images?: string[];
 }
 
 export class PromptBuilder {
@@ -74,6 +87,7 @@ export class PromptBuilder {
 		const parseLinksInTemplates = ctx?.parseLinksInTemplates ?? true;
 		const sourcePath = ctx?.sourcePath ?? this.app.workspace.getActiveFile()?.path ?? '';
 		const maxHistoryRounds = ctx?.maxHistoryRounds ?? DEFAULT_HISTORY_ROUNDS;
+		const prebuiltContextMessage = ctx?.prebuiltContextMessage;
 		const taskTemplate = ctx?.taskTemplate;
 		const enableFileIntentAnalysis = ctx?.enableFileIntentAnalysis ?? true;
 
@@ -119,16 +133,17 @@ export class PromptBuilder {
 		const contextEmbeds = hasContextData ? imageEmbeds : [];
 		const taskEmbeds = hasContextData ? [] : imageEmbeds;
 
-		const contextMessage = await this.buildContextMessage({
-			selectedFiles,
-			selectedFolders,
-			contextNotes,
-			selectedText,
-			fileContentOptions,
-			linkParseOptions,
-			sourcePath,
-			embeds: contextEmbeds
-		});
+		const contextMessage = prebuiltContextMessage
+			?? await this.buildChatContextMessage({
+				selectedFiles,
+				selectedFolders,
+				contextNotes,
+				selectedText,
+				fileContentOptions,
+				linkParseOptions,
+				sourcePath,
+				embeds: contextEmbeds
+			});
 		if (contextMessage) {
 			result.push(contextMessage);
 		}
@@ -303,16 +318,10 @@ export class PromptBuilder {
 		return content;
 	}
 
-	private async buildContextMessage(params: {
-		selectedFiles: SelectedFile[];
-		selectedFolders: SelectedFolder[];
-		contextNotes: string[];
-		selectedText: string | null;
-		fileContentOptions?: FileContentOptions;
-		linkParseOptions?: PromptBuilderLinkParseOptions;
-		sourcePath: string;
-		embeds: EmbedCache[];
-	}): Promise<ProviderMessage | null> {
+	async buildChatContextMessage(
+		params: PromptBuilderContextMessageParams
+	): Promise<ProviderMessage | null> {
+		const embeds = params.embeds ?? this.createEmbedsFromImages(params.images ?? []);
 		const documents: Array<{ source: string; content: string }> = [];
 
 		// 1) 附加上下文备注
@@ -354,7 +363,7 @@ export class PromptBuilder {
 		}
 
 		const hasDocs = documents.length > 0;
-		const hasEmbeds = params.embeds.length > 0;
+		const hasEmbeds = embeds.length > 0;
 		if (!hasDocs && !hasEmbeds) {
 			return null;
 		}
@@ -363,7 +372,7 @@ export class PromptBuilder {
 		return {
 			role: 'user',
 			content: xml,
-			embeds: hasEmbeds ? params.embeds : undefined
+			embeds: hasEmbeds ? embeds : undefined
 		};
 	}
 

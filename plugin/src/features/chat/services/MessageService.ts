@@ -5,7 +5,11 @@ import type { ChatMessage, ChatRole, SelectedFile, SelectedFolder } from '../typ
 import type { ToolCall } from '../types/tools';
 import { parseContentBlocks } from '../utils/markdown';
 import { FileContentService, FileContentOptions } from './FileContentService';
-import { PromptBuilder, PromptBuilderLinkParseOptions } from 'src/service/PromptBuilder';
+import {
+	PromptBuilder,
+	PromptBuilderLinkParseOptions,
+	type PromptBuilderContextMessageParams,
+} from 'src/service/PromptBuilder';
 import { formatReasoningDuration } from 'src/features/tars/providers/utils';
 
 export class MessageService {
@@ -51,9 +55,21 @@ export class MessageService {
 			parseLinksInTemplates?: boolean;
 			sourcePath?: string;
 			maxHistoryRounds?: number;
+			prebuiltContextMessage?: ProviderMessage | null;
 		}
 	): Promise<ProviderMessage[]> {
-		const { contextNotes = [], systemPrompt, selectedFiles = [], selectedFolders = [], fileContentOptions, linkParseOptions, parseLinksInTemplates, sourcePath, maxHistoryRounds } = options ?? {};
+		const {
+			contextNotes = [],
+			systemPrompt,
+			selectedFiles = [],
+			selectedFolders = [],
+			fileContentOptions,
+			linkParseOptions,
+			parseLinksInTemplates,
+			sourcePath,
+			maxHistoryRounds,
+			prebuiltContextMessage,
+		} = options ?? {};
 
 		const promptBuilder = new PromptBuilder(this.app, this.fileContentService);
 		return promptBuilder.buildChatProviderMessages(messages, {
@@ -65,8 +81,16 @@ export class MessageService {
 			linkParseOptions,
 			parseLinksInTemplates,
 			sourcePath,
-			maxHistoryRounds
+			maxHistoryRounds,
+			prebuiltContextMessage,
 		});
+	}
+
+	async buildContextProviderMessage(
+		params: PromptBuilderContextMessageParams
+	): Promise<ProviderMessage | null> {
+		const promptBuilder = new PromptBuilder(this.app, this.fileContentService);
+		return promptBuilder.buildChatContextMessage(params);
 	}
 
 	serializeMessage(message: ChatMessage, selectedFiles?: SelectedFile[], selectedFolders?: SelectedFolder[]): string {
@@ -566,4 +590,3 @@ export class MessageService {
 		return mimeToExt[mimeType] || 'png';
 	}
 }
-

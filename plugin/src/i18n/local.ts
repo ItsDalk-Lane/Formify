@@ -731,6 +731,12 @@ export interface Local {
 	chat_settings_auto_add_active_file_desc: string;
 	chat_settings_show_ribbon_icon: string;
 	chat_settings_show_ribbon_icon_desc: string;
+	chat_settings_message_management: string;
+	chat_settings_message_management_desc: string;
+	chat_settings_history_budget_tokens: string;
+	chat_settings_history_budget_tokens_desc: string;
+	chat_settings_recent_turns: string;
+	chat_settings_recent_turns_desc: string;
 	chat_settings_configure: string;
 	chat_settings_save_failed: string;
 	tool_execution_max_tool_calls: string;

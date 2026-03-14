@@ -69,6 +69,25 @@ export interface ChatMessage {
 	parallelGroupId?: string;
 }
 
+export interface ChatContextCompactionRange {
+	endMessageId: string | null;
+	messageCount: number;
+	signature: string;
+}
+
+export interface ChatContextCompactionState {
+	version: number;
+	coveredRange: ChatContextCompactionRange;
+	summary: string;
+	historyTokenEstimate: number;
+	contextSummary?: string;
+	contextSourceSignature?: string;
+	contextTokenEstimate?: number;
+	totalTokenEstimate?: number;
+	updatedAt: number;
+	droppedReasoningCount: number;
+}
+
 export interface ChatSession {
 	id: string;
 	title: string;
@@ -87,6 +106,7 @@ export interface ChatSession {
 	activeCompareGroupId?: string;
 	layoutMode?: LayoutMode;
 	livePlan?: PlanSnapshot | null;
+	contextCompaction?: ChatContextCompactionState | null;
 }
 
 export type ChatOpenMode = 'sidebar' | 'left-sidebar' | 'tab' | 'window' | 'persistent-modal';
@@ -188,7 +208,49 @@ export interface ChatSettings {
 	maxQuickActionButtons: number; // 工具栏最多显示的按钮数量
 	quickActionsStreamOutput: boolean; // 快捷操作是否使用流式输出
 	quickActions?: QuickAction[]; // 操作列表运行时缓存（非 data.json 持久化源）
+	messageManagement: MessageManagementSettings;
 }
+
+export interface MessageManagementSettings {
+	enabled: boolean;
+	contextBudgetTokens: number;
+	/**
+	 * @deprecated 兼容旧配置字段，运行时会归并到 contextBudgetTokens
+	 */
+	historyBudgetTokens?: number;
+	recentTurns: number;
+}
+
+export const DEFAULT_MESSAGE_MANAGEMENT_SETTINGS: MessageManagementSettings = {
+	enabled: true,
+	contextBudgetTokens: 12000,
+	recentTurns: 6,
+};
+
+export const resolveContextBudgetTokens = (
+	settings?: Partial<MessageManagementSettings> | null
+): number => {
+	const candidate =
+		typeof settings?.contextBudgetTokens === 'number'
+			? settings.contextBudgetTokens
+			: typeof settings?.historyBudgetTokens === 'number'
+				? settings.historyBudgetTokens
+				: DEFAULT_MESSAGE_MANAGEMENT_SETTINGS.contextBudgetTokens;
+	return Number.isFinite(candidate) && candidate > 0
+		? Math.floor(candidate)
+		: DEFAULT_MESSAGE_MANAGEMENT_SETTINGS.contextBudgetTokens;
+};
+
+export const normalizeMessageManagementSettings = (
+	settings?: Partial<MessageManagementSettings> | null
+): MessageManagementSettings => ({
+	enabled: settings?.enabled ?? DEFAULT_MESSAGE_MANAGEMENT_SETTINGS.enabled,
+	contextBudgetTokens: resolveContextBudgetTokens(settings),
+	recentTurns:
+		typeof settings?.recentTurns === 'number' && settings.recentTurns > 0
+			? Math.floor(settings.recentTurns)
+			: DEFAULT_MESSAGE_MANAGEMENT_SETTINGS.recentTurns,
+});
 
 /**
  * 会话级 MCP 工具调用模式
@@ -256,4 +318,5 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 	maxQuickActionButtons: 4, // 默认显示4个按钮
 	quickActionsStreamOutput: true, // 默认启用流式输出
 	quickActions: [], // 默认无操作（运行时缓存，持久化由 quick-actions/*.md 提供）
+	messageManagement: { ...DEFAULT_MESSAGE_MANAGEMENT_SETTINGS },
 };

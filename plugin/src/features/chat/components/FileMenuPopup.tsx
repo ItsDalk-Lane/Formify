@@ -310,23 +310,22 @@ export const FileMenuPopup = ({ isOpen, onClose, onSelectFile, onSelectFolder, a
 
 	// 计算弹出菜单位置
 	const buttonRect = buttonRef.current?.getBoundingClientRect();
-	const popupWidth = 320; // minWidth
 
-	// 计算水平位置，确保不超出屏幕右边界
-	let leftPos = buttonRect ? buttonRect.left : 0;
-	if (buttonRect && leftPos + popupWidth > window.innerWidth - 16) {
-		leftPos = window.innerWidth - popupWidth - 16;
-	}
-	// 确保不超出左边界
-	if (leftPos < 16) {
-		leftPos = 16;
+	// 使用 right 定位，这样当宽度扩展时菜单会向左扩展（保持右边缘位置）
+	let rightPos;
+	if (buttonRect) {
+		// 计算距离屏幕右边距的距离
+		rightPos = window.innerWidth - buttonRect.right;
+	} else {
+		rightPos = 16;
 	}
 
 	const popupStyle: React.CSSProperties = {
 		position: 'fixed',
 		bottom: buttonRect ? `${window.innerHeight - buttonRect.top + 8}px` : 'auto',
-		left: `${leftPos}px`,
+		right: `${rightPos}px`,
 		zIndex: 1000,
+		width: 'auto',
 		minWidth: '320px',
 		maxWidth: '500px',
 		maxHeight: '500px',

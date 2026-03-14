@@ -319,23 +319,27 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	padding: 0;
+	margin: 0;
 }
 
 .ff-toggle-btn {
-	padding: 2px;
-	border: none;
-	background: transparent;
+	padding: 0 !important;
+	border: 0 !important;
+	background: transparent !important;
 	cursor: pointer;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	border-radius: 2px;
 	color: currentColor;
-	transition: background-color 0.15s ease, transform 0.15s ease;
+	outline: none !important;
+	box-shadow: none !important;
+	appearance: none !important;
+	-webkit-appearance: none !important;
 }
 
 .ff-toggle-btn:hover {
-	background-color: var(--background-modifier-hover);
+	/* 移除 hover 背景色效果 */
 }
 
 .ff-toggle-spacer {
@@ -355,7 +359,7 @@
 }
 
 .ff-folder-content:hover {
-	background-color: rgba(var(--interactive-accent-rgb), 0.1);
+	/* 移除 hover 背景色效果 */
 }
 
 .ff-folder-info {
@@ -446,7 +450,6 @@
 }
 
 /* ========== 通用过渡效果 ========== */
-.file-menu-popup button,
 .file-menu-popup input {
 	transition: all 0.15s ease;
 }

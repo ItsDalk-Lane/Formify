@@ -790,6 +790,12 @@ export class Zh implements Local {
 	chat_settings_auto_add_active_file_desc = "自动将当前活跃的 Markdown 文件添加至 AI 聊天上下文中，并在文件关闭时自动移除";
 	chat_settings_show_ribbon_icon = "显示功能区图标";
 	chat_settings_show_ribbon_icon_desc = "在 Obsidian 左侧功能区显示 AI Chat 图标按钮";
+	chat_settings_message_management = "启用消息压缩";
+	chat_settings_message_management_desc = "为长对话自动压缩较旧的历史消息与文件上下文，仅保留最近轮次原文，并在超预算时生成可复用的模型摘要。";
+	chat_settings_history_budget_tokens = "上下文预算（tokens）";
+	chat_settings_history_budget_tokens_desc = "统一控制历史消息、文件/文件夹上下文与临时上下文的总预算；超出时会优先复用或生成摘要。";
+	chat_settings_recent_turns = "保留最近轮数";
+	chat_settings_recent_turns_desc = "压缩时始终保留最近几轮用户往返原文，其余旧消息进入摘要。";
 	chat_settings_configure = "配置";
 	chat_settings_save_failed = "保存设置失败";
 	tool_execution_max_tool_calls = "共享工具调用最大次数";

@@ -4,7 +4,14 @@ import {
 	type PlanSnapshot,
 	type PlanTaskStatus,
 } from 'src/builtin-mcp/runtime/plan-state';
-import type { ChatMessage, ChatRole, ChatSession, SelectedFile, SelectedFolder } from '../types/chat';
+import type {
+	ChatContextCompactionState,
+	ChatMessage,
+	ChatRole,
+	ChatSession,
+	SelectedFile,
+	SelectedFolder,
+} from '../types/chat';
 import { ensureFolderExists, joinPath, sanitizeFileName } from '../utils/storage';
 import { MessageService } from './MessageService';
 
@@ -92,6 +99,56 @@ export class HistoryService {
 
 	private parseOptionalString(value: unknown): string | undefined {
 		return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+	}
+
+	private parseContextCompaction(
+		value: unknown
+	): ChatContextCompactionState | null {
+		if (!value || typeof value !== 'object') {
+			return null;
+		}
+
+		const raw = value as Record<string, unknown>;
+		const coveredRange =
+			raw.coveredRange && typeof raw.coveredRange === 'object'
+				? (raw.coveredRange as Record<string, unknown>)
+				: null;
+		if (
+			typeof raw.version !== 'number'
+			|| !coveredRange
+			|| typeof raw.summary !== 'string'
+			|| typeof raw.historyTokenEstimate !== 'number'
+			|| typeof raw.updatedAt !== 'number'
+			|| typeof raw.droppedReasoningCount !== 'number'
+		) {
+			return null;
+		}
+
+		const endMessageId = coveredRange.endMessageId;
+		if (
+			(endMessageId !== null && typeof endMessageId !== 'string')
+			|| typeof coveredRange.messageCount !== 'number'
+			|| typeof coveredRange.signature !== 'string'
+		) {
+			return null;
+		}
+
+		if (
+			('contextSummary' in raw && raw.contextSummary !== undefined && typeof raw.contextSummary !== 'string')
+			|| ('contextSourceSignature' in raw
+				&& raw.contextSourceSignature !== undefined
+				&& typeof raw.contextSourceSignature !== 'string')
+			|| ('contextTokenEstimate' in raw
+				&& raw.contextTokenEstimate !== undefined
+				&& typeof raw.contextTokenEstimate !== 'number')
+			|| ('totalTokenEstimate' in raw
+				&& raw.totalTokenEstimate !== undefined
+				&& typeof raw.totalTokenEstimate !== 'number')
+		) {
+			return null;
+		}
+
+		return JSON.parse(JSON.stringify(raw)) as ChatContextCompactionState;
 	}
 
 	private parseMultiModelMode(value: unknown): ChatSession['multiModelMode'] {
@@ -403,6 +460,7 @@ export class HistoryService {
 					activeCompareGroupId: session.activeCompareGroupId,
 					layoutMode: session.layoutMode,
 					livePlan: clonePlanSnapshot(session.livePlan ?? null),
+					contextCompaction: session.contextCompaction ?? null,
 				});
 				return session.filePath;
 			}
@@ -444,6 +502,7 @@ export class HistoryService {
 			activeCompareGroupId: session.activeCompareGroupId,
 			layoutMode: session.layoutMode,
 			livePlan: clonePlanSnapshot(session.livePlan ?? null),
+			contextCompaction: session.contextCompaction ?? null,
 		});
 
 		const body = session.messages.map((message) => this.messageService.serializeMessage(message)).join('\n\n');
@@ -488,6 +547,7 @@ ${body}
 				activeCompareGroupId: this.parseOptionalString(frontmatter.activeCompareGroupId),
 				layoutMode: this.parseLayoutMode(frontmatter.layoutMode),
 				livePlan: this.resolveLivePlan(persistedPlan, messagePlan),
+				contextCompaction: this.parseContextCompaction(frontmatter.contextCompaction),
 				filePath: filePath // 设置文件路径
 			};
 			return session;
@@ -529,6 +589,7 @@ ${body}
 			activeCompareGroupId: session.activeCompareGroupId,
 			layoutMode: session.layoutMode,
 			livePlan: clonePlanSnapshot(session.livePlan ?? null),
+			contextCompaction: session.contextCompaction ?? null,
 		});
 
 		// 创建文件，只包含frontmatter，不包含任何消息
@@ -656,6 +717,7 @@ ${body}
 			activeCompareGroupId: session.activeCompareGroupId,
 			layoutMode: session.layoutMode,
 			livePlan: clonePlanSnapshot(session.livePlan ?? null),
+			contextCompaction: session.contextCompaction ?? null,
 		});
 
 		// 序列化第一条消息，但不重复添加文件和文件夹信息（因为已经在消息内容中了）

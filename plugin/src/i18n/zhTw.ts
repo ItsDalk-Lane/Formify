@@ -806,6 +806,12 @@ export class ZhTw implements Local {
 	chat_settings_auto_add_active_file_desc = "自動將目前活躍的 Markdown 檔案加入 AI 聊天上下文，並在檔案關閉時自動移除";
 	chat_settings_show_ribbon_icon = "顯示功能區圖示";
 	chat_settings_show_ribbon_icon_desc = "在 Obsidian 左側功能區顯示 AI Chat 圖示按鈕";
+	chat_settings_message_management = "啟用訊息壓縮";
+	chat_settings_message_management_desc = "針對長對話自動壓縮較舊的歷史訊息與檔案上下文，只保留最近輪次原文，並在超出預算時生成可復用的模型摘要。";
+	chat_settings_history_budget_tokens = "上下文預算（tokens）";
+	chat_settings_history_budget_tokens_desc = "統一控制歷史訊息、檔案/資料夾上下文與暫時上下文的總預算；超出時會優先復用或生成摘要。";
+	chat_settings_recent_turns = "保留最近輪數";
+	chat_settings_recent_turns_desc = "壓縮時始終保留最近幾輪使用者往返原文，其餘舊訊息進入摘要。";
 	chat_settings_configure = "配置";
 	chat_settings_save_failed = "保存設定失敗";
 	tool_execution_max_tool_calls = "共享工具呼叫最大次數";

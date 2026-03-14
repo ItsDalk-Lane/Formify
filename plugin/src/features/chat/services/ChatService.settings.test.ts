@@ -24,7 +24,10 @@ jest.mock('../components/ChatSettingsModal', () => ({
 import { Notice } from 'obsidian';
 import { ChatSettingsModal } from '../components/ChatSettingsModal';
 import { ChatService } from './ChatService';
-import { DEFAULT_CHAT_SETTINGS } from '../types/chat';
+import {
+	DEFAULT_CHAT_SETTINGS,
+	DEFAULT_MESSAGE_MANAGEMENT_SETTINGS,
+} from '../types/chat';
 import { DEFAULT_MCP_SETTINGS } from 'src/features/tars/mcp';
 import {
 	DEFAULT_TOOL_EXECUTION_SETTINGS,
@@ -46,6 +49,9 @@ const createPlugin = () =>
 			aiDataFolder: 'System/formify',
 			chat: {
 				...DEFAULT_CHAT_SETTINGS,
+				messageManagement: {
+					...DEFAULT_MESSAGE_MANAGEMENT_SETTINGS,
+				},
 			},
 			tars: {
 				settings: {
@@ -125,6 +131,30 @@ describe('ChatService settings integration', () => {
 		expect(plugin.settings.chat.chatModalWidth).toBe(900);
 		expect(plugin.saveSettings).toHaveBeenCalledTimes(1);
 		expect(service.getChatSettingsSnapshot().autosaveChat).toBe(false);
+	});
+
+	it('persists nested message management settings with defaults', async () => {
+		const plugin = createPlugin();
+		const service = new ChatService(plugin);
+
+		await service.persistChatSettings({
+			messageManagement: {
+				enabled: false,
+				contextBudgetTokens: 9000,
+				recentTurns: 4,
+			},
+		});
+
+		expect(plugin.settings.chat.messageManagement).toEqual({
+			enabled: false,
+			contextBudgetTokens: 9000,
+			recentTurns: 4,
+		});
+		expect(service.getChatSettingsSnapshot().messageManagement).toEqual({
+			enabled: false,
+			contextBudgetTokens: 9000,
+			recentTurns: 4,
+		});
 	});
 
 	it('rolls back chat settings when save fails and surfaces a notice', async () => {
