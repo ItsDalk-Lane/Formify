@@ -145,9 +145,6 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 	const [builtinTimeTimezoneDraft, setBuiltinTimeTimezoneDraft] = useState(
 		() => DEFAULT_BUILTIN_TIME_TIMEZONE
 	);
-	// 临时状态：允许用户自由编辑输入框（包括清空）
-	// 使用 null 表示未编辑状态，空字符串表示用户已清空
-	const [contextBudgetDraft, setContextBudgetDraft] = useState<string | null>(null);
 	const [recentTurnsDraft, setRecentTurnsDraft] = useState<string | null>(null);
 
 	const providers = tarsSettings.providers ?? service.getProviders();
@@ -173,6 +170,18 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 			...(chatSettings.messageManagement ?? {}),
 		}),
 		[chatSettings.messageManagement]
+	);
+	const activeModelTag = useMemo(
+		() =>
+			service.getState().selectedModelId
+			|| chatSettings.defaultModel
+			|| providers[0]?.tag
+			|| null,
+		[chatSettings.defaultModel, providers, service]
+	);
+	const resolvedContextBudget = useMemo(
+		() => service.getResolvedContextBudget(activeModelTag),
+		[activeModelTag, service]
 	);
 
 	const reloadSnapshots = useCallback(() => {
@@ -611,54 +620,45 @@ const ChatSettingsModalApp = ({ app, service }: ChatSettingsModalProps) => {
 				<div className="chat-settings-grid">
 					<label className="chat-settings-field chat-settings-field--section">
 						<span className="chat-settings-field__title">
-							{localInstance.chat_settings_history_budget_tokens}
+							{localInstance.chat_settings_auto_context_budget}
 						</span>
 						<span className="chat-settings-field__desc">
-							{localInstance.chat_settings_history_budget_tokens_desc}
+							{localInstance.chat_settings_auto_context_budget_desc}
 						</span>
-						<input
+						<div className="chat-settings-input">
+							<div>{localInstance.chat_settings_auto_context_budget_usable}: {resolvedContextBudget.usableInputTokens.toLocaleString()}</div>
+							<div>{localInstance.chat_settings_auto_context_budget_trigger}: {resolvedContextBudget.triggerTokens.toLocaleString()}</div>
+							<div>{localInstance.chat_settings_auto_context_budget_target}: {resolvedContextBudget.targetTokens.toLocaleString()}</div>
+							<div>{localInstance.chat_settings_auto_context_budget_reserve}: {resolvedContextBudget.reserveForOutput.toLocaleString()}</div>
+						</div>
+					</label>
+
+					<label className="chat-settings-field chat-settings-field--section">
+						<span className="chat-settings-field__title">
+							{localInstance.chat_settings_summary_model}
+						</span>
+						<span className="chat-settings-field__desc">
+							{localInstance.chat_settings_summary_model_desc}
+						</span>
+						<select
 							className="chat-settings-input"
-							type="number"
-							min={1000}
-							step={500}
-							value={contextBudgetDraft ?? messageManagement.contextBudgetTokens}
+							value={messageManagement.summaryModelTag ?? ''}
 							onChange={(event) => {
-								setContextBudgetDraft(event.target.value);
+								void persistChatSettings({
+									messageManagement: {
+										...messageManagement,
+										summaryModelTag: event.target.value || undefined,
+									},
+								});
 							}}
-							onFocus={() => {
-								setContextBudgetDraft(String(messageManagement.contextBudgetTokens));
-							}}
-							onBlur={() => {
-								if (contextBudgetDraft === null) {
-									return;
-								}
-								const draft = contextBudgetDraft.trim();
-								if (draft === '') {
-									// 空值时恢复原值
-									setContextBudgetDraft(null);
-									return;
-								}
-								const nextValue = Number.parseInt(draft, 10);
-								if (Number.isFinite(nextValue) && nextValue >= 1000) {
-									void persistChatSettings({
-										messageManagement: {
-											...messageManagement,
-											contextBudgetTokens: nextValue,
-										},
-									});
-								}
-								setContextBudgetDraft(null);
-							}}
-							onKeyDown={(event) => {
-								if (event.key === 'Enter') {
-									event.currentTarget.blur();
-								}
-							}}
-							onWheel={(event) => {
-								// 禁用鼠标滚轮改变数值
-								event.currentTarget.blur();
-							}}
-						/>
+						>
+							<option value="">{localInstance.chat_settings_summary_model_follow_current}</option>
+							{providerOptions.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</select>
 					</label>
 
 					<label className="chat-settings-field chat-settings-field--section">

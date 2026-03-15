@@ -57,6 +57,8 @@ export interface BaseOptions {
 	model: string
 	parameters: Record<string, unknown>
 	enableWebSearch?: boolean
+	/** 模型上下文长度（tokens），用于上下文管理 */
+	contextLength?: number
 
 	/** 通用工具定义列表（由 ChatService 注入，来源可以是 MCP 或其他工具后端） */
 	tools?: ToolDefinition[]

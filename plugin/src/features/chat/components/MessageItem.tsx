@@ -1,4 +1,4 @@
-import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download, Highlighter, ChevronDown, ChevronRight, StopCircle } from 'lucide-react';
+import { Check, Copy, PenSquare, RotateCw, TextCursorInput, Trash2, X, Maximize2, Download, Highlighter, ChevronDown, ChevronRight, StopCircle, Pin } from 'lucide-react';
 import { Component } from 'obsidian';
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useObsidianApp } from 'src/context/obsidianAppContext';
@@ -10,6 +10,9 @@ import { getEditableUserMessageContent } from '../utils/userMessageEditing';
 import { Notice } from 'obsidian';
 import { ModelTag } from './ModelTag';
 import { availableVendors } from 'src/features/tars/settings';
+import { countMessageTokens, formatTokenCount } from '../utils/token';
+import { localInstance } from 'src/i18n/locals';
+import { isPinnedChatMessage } from '../types/chat';
 
 interface MessageItemProps {
 	message: ChatMessage;
@@ -168,9 +171,13 @@ export const MessageItem = ({ message, service, isGenerating, hideModelTag }: Me
 	const [previewImage, setPreviewImage] = useState<string | null>(null);
 	const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
 	const isTransient = message.metadata?.transient === true;
+	const isPinned = isPinnedChatMessage(message);
 
 	const timestamp = useMemo(() => helper.formatTimestamp(message.timestamp), [helper, message.timestamp]);
-	
+
+	// 计算消息 token 数量（仅在消息内容变化时重新计算）
+	const tokenCount = useMemo(() => countMessageTokens(message), [message]);
+
 	// 解析内容块
 	useEffect(() => {
 		const blocks = parseContentBlocks(message.content);
@@ -424,7 +431,17 @@ export const MessageItem = ({ message, service, isGenerating, hideModelTag }: Me
 				{/* 临时消息在落盘前不展示操作区，避免对不存在的消息执行操作 */}
 				{!isTransient && (message.role !== 'assistant' || !isGenerating) && (
 					<div className="chat-message__meta tw-flex tw-items-center tw-justify-between">
-						<span className="tw-text-xs tw-text-faint">{timestamp}</span>
+						<div className="tw-flex tw-items-center tw-gap-2">
+							<span className="tw-text-xs tw-text-faint">{timestamp}</span>
+							{isPinned && (
+								<span className="tw-text-xs tw-text-accent" title={localInstance.chat_message_pinned}>
+									{localInstance.chat_message_pinned}
+								</span>
+							)}
+							<span className="tw-text-xs tw-text-faint" title={`Token 数量: ${tokenCount}`}>
+								{formatTokenCount(tokenCount)} tokens
+							</span>
+						</div>
 						<div className="chat-message__actions tw-flex tw-items-center tw-gap-2 tw-opacity-100 hover:tw-opacity-100 tw-transition-opacity">
 							{/* User message buttons */}
 							{message.role === 'user' && (
@@ -450,6 +467,14 @@ export const MessageItem = ({ message, service, isGenerating, hideModelTag }: Me
 											</span>
 										</>
 									)}
+									<span
+										onClick={() => service?.togglePinnedMessage(message.id)}
+										aria-label={isPinned ? localInstance.chat_message_unpin : localInstance.chat_message_pin}
+										className={`tw-cursor-pointer ${isPinned ? 'tw-text-accent' : 'tw-text-muted'} hover:tw-text-accent`}
+										title={isPinned ? localInstance.chat_message_unpin : localInstance.chat_message_pin}
+									>
+										<Pin className="tw-size-4" />
+									</span>
 									<span onClick={handleDelete} aria-label="删除消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 										<Trash2 className="tw-size-4" />
 									</span>
@@ -474,6 +499,14 @@ export const MessageItem = ({ message, service, isGenerating, hideModelTag }: Me
 								</span>
 								<span onClick={handleCopy} aria-label="复制消息" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 									{copied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
+								</span>
+								<span
+									onClick={() => service?.togglePinnedMessage(message.id)}
+									aria-label={isPinned ? localInstance.chat_message_unpin : localInstance.chat_message_pin}
+									className={`tw-cursor-pointer ${isPinned ? 'tw-text-accent' : 'tw-text-muted'} hover:tw-text-accent`}
+									title={isPinned ? localInstance.chat_message_unpin : localInstance.chat_message_pin}
+								>
+									<Pin className="tw-size-4" />
 								</span>
 								<span onClick={handleRegenerate} aria-label="重新生成" className="tw-cursor-pointer tw-text-muted hover:tw-text-accent">
 									<RotateCw className="tw-size-4" />

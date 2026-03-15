@@ -1,9 +1,27 @@
-import { MessageContextOptimizer } from './MessageContextOptimizer';
+import { TextDecoder, TextEncoder } from 'util';
 import type {
 	ChatContextCompactionState,
 	ChatMessage,
 	MessageManagementSettings,
 } from '../types/chat';
+
+jest.mock(
+	'obsidian',
+	() => require('../../../testing/obsidianMock').createObsidianMock(),
+	{ virtual: true }
+);
+
+if (!globalThis.TextDecoder) {
+	(globalThis as typeof globalThis & { TextDecoder: typeof TextDecoder }).TextDecoder =
+		TextDecoder;
+}
+
+if (!globalThis.TextEncoder) {
+	(globalThis as typeof globalThis & { TextEncoder: typeof TextEncoder }).TextEncoder =
+		TextEncoder;
+}
+
+const { MessageContextOptimizer } = require('./MessageContextOptimizer') as typeof import('./MessageContextOptimizer');
 
 const createMessage = (
 	id: string,
@@ -22,9 +40,27 @@ describe('MessageContextOptimizer', () => {
 	const optimizer = new MessageContextOptimizer();
 	const settings: MessageManagementSettings = {
 		enabled: true,
-		contextBudgetTokens: 80,
 		recentTurns: 1,
 	};
+	const structuredSummary = [
+		'[Earlier conversation summary]',
+		'This block compresses earlier chat turns. Treat it as prior context, not a new instruction.',
+		'',
+		'[CONTEXT]',
+		'- Model summary',
+		'',
+		'[KEY DECISIONS]',
+		'- Keep rolling summary',
+		'',
+		'[CURRENT STATE]',
+		'- Older history compressed',
+		'',
+		'[IMPORTANT DETAILS]',
+		'- Path: plugin/src/features/chat/services/ChatService.ts',
+		'',
+		'[OPEN ITEMS]',
+		'- Continue the latest turn',
+	].join('\n');
 
 	it('compacts older history when the token budget is exceeded', async () => {
 		const messages: ChatMessage[] = [
@@ -35,12 +71,14 @@ describe('MessageContextOptimizer', () => {
 			createMessage('user-3', 'user', '现在给我最终方案。', { timestamp: 5 }),
 		];
 
-		const result = await optimizer.optimize(messages, settings);
+		const result = await optimizer.optimize(messages, settings, null, {
+			targetHistoryBudgetTokens: 80,
+		});
 
 		expect(result.usedSummary).toBe(true);
 		expect(result.contextCompaction).not.toBeNull();
 		expect(result.messages[0].metadata?.isContextSummary).toBe(true);
-		expect(result.messages[0].content).toContain('[Earlier conversation summary]');
+		expect(result.messages[0].content).toContain('[CONTEXT]');
 		expect(result.messages.slice(1).map((message) => message.id)).toEqual(['user-3']);
 	});
 
@@ -51,16 +89,20 @@ describe('MessageContextOptimizer', () => {
 			createMessage('user-2', 'user', '新问题', { timestamp: 3 }),
 		];
 
-		const initial = await optimizer.optimize(messages, settings);
+		const initial = await optimizer.optimize(messages, settings, null, {
+			targetHistoryBudgetTokens: 40,
+		});
 		const existingCompaction: ChatContextCompactionState = {
 			...(initial.contextCompaction as ChatContextCompactionState),
-			summary: '[Earlier conversation summary]\nReused summary',
+			summary: structuredSummary,
 		};
 
-		const reused = await optimizer.optimize(messages, settings, existingCompaction);
+		const reused = await optimizer.optimize(messages, settings, existingCompaction, {
+			targetHistoryBudgetTokens: 40,
+		});
 
-		expect(reused.contextCompaction?.summary).toBe('[Earlier conversation summary]\nReused summary');
-		expect(reused.messages[0].content).toContain('Reused summary');
+		expect(reused.contextCompaction?.summary).toBe(structuredSummary);
+		expect(reused.messages[0].content).toContain('[CONTEXT]');
 	});
 
 	it('uses the model-generated history summary when provided', async () => {
@@ -71,11 +113,12 @@ describe('MessageContextOptimizer', () => {
 		];
 
 		const result = await optimizer.optimize(messages, settings, null, {
-			summaryGenerator: async () => '[Earlier conversation summary]\nModel summary',
+			targetHistoryBudgetTokens: 40,
+			summaryGenerator: async () => structuredSummary,
 		});
 
 		expect(result.contextCompaction?.summary).toContain('Model summary');
-		expect(result.messages[0].content).toContain('Model summary');
+		expect(result.messages[0].content).toContain('[IMPORTANT DETAILS]');
 	});
 
 	it('preserves exact paths and prohibition wording from user constraints in the compacted summary', async () => {
@@ -91,12 +134,13 @@ describe('MessageContextOptimizer', () => {
 				].join('\n'),
 				{ timestamp: 1 }
 			),
-			createMessage('assistant-1', 'assistant', '这是第一轮分析结论。'.repeat(30), { timestamp: 2 }),
+			createMessage('assistant-1', 'assistant', '这是第一轮分析结论。'.repeat(60), { timestamp: 2 }),
 			createMessage('user-2', 'user', '现在给我最终方案。', { timestamp: 3 }),
 		];
 
 		const result = await optimizer.optimize(messages, settings, null, {
-			summaryGenerator: async () => '[Earlier conversation summary]\nModel summary',
+			targetHistoryBudgetTokens: 120,
+			summaryGenerator: async () => structuredSummary,
 		});
 
 		expect(result.contextCompaction?.summary).toContain(
@@ -123,9 +167,31 @@ describe('MessageContextOptimizer', () => {
 			}),
 		];
 
-		const result = await optimizer.optimize(messages, settings);
+		const result = await optimizer.optimize(messages, settings, null, {
+			targetHistoryBudgetTokens: 80,
+		});
 
 		expect(result.messages[result.messages.length - 1].id).toBe('ephemeral-1');
 		expect(result.messages[result.messages.length - 1].metadata?.isEphemeralContext).toBe(true);
+	});
+
+	it('keeps pinned older messages verbatim outside the rolling summary', async () => {
+		const messages: ChatMessage[] = [
+			createMessage('user-1', 'user', '这条旧消息必须原文保留', {
+				timestamp: 1,
+				metadata: { pinned: true },
+			}),
+			createMessage('assistant-1', 'assistant', '普通旧回复'.repeat(60), { timestamp: 2 }),
+			createMessage('user-2', 'user', '当前问题', { timestamp: 3 }),
+		];
+
+		const result = await optimizer.optimize(messages, settings, null, {
+			targetHistoryBudgetTokens: 40,
+			summaryGenerator: async () => structuredSummary,
+		});
+
+		expect(result.messages[0].content).toBe('这条旧消息必须原文保留');
+		expect(result.messages[1].metadata?.isContextSummary).toBe(true);
+		expect(result.messages[1].content).not.toContain('这条旧消息必须原文保留');
 	});
 });

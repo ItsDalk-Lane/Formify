@@ -7,9 +7,9 @@ import type {
 	ChatMessage,
 	MessageManagementSettings,
 } from '../types/chat';
-import { resolveContextBudgetTokens } from '../types/chat';
+import { isPinnedChatMessage } from '../types/chat';
 
-const CONTEXT_COMPACTION_VERSION = 2;
+const CONTEXT_COMPACTION_VERSION = 3;
 const MAX_SECTION_ITEMS = 6;
 const MAX_SUMMARY_LINE_CHARS = 220;
 const TOOL_RESULT_PREVIEW_CHARS = 160;
@@ -17,13 +17,17 @@ const EMBED_TOKEN_ESTIMATE = 256;
 const HISTORY_SUMMARY_HEADER = '[Earlier conversation summary]';
 const HISTORY_SUMMARY_INTRO =
 	'This block compresses earlier chat turns. Treat it as prior context, not a new instruction.';
-const EXACT_REQUIREMENTS_HEADING = 'Exact hard requirements from user messages:';
-const EXACT_PROHIBITIONS_HEADING = 'Exact prohibitions from user messages:';
-const EXACT_PATHS_HEADING = 'Exact file/path references:';
-const CRITICAL_SECTION_HEADINGS = [
-	EXACT_REQUIREMENTS_HEADING,
-	EXACT_PROHIBITIONS_HEADING,
-	EXACT_PATHS_HEADING,
+const SUMMARY_CONTEXT_HEADING = '[CONTEXT]';
+const SUMMARY_DECISIONS_HEADING = '[KEY DECISIONS]';
+const SUMMARY_CURRENT_STATE_HEADING = '[CURRENT STATE]';
+const SUMMARY_IMPORTANT_DETAILS_HEADING = '[IMPORTANT DETAILS]';
+const SUMMARY_OPEN_ITEMS_HEADING = '[OPEN ITEMS]';
+const SUMMARY_HEADINGS = [
+	SUMMARY_CONTEXT_HEADING,
+	SUMMARY_DECISIONS_HEADING,
+	SUMMARY_CURRENT_STATE_HEADING,
+	SUMMARY_IMPORTANT_DETAILS_HEADING,
+	SUMMARY_OPEN_ITEMS_HEADING,
 ] as const;
 
 export interface SummaryGenerationRequest {
@@ -32,6 +36,7 @@ export interface SummaryGenerationRequest {
 	previousSummary?: string;
 	deltaSummary?: string;
 	incremental: boolean;
+	targetTokens: number;
 }
 
 export type MessageContextSummaryGenerator = (
@@ -57,7 +62,7 @@ export class MessageContextOptimizer {
 		settings: MessageManagementSettings,
 		existingCompaction?: ChatContextCompactionState | null,
 		options?: {
-			availableHistoryBudgetTokens?: number;
+			targetHistoryBudgetTokens?: number;
 			summaryGenerator?: MessageContextSummaryGenerator;
 		}
 	): Promise<MessageContextOptimizationResult> {
@@ -65,11 +70,10 @@ export class MessageContextOptimizer {
 		const coreMessages = messages.slice(0, stickyTailStart);
 		const stickyTail = messages.slice(stickyTailStart);
 		const historyBudgetTokens = this.normalizePositiveInteger(
-			options?.availableHistoryBudgetTokens
-				?? resolveContextBudgetTokens(settings),
-			resolveContextBudgetTokens(settings)
+			options?.targetHistoryBudgetTokens,
+			Number.MAX_SAFE_INTEGER
 		);
-		const recentTurns = this.normalizePositiveInteger(settings.recentTurns, 6);
+		const recentTurns = this.normalizePositiveInteger(settings.recentTurns, 1);
 
 		if (coreMessages.length === 0) {
 			return {
@@ -98,31 +102,54 @@ export class MessageContextOptimizer {
 			};
 		}
 
-		let recentStart = this.findRecentTurnStart(coreMessages, recentTurns);
-		let optimized = await this.buildCompactedResult(
-			coreMessages,
+		const recentStart = this.findRecentTurnStart(coreMessages, recentTurns);
+		const recentMessages = coreMessages.slice(recentStart);
+		const olderMessages = coreMessages.slice(0, recentStart);
+		const pinnedOlderMessages = olderMessages.filter((message) =>
+			isPinnedChatMessage(message)
+		);
+		const compactedHistory = olderMessages.filter(
+			(message) => !isPinnedChatMessage(message)
+		);
+		const protectedMessages = [...pinnedOlderMessages, ...recentMessages];
+		const protectedHistoryTokens = this.estimateChatTokens(protectedMessages);
+
+		if (compactedHistory.length === 0 || protectedHistoryTokens >= historyBudgetTokens) {
+			const preservedMessages = [...protectedMessages, ...stickyTail];
+			return {
+				messages: preservedMessages,
+				contextCompaction: {
+					version: CONTEXT_COMPACTION_VERSION,
+					coveredRange: {
+						endMessageId: null,
+						messageCount: 0,
+						signature: '0',
+					},
+					summary: '',
+					historyTokenEstimate: this.estimateChatTokens(protectedMessages),
+					contextSummary: existingCompaction?.contextSummary,
+					contextSourceSignature: existingCompaction?.contextSourceSignature,
+					contextTokenEstimate: existingCompaction?.contextTokenEstimate,
+					totalTokenEstimate: existingCompaction?.totalTokenEstimate,
+					updatedAt: Date.now(),
+					droppedReasoningCount: 0,
+					overflowedProtectedLayers: true,
+				},
+				historyTokenEstimate: this.estimateChatTokens(protectedMessages),
+				usedSummary: false,
+				droppedReasoningCount: 0,
+			};
+		}
+
+		return this.buildCompactedResult(
+			compactedHistory,
+			pinnedOlderMessages,
+			recentMessages,
 			stickyTail,
-			recentStart,
+			historyBudgetTokens,
 			existingCompaction,
 			options?.summaryGenerator
 		);
-
-		while (optimized.historyTokenEstimate > historyBudgetTokens) {
-			const nextStart = this.findNextTurnStart(coreMessages, recentStart);
-			if (nextStart === recentStart) {
-				break;
-			}
-			recentStart = nextStart;
-			optimized = await this.buildCompactedResult(
-				coreMessages,
-				stickyTail,
-				recentStart,
-				existingCompaction,
-				options?.summaryGenerator
-			);
-		}
-
-		return optimized;
 	}
 
 	estimateChatTokens(messages: ChatMessage[]): number {
@@ -181,49 +208,46 @@ export class MessageContextOptimizer {
 	}
 
 	private async buildCompactedResult(
-		coreMessages: ChatMessage[],
+		compactedHistory: ChatMessage[],
+		pinnedMessages: ChatMessage[],
+		recentMessages: ChatMessage[],
 		stickyTail: ChatMessage[],
-		recentStart: number,
+		historyBudgetTokens: number,
 		existingCompaction?: ChatContextCompactionState | null,
 		summaryGenerator?: MessageContextSummaryGenerator
 	): Promise<MessageContextOptimizationResult> {
-		const compactedHistory = coreMessages.slice(0, recentStart);
-		if (compactedHistory.length === 0) {
-			return {
-				messages: [...coreMessages, ...stickyTail],
-				contextCompaction: existingCompaction
-					? {
-						...existingCompaction,
-						historyTokenEstimate: this.estimateChatTokens(coreMessages),
-					}
-					: null,
-				historyTokenEstimate: this.estimateChatTokens(coreMessages),
-				usedSummary: false,
-				droppedReasoningCount: 0,
-			};
-		}
-
 		const coveredRange = this.buildCoveredRange(compactedHistory);
+		const protectedHistoryTokens = this.estimateChatTokens([
+			...pinnedMessages,
+			...recentMessages,
+		]);
+		const summaryBudgetTokens = Math.max(0, historyBudgetTokens - protectedHistoryTokens);
 		const summaryBuild = await this.resolveSummary(
 			compactedHistory,
 			coveredRange,
+			summaryBudgetTokens,
 			existingCompaction,
 			summaryGenerator
 		);
-		const summaryMessage: ChatMessage = {
-			id: `context-compaction:${coveredRange.endMessageId ?? 'history'}`,
-			role: 'assistant',
-			content: summaryBuild.summary,
-			timestamp: compactedHistory[compactedHistory.length - 1]?.timestamp ?? Date.now(),
-			metadata: {
-				isContextSummary: true,
-				hidden: true,
-				hiddenFromHistory: true,
-			},
-		};
+		const summaryMessage =
+			summaryBuild.summary.trim().length > 0
+				? {
+					id: `context-compaction:${coveredRange.endMessageId ?? 'history'}`,
+					role: 'assistant' as const,
+					content: summaryBuild.summary,
+					timestamp:
+						compactedHistory[compactedHistory.length - 1]?.timestamp ?? Date.now(),
+					metadata: {
+						isContextSummary: true,
+						hidden: true,
+						hiddenFromHistory: true,
+					},
+				}
+				: null;
 		const optimizedCoreMessages = [
-			summaryMessage,
-			...coreMessages.slice(recentStart),
+			...pinnedMessages,
+			...(summaryMessage ? [summaryMessage] : []),
+			...recentMessages,
 		];
 		const historyTokenEstimate = this.estimateChatTokens(optimizedCoreMessages);
 
@@ -240,9 +264,10 @@ export class MessageContextOptimizer {
 				totalTokenEstimate: existingCompaction?.totalTokenEstimate,
 				updatedAt: Date.now(),
 				droppedReasoningCount: summaryBuild.droppedReasoningCount,
+				overflowedProtectedLayers: false,
 			},
 			historyTokenEstimate,
-			usedSummary: true,
+			usedSummary: Boolean(summaryMessage),
 			droppedReasoningCount: summaryBuild.droppedReasoningCount,
 		};
 	}
@@ -250,19 +275,30 @@ export class MessageContextOptimizer {
 	private async resolveSummary(
 		messages: ChatMessage[],
 		coveredRange: ChatContextCompactionRange,
+		summaryBudgetTokens: number,
 		existingCompaction?: ChatContextCompactionState | null,
 		summaryGenerator?: MessageContextSummaryGenerator
 	): Promise<SummaryBuildResult> {
+		if (summaryBudgetTokens <= 0) {
+			return {
+				summary: '',
+				droppedReasoningCount: 0,
+			};
+		}
+
 		if (this.canReuseCompaction(existingCompaction, coveredRange)) {
 			return {
-				summary: existingCompaction.summary,
+				summary: this.fitSummaryToBudget(existingCompaction.summary, summaryBudgetTokens),
 				droppedReasoningCount: existingCompaction.droppedReasoningCount ?? 0,
 			};
 		}
 
-		const baseSummary = this.buildSummary(messages);
+		const baseSummary = this.buildSummary(messages, summaryBudgetTokens);
 		if (!summaryGenerator) {
-			return baseSummary;
+			return {
+				summary: this.fitSummaryToBudget(baseSummary.summary, summaryBudgetTokens),
+				droppedReasoningCount: baseSummary.droppedReasoningCount,
+			};
 		}
 
 		try {
@@ -273,13 +309,20 @@ export class MessageContextOptimizer {
 				previousSummary: incrementalDelta ? existingCompaction?.summary : undefined,
 				deltaSummary: incrementalDelta?.summary,
 				incremental: Boolean(incrementalDelta),
+				targetTokens: summaryBudgetTokens,
 			});
 			return {
-				summary: this.normalizeGeneratedSummary(generatedSummary, baseSummary.summary),
+				summary: this.fitSummaryToBudget(
+					this.normalizeGeneratedSummary(generatedSummary, baseSummary.summary),
+					summaryBudgetTokens
+				),
 				droppedReasoningCount: baseSummary.droppedReasoningCount,
 			};
 		} catch {
-			return baseSummary;
+			return {
+				summary: this.fitSummaryToBudget(baseSummary.summary, summaryBudgetTokens),
+				droppedReasoningCount: baseSummary.droppedReasoningCount,
+			};
 		}
 	}
 
@@ -298,7 +341,11 @@ export class MessageContextOptimizer {
 
 		const previousMessages = messages.slice(0, previousCount);
 		const previousLastMessage = previousMessages[previousMessages.length - 1];
-		if (!previousLastMessage || previousLastMessage.id !== existingCompaction.coveredRange.endMessageId) {
+		if (
+			!previousLastMessage
+			|| this.buildStableMessageKey(previousLastMessage)
+				!== existingCompaction.coveredRange.endMessageId
+		) {
 			return null;
 		}
 
@@ -307,7 +354,9 @@ export class MessageContextOptimizer {
 		}
 
 		const deltaMessages = messages.slice(previousCount);
-		return deltaMessages.length > 0 ? this.buildSummary(deltaMessages) : null;
+		return deltaMessages.length > 0
+			? this.buildSummary(deltaMessages, Number.MAX_SAFE_INTEGER)
+			: null;
 	}
 
 	private normalizeGeneratedSummary(summary: string | null, fallback: string): string {
@@ -315,15 +364,18 @@ export class MessageContextOptimizer {
 		if (!trimmed) {
 			return fallback;
 		}
+		if (!this.hasExpectedSummaryStructure(trimmed)) {
+			return fallback;
+		}
 		const normalized = trimmed.includes(HISTORY_SUMMARY_HEADER)
 			? trimmed
 			: [
-			HISTORY_SUMMARY_HEADER,
-			HISTORY_SUMMARY_INTRO,
-			'',
-			trimmed,
-		].join('\n');
-		return this.mergeCriticalSections(normalized, fallback);
+				HISTORY_SUMMARY_HEADER,
+				HISTORY_SUMMARY_INTRO,
+				'',
+				trimmed,
+			].join('\n');
+		return this.mergeImportantDetails(normalized, fallback);
 	}
 
 	private canReuseCompaction(
@@ -343,25 +395,30 @@ export class MessageContextOptimizer {
 
 	private buildCoveredRange(messages: ChatMessage[]): ChatContextCompactionRange {
 		return {
-			endMessageId: messages[messages.length - 1]?.id ?? null,
+			endMessageId: messages[messages.length - 1]
+				? this.buildStableMessageKey(messages[messages.length - 1])
+				: null,
 			messageCount: messages.length,
 			signature: this.buildSignature(messages),
 		};
 	}
 
+	private buildStableMessageKey(message: ChatMessage): string {
+		const toolSignature = (message.toolCalls ?? [])
+			.map((toolCall) => `${toolCall.name}:${toolCall.result ?? ''}`)
+			.join('|');
+		return [
+			message.role,
+			message.timestamp,
+			message.content,
+			toolSignature,
+		].join('::');
+	}
+
 	private buildSignature(messages: ChatMessage[]): string {
 		let hash = 5381;
 		for (const message of messages) {
-			const toolSignature = (message.toolCalls ?? [])
-				.map((toolCall) => `${toolCall.name}:${toolCall.result ?? ''}`)
-				.join('|');
-			const value = [
-				message.id,
-				message.role,
-				message.timestamp,
-				message.content,
-				toolSignature,
-			].join('::');
+			const value = this.buildStableMessageKey(message);
 			for (let index = 0; index < value.length; index += 1) {
 				hash = ((hash << 5) + hash) ^ value.charCodeAt(index);
 			}
@@ -369,15 +426,25 @@ export class MessageContextOptimizer {
 		return String(hash >>> 0);
 	}
 
-	private buildSummary(messages: ChatMessage[]): SummaryBuildResult {
+	private buildSummary(
+		messages: ChatMessage[],
+		summaryBudgetTokens: number
+	): SummaryBuildResult {
 		const sessionIntent: string[] = [];
-		const establishedFacts: string[] = [];
+		const currentState: string[] = [];
 		const decisions: string[] = [];
-		const importantFiles = new Set<string>();
-		const exactRequirements: string[] = [];
-		const exactProhibitions: string[] = [];
-		const toolOutcomes: string[] = [];
+		const importantDetails: string[] = [];
+		const openItems: string[] = [];
 		let droppedReasoningCount = 0;
+		const detailLimit = summaryBudgetTokens < 320
+			? 2
+			: summaryBudgetTokens < 640
+				? 4
+				: MAX_SECTION_ITEMS;
+		const importantDetailLimit = Math.min(
+			MAX_SECTION_ITEMS,
+			Math.max(4, detailLimit)
+		);
 
 		for (const message of messages) {
 			const text = this.extractVisibleText(message);
@@ -385,10 +452,11 @@ export class MessageContextOptimizer {
 
 			if (message.role === 'user' && compact) {
 				this.pushUnique(sessionIntent, compact);
+				this.pushUnique(openItems, compact);
 			}
 
 			if (message.role === 'assistant' && compact) {
-				this.pushUnique(establishedFacts, compact);
+				this.pushUnique(currentState, compact);
 				if (this.looksLikeDecision(compact)) {
 					this.pushUnique(decisions, compact);
 				}
@@ -397,10 +465,10 @@ export class MessageContextOptimizer {
 			if (message.role === 'user') {
 				const constraints = this.extractConstraintLines(message.content);
 				for (const requirement of constraints.requirements) {
-					this.pushUnique(exactRequirements, requirement);
+					this.pushUnique(importantDetails, `Requirement: ${requirement}`);
 				}
 				for (const prohibition of constraints.prohibitions) {
-					this.pushUnique(exactProhibitions, prohibition);
+					this.pushUnique(importantDetails, `Prohibition: ${prohibition}`);
 				}
 			}
 
@@ -410,9 +478,11 @@ export class MessageContextOptimizer {
 			droppedReasoningCount += reasoningBlocks.length;
 
 			for (const reference of this.extractPathReferences(message)) {
-				if (importantFiles.size < MAX_SECTION_ITEMS) {
-					importantFiles.add(reference);
-				}
+				this.pushUnique(importantDetails, `Path: ${reference}`);
+			}
+
+			for (const detail of this.extractImportantDetailLines(message.content)) {
+				this.pushUnique(importantDetails, detail);
 			}
 
 			for (const toolCall of message.toolCalls ?? []) {
@@ -425,44 +495,58 @@ export class MessageContextOptimizer {
 				if (resultPreview) {
 					parts.push(`结果: ${resultPreview}`);
 				}
-				this.pushUnique(toolOutcomes, parts.join(' · '));
+				this.pushUnique(importantDetails, `Tool: ${parts.join(' · ')}`);
 			}
 		}
 
-		const openThreads = sessionIntent.slice(-2);
 		const lines = [
 			HISTORY_SUMMARY_HEADER,
 			HISTORY_SUMMARY_INTRO,
 			'',
-			'Session intent:',
-			...this.toBulletLines(sessionIntent),
+			SUMMARY_CONTEXT_HEADING,
+			...this.toBulletLines(sessionIntent, Math.min(3, detailLimit)),
 			'',
-			EXACT_REQUIREMENTS_HEADING,
-			...this.toBulletLines(exactRequirements),
+			SUMMARY_DECISIONS_HEADING,
+			...this.toBulletLines(decisions, detailLimit),
 			'',
-			EXACT_PROHIBITIONS_HEADING,
-			...this.toBulletLines(exactProhibitions),
+			SUMMARY_CURRENT_STATE_HEADING,
+			...this.toBulletLines(currentState, detailLimit),
 			'',
-			'Established facts:',
-			...this.toBulletLines(establishedFacts),
+			SUMMARY_IMPORTANT_DETAILS_HEADING,
+			...this.toBulletLines(importantDetails, importantDetailLimit),
 			'',
-			'Decisions made:',
-			...this.toBulletLines(decisions),
-			'',
-			EXACT_PATHS_HEADING,
-			...this.toBulletLines(Array.from(importantFiles)),
-			'',
-			'Tool outcomes:',
-			...this.toBulletLines(toolOutcomes),
-			'',
-			'Open threads before the recent window:',
-			...this.toBulletLines(openThreads),
+			SUMMARY_OPEN_ITEMS_HEADING,
+			...this.toBulletLines(openItems, Math.min(3, detailLimit)),
 		];
 
 		return {
 			summary: lines.join('\n').trim(),
 			droppedReasoningCount,
 		};
+	}
+
+	private extractImportantDetailLines(content: string): string[] {
+		const details: string[] = [];
+		const lines = String(content ?? '').split('\n');
+
+		for (const rawLine of lines) {
+			const line = rawLine
+				.replace(/^\s*(?:[-*+]\s+|\d+[.)、]\s*|#+\s*)/, '')
+				.trim();
+			if (!line || line.length > MAX_SUMMARY_LINE_CHARS * 1.8) {
+				continue;
+			}
+			if (
+				/`[^`]+`/.test(line)
+				|| /(?:^|[^\d])\d+(?:\.\d+)?(?:%|ms|s|kb|mb|gb|tokens?)?/i.test(line)
+				|| /(max_tokens|max_output_tokens|contextlength|summarymodeltag|frontmatter|contextsummary|contextsourcesignature|totaltokenestimate)/i.test(line)
+				|| /[:=]/.test(line)
+			) {
+				this.pushUnique(details, line);
+			}
+		}
+
+		return details;
 	}
 
 	private extractVisibleText(message: ChatMessage): string {
@@ -582,28 +666,50 @@ export class MessageContextOptimizer {
 		return /不允许|禁止|不得|不能|不要|不再|严禁/i.test(line);
 	}
 
-	private mergeCriticalSections(summary: string, fallback: string): string {
-		const missingBlocks: string[] = [];
+	private hasExpectedSummaryStructure(summary: string): boolean {
+		return SUMMARY_HEADINGS.every((heading) => summary.includes(heading));
+	}
 
-		for (const heading of CRITICAL_SECTION_HEADINGS) {
-			const fallbackItems = this.extractSectionItems(fallback, heading);
-			if (fallbackItems.length === 0 || fallbackItems.every((item) => item === '- None')) {
-				continue;
-			}
-
-			const missingItems = fallbackItems.filter((item) => !summary.includes(item.slice(2)));
-			if (missingItems.length === 0) {
-				continue;
-			}
-
-			missingBlocks.push(heading, ...missingItems, '');
-		}
-
-		if (missingBlocks.length === 0) {
+	private mergeImportantDetails(summary: string, fallback: string): string {
+		const fallbackItems = this.extractSectionItems(
+			fallback,
+			SUMMARY_IMPORTANT_DETAILS_HEADING
+		);
+		if (
+			fallbackItems.length === 0
+			|| fallbackItems.every((item) => item === '- None')
+		) {
 			return summary;
 		}
 
-		return `${summary.trim()}\n\n${missingBlocks.join('\n').trim()}`;
+		const summaryItems = this.extractSectionItems(
+			summary,
+			SUMMARY_IMPORTANT_DETAILS_HEADING
+		);
+		const missingItems = fallbackItems.filter((item) => !summaryItems.includes(item));
+		if (missingItems.length === 0) {
+			return summary;
+		}
+
+		const parsed = this.parseStructuredSummary(summary);
+		const importantSection = parsed.sections.find(
+			(section) => section.heading === SUMMARY_IMPORTANT_DETAILS_HEADING
+		);
+		if (!importantSection) {
+			parsed.sections.push({
+				heading: SUMMARY_IMPORTANT_DETAILS_HEADING,
+				items: [...missingItems],
+			});
+			return this.renderStructuredSummary(parsed);
+		}
+
+		for (const item of missingItems) {
+			if (!importantSection.items.includes(item)) {
+				importantSection.items.push(item);
+			}
+		}
+
+		return this.renderStructuredSummary(parsed);
 	}
 
 	private extractSectionItems(summary: string, heading: string): string[] {
@@ -619,16 +725,127 @@ export class MessageContextOptimizer {
 			if (!collecting) {
 				continue;
 			}
-			if (!line.trim()) {
+			if (SUMMARY_HEADINGS.includes(line as typeof SUMMARY_HEADINGS[number])) {
 				break;
 			}
-			if (!line.startsWith('- ')) {
-				break;
+			if (line.startsWith('- ')) {
+				items.push(line);
 			}
-			items.push(line);
 		}
 
 		return items;
+	}
+
+	private parseStructuredSummary(summary: string): {
+		preamble: string[];
+		sections: Array<{ heading: string; items: string[] }>;
+	} {
+		const lines = summary.trim().split('\n');
+		const preamble: string[] = [];
+		const sections: Array<{ heading: string; items: string[] }> = [];
+		let currentSection: { heading: string; items: string[] } | null = null;
+
+		for (const line of lines) {
+			if (SUMMARY_HEADINGS.includes(line as typeof SUMMARY_HEADINGS[number])) {
+				currentSection = { heading: line, items: [] };
+				sections.push(currentSection);
+				continue;
+			}
+			if (!currentSection) {
+				preamble.push(line);
+				continue;
+			}
+			if (line.startsWith('- ')) {
+				currentSection.items.push(line);
+			} else if (line.trim()) {
+				currentSection.items.push(`- ${line.trim()}`);
+			}
+		}
+
+		for (const heading of SUMMARY_HEADINGS) {
+			if (!sections.some((section) => section.heading === heading)) {
+				sections.push({ heading, items: ['- None'] });
+			}
+		}
+
+		return { preamble, sections };
+	}
+
+	private renderStructuredSummary(summary: {
+		preamble: string[];
+		sections: Array<{ heading: string; items: string[] }>;
+	}): string {
+		const lines: string[] = [];
+		const preamble = summary.preamble.filter((line) => line.trim().length > 0);
+		if (preamble.length > 0) {
+			lines.push(...preamble, '');
+		}
+
+		for (const heading of SUMMARY_HEADINGS) {
+			const section = summary.sections.find((item) => item.heading === heading);
+			lines.push(heading, ...(section?.items.length ? section.items : ['- None']), '');
+		}
+
+		return lines.join('\n').trim();
+	}
+
+	private fitSummaryToBudget(summary: string, targetBudgetTokens: number): string {
+		const trimmed = summary.trim();
+		if (!trimmed || targetBudgetTokens <= 0) {
+			return '';
+		}
+
+		let parsed = this.parseStructuredSummary(trimmed);
+		let fitted = this.renderStructuredSummary(parsed);
+		const estimateTokens = (value: string) =>
+			this.estimateProviderMessagesTokens([{ role: 'assistant', content: value }]);
+		if (estimateTokens(fitted) <= targetBudgetTokens) {
+			return fitted;
+		}
+
+		const trimOrder = [
+			SUMMARY_OPEN_ITEMS_HEADING,
+			SUMMARY_CURRENT_STATE_HEADING,
+			SUMMARY_DECISIONS_HEADING,
+			SUMMARY_CONTEXT_HEADING,
+		];
+
+		for (;;) {
+			let removed = false;
+			for (const heading of trimOrder) {
+				const section = parsed.sections.find((item) => item.heading === heading);
+				if (section && section.items.length > 1) {
+					section.items.pop();
+					removed = true;
+					break;
+				}
+			}
+			fitted = this.renderStructuredSummary(parsed);
+			if (!removed || estimateTokens(fitted) <= targetBudgetTokens) {
+				break;
+			}
+		}
+
+		for (const maxChars of [180, 140, 110, 90, 70, 50]) {
+			parsed = {
+				...parsed,
+				sections: parsed.sections.map((section) => ({
+					...section,
+					items: section.items.map((item) =>
+						item === '- None'
+							|| section.heading === SUMMARY_IMPORTANT_DETAILS_HEADING
+							? item
+							: `- ${this.compactLine(item.slice(2), maxChars)}`
+					),
+				})),
+			};
+			fitted = this.renderStructuredSummary(parsed);
+			if (estimateTokens(fitted) <= targetBudgetTokens) {
+				return fitted;
+			}
+		}
+
+		return fitted;
 	}
 
 	private extractToolTarget(args: Record<string, unknown>): string | null {
@@ -663,11 +880,11 @@ export class MessageContextOptimizer {
 		);
 	}
 
-	private toBulletLines(items: string[]): string[] {
+	private toBulletLines(items: string[], limit = MAX_SECTION_ITEMS): string[] {
 		if (items.length === 0) {
 			return ['- None'];
 		}
-		return items.slice(0, MAX_SECTION_ITEMS).map((item) => `- ${item}`);
+		return items.slice(0, limit).map((item) => `- ${item}`);
 	}
 
 	private pushUnique(collection: string[], value: string): void {
@@ -699,16 +916,7 @@ export class MessageContextOptimizer {
 		return 0;
 	}
 
-	private findNextTurnStart(messages: ChatMessage[], currentStart: number): number {
-		for (let index = currentStart + 1; index < messages.length; index += 1) {
-			if (messages[index].role === 'user') {
-				return index;
-			}
-		}
-		return currentStart;
-	}
-
-	private normalizePositiveInteger(value: number, fallback: number): number {
+	private normalizePositiveInteger(value: number | null | undefined, fallback: number): number {
 		if (Number.isFinite(value) && value > 0) {
 			return Math.floor(value);
 		}

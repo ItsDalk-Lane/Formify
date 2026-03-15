@@ -144,6 +144,9 @@ export class HistoryService {
 			|| ('totalTokenEstimate' in raw
 				&& raw.totalTokenEstimate !== undefined
 				&& typeof raw.totalTokenEstimate !== 'number')
+			|| ('overflowedProtectedLayers' in raw
+				&& raw.overflowedProtectedLayers !== undefined
+				&& typeof raw.overflowedProtectedLayers !== 'boolean')
 		) {
 			return null;
 		}
@@ -967,6 +970,13 @@ ${body}
 				content = content.replace(/\n\n> 对比组:\s*.+$/m, '').trim();
 			}
 
+			let pinned = false;
+			const pinnedMatch = content.match(/\n\n> 置顶:\s*(true|false)$/mi);
+			if (pinnedMatch?.[1]) {
+				pinned = pinnedMatch[1].trim().toLowerCase() === 'true';
+				content = content.replace(/\n\n> 置顶:\s*(?:true|false)$/mi, '').trim();
+			}
+
 			let isError = false;
 			if (content.startsWith('[错误]')) {
 				isError = true;
@@ -999,7 +1009,8 @@ ${body}
 				metadata: {
 					hiddenFromModel: currentHeader.role === 'assistant' && Boolean(parallelGroupId),
 					originalHeader: currentHeader.header.trim(),
-					originalTimestamp: currentHeader.timestampStr
+					originalTimestamp: currentHeader.timestampStr,
+					...(pinned ? { pinned: true } : {}),
 				}
 			});
 
@@ -1036,11 +1047,19 @@ ${body}
 						// 清理转换后可能产生的多余空行
 						content = content.replace(/\n{3,}/g, '\n\n').trim();
 
+						let pinned = false;
+						const pinnedMatch = content.match(/\n\n> 置顶:\s*(true|false)$/mi);
+						if (pinnedMatch?.[1]) {
+							pinned = pinnedMatch[1].trim().toLowerCase() === 'true';
+							content = content.replace(/\n\n> 置顶:\s*(?:true|false)$/mi, '').trim();
+						}
+
 						const message = this.messageService.createMessage(currentRole, content, {
 							timestamp: currentTimestamp,
 							modelTag: currentModelTag,
 							modelName: currentModelTag,
-							toolCalls: extracted.toolCalls
+							toolCalls: extracted.toolCalls,
+							metadata: pinned ? { pinned: true } : {},
 						});
 
 						messages.push(message);
@@ -1073,10 +1092,18 @@ ${body}
 				content = this.messageService.parseMcpToolBlocksFromHistory(content);
 				// 清理转换后可能产生的多余空行
 				content = content.replace(/\n{3,}/g, '\n\n').trim();
+
+				let pinned = false;
+				const pinnedMatch = content.match(/\n\n> 置顶:\s*(true|false)$/mi);
+				if (pinnedMatch?.[1]) {
+					pinned = pinnedMatch[1].trim().toLowerCase() === 'true';
+					content = content.replace(/\n\n> 置顶:\s*(?:true|false)$/mi, '').trim();
+				}
 				messages.push(this.messageService.createMessage(currentRole, content, {
 					timestamp: currentTimestamp,
 					modelTag: currentModelTag,
-					modelName: currentModelTag
+					modelName: currentModelTag,
+					metadata: pinned ? { pinned: true } : {},
 				}));
 			}
 		}

@@ -6,6 +6,7 @@ import type { CompareGroup } from '../types/multiModel';
 import { MultiModelSelector } from '../components/MultiModelSelector';
 import { TemplateSelector } from '../components/TemplateSelector';
 import { ModelTag } from '../components/ModelTag';
+import { ContextUsageIndicator } from '../components/ContextUsageIndicator';
 import { App } from 'obsidian';
 import { localInstance } from 'src/i18n/locals';
 import { availableVendors } from 'src/features/tars/settings';
@@ -326,6 +327,14 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 						<div className="tw-flex tw-items-center tw-justify-between tw-mt-0">
 							<div className="tw-flex tw-items-center tw-gap-2" style={{ flex: 1, minWidth: 0 }}>
 								{renderModelSelector()}
+								{/* 上下文使用指示器 */}
+								<ContextUsageIndicator
+									providers={providers}
+									selectedModelId={state.selectedModelId ?? null}
+									session={state.activeSession}
+									isGenerating={state.isGenerating}
+									size="sm"
+								/>
 							</div>
 							<div className="tw-flex tw-items-center tw-gap-2">
 								<span
@@ -360,6 +369,14 @@ export const ChatInput = ({ service, state, app }: ChatInputProps) => {
 						<div className="tw-flex tw-items-center tw-justify-between tw-mt-0">
 							<div className="tw-flex tw-items-center tw-gap-2" style={{ flex: 1, minWidth: 0 }}>
 								{renderModelSelector()}
+								{/* 上下文使用指示器 */}
+								<ContextUsageIndicator
+									providers={providers}
+									selectedModelId={state.selectedModelId ?? null}
+									session={state.activeSession}
+									isGenerating={state.isGenerating}
+									size="sm"
+								/>
 							</div>
 							<div className="tw-flex tw-items-center tw-gap-2">
 								{/* 停止控制 */}

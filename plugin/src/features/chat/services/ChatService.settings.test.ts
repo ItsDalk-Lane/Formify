@@ -1,10 +1,16 @@
-jest.mock('obsidian', () => {
-	const actual = jest.requireActual('obsidian');
-	return {
-		...actual,
-		Notice: jest.fn(),
-	};
-});
+jest.mock(
+	'obsidian',
+	() => require('../../../testing/obsidianMock').createObsidianMock(),
+	{ virtual: true }
+);
+
+(globalThis as typeof globalThis & {
+	window?: { localStorage: { getItem: jest.Mock } };
+}).window = {
+	localStorage: {
+		getItem: jest.fn(() => 'en'),
+	},
+};
 
 jest.mock('../components/ChatSettingsModal', () => ({
 	ChatSettingsModal: jest.fn().mockImplementation(function (
@@ -21,9 +27,6 @@ jest.mock('../components/ChatSettingsModal', () => ({
 	}),
 }));
 
-import { Notice } from 'obsidian';
-import { ChatSettingsModal } from '../components/ChatSettingsModal';
-import { ChatService } from './ChatService';
 import {
 	DEFAULT_CHAT_SETTINGS,
 	DEFAULT_MESSAGE_MANAGEMENT_SETTINGS,
@@ -32,6 +35,10 @@ import { DEFAULT_MCP_SETTINGS } from 'src/features/tars/mcp';
 import {
 	DEFAULT_TOOL_EXECUTION_SETTINGS,
 } from 'src/features/tars/settings';
+
+const { Notice } = require('obsidian') as typeof import('obsidian');
+const { ChatSettingsModal } = require('../components/ChatSettingsModal') as typeof import('../components/ChatSettingsModal');
+const { ChatService } = require('./ChatService') as typeof import('./ChatService');
 
 const createPlugin = () =>
 	({
@@ -140,20 +147,44 @@ describe('ChatService settings integration', () => {
 		await service.persistChatSettings({
 			messageManagement: {
 				enabled: false,
-				contextBudgetTokens: 9000,
 				recentTurns: 4,
+				summaryModelTag: 'summary-model',
 			},
 		});
 
 		expect(plugin.settings.chat.messageManagement).toEqual({
 			enabled: false,
-			contextBudgetTokens: 9000,
 			recentTurns: 4,
+			summaryModelTag: 'summary-model',
 		});
 		expect(service.getChatSettingsSnapshot().messageManagement).toEqual({
 			enabled: false,
-			contextBudgetTokens: 9000,
 			recentTurns: 4,
+			summaryModelTag: 'summary-model',
+		});
+	});
+
+	it('drops legacy token budget fields when persisting message management settings', async () => {
+		const plugin = createPlugin();
+		plugin.settings.chat.messageManagement = {
+			enabled: true,
+			recentTurns: 2,
+			contextBudgetTokens: 9000,
+			historyBudgetTokens: 8000,
+		};
+		const service = new ChatService(plugin);
+
+		await service.persistChatSettings({
+			messageManagement: {
+				enabled: true,
+				recentTurns: 3,
+			},
+		});
+
+		expect(plugin.settings.chat.messageManagement).toEqual({
+			enabled: true,
+			recentTurns: 3,
+			summaryModelTag: undefined,
 		});
 	});
 

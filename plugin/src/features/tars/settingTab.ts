@@ -3735,6 +3735,9 @@ export class TarsSettingTab {
 		if ('apiVersion' in settings.options)
 			this.addApiVersionOptional(container, settings.options as BaseOptions & Pick<Optional, 'apiVersion'>)
 
+		// 上下文长度配置（通用）
+		this.addContextLengthSection(container, settings.options)
+
 		this.addParametersSection(container, settings.options)
 
 		const testButtonLabel = t('Test now')
@@ -4476,6 +4479,29 @@ export class TarsSettingTab {
 						await this.saveSettings()
 					})
 			)
+
+	addContextLengthSection = (details: HTMLElement, options: BaseOptions) => {
+		const DEFAULT_CONTEXT_LENGTH = 128000
+		const setting = new Setting(details)
+			.setName(t('Context length'))
+			.setDesc(t('Context length description'))
+			.addText((text) =>
+				text
+					.setPlaceholder('128000')
+					.setValue(String(options.contextLength ?? DEFAULT_CONTEXT_LENGTH))
+					.onChange(async (value) => {
+						const num = parseInt(value.trim(), 10)
+						if (isNaN(num) || num <= 0) {
+							// 无效值时使用默认值
+							options.contextLength = DEFAULT_CONTEXT_LENGTH
+						} else {
+							options.contextLength = num
+						}
+						await this.saveSettings()
+					})
+			)
+		return setting
+	}
 
 	addParametersSection = (details: HTMLElement, options: BaseOptions) => {
 		const setting = new Setting(details)

@@ -1,5 +1,20 @@
+jest.mock(
+	'obsidian',
+	() => require('../../../testing/obsidianMock').createObsidianMock(),
+	{ virtual: true }
+);
+
 import { TFile } from 'obsidian';
-import { HistoryService } from './HistoryService';
+
+(globalThis as typeof globalThis & {
+	window?: { localStorage: { getItem: jest.Mock } };
+}).window = {
+	localStorage: {
+		getItem: jest.fn(() => 'en'),
+	},
+};
+
+const { HistoryService } = require('./HistoryService') as typeof import('./HistoryService');
 
 class MockApp {
 	vault = {
@@ -175,5 +190,31 @@ contextCompaction:
 			updatedAt: 1710000000000,
 			droppedReasoningCount: 2,
 		});
+	});
+
+	it('should restore pinned message metadata from history body', async () => {
+		const mockApp = new MockApp() as any;
+		const service = new HistoryService(mockApp, 'System/formify');
+		const file = createMockFile('history.md');
+
+		mockApp.vault.getAbstractFileByPath.mockReturnValue(file);
+		mockApp.vault.read.mockResolvedValue(`---
+id: history-3
+title: 置顶测试
+model: deepseek-chat
+created: 2026-03-08 12:00:00
+updated: 2026-03-08 12:30:00
+---
+
+# 用户 (2026/03/08 12:00:00)
+这条消息要保留
+
+> 置顶: true
+`);
+
+		const session = await service.loadSession('history.md');
+
+		expect(session?.messages[0]?.content).toBe('这条消息要保留');
+		expect(session?.messages[0]?.metadata?.pinned).toBe(true);
 	});
 });

@@ -69,6 +69,10 @@ export interface ChatMessage {
 	parallelGroupId?: string;
 }
 
+export const isPinnedChatMessage = (
+	message: Pick<ChatMessage, 'metadata'> | null | undefined
+): boolean => message?.metadata?.pinned === true;
+
 export interface ChatContextCompactionRange {
 	endMessageId: string | null;
 	messageCount: number;
@@ -86,6 +90,7 @@ export interface ChatContextCompactionState {
 	totalTokenEstimate?: number;
 	updatedAt: number;
 	droppedReasoningCount: number;
+	overflowedProtectedLayers?: boolean;
 }
 
 export interface ChatSession {
@@ -213,43 +218,36 @@ export interface ChatSettings {
 
 export interface MessageManagementSettings {
 	enabled: boolean;
-	contextBudgetTokens: number;
 	/**
-	 * @deprecated 兼容旧配置字段，运行时会归并到 contextBudgetTokens
+	 * @deprecated 旧版固定 token 预算设置，运行时已忽略，仅用于兼容读取旧配置。
+	 */
+	contextBudgetTokens?: number;
+	/**
+	 * @deprecated 兼容旧配置字段，运行时已忽略。
 	 */
 	historyBudgetTokens?: number;
 	recentTurns: number;
+	summaryModelTag?: string;
 }
 
 export const DEFAULT_MESSAGE_MANAGEMENT_SETTINGS: MessageManagementSettings = {
 	enabled: true,
-	contextBudgetTokens: 12000,
-	recentTurns: 6,
-};
-
-export const resolveContextBudgetTokens = (
-	settings?: Partial<MessageManagementSettings> | null
-): number => {
-	const candidate =
-		typeof settings?.contextBudgetTokens === 'number'
-			? settings.contextBudgetTokens
-			: typeof settings?.historyBudgetTokens === 'number'
-				? settings.historyBudgetTokens
-				: DEFAULT_MESSAGE_MANAGEMENT_SETTINGS.contextBudgetTokens;
-	return Number.isFinite(candidate) && candidate > 0
-		? Math.floor(candidate)
-		: DEFAULT_MESSAGE_MANAGEMENT_SETTINGS.contextBudgetTokens;
+	recentTurns: 1,
+	summaryModelTag: undefined,
 };
 
 export const normalizeMessageManagementSettings = (
 	settings?: Partial<MessageManagementSettings> | null
 ): MessageManagementSettings => ({
 	enabled: settings?.enabled ?? DEFAULT_MESSAGE_MANAGEMENT_SETTINGS.enabled,
-	contextBudgetTokens: resolveContextBudgetTokens(settings),
 	recentTurns:
 		typeof settings?.recentTurns === 'number' && settings.recentTurns > 0
 			? Math.floor(settings.recentTurns)
 			: DEFAULT_MESSAGE_MANAGEMENT_SETTINGS.recentTurns,
+	summaryModelTag:
+		typeof settings?.summaryModelTag === 'string'
+			? settings.summaryModelTag.trim() || undefined
+			: DEFAULT_MESSAGE_MANAGEMENT_SETTINGS.summaryModelTag,
 });
 
 /**

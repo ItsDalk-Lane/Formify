@@ -132,6 +132,10 @@ export class MessageService {
 			fullMessage += `\n\n> 对比组: ${message.parallelGroupId}`;
 		}
 
+		if (message.metadata?.pinned === true) {
+			fullMessage += '\n\n> 置顶: true';
+		}
+
 		// 如果有选中文本，添加到消息中
 		if (message.metadata?.selectedText && typeof message.metadata.selectedText === 'string') {
 			const selectedText = message.metadata.selectedText;

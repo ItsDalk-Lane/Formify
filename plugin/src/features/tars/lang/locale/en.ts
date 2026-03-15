@@ -126,6 +126,8 @@ export default {
 	'Additional parameters description':
 		'Set additional API parameters in JSON format (e.g., temperature, top_p, max_tokens). Note: Do not set the model parameter here.',
 	'Please set model in the Model field above, not here': 'Please set model in the Model field above, not here',
+	'Context length': 'Context length',
+	'Context length description': 'Set the context length (tokens) supported by the model, used for context management and message truncation.',
 	'Common parameters example': 'Common parameters example: {"temperature": 0.7, "top_p": 0.9, "max_tokens": 2000}',
 	'Remove AI assistant': 'Remove AI assistant',
 	Remove: 'Remove',

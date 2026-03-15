@@ -54,6 +54,7 @@ import {
 	MessageContextOptimizer,
 	type MessageContextSummaryGenerator,
 } from './MessageContextOptimizer';
+import { resolveContextBudget, type ResolvedContextBudget } from '../utils/contextBudget';
 
 type ChatSubscriber = (state: ChatState) => void;
 type ChatTriggerSource =
@@ -1308,6 +1309,39 @@ export class ChatService {
 		}
 	}
 
+	async togglePinnedMessage(messageId: string) {
+		const session = this.state.activeSession;
+		if (!session) return;
+
+		const message = session.messages.find((item) => item.id === messageId);
+		if (!message || message.metadata?.hidden || message.metadata?.transient) {
+			return;
+		}
+
+		const metadata = { ...(message.metadata ?? {}) } as Record<string, unknown>;
+		if (metadata.pinned === true) {
+			delete metadata.pinned;
+		} else {
+			metadata.pinned = true;
+		}
+		message.metadata = metadata;
+		session.updatedAt = Date.now();
+		this.invalidateSessionContextCompaction(session);
+		this.emitState();
+
+		if (session.filePath) {
+			try {
+				await this.historyService.rewriteMessagesOnly(
+					session.filePath,
+					session.messages
+				);
+			} catch (error) {
+				console.error('[ChatService] 更新消息置顶状态失败:', error);
+				new Notice('更新置顶状态失败，但界面已刷新');
+			}
+		}
+	}
+
 	insertMessageToEditor(messageId: string) {
 		const session = this.state.activeSession;
 		if (!session) return;
@@ -1377,6 +1411,14 @@ export class ChatService {
 		session.messages = session.messages.slice(0, index);
 		session.updatedAt = Date.now();
 		this.invalidateSessionContextCompaction(session);
+
+		// 清理任务计划：重新生成时应该清除之前的任务计划状态
+		session.livePlan = null;
+		const manager = this.plugin.featureCoordinator.getMcpClientManager();
+		if (manager) {
+			await manager.syncLivePlanSnapshot(null);
+		}
+
 		this.emitState();
 
 		// 使用rewriteMessagesOnly更新文件，而不是重写整个文件
@@ -2587,78 +2629,118 @@ export class ChatService {
 				images: contextSourceMessage?.images ?? [],
 			})
 			: null;
-		let requestMessages = messages;
+		let requestMessages = messages.filter((message) => message.role !== 'system');
 		let prebuiltContextMessage = rawContextMessage;
 		let nextCompaction = session.contextCompaction ?? null;
+		const resolvedBudget = this.getResolvedContextBudget(
+			modelTag ?? session.modelId ?? this.state.selectedModelId ?? undefined
+		);
+		const systemTokenEstimate = this.estimateSystemPromptTokens(effectiveSystemPrompt);
 
 		if (messageManagement.enabled) {
-			const contextBudgetTokens = messageManagement.contextBudgetTokens;
 			const rawContextTokens = rawContextMessage
 				? this.messageContextOptimizer.estimateProviderMessagesTokens([rawContextMessage])
 				: 0;
-			const summaryGenerator = this.createHistorySummaryGenerator(modelTag, session);
-			let optimized = await this.messageContextOptimizer.optimize(
-				messages,
-				messageManagement,
-				nextCompaction,
-				{
-					availableHistoryBudgetTokens: Math.max(1, contextBudgetTokens - rawContextTokens),
-					summaryGenerator,
-				}
-			);
-			requestMessages = optimized.messages;
 			let contextTokenEstimate = rawContextTokens;
-			let totalTokenEstimate = optimized.historyTokenEstimate + rawContextTokens;
+			let historyTokenEstimate = this.messageContextOptimizer.estimateChatTokens(
+				requestMessages
+			);
+			let totalTokenEstimate =
+				systemTokenEstimate + historyTokenEstimate + contextTokenEstimate;
+			const shouldCompact = totalTokenEstimate > resolvedBudget.triggerTokens;
 
-			if (rawContextMessage && totalTokenEstimate > contextBudgetTokens) {
-				const contextCompaction = await this.compactContextProviderMessage({
-					contextMessage: rawContextMessage,
-					existingCompaction: nextCompaction,
-					session,
+			if (shouldCompact) {
+				const summaryGenerator = this.createHistorySummaryGenerator(
 					modelTag,
-					targetBudgetTokens: Math.max(
-						256,
-						contextBudgetTokens - optimized.historyTokenEstimate
-					),
-				});
-				prebuiltContextMessage = contextCompaction.message;
-				contextTokenEstimate = contextCompaction.tokenEstimate;
-				totalTokenEstimate = optimized.historyTokenEstimate + contextTokenEstimate;
-
-				if (totalTokenEstimate > contextBudgetTokens) {
-					optimized = await this.messageContextOptimizer.optimize(
-						messages,
-						messageManagement,
-						optimized.contextCompaction ?? nextCompaction,
-						{
-							availableHistoryBudgetTokens: Math.max(
-								1,
-								contextBudgetTokens - contextTokenEstimate
-							),
-							summaryGenerator,
-						}
-					);
-					requestMessages = optimized.messages;
-					totalTokenEstimate = optimized.historyTokenEstimate + contextTokenEstimate;
-				}
-
-				nextCompaction = this.mergeCompactionState(
-					optimized.contextCompaction,
-					contextCompaction.summary,
-					contextCompaction.signature,
-					contextTokenEstimate,
-					totalTokenEstimate
+					session
 				);
-			} else if (optimized.contextCompaction) {
-				nextCompaction = {
-					...optimized.contextCompaction,
-					totalTokenEstimate,
-				};
+				let optimized = await this.messageContextOptimizer.optimize(
+					requestMessages,
+					messageManagement,
+					nextCompaction,
+					{
+						targetHistoryBudgetTokens: Math.max(
+							1,
+							resolvedBudget.targetTokens
+								- systemTokenEstimate
+								- contextTokenEstimate
+						),
+						summaryGenerator,
+					}
+				);
+				requestMessages = optimized.messages;
+				historyTokenEstimate = optimized.historyTokenEstimate;
+				totalTokenEstimate =
+					systemTokenEstimate + historyTokenEstimate + contextTokenEstimate;
+
+				if (rawContextMessage && totalTokenEstimate > resolvedBudget.targetTokens) {
+					const contextCompaction = await this.compactContextProviderMessage({
+						contextMessage: rawContextMessage,
+						existingCompaction: nextCompaction,
+						session,
+						modelTag,
+						targetBudgetTokens: Math.max(
+							256,
+							resolvedBudget.targetTokens
+								- systemTokenEstimate
+								- historyTokenEstimate
+						),
+					});
+					prebuiltContextMessage = contextCompaction.message;
+					contextTokenEstimate = contextCompaction.tokenEstimate;
+					totalTokenEstimate =
+						systemTokenEstimate + historyTokenEstimate + contextTokenEstimate;
+
+					if (totalTokenEstimate > resolvedBudget.targetTokens) {
+						optimized = await this.messageContextOptimizer.optimize(
+							messages.filter((message) => message.role !== 'system'),
+							messageManagement,
+							optimized.contextCompaction ?? nextCompaction,
+							{
+								targetHistoryBudgetTokens: Math.max(
+									1,
+									resolvedBudget.targetTokens
+										- systemTokenEstimate
+										- contextTokenEstimate
+								),
+								summaryGenerator,
+							}
+						);
+						requestMessages = optimized.messages;
+						historyTokenEstimate = optimized.historyTokenEstimate;
+						totalTokenEstimate =
+							systemTokenEstimate + historyTokenEstimate + contextTokenEstimate;
+					}
+
+					nextCompaction = this.mergeCompactionState(
+						optimized.contextCompaction,
+						contextCompaction.summary,
+						contextCompaction.signature,
+						contextTokenEstimate,
+						totalTokenEstimate
+					);
+				} else if (optimized.contextCompaction) {
+					nextCompaction = {
+						...optimized.contextCompaction,
+						totalTokenEstimate,
+						contextTokenEstimate,
+					};
+				} else if (nextCompaction) {
+					nextCompaction = {
+						...nextCompaction,
+						historyTokenEstimate,
+						totalTokenEstimate,
+						contextTokenEstimate,
+					};
+				} else {
+					nextCompaction = null;
+				}
 			} else if (nextCompaction) {
 				nextCompaction = {
 					...nextCompaction,
-					historyTokenEstimate: optimized.historyTokenEstimate,
+					historyTokenEstimate,
 					totalTokenEstimate,
+					contextTokenEstimate,
 				};
 			} else {
 				nextCompaction = null;
@@ -2678,6 +2760,7 @@ export class ChatService {
 				&& nextCompaction.coveredRange.messageCount === 0
 				&& !nextCompaction.summary.trim()
 				&& !nextCompaction.contextSummary
+				&& !nextCompaction.overflowedProtectedLayers
 			) {
 				nextCompaction = null;
 			}
@@ -2727,6 +2810,21 @@ export class ChatService {
 				/Thumbs\.db/,
 			],
 		};
+	}
+
+	getResolvedContextBudget(modelTag?: string | null): ResolvedContextBudget {
+		return resolveContextBudget(
+			this.resolveProviderByTag(modelTag ?? this.state.selectedModelId ?? undefined)
+		);
+	}
+
+	private estimateSystemPromptTokens(systemPrompt?: string): number {
+		if (!systemPrompt?.trim()) {
+			return 0;
+		}
+		return this.messageContextOptimizer.estimateProviderMessagesTokens([
+			{ role: 'system', content: systemPrompt },
+		]);
 	}
 
 	private getInternalLinkParseOptions() {
@@ -2784,7 +2882,7 @@ export class ChatService {
 		totalTokenEstimate: number
 	): ChatContextCompactionState {
 		return {
-			version: base?.version ?? 2,
+			version: base?.version ?? 3,
 			coveredRange: base?.coveredRange ?? {
 				endMessageId: null,
 				messageCount: 0,
@@ -2798,6 +2896,7 @@ export class ChatService {
 			totalTokenEstimate,
 			updatedAt: Date.now(),
 			droppedReasoningCount: base?.droppedReasoningCount ?? 0,
+			overflowedProtectedLayers: base?.overflowedProtectedLayers ?? false,
 		};
 	}
 
@@ -2813,15 +2912,17 @@ export class ChatService {
 		return async (request) => {
 			const systemPrompt = [
 				'You compress prior chat history for an AI coding assistant.',
-				'Preserve exact file paths, exact field names, decisions, tool outcomes, pending work, and factual constraints.',
+				'Output the exact same five sections: [CONTEXT], [KEY DECISIONS], [CURRENT STATE], [IMPORTANT DETAILS], [OPEN ITEMS].',
+				'Preserve exact file paths, exact field names, precise numbers, config keys, tool outcomes, pending work, and factual constraints.',
 				'Never flip polarity for requirements or prohibitions. If the source says "do not send old reasoning_content", preserve that exact meaning.',
-				'Do not invent details. Do not include chain-of-thought. Keep the same section structure as the source summary.',
+				'Do not invent details. Do not include chain-of-thought. Be concise but keep critical technical details verbatim when needed.',
 			].join(' ');
 
 			const userPrompt = request.incremental
 				? [
 					'Update the existing summary by merging in the newly truncated history span.',
-					'Keep useful prior bullets, deduplicate repeated facts, preserve exact paths/tool names, and keep requirement/prohibition wording exact.',
+					`Keep the result within roughly ${request.targetTokens} tokens.`,
+					'Keep useful prior bullets, deduplicate repeated facts, preserve exact paths/tool names, exact numeric values, and keep requirement/prohibition wording exact.',
 					'',
 					'Existing summary:',
 					request.previousSummary ?? '',
@@ -2831,7 +2932,8 @@ export class ChatService {
 				].join('\n')
 				: [
 					'Rewrite the extracted history summary into a concise persistent context block.',
-					'Preserve exact file paths, exact field names, user requests, decisions, tool outcomes, open threads, and any explicit do/do-not rules verbatim when possible.',
+					`Keep the result within roughly ${request.targetTokens} tokens.`,
+					'Preserve exact file paths, exact field names, user requests, decisions, tool outcomes, open threads, exact numbers, and any explicit do/do-not rules verbatim when possible.',
 					'',
 					'Source summary:',
 					request.baseSummary,
@@ -2841,7 +2943,7 @@ export class ChatService {
 				summaryModelTag,
 				systemPrompt,
 				userPrompt,
-				900
+				Math.max(256, Math.min(900, request.targetTokens))
 			);
 		};
 	}
@@ -2850,8 +2952,10 @@ export class ChatService {
 		preferredModelTag: string | undefined,
 		session: ChatSession
 	): string | null {
+		const summaryModelTag = this.getMessageManagementSettings().summaryModelTag;
 		const resolved =
-			preferredModelTag
+			summaryModelTag
+			|| preferredModelTag
 			|| session.modelId
 			|| this.state.selectedModelId
 			|| this.getDefaultProviderTag();

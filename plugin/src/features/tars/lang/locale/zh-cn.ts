@@ -122,6 +122,8 @@ export default {
 	'Additional parameters': '额外参数',
 	'Additional parameters description': '以 JSON 格式设置额外的 API 参数（如 temperature、top_p、max_tokens 等）。注意：请勿在此设置 model 参数。',
 	'Please set model in the Model field above, not here': '请在上方的"模型"字段设置模型，而不是在这里',
+	'Context length': '上下文长度',
+	'Context length description': '设置模型支持的上下文长度（tokens），用于上下文管理和消息截断。',
 	'Common parameters example': '常用参数示例：{"temperature": 0.7, "top_p": 0.9, "max_tokens": 2000}',
 	'Remove AI assistant': '移除 AI 助手',
 	Remove: '移除',

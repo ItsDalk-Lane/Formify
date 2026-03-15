@@ -25,6 +25,8 @@ export default {
 	'Additional parameters description': '以 JSON 格式設定額外的 API 參數（如 temperature、top_p、max_tokens 等）。注意：請勿在此設定 model 參數。',
 	'Please set model in the Model field above, not here': '請在上方的「模型」欄位設定模型，而不是在這裡',
 	'Common parameters example': '常用參數範例：{"temperature": 0.7, "top_p": 0.9, "max_tokens": 2000}',
+	'Context length': '上下文長度',
+	'Context length description': '設定模型支援的上下文長度（tokens），用於上下文管理和訊息截斷。',
 
 	// MCP
 	'MCP Servers': 'MCP 伺服器',
